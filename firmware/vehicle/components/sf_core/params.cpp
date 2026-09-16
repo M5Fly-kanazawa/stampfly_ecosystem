@@ -575,6 +575,45 @@ namespace param_vars {
     // 動く（倒して動かし、離して保持）、中立=保持。屋内向けに穏やかな既定値。
     float pos_stick_vel   = 0.4f;
 
+    // Flip maneuver (docs/plans/flip-maneuver-plan.md §3.4 — final defaults
+    // from §5.3's v3 planar-model sweep, 2026-09-16). Read into
+    // FlipSequencer::Config by PidController::loadParams(); FlipSequencer
+    // itself never touches this param system. Ranges below follow the plan's
+    // §3.4/§5.3 sweep windows where one is given.
+    // 宙返りマニューバ（plan §3.4 — §5.3 v3平面モデル掃引の最終既定値、
+    // 2026-09-16）。PidController::loadParams() が FlipSequencer::Config へ
+    // 読み込む。FlipSequencer 自身はこの param システムに一切触れない。
+    // 下の範囲は plan §3.4/§5.3 の掃引窓がある場合はそれに従う。
+    float flip_rate_roll_dps    = 1500.0f;  // [deg/s] measured peak <=1700 under the ramp / ランプ下の計測ピーク1700以下
+    float flip_rate_pitch_dps   = 1400.0f;  // [deg/s] lower than roll: Iyy=1.45x Ixx / ロールより低い: Iyy=Ixxの1.45倍
+    float flip_rate_ramp_rps2   = 300.0f;   // [rad/s^2] command ramp, both accel and decel / 指令ランプ、加減速共通
+    float flip_boost_ms         = 150.0f;   // [ms] pre-spin climb / 反転前の上昇
+    float flip_thrust_boost_ratio   = 0.9f;   // [-] Boost/Recover, x max_thrust_ / Boost/Recover、max_thrust_基準
+    float flip_thrust_spin_hi_ratio = 0.5f;   // [-] Spin accel/decel windows + Brake / Spin加減速窓+Brake
+    float flip_thrust_lo_n      = 0.03f;    // [N] inverted coast window / 反転惰性区間
+    float flip_angle_a_deg      = 60.0f;    // [deg] accel window end / 加速窓終了角
+    float flip_motor_lag_ms     = 16.0f;    // [ms] brake-angle lookahead model / 減速角先読みモデル
+    float flip_brake_margin     = 1.0f;     // [-] achievable decel / commanded ramp / 達成減速度÷指令ランプ
+    float flip_recover_boost_tilt_deg = 20.0f; // [deg] boost only below this tilt in Recover / Recover で増強する傾き上限
+    float flip_spin_yaw_torque_limit_nm = 0.3e-3f; // [Nm] yaw torque cap while spinning / 回転中のヨートルク上限
+    float flip_spin_torque_limit_nm = 7.0e-3f;   // [Nm] flip-axis torque limit while spinning / 回転中の回転軸トルク上限
+    float flip_brake_ramp_rps2  = 500.0f;   // [rad/s^2] brake ramp-down of the rate command / 減速ランプ
+    float flip_settle_ms        = 1000.0f;  // [ms] post-flip settle window / 宙返り後の整定窓
+    float flip_settle_tilt_deg  = 5.0f;     // [deg] position-loop tilt cap in the settle window / 整定窓の傾き上限
+    float flip_handoff_min_deg  = 290.0f;   // [deg] Brake->Recover angle gate / Brake→Recover角度判定
+    float flip_handoff_rate_dps = 300.0f;   // [deg/s] Brake->Recover rate gate / Brake→Recoverレート判定
+    float flip_handoff_force_deg = 350.0f;  // [deg] unconditional Brake->Recover / 無条件Brake→Recover
+    float flip_recover_timeout_ms = 800.0f; // [ms] C: abort if vz never recovers / vz回復せず打ち切り
+    float flip_spin_timeout_ms  = 700.0f;   // [ms] abort if phi_brake never reached / phi_brake未到達で打ち切り
+    float flip_gyro_abort_dps   = 1800.0f;  // [deg/s] measured-rate abort limit (gyro range 2000) / 計測レート打ち切り上限（レンジ2000）
+    float flip_min_height_m     = 1.0f;     // [m] C2 / 実行条件C2
+    float flip_min_voltage_v    = 3.6f;     // [V] C5 / 実行条件C5
+    float flip_max_tilt_deg     = 15.0f;    // [deg] C3 / 実行条件C3
+    float flip_max_rate_dps     = 60.0f;    // [deg/s] C3 / 実行条件C3
+    float flip_max_hvel_mps     = 0.3f;     // [m/s] C4 / 実行条件C4
+    float flip_max_vvel_mps     = 0.2f;     // [m/s] C4 / 実行条件C4
+    float flip_cooldown_ms      = 2000.0f;  // [ms] C7, between flips / 実行条件C7、連続起動間隔
+
     // ESKF process noise
     float eskf_gyro_noise   = 0.009655f;
     float eskf_accel_noise  = 0.3f;
@@ -821,6 +860,38 @@ static const ParamEntry table[] = {
     {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  3.0f,  0.0f, 10.0f,  &notifyControllerReload},
     {"position.vel.ti",   ParamType::FLOAT, &pos_vel_ti,  2.0f,  0.1f, 100.0f, &notifyControllerReload},
     {"position.stick_vel", ParamType::FLOAT, &pos_stick_vel, 0.4f, 0.05f, 2.0f, &notifyControllerReload},
+
+    // Flip maneuver — see the param_vars comment above (flip-maneuver-plan.md §3.4/§5.3).
+    // 宙返りマニューバ — 上の param_vars コメント参照（plan §3.4/§5.3）。
+    {"flip.rate_roll_dps",     ParamType::FLOAT, &flip_rate_roll_dps,    1500.0f, 500.0f, 1900.0f, &notifyControllerReload},
+    {"flip.rate_pitch_dps",    ParamType::FLOAT, &flip_rate_pitch_dps,   1400.0f, 500.0f, 1900.0f, &notifyControllerReload},
+    {"flip.rate_ramp_rps2",    ParamType::FLOAT, &flip_rate_ramp_rps2,    300.0f,  50.0f, 1000.0f, &notifyControllerReload},
+    {"flip.boost_ms",          ParamType::FLOAT, &flip_boost_ms,          150.0f,   0.0f,  500.0f, &notifyControllerReload},
+    {"flip.thrust_boost_ratio",   ParamType::FLOAT, &flip_thrust_boost_ratio,   0.9f,  0.5f, 1.0f, &notifyControllerReload},
+    {"flip.thrust_spin_hi_ratio", ParamType::FLOAT, &flip_thrust_spin_hi_ratio, 0.5f, 0.2f, 1.0f, &notifyControllerReload},
+    {"flip.thrust_lo_n",       ParamType::FLOAT, &flip_thrust_lo_n,        0.03f,   0.0f,   0.2f, &notifyControllerReload},
+    {"flip.angle_a_deg",       ParamType::FLOAT, &flip_angle_a_deg,        60.0f,  10.0f,  120.0f, &notifyControllerReload},
+    {"flip.motor_lag_ms",      ParamType::FLOAT, &flip_motor_lag_ms,       16.0f,   1.0f,   50.0f, &notifyControllerReload},
+    {"flip.brake_margin",      ParamType::FLOAT, &flip_brake_margin,        1.0f,   0.3f,    1.0f, &notifyControllerReload},
+    {"flip.recover_boost_tilt_deg", ParamType::FLOAT, &flip_recover_boost_tilt_deg, 20.0f, 5.0f, 60.0f, &notifyControllerReload},
+    {"flip.spin_yaw_torque_limit_nm", ParamType::FLOAT, &flip_spin_yaw_torque_limit_nm, 0.3e-3f, 0.0f, 2.0e-3f, &notifyControllerReload},
+    {"flip.spin_torque_limit_nm", ParamType::FLOAT, &flip_spin_torque_limit_nm, 7.0e-3f, 2.0e-3f, 10.0e-3f, &notifyControllerReload},
+    {"flip.brake_ramp_rps2",   ParamType::FLOAT, &flip_brake_ramp_rps2,   500.0f, 100.0f, 1500.0f, &notifyControllerReload},
+    {"flip.settle_ms",         ParamType::FLOAT, &flip_settle_ms,        1000.0f,   0.0f, 5000.0f, &notifyControllerReload},
+    {"flip.settle_tilt_deg",   ParamType::FLOAT, &flip_settle_tilt_deg,     5.0f,   1.0f,   30.0f, &notifyControllerReload},
+    {"flip.handoff_min_deg",   ParamType::FLOAT, &flip_handoff_min_deg,   290.0f, 200.0f,  350.0f, &notifyControllerReload},
+    {"flip.handoff_rate_dps",  ParamType::FLOAT, &flip_handoff_rate_dps,  300.0f,  50.0f,  600.0f, &notifyControllerReload},
+    {"flip.handoff_force_deg", ParamType::FLOAT, &flip_handoff_force_deg, 350.0f, 300.0f,  360.0f, &notifyControllerReload},
+    {"flip.recover_timeout_ms", ParamType::FLOAT, &flip_recover_timeout_ms, 800.0f, 100.0f, 3000.0f, &notifyControllerReload},
+    {"flip.spin_timeout_ms",   ParamType::FLOAT, &flip_spin_timeout_ms,   700.0f, 100.0f, 3000.0f, &notifyControllerReload},
+    {"flip.gyro_abort_dps",    ParamType::FLOAT, &flip_gyro_abort_dps,   1800.0f, 1000.0f, 1950.0f, &notifyControllerReload},
+    {"flip.min_height_m",      ParamType::FLOAT, &flip_min_height_m,       1.0f,   0.3f,    3.0f, &notifyControllerReload},
+    {"flip.min_voltage_v",     ParamType::FLOAT, &flip_min_voltage_v,      3.6f,   3.0f,    4.2f, &notifyControllerReload},
+    {"flip.max_tilt_deg",      ParamType::FLOAT, &flip_max_tilt_deg,      15.0f,   1.0f,   45.0f, &notifyControllerReload},
+    {"flip.max_rate_dps",      ParamType::FLOAT, &flip_max_rate_dps,      60.0f,   5.0f,  200.0f, &notifyControllerReload},
+    {"flip.max_hvel_mps",      ParamType::FLOAT, &flip_max_hvel_mps,      0.3f,   0.05f,   2.0f, &notifyControllerReload},
+    {"flip.max_vvel_mps",      ParamType::FLOAT, &flip_max_vvel_mps,      0.2f,   0.05f,   2.0f, &notifyControllerReload},
+    {"flip.cooldown_ms",       ParamType::FLOAT, &flip_cooldown_ms,     2000.0f,   0.0f, 10000.0f, &notifyControllerReload},
 
     // ESKF process noise
     {"eskf.process.gyro_noise",  ParamType::FLOAT, &eskf_gyro_noise,  0.009655f, 0.001f, 1.0f,  &notifyEstimatorReload},

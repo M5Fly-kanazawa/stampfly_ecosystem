@@ -25,6 +25,7 @@
 #pragma once
 
 #include "controller.hpp"
+#include "flip_sequencer.hpp"
 #include "pid.hpp"
 #include "sf_math.hpp"
 
@@ -49,6 +50,13 @@ public:
                            const CommandSetpoint& current_sticks) override;
     bool isGuidanceActive() const override { return guidance_active_; }
     void startExcitation(const SysidCommand& cmd) override;
+
+    // Flip maneuver (docs/plans/flip-maneuver-plan.md §4.1) / 宙返りマニューバ
+    void onFlip(FlipDirection dir) override;
+    void onFlipComplete() override;
+    bool isFlipReady(FlipBlockReason& reason) const override;
+    bool isFlipActive() const override { return flip_.active(); }
+    bool isFlipDone(FlipResult& result) const override { return flip_.done(result); }
 
     /// One-shot fetch of a completed stepped-sine point (autotune). Returns
     /// true once per completed excitation; the TASK layer publishes it (core
@@ -83,6 +91,18 @@ private:
     /// 新しい保持目標として再捕捉する。
     void computePositionHold(const StateEstimate& state, const CommandSetpoint& setpoint,
                              float yaw, float dt, float& roll_sp, float& pitch_sp);
+
+    // Shortest-path heading-rate P law (target - current, wrapped to
+    // [-pi,pi], clamped to +-rate_max) — shared by the normal yaw-hold block,
+    // the guidance position-mode (1) yaw seek, and the FLIP Boost/Recover
+    // heading hold below, so all three read from ONE formula instead of three
+    // near-identical copies.
+    // 最短経路のヘディングレート P 則（target-current を [-pi,pi] に折返し、
+    // ±rate_max にクランプ）— 通常のヘディングホールド、誘導位置モード(1)の
+    // ヨーシーク、下のFLIP Boost/Recoverヘディングホールドの3箇所が、
+    // ほぼ同一の3コピーでなく「1つの式」を共有する。
+    float shortestPathYawRate(float target_yaw, float current_yaw,
+                              float kp, float rate_max) const;
 
     FlightMode current_mode_ = FlightMode::STABILIZE;
 
@@ -685,6 +705,90 @@ private:
     bool     takeoff_reached_        = false;
     uint16_t takeoff_settle_cycles_  = 0;
     uint16_t takeoff_elapsed_cycles_ = 0;   // time in TakeoffClimb, for the timeout backstop
+
+    // --- Flip maneuver (docs/plans/flip-maneuver-plan.md §3/§4/§7) ---
+    // The sequencer holds no control law of its own (INV-1); this controller
+    // routes the EXISTING rate/attitude PIDs' setpoints through it while a
+    // flip is active() — see computeFlipAttitude() in pid_controller.cpp.
+    // --- 宙返りマニューバ（plan §3/§4/§7） ---
+    // 列生成器は自身の制御則を持たない（INV-1）。本制御器は、フリップが
+    // active() の間、既存のレート/姿勢 PID の「設定点」だけを列生成器経由に
+    // 差し替える — pid_controller.cpp の computeFlipAttitude() 参照。
+    FlipSequencer flip_;
+
+    // onFlip() cannot capture "current" yaw/height itself (IController's
+    // onFlip(dir) receives no StateEstimate, matching onTakeoff()/onLanding()).
+    // It defers the actual flip_.start() to the NEXT compute() cycle instead —
+    // the same one-cycle-deferred-capture idiom this file already uses for
+    // capture_alt_/capture_pos_.
+    // onFlip() は自ら「現在の」ヨー/高度を取り込めない（IController の
+    // onFlip(dir) は StateEstimate を受け取らない、onTakeoff()/onLanding()と
+    // 同型）。実際の flip_.start() は「次の」compute() 周期に遅延させる —
+    // 本ファイルが capture_alt_/capture_pos_ で既に使っている1周期遅延取り込み
+    // と同じ作法。
+    bool          flip_start_pending_ = false;
+    FlipDirection flip_pending_dir_   = FlipDirection::Right;
+
+    // Edge-detects Spin/Recover entry so the rate-loop integrators can be
+    // reset exactly at those two points (flip-maneuver-plan.md §3.3), not
+    // just once at onFlip(). Idle outside an active flip.
+    // Spin/Recover 突入のエッジを検出し、その2点で正確にレートループ積分器を
+    // リセットする（plan §3.3）— onFlip() 時の1回だけでは足りない。
+    // フリップ非活性中は Idle。
+    FlipSequencer::Phase flip_prev_phase_ = FlipSequencer::Phase::Idle;
+    // Post-flip settle window countdown [s] (FlipSequencer::Config::settle_ms):
+    // while > 0 the position-loop tilt and the yaw torque stay capped.
+    // 宙返り後の整定窓の残り時間 [s]（FlipSequencer::Config::settle_ms）: 正の間は
+    // 位置ループの傾きとヨートルクを抑える。
+    float flip_settle_remaining_s_ = 0.0f;
+
+    // Cached result of the LAST readiness evaluation (updateFlipReadiness(),
+    // called every compute() cycle) — isFlipReady() is const and cannot
+    // itself call compute()'s state-dependent evaluation, the same reason
+    // isTakeoffComplete()/isGuidanceActive() read a cached flag instead of
+    // computing on demand.
+    // 直近の readiness 評価結果のキャッシュ（updateFlipReadiness()、毎
+    // compute() 周期で呼ぶ）— isFlipReady() は const であり state 依存の
+    // 評価を自ら呼べない。isTakeoffComplete()/isGuidanceActive() が
+    // オンデマンド計算でなくキャッシュ済みフラグを読むのと同じ理由。
+    bool            flip_ready_  = false;
+    FlipBlockReason flip_reason_ = FlipBlockReason::NotFlying;
+
+    /// Build this cycle's FlipSequencer::Input from the state estimate.
+    /// See the sign-convention notes in pid_controller.cpp (matches the
+    /// existing altitude/vel_up conventions used elsewhere in compute()).
+    /// この周期の FlipSequencer::Input を state から組み立てる。符号規約は
+    /// pid_controller.cpp のコメント参照（compute() の他所で使う
+    /// altitude/vel_up と同じ規約）。
+    FlipSequencer::Input buildFlipInput(const StateEstimate& state, float dt) const;
+
+    /// Re-evaluate flip readiness (C2-C8) into flip_ready_/flip_reason_.
+    /// Called once per compute() cycle.
+    /// フリップ実行条件（C2-C8）を再評価し flip_ready_/flip_reason_ を更新。
+    /// compute() 周期ごとに1回呼ぶ。
+    void updateFlipReadiness(const StateEstimate& state, float dt);
+
+    /// Route roll/pitch/yaw setpoints for one FLIP cycle: Spin/Brake drive
+    /// the rate PID directly (bypassing the attitude PID so its integrators
+    /// cannot wind up against the meaningless mid-flip Euler-angle error);
+    /// Boost/Recover reuse the EXISTING attitude PID for a level hold plus
+    /// the shared heading-hold law. See pid_controller.cpp.
+    /// 1 FLIP周期分の roll/pitch/yaw 設定点を配線する: Spin/Brake はレート
+    /// PID を直接駆動（姿勢 PID を迂回し、フリップ中の無意味なオイラー角
+    /// 誤差で積分器が巻き上がらないようにする）。Boost/Recover は既存の
+    /// 姿勢 PID を水平保持に再利用し、共有のヘディングホールド則を使う。
+    /// pid_controller.cpp 参照。
+    void computeFlipAttitude(const StateEstimate& state,
+                             const FlipSequencer::Output& flip_out, float dt,
+                             float& rate_sp_roll, float& rate_sp_pitch,
+                             float& rate_sp_yaw, float& roll_sp, float& pitch_sp);
+
+    /// Reset the rate-loop integrators exactly at the Spin and Recover phase
+    /// entries (flip-maneuver-plan.md §3.3), edge-detected against
+    /// flip_prev_phase_.
+    /// Spin と Recover のフェーズ突入時点で正確にレートループ積分器を
+    /// リセットする（plan §3.3）。flip_prev_phase_ に対するエッジ検出。
+    void trackFlipPhaseTransition(FlipSequencer::Phase now);
 };
 
 }  // namespace sf

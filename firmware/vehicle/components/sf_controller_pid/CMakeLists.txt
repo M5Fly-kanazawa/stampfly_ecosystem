@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "pid_controller.cpp"
+        "flip_sequencer.cpp"
     INCLUDE_DIRS "include"
     REQUIRES
         sf_core

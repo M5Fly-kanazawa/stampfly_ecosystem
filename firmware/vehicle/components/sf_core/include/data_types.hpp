@@ -133,6 +133,21 @@ struct StateEstimate {
     float specific_force[3]; // Bias-corrected specific force [m/s²] body FRD / バイアス補正済みの加速度計測定値（機体FRD）
     uint8_t sensor_mask;  // Active sensor bitmask / 有効センサマスク
     uint32_t timestamp;   // [us]
+    // The two fields below are NOT populated by the estimator (core
+    // components may not touch Pub-Sub topics). ControlTask (task layer)
+    // fills them into its LOCAL copy of this struct — read from
+    // sensor_power/sensor_snapshot — before calling IController::compute(),
+    // so a core controller can still see them via its normal state
+    // parameter (flip-maneuver-plan.md §3.1 C5/C6 gates; see
+    // PidController::buildFlipInput() and control_task.cpp).
+    // 以下2フィールドは推定器が埋めない（コア部品は Pub-Sub トピックに触れない）。
+    // ControlTask（タスク層）が sensor_power/sensor_snapshot から読み、
+    // IController::compute() を呼ぶ前にこの構造体の「ローカルコピー」へ
+    // 注入する — コアの制御器も通常の state 引数経由でこれらを見られる
+    // （flip-maneuver-plan.md §3.1 C5/C6 判定。PidController::buildFlipInput()
+    // と control_task.cpp 参照）。
+    float battery_voltage; // [V] live pack voltage, injected by ControlTask / 実電源電圧、ControlTaskが注入
+    bool  tof_valid;       // ToF observation currently usable, injected by ControlTask / ToF観測が使用可能、ControlTaskが注入
 };
 
 // =============================================================================

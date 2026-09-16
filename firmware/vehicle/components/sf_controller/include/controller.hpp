@@ -198,6 +198,57 @@ public:
     /// ライブチューニング。パラメータ変更時（param set コールバック）に
     /// ControllerCmd::ReloadParams 経由で実行。既定 no-op。
     virtual void reloadParams() {}
+
+    // =========================================================================
+    // Flip Maneuver (Tello-compatible flip l/r/f/b)
+    // 宙返りマニューバ（Tello 互換 flip l/r/f/b）
+    //
+    // @design docs/plans/flip-maneuver-plan.md §4.1 — ControllerCmd/IController [OK]
+    //         hooks (same shape as onTakeoff/onTakeoffComplete)
+    // =========================================================================
+
+    /// Flip entry (ControllerCmd::Flip, FLYING->FLIP entry): run the
+    /// angle-scheduled flip maneuver in `dir`. Default no-op for controllers
+    /// without a flip sequencer.
+    /// 宙返り突入（ControllerCmd::Flip, FLYING→FLIP突入）: dir 方向の角度
+    /// スケジュール型宙返りを実行する。列生成器を持たない制御器では既定 no-op。
+    virtual void onFlip(FlipDirection dir) {}
+
+    /// Flip finished (ControllerCmd::FlipComplete, FLIP->FLYING exit):
+    /// re-capture altitude/position targets and resume the normal mode law.
+    /// Default no-op.
+    /// 宙返り完了（ControllerCmd::FlipComplete, FLIP→FLYING退出）: 高度・位置
+    /// 目標を取り直し通常のモード則を再開する。既定 no-op。
+    virtual void onFlipComplete() {}
+
+    /// Whether the flip execution conditions C2-C8 currently hold. Re-evaluated
+    /// every cycle while FLYING; can only be true while Airborne (C1,
+    /// FlightState::FLYING, is judged by StateManager, not here — see
+    /// flip-maneuver-plan.md §3.1/§4.2 INV-3). `reason` is filled with why not
+    /// when this returns false. Default: never ready (no flip capability).
+    /// 実行条件 C2-C8 が現在成立しているか。FLYING 中毎周期評価し、Airborne
+    /// 中のみ真になり得る（C1＝FlightState::FLYING は StateManager が判定し、
+    /// ここでは扱わない — plan §3.1/§4.2 INV-3）。false のとき `reason` に
+    /// 理由を格納。既定: 常に不成立（宙返り機能なし）。
+    virtual bool isFlipReady(FlipBlockReason& reason) const {
+        reason = FlipBlockReason::NotFlying;
+        return false;
+    }
+
+    /// Whether a flip maneuver is currently in progress. Default false.
+    /// 宙返りマニューバが現在進行中か。既定 false。
+    virtual bool isFlipActive() const { return false; }
+
+    /// Whether the in-progress (or just-finished) flip has reached its
+    /// terminal state (completed normally OR aborted-then-recovered).
+    /// `result` carries the outcome. Default: never done (no flip capability).
+    /// 進行中（または完了直後）の宙返りが終端状態に達したか（正常完了 or
+    /// 打ち切り後回復完了）。`result` に結果を格納。既定: 常に未完了
+    /// （宙返り機能なし）。
+    virtual bool isFlipDone(FlipResult& result) const {
+        result = FlipResult::None;
+        return false;
+    }
 };
 
 }  // namespace sf

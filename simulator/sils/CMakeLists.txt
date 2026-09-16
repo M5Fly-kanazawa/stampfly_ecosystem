@@ -52,7 +52,8 @@ if(SILS_BUILD_CORES_SMOKE OR SILS_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_estimator_eskf/eskf_core.cpp
     ${VN}/components/sf_estimator_complementary/complementary_estimator.cpp
     ${VN}/components/sf_controller_pid/pid_controller.cpp
-    ${VN}/components/sf_app_hooks/app_default.cpp              # sf::app::controller/estimator/start default (rtos_smoke/hover_smoke/rate_tune compile imu_task.cpp/control_task.cpp directly, below, and both now call the app hooks)
+    ${VN}/components/sf_controller_pid/flip_sequencer.cpp        # FLIP sequence setpoints (FlightState::FLIP, flip-maneuver-plan.md)
+    ${VN}/components/sf_app_hooks/app_default.cpp             # sf::app::controller/estimator/start default (rtos_smoke/hover_smoke/rate_tune compile imu_task.cpp/control_task.cpp directly, below, and both now call the app hooks)
     ${VN}/components/sf_app_hooks/stock_hooks.cpp               # sf::app::stock::controller/estimator body app_default.cpp delegates to (Phase 2)
     ${VN}/components/sf_takeoff_landing/takeoff_landing.cpp   # ToF ground/airborne detect (imu_task)
     ${VN}/components/sf_calibration/calibration.cpp           # boot gyro/accel bias calib (imu_task)

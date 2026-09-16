@@ -1,0 +1,40 @@
+# api_flip_roll.scn — Tello-style API flips: command → takeoff → up → flip r/l/f/b → land
+#                Tello 風 API 宙返り: command → takeoff → up → flip r/l/f/b → land
+#
+# Drives the REAL ApiTask parser (scenario `api` channel → sf_api_inject_line).
+# The chain under test (docs/plans/flip-maneuver-plan.md §3, §4.3, §5.2):
+#   1. "command" / "takeoff": SDK mode, ARM-triggered auto-takeoff to 0.5 m (POS_HOLD).
+#   2. "up 60": climb to ~1.1 m so the flip execution condition h >= flip.min_height_m
+#      (1.0 m) holds while the ToF stays valid — the SILS VL53 device model reports
+#      no target above 1.4 m (simulator/sils/devices/vl53_device.cpp MAX_MM), unlike
+#      the real sensor (~3 m), so the pre-flip hover must sit below that limit.
+#   3. "flip r" / "flip l" (roll axis only — the pitch axis is api_flip_pitch.scn,
+#      kept separate while a SILS plant defect after pitch flips is investigated):
+#      each one is FLYING → FLIP → FLYING
+#      (FlightState::FLIP, a dedicated sequence state). The 3 s neutral RC between
+#      flips covers the maneuver (~0.6 s) plus the 2 s cooldown (flip.cooldown_ms).
+#   4. "land": autonomous landing.
+# The RC stays paired with neutral sticks throughout (a safety pilot holding a
+# centered transmitter), as in api_flight.scn.
+#
+# 実 ApiTask パーサを駆動。検証する鎖: SDK モード → 自動離陸（0.5 m）→ up 60 で約 1.1 m へ
+# （実行条件 h ≥ 1.0 m を満たしつつ、SILS の ToF 模擬の上限 1.4 m より下に留める。実センサは
+# 約 3 m）→ 4 方向の宙返り（各 FLYING → FLIP → FLYING、
+# 間隔 3 s = マニューバ約 0.6 s + クールダウン 2 s）→ 自動着陸。全行程 RC は中立のまま。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_flip_roll.scn --target vehicle --duration 39000000
+#      (add --video to render the maneuver / --video で動画を出力)
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes
+   +    api  "command"                                                           # B: enter SDK mode (t=6)
+   +    api  "takeoff"                                                           # C: take off → POS_HOLD hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC while the API flies (t=6-18)
+   +    api  "up 60"                                                             # E: climb +60 cm to ~1.1 m (t=18)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # F: neutral RC while climbing+settling (t=18-23)
+   +    api  "flip r"                                                            # G: roll right 360 deg (t=23)
+   +    rc   2048  2048   2048    2048  0     3000      50                       # H: maneuver + cooldown (t=23-26)
+   +    api  "flip l"                                                            # I: roll left 360 deg (t=26)
+   +    rc   2048  2048   2048    2048  0     3000      50                       # J: (t=26-29)
+   +    api  "land"                                                              # O: autonomous landing (t=29)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # P: neutral RC through touchdown (t=29-37)

@@ -182,6 +182,46 @@ void PidController::loadParams()
     vel_x_.output_limit      = gravity_ * max_pos_tilt_;        // [m/s²] = g·tilt limit
     vel_y_.output_limit      = gravity_ * max_pos_tilt_;        // [m/s²]
 
+    // Flip maneuver (docs/plans/flip-maneuver-plan.md §3.4/§5.3 final
+    // recommendation). max_thrust_n is NOT a `flip.*` NVS param — it mirrors
+    // this controller's own max_thrust_ so FlipSequencer's thrust ratios
+    // convert to newtons without depending on PidController (see
+    // FlipSequencer::Config's doc).
+    // 宙返りマニューバ（plan §3.4/§5.3 最終推奨）。max_thrust_n は `flip.*` の
+    // NVS パラメータではない — 本制御器自身の max_thrust_ を複写し、
+    // FlipSequencer の推力比率が PidController に依存せず [N] に変換できる
+    // ようにする（FlipSequencer::Config のドキュメント参照）。
+    params::get_float("flip.rate_roll_dps",     flip_.config.rate_roll_dps);
+    params::get_float("flip.rate_pitch_dps",    flip_.config.rate_pitch_dps);
+    params::get_float("flip.rate_ramp_rps2",    flip_.config.rate_ramp_rps2);
+    params::get_float("flip.boost_ms",          flip_.config.boost_ms);
+    params::get_float("flip.thrust_boost_ratio",   flip_.config.thrust_boost_ratio);
+    params::get_float("flip.thrust_spin_hi_ratio", flip_.config.thrust_spin_hi_ratio);
+    params::get_float("flip.thrust_lo_n",       flip_.config.thrust_lo_n);
+    params::get_float("flip.angle_a_deg",       flip_.config.angle_a_deg);
+    params::get_float("flip.motor_lag_ms",      flip_.config.motor_lag_ms);
+    params::get_float("flip.brake_margin",      flip_.config.brake_margin);
+    params::get_float("flip.recover_boost_tilt_deg", flip_.config.recover_boost_tilt_deg);
+    params::get_float("flip.spin_yaw_torque_limit_nm", flip_.config.spin_yaw_torque_limit_nm);
+    params::get_float("flip.spin_torque_limit_nm", flip_.config.spin_torque_limit_nm);
+    params::get_float("flip.brake_ramp_rps2",   flip_.config.brake_ramp_rps2);
+    params::get_float("flip.settle_ms",         flip_.config.settle_ms);
+    params::get_float("flip.settle_tilt_deg",   flip_.config.settle_tilt_deg);
+    params::get_float("flip.handoff_min_deg",   flip_.config.handoff_min_deg);
+    params::get_float("flip.handoff_rate_dps",  flip_.config.handoff_rate_dps);
+    params::get_float("flip.handoff_force_deg", flip_.config.handoff_force_deg);
+    params::get_float("flip.recover_timeout_ms", flip_.config.recover_timeout_ms);
+    params::get_float("flip.spin_timeout_ms",   flip_.config.spin_timeout_ms);
+    params::get_float("flip.gyro_abort_dps",    flip_.config.gyro_abort_dps);
+    params::get_float("flip.min_height_m",      flip_.config.min_height_m);
+    params::get_float("flip.min_voltage_v",     flip_.config.min_voltage_v);
+    params::get_float("flip.max_tilt_deg",      flip_.config.max_tilt_deg);
+    params::get_float("flip.max_rate_dps",      flip_.config.max_rate_dps);
+    params::get_float("flip.max_hvel_mps",      flip_.config.max_hvel_mps);
+    params::get_float("flip.max_vvel_mps",      flip_.config.max_vvel_mps);
+    params::get_float("flip.cooldown_ms",       flip_.config.cooldown_ms);
+    flip_.config.max_thrust_n = max_thrust_;
+
     // Re-apply the phase schedule so a mid-flight param reload cannot leave
     // alt_vel_.ti stale relative to the (unchanged) phase_.
     // 飛行中の param 再読込でも alt_vel_.ti が（不変の）phase_ に対して古いままに
@@ -230,6 +270,61 @@ ControlOutput PidController::compute(
                  state.attitude[2], state.attitude[3]);
     math::Vec3 euler = q.to_euler();
 
+    // Flip maneuver (docs/plans/flip-maneuver-plan.md §3/§4/§7).
+    //
+    // Deferred start: onFlip(dir) cannot capture "current" yaw/height itself
+    // (it receives no StateEstimate — matching onTakeoff()/onLanding()), so it
+    // only latches flip_start_pending_; the actual flip_.start() happens HERE,
+    // on the first compute() cycle after onFlip() (same one-cycle-deferred-
+    // capture idiom as capture_alt_/capture_pos_ elsewhere in this file).
+    //
+    // Readiness (C2-C8) is re-evaluated every cycle regardless of mode/phase
+    // into flip_ready_/flip_reason_ — isFlipReady() is const and reads that
+    // cache (same reason isTakeoffComplete()/isGuidanceActive() read cached
+    // flags instead of computing on demand). The natural gates (height, tilt,
+    // rate, velocity, cooldown) keep it false outside a stable Airborne hover
+    // without this controller needing to know FlightState.
+    //
+    // If a flip is active(), the sequencer is advanced exactly once per cycle
+    // and its output is consumed below at the attitude confluence and the
+    // vertical channel INSTEAD OF the normal cascade — the sequencer only
+    // switches the setpoint SOURCE, never the control law (INV-1).
+    //
+    // 宙返りマニューバ（plan §3/§4/§7）。
+    //
+    // 遅延開始: onFlip(dir) は自ら「現在の」ヨー/高度を取り込めない
+    // （StateEstimate を受け取らない — onTakeoff()/onLanding()と同型）ため
+    // flip_start_pending_ を立てるだけ。実際の flip_.start() は「ここ」、
+    // onFlip() 後の最初の compute() 周期で行う（本ファイル他所の
+    // capture_alt_/capture_pos_ と同じ1周期遅延取り込みの作法）。
+    //
+    // 実行条件（C2-C8）はモード/フェーズに関わらず毎周期
+    // flip_ready_/flip_reason_ へ再評価する — isFlipReady() は const で
+    // このキャッシュを読む（isTakeoffComplete()/isGuidanceActive() が
+    // オンデマンド計算でなくキャッシュ済みフラグを読むのと同じ理由）。
+    // 判定自体（高度・傾き・角速度・速度・クールダウン）が、この制御器が
+    // FlightState を知らなくても、安定した空中ホバー以外では自然に false に
+    // 保つ。
+    //
+    // フリップが active() なら、列生成器を1周期に1回だけ進め、その出力を
+    // 下の姿勢合流点と鉛直チャネルで「通常カスケードの代わりに」使う —
+    // 列生成器は設定点の「出所」だけを切り替え、制御則は変えない（INV-1）。
+    if (flip_start_pending_) {
+        flip_.start(flip_pending_dir_, euler.z, -state.position[2]);
+        flip_start_pending_ = false;
+    }
+    updateFlipReadiness(state, dt);
+
+    FlipSequencer::Output flip_out{};
+    const bool flip_active = flip_.active();
+    if (flip_active) {
+        flip_out = flip_.update(buildFlipInput(state, dt));
+        trackFlipPhaseTransition(flip_.phase());
+    } else if (flip_settle_remaining_s_ > 0.0f) {
+        flip_settle_remaining_s_ -= dt;   // post-flip settle window (Config::settle_ms) / 宙返り後の整定窓
+    }
+    const bool flip_settling = !flip_active && flip_settle_remaining_s_ > 0.0f;
+
     // Guidance cancel-on-stick-movement: any stick departing from its engage
     // snapshot hands control back to the pilot instantly (the pilot always wins).
     // 誘導のスティック動作解除: どれかのスティックが設定時スナップショットから動いたら
@@ -273,7 +368,25 @@ ControlOutput PidController::compute(
     // from ACRO (a comm-loss landing). INV-1: one attitude path for every phase.
     // 姿勢カスケードは STABILIZE 以上、加えて任意モードの Landing 中も動かす — 自動着陸は
     // ACRO から始まっても（通信途絶着陸）姿勢安定化が必要。INV-1: 全フェーズ単一姿勢経路。
-    if (current_mode_ >= FlightMode::STABILIZE ||
+    //
+    // FLIP takes the WHOLE block's place instead of running inside it: Spin/
+    // Brake bypass the attitude PID entirely (not just override its result) so
+    // its integrators cannot wind up against the meaningless mid-flip Euler-
+    // angle error, and Boost/Recover reuse att_roll_/att_pitch_ through a
+    // dedicated small helper instead of the stick/POS_HOLD/trim/yaw-hold
+    // machinery below (the pilot/guidance/trim setpoint sources are all
+    // ignored during FLIP — flip-maneuver-plan.md §4.1).
+    // FLIP はこのブロック「全体」の代わりになる（内部で動くのではない）:
+    // Spin/Brake は姿勢 PID を完全に迂回する（結果の上書きではない）ため、
+    // フリップ中の無意味なオイラー角誤差で積分器が巻き上がらない。
+    // Boost/Recover は att_roll_/att_pitch_ を専用の小さなヘルパ経由で
+    // 再利用し、下のスティック/POS_HOLD/トリム/ヘディングホールド機構は
+    // 使わない（パイロット/誘導/トリムの設定点はいずれも FLIP 中は無視 —
+    // plan §4.1）。
+    if (flip_active) {
+        computeFlipAttitude(state, flip_out, dt, rate_sp_roll, rate_sp_pitch,
+                            rate_sp_yaw, roll_sp, pitch_sp);
+    } else if (current_mode_ >= FlightMode::STABILIZE ||
         phase_ == VerticalPhase::Landing) {
         // Default: sticks command the tilt angle directly (STABILIZE).
         // 既定: スティックが傾き角を直接指令する（STABILIZE）。
@@ -338,15 +451,12 @@ ControlOutput PidController::compute(
                 capture_pos_ = false;   // setpoints are guidance-owned now / 設定点は誘導所有
                 capture_alt_ = false;
 
-                // Yaw: shortest-path error, P with a turn-rate limit.
-                // ヨー: 最短経路誤差の P、回頭率制限付き。
-                float yaw_err = guide_yaw_ - euler.z;
-                while (yaw_err >  3.14159265f) yaw_err -= 6.2831853f;
-                while (yaw_err < -3.14159265f) yaw_err += 6.2831853f;
-                float yaw_cmd = guide_yaw_kp_ * yaw_err;
-                if (yaw_cmd >  guide_yaw_rate_max_) yaw_cmd =  guide_yaw_rate_max_;
-                if (yaw_cmd < -guide_yaw_rate_max_) yaw_cmd = -guide_yaw_rate_max_;
-                rate_sp_yaw = yaw_cmd;
+                // Yaw: shortest-path error, P with a turn-rate limit (shared
+                // formula — see shortestPathYawRate()).
+                // ヨー: 最短経路誤差の P、回頭率制限付き（共有の式 —
+                // shortestPathYawRate() 参照）。
+                rate_sp_yaw = shortestPathYawRate(guide_yaw_, euler.z,
+                                                  guide_yaw_kp_, guide_yaw_rate_max_);
             }
         }
 
@@ -375,16 +485,16 @@ ControlOutput PidController::compute(
                     yaw_hold_target_ = euler.z;   // capture on engage edge / 係合エッジで捕捉
                     yaw_hold_active_ = true;
                 }
-                // Shortest-path heading error, P with a turn-rate limit (the
-                // same shape as the guidance yaw law above).
-                // 最短経路の方位誤差、回頭率制限付き P（上の誘導ヨー則と同形）。
-                float hold_err = yaw_hold_target_ - euler.z;
-                while (hold_err >  3.14159265f) hold_err -= 6.2831853f;
-                while (hold_err < -3.14159265f) hold_err += 6.2831853f;
-                float hold_cmd = yaw_hold_kp_ * hold_err;
-                if (hold_cmd >  yaw_hold_rate_max_) hold_cmd =  yaw_hold_rate_max_;
-                if (hold_cmd < -yaw_hold_rate_max_) hold_cmd = -yaw_hold_rate_max_;
-                rate_sp_yaw = hold_cmd;
+                // Shortest-path heading error, P with a turn-rate limit
+                // (shared formula — see shortestPathYawRate()). This exact
+                // gain pair is reused, unmodified, by the FLIP Boost/Recover
+                // heading hold in computeFlipAttitude().
+                // 最短経路の方位誤差、回頭率制限付き P（共有の式 —
+                // shortestPathYawRate() 参照）。この同じゲイン対は
+                // computeFlipAttitude() の FLIP Boost/Recover ヘディング
+                // ホールドでも無改変で再利用する。
+                rate_sp_yaw = shortestPathYawRate(yaw_hold_target_, euler.z,
+                                                  yaw_hold_kp_, yaw_hold_rate_max_);
             } else {
                 yaw_hold_active_ = false;
             }
@@ -565,6 +675,20 @@ ControlOutput PidController::compute(
             if (takeoff_elapsed_cycles_ >= kTakeoffMaxCycles) {
                 takeoff_reached_ = true;   // timeout backstop — never stay dead-sticked
             }
+        } else if (flip_active) {
+            // FLIP overrides the vertical channel with the sequencer's own
+            // thrust schedule and SUSPENDS the altitude cascade entirely —
+            // not just its output. Running alt_pos_/alt_vel_/DOB/hover-learn
+            // against the huge, transient altitude error a flip produces
+            // would wind up their integrators and corrupt the learned
+            // hover_thrust_ (flip-maneuver-plan.md §3.3: "高度カスケードは休止").
+            // FLIP は鉛直チャネルを列生成器自身の推力スケジュールで上書きし、
+            // 高度カスケードを完全に「休止」する — 出力の上書きだけではない。
+            // フリップが生む巨大で過渡的な高度誤差に対して
+            // alt_pos_/alt_vel_/DOB/ホバー推力学習を動かすと、それらの積分器が
+            // 巻き上がり学習済み hover_thrust_ を汚染する（plan §3.3:
+            // 「高度カスケードは休止」）。
+            thrust = flip_out.thrust_n;
         } else {
             // Airborne: normal ALT_HOLD law.
             // 空中: 通常の ALT_HOLD 則。
@@ -686,6 +810,21 @@ ControlOutput PidController::compute(
         }
     }
 
+    // FLIP vertical-channel override, unconditional catch-all: the button can
+    // start a flip from ANY FLYING mode (flip-maneuver-plan.md §9 decision 3),
+    // including ACRO/STABILIZE, which the if/else chain above never touches
+    // (thrust would otherwise stay at the raw-throttle default from the top
+    // of this function). The ALT_HOLD/POS_HOLD Airborne branch above already
+    // set thrust = flip_out.thrust_n itself, so this is a no-op there.
+    // FLIP 鉛直チャネル上書き、無条件の catch-all: ボタンは任意の FLYING
+    // モードからフリップを起動できる（plan §9 決定3）。ACRO/STABILIZE は上の
+    // if/else 連鎖が一切触れない（さもなければ推力はこの関数冒頭の生スロットル
+    // 既定値のまま）。ALT_HOLD/POS_HOLD の Airborne 分岐は既に自分で
+    // thrust = flip_out.thrust_n を設定済みのため、ここでは no-op。
+    if (flip_active) {
+        thrust = flip_out.thrust_n;
+    }
+
     // Position control (POS_HOLD) is applied inside the attitude block above —
     // computePositionHold() turns the position/velocity error into the tilt
     // setpoints the attitude loop tracks. See the helper below.
@@ -771,9 +910,47 @@ ControlOutput PidController::compute(
     gyro_rate.y = state.angular_rate[1];
     gyro_rate.z = state.angular_rate[2];
 
+    // While the flip spins (rate-only phases), let the flip-axis rate loops use
+    // the mixer's geometric torque headroom (flip.spin_torque_limit_nm) instead
+    // of the flight-proven normal clamp: the collective sits at mid-scale
+    // (thrust_spin_hi_ratio 0.5) precisely so that +-torque headroom exists,
+    // and the heavier pitch axis (Iyy) needs it to brake inside 360 deg (SILS
+    // api_flip 2026-09-16: 383 deg overshoot at the normal clamp). Restored
+    // every cycle so nothing leaks into normal flight.
+    // 回転中（レートのみのフェーズ）は回転軸のレートループにミキサーの幾何学的な
+    // トルク余裕（flip.spin_torque_limit_nm）を使わせ、通常飛行の実績上限を
+    // 使わない: 集合推力を中点（thrust_spin_hi_ratio 0.5）にしたのは ± のトルク
+    // 余裕を作るためで、慣性の大きいピッチ軸は 360° 以内で減速するのにそれが要る
+    // （SILS api_flip 2026-09-16: 通常上限では 383° まで行き過ぎ）。毎周期戻すので
+    // 通常飛行には漏れない。
+    const bool flip_spinning = flip_active && !flip_out.attitude_loop;
+    const float spin_limit = flip_spinning ? flip_.config.spin_torque_limit_nm
+                                           : max_roll_pitch_torque_;
+    rate_roll_.output_limit  = spin_limit;
+    rate_pitch_.output_limit = spin_limit;
     output.torque[0] = rate_roll_.compute(rate_sp_roll, gyro_rate.x, dt);
     output.torque[1] = rate_pitch_.compute(rate_sp_pitch, gyro_rate.y, dt);
     output.torque[2] = rate_yaw_.compute(rate_sp_yaw, gyro_rate.z, dt);
+    // While the flip spins (rate-only phases), cap the yaw torque: yaw needs
+    // tau/(4*kappa) of thrust per motor (0.075 N at the 1.23 mNm clamp — as much
+    // as the whole per-motor collective), so a small yaw-rate error saturating
+    // the yaw loop would eat the mixer headroom the flip axis needs. SILS
+    // api_flip (2026-09-16): a -15 deg/s yaw transient during the pitch spin-up
+    // drove the yaw loop to its clamp, the per-motor clamp then cut the pitch
+    // torque to 1/10 and the brake failed. A few degrees of yaw drift over the
+    // 0.3 s spin is harmless; the heading hold in Recover restores it.
+    // 回転中（レートのみのフェーズ）はヨートルクに上限を設ける: ヨーは 1 モータ
+    // あたり τ/(4κ) の推力差が要り（クランプ 1.23 mN·m で 0.075 N — 集合推力の
+    // 1 モータ分に匹敵）、小さなヨーレート誤差でヨーループが飽和すると回転軸に
+    // 必要なミキサーの余裕を食い尽くす。SILS api_flip（2026-09-16）: ピッチ加速中の
+    // −15 °/s のヨー過渡でヨーループが上限に張り付き、モータごとのクランプで
+    // ピッチトルクが 1/10 になり減速に失敗した。0.3 s の回転中の数度のヨーずれは
+    // 無害で、Recover のヘディング保持が戻す。
+    if (flip_spinning || flip_settling) {
+        const float yaw_limit = flip_.config.spin_yaw_torque_limit_nm;
+        if (output.torque[2] >  yaw_limit) output.torque[2] =  yaw_limit;
+        if (output.torque[2] < -yaw_limit) output.torque[2] = -yaw_limit;
+    }
     output.thrust = thrust;
 
     // Stepped-sine I/Q accumulation (after the settle transient): correlate the
@@ -1342,9 +1519,18 @@ void PidController::computePositionHold(const StateEstimate& state,
     // POS_HOLD tilt limit so the outer loop cannot command an aggressive attitude.
     // 加速度を傾きへ写像（a≈g·tilt）。前進=ノーズダウン(負pitch)、右=右ロール(正roll)。
     // 外ループが過激な姿勢を指令しないよう POS_HOLD 傾き上限でクランプ。
-    auto clampTilt = [this](float t) {
-        if (t >  max_pos_tilt_) return  max_pos_tilt_;
-        if (t < -max_pos_tilt_) return -max_pos_tilt_;
+    // In the post-flip settle window the cap shrinks to settle_tilt_deg so the
+    // position loop cannot starve the mixer while the flip's horizontal
+    // velocity is still being bled off (FlipSequencer::Config::settle_ms).
+    // 宙返り後の整定窓では上限を settle_tilt_deg に縮め、宙返りで付いた水平速度が
+    // 抜ける間に位置ループがミキサーの余裕を食い尽くさないようにする。
+    constexpr float kDegToRad = 3.14159265358979f / 180.0f;
+    const float settle_tilt = flip_.config.settle_tilt_deg * kDegToRad;
+    const bool settling = flip_settle_remaining_s_ > 0.0f && !flip_.active();
+    const float tilt_limit = (settling && settle_tilt < max_pos_tilt_) ? settle_tilt : max_pos_tilt_;
+    auto clampTilt = [tilt_limit](float t) {
+        if (t >  tilt_limit) return  tilt_limit;
+        if (t < -tilt_limit) return -tilt_limit;
         return t;
     };
     pitch_sp = clampTilt(-ax_body / gravity_);
@@ -1439,6 +1625,18 @@ void PidController::onTakeoffComplete()
 void PidController::setGuidanceTarget(const GuidanceTarget& target,
                                       const CommandSetpoint& current_sticks)
 {
+    // FLIP owns every setpoint channel for its short duration — a guidance
+    // target arriving mid-flip must not fight it (flip-maneuver-plan.md §4.1:
+    // "誘導目標・同定励振は FLIP 中は無視"). Rejected here rather than
+    // silently overwritten-and-ignored, so a caller can tell the difference.
+    // FLIP は短時間の間、全ての設定点チャネルを所有する — フリップ中に届いた
+    // 誘導目標がそれと競合してはならない（plan §4.1: 「誘導目標・同定励振は
+    // FLIP 中は無視」）。無言で上書き＆無視にせず、ここで拒否して呼び出し側が
+    // 判別できるようにする。
+    if (flip_.active()) {
+        ESP_LOGW(TAG, "Guidance target rejected: flip in progress");
+        return;
+    }
     // Guidance is a POS_HOLD-only feature (the position cascade is what tracks
     // the walking setpoint). Reject elsewhere so a stray API target cannot
     // disturb a manual mode.
@@ -1513,6 +1711,14 @@ void PidController::setGuidanceTarget(const GuidanceTarget& target,
 
 void PidController::startExcitation(const SysidCommand& cmd)
 {
+    // Same FLIP-owns-every-channel rejection as setGuidanceTarget() above —
+    // flip-maneuver-plan.md §4.1.
+    // setGuidanceTarget() 上と同じ「FLIP が全チャネルを所有」の拒否 —
+    // plan §4.1。
+    if (flip_.active()) {
+        ESP_LOGW(TAG, "Sysid excitation rejected: flip in progress");
+        return;
+    }
     if (phase_ != VerticalPhase::Airborne) {   // Landing/Takeoff/Grounded are not Airborne
         ESP_LOGW(TAG, "Sysid excitation rejected: not airborne");
         return;
@@ -1587,6 +1793,11 @@ void PidController::reset()
     // NOTE: roll_trim_/pitch_trim_ are NOT cleared — the learned/loaded trim persists
     // across resets (config, not integrator state). / roll_trim_/pitch_trim_ はクリア
     // しない — 学習/読込トリムは reset を跨いで保持（積分器状態でなく構成値）。
+    flip_.reset();                              // idle + cooldown handling, keeps the last result_ / idle化+クールダウン処理、最終result_は保持
+    flip_start_pending_ = false;
+    flip_prev_phase_    = FlipSequencer::Phase::Idle;
+    flip_ready_         = false;
+    flip_reason_        = FlipBlockReason::NotFlying;
     ESP_LOGI(TAG, "PID controller reset");
 }
 
@@ -1633,6 +1844,339 @@ void PidController::onModeChange(FlightMode new_mode)
     }
 
     current_mode_ = new_mode;
+}
+
+// -----------------------------------------------------------------------------
+// shortestPathYawRate — shared heading-rate P law (target - current, wrapped
+// to [-pi,pi], clamped to +-rate_max). One formula for three call sites:
+// the guidance position-mode (1) yaw seek and the normal yaw-hold block
+// above (both refactored to call this — identical math, no behavior change),
+// and the FLIP Boost/Recover heading hold below (computeFlipAttitude()).
+// shortestPathYawRate — 共有のヘディングレート P 則（target-current を
+// [-pi,pi] に折返し、±rate_max にクランプ）。3箇所が1つの式を共有する:
+// 誘導位置モード(1)のヨーシークと上の通常ヘディングホールド（どちらも
+// この呼び出しへリファクタ済み — 数式は同一、挙動変化なし）、そして下の
+// FLIP Boost/Recover ヘディングホールド（computeFlipAttitude()）。
+// -----------------------------------------------------------------------------
+float PidController::shortestPathYawRate(float target_yaw, float current_yaw,
+                                         float kp, float rate_max) const
+{
+    float error = target_yaw - current_yaw;
+    while (error >  3.14159265f) error -= 6.2831853f;
+    while (error < -3.14159265f) error += 6.2831853f;
+    float rate = kp * error;
+    if (rate >  rate_max) rate =  rate_max;
+    if (rate < -rate_max) rate = -rate_max;
+    return rate;
+}
+
+// =============================================================================
+// Flip maneuver (docs/plans/flip-maneuver-plan.md §3/§4/§7)
+// 宙返りマニューバ（plan §3/§4/§7）
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// onFlip — FLYING->FLIP entry (ControllerCmd::Flip). Latches the direction for
+// the deferred flip_.start() in compute() (see compute()'s doc on
+// flip_start_pending_) and resets the rate-loop integrators so Boost starts
+// clean.
+//
+// Defensive re-check, not a hard gate: state_task already verified
+// isFlipReady() before issuing ControllerCmd::Flip, but up to one control
+// cycle may have passed. This proceeds regardless of a stale disagreement —
+// once FlightState::FLIP is entered the ONLY documented exit is flip_done
+// (detailed_design.md §3.1 FLIP row: FLIP->FLYING via flip_done, FLIP-> any
+// other state only through IMPACT/DISARM/emergency). Refusing to start here
+// would strand the state machine in FLIP with no way back. A stale-condition
+// start is still bounded and safe: the in-flight abort paths (spin_timeout /
+// gyro_abort / recover_timeout) catch a maneuver that goes wrong once running.
+//
+// onFlip — FLYING→FLIP突入（ControllerCmd::Flip）。方向を、compute() 内の
+// 遅延 flip_.start() 用に保持し（compute() の flip_start_pending_ ドキュメント
+// 参照）、Boost がきれいに始まるようレートループ積分器をリセットする。
+//
+// 防御的再評価であり、ハードゲートではない: state_task は
+// ControllerCmd::Flip 発行前に isFlipReady() を確認済みだが、最大1制御周期分
+// 経過している可能性がある。判定が古くなっていても開始を続行する —
+// FlightState::FLIP に入った後の唯一の文書化された脱出は flip_done
+// （detailed_design.md §3.1 FLIP行: FLIP→FLYING は flip_done 経由、
+// FLIP→他状態は IMPACT/DISARM/emergency のみ）。ここで開始を拒否すると
+// 状態機械が戻る手段なく FLIP に取り残される。古い判定のまま開始しても、
+// 実行中の打ち切り経路（spin_timeout / gyro_abort / recover_timeout）が
+// 走り出してから異常を捕捉するため安全な範囲に収まる。
+// -----------------------------------------------------------------------------
+void PidController::onFlip(FlipDirection dir)
+{
+    FlipBlockReason reason;
+    if (!isFlipReady(reason)) {
+        ESP_LOGW(TAG, "Flip %s starting despite a stale readiness check (%s)",
+                 flipDirectionName(dir), flipBlockReasonName(reason));
+    }
+    // Belt-and-suspenders for the same stale-readiness race: C8 already keeps
+    // flip_ready_ false while excitation/guidance is active, but force both
+    // off HERE too so a flip that starts anyway (see the doc above) cannot
+    // have either still injecting into the setpoints it now owns exclusively.
+    // 同じ「判定の古さ」による競合への保険: C8 は励振/誘導が有効な間
+    // flip_ready_ を false に保つが、（上のドキュメントどおり）それでも開始した
+    // 場合に備え、ここでも両方を強制停止し、フリップが今から独占する設定点へ
+    // どちらかが注入し続けることがないようにする。
+    excite_active_   = false;
+    guidance_active_ = false;
+    rate_roll_.reset();
+    rate_pitch_.reset();
+    rate_yaw_.reset();
+    flip_pending_dir_   = dir;
+    flip_start_pending_ = true;
+    ESP_LOGI(TAG, "Flip engaged: %s", flipDirectionName(dir));
+}
+
+// -----------------------------------------------------------------------------
+// onFlipComplete — FLIP->FLYING exit (ControllerCmd::FlipComplete, plan §4.1
+// onExit). Re-captures the altitude/position targets at the CURRENT state
+// (via the existing capture_alt_/capture_pos_ deferred-capture flags — the
+// same mechanism onTakeoff()/onModeChange() already use) and resets the
+// altitude/position integrators: both horizontal position and altitude moved
+// during the flip (plan §3.6: horizontal drift ~0.1m over 0.5s; vertical is
+// actively driven by Recover), so holding the PRE-flip targets would command
+// a walk-back instead of a clean hold where the flip actually ended.
+//
+// flip_.reset() clears phase_ back to Idle (isFlipActive()/isFlipDone()
+// both go false from here) but deliberately keeps the last result_ — see
+// FlipSequencer::reset()'s doc: the Tello API polls ControllerStatus AFTER
+// state_task's FLIP->FLYING and needs flip_result to answer `flip <dir>`.
+//
+// onFlipComplete — FLIP→FLYING退出（ControllerCmd::FlipComplete, plan §4.1
+// onExit）。高度・位置目標を「現在」の状態で取り直し（既存の
+// capture_alt_/capture_pos_ 遅延取り込みフラグ経由 — onTakeoff()/
+// onModeChange() が既に使うのと同じ仕組み）、高度・位置積分器をリセットする:
+// フリップ中は水平位置・高度とも動く（plan §3.6: 水平ドリフト0.5sで約0.1m、
+// 鉛直は Recover が能動駆動）ため、フリップ「前」の目標を保持すると
+// 「戻る」指令になり、フリップが実際に終わった場所での綺麗な保持にならない。
+//
+// flip_.reset() は phase_ を Idle に戻す（ここから isFlipActive()/
+// isFlipDone() は両方 false）が、最後の result_ は意図的に保持する —
+// FlipSequencer::reset() のドキュメント参照: Tello API は state_task の
+// FLIP→FLYING の「後」に ControllerStatus をポーリングし、`flip <dir>` に
+// 答えるため flip_result を必要とする。
+// -----------------------------------------------------------------------------
+void PidController::onFlipComplete()
+{
+    // Altitude target = the PRE-flip altitude (plan §4.1 onExit), not the
+    // current one: Recover ends near the lowest point, so re-capturing there
+    // would ratchet the hover down by ~0.1 m per flip (SILS 2026-09-16).
+    // 高度目標は「宙返り前」の高度（plan §4.1 onExit）。現在高度で取り直すと
+    // Recover の終わりは最低点付近なので宙返りごとに約 0.1 m ずつ下がる（SILS
+    // 2026-09-16）。
+    alt_setpoint_ = flip_.startHeightM();
+    capture_alt_ = false;
+    capture_pos_ = true;
+    alt_pos_.reset();
+    alt_vel_.reset();
+    pos_x_.reset();
+    pos_y_.reset();
+    vel_x_.reset();
+    vel_y_.reset();
+    rate_yaw_.reset();
+    flip_settle_remaining_s_ = flip_.config.settle_ms * 0.001f;
+    flip_.reset();
+    flip_prev_phase_ = FlipSequencer::Phase::Idle;
+    ESP_LOGI(TAG, "Flip complete — normal mode law resumed");
+}
+
+// -----------------------------------------------------------------------------
+// isFlipReady — reads the cache updateFlipReadiness() (called every
+// compute() cycle) last wrote. const, so it cannot itself read the
+// StateEstimate needed to evaluate C2-C7 — same reason isTakeoffComplete()/
+// isGuidanceActive() read a cached flag instead of computing on demand.
+// isFlipReady — updateFlipReadiness()（毎 compute() 周期で呼ぶ）が最後に
+// 書いたキャッシュを読む。const のため C2-C7 の評価に要る StateEstimate を
+// 自ら読めない — isTakeoffComplete()/isGuidanceActive() がオンデマンド計算
+// でなくキャッシュ済みフラグを読むのと同じ理由。
+// -----------------------------------------------------------------------------
+bool PidController::isFlipReady(FlipBlockReason& reason) const
+{
+    reason = flip_reason_;
+    return flip_ready_;
+}
+
+// -----------------------------------------------------------------------------
+// buildFlipInput — assemble one cycle's FlipSequencer::Input from the state
+// estimate. Sign conventions MATCH the ones already used elsewhere in this
+// file (see the Landing/ALT_HOLD vertical blocks in compute()): NED
+// position/velocity z is down-positive, so altitude and up-velocity are both
+// negated.
+//
+// estimator_ok is a coarse proxy (sensor_mask != 0, i.e. the ESKF has not
+// frozen every state) — StateEstimate does not yet carry a dedicated
+// estimator-health fact reachable from a core (topic-free) component; a
+// cleaner signal is expected once the parallel estimator work lands (see this
+// task's final report). battery_v/tof_valid are exact: both are injected by
+// ControlTask into its LOCAL copy of StateEstimate before calling compute()
+// (see data_types.hpp's doc on those two fields and control_task.cpp).
+//
+// buildFlipInput — state から1周期分の FlipSequencer::Input を組み立てる。
+// 符号規約は本ファイル他所（compute() の Landing/ALT_HOLD 鉛直ブロック）と
+// 一致させる: NED の位置/速度の z は下向き正のため、高度と上向き速度は
+// どちらも符号反転する。
+//
+// estimator_ok は粗い代理指標（sensor_mask != 0、すなわち ESKF が全状態を
+// 凍結していない）— StateEstimate はまだコア（トピック禁制）部品から届く
+// 専用の推定器健全性の事実を持たない。並行実装中の推定器側の作業が
+// 着地すればより正確な信号に置き換わる見込み（本タスクの最終報告参照）。
+// battery_v/tof_valid は正確 — どちらも ControlTask が compute() 呼び出し前に
+// StateEstimate の「ローカルコピー」へ注入する（data_types.hpp のこの2
+// フィールドのドキュメントと control_task.cpp 参照）。
+// -----------------------------------------------------------------------------
+FlipSequencer::Input PidController::buildFlipInput(const StateEstimate& state, float dt) const
+{
+    FlipSequencer::Input input{};
+    for (int i = 0; i < 3; ++i) input.gyro[i] = state.angular_rate[i];
+    for (int i = 0; i < 4; ++i) input.quat[i] = state.attitude[i];
+    input.height_m = -state.position[2];                   // NED z-down -> altitude up
+    input.vertical_velocity_up_mps = -state.velocity[2];   // NED z-down -> up-positive
+    input.horizontal_speed_mps =
+        sqrtf(state.velocity[0] * state.velocity[0] + state.velocity[1] * state.velocity[1]);
+    input.battery_v    = state.battery_voltage;
+    input.estimator_ok = (state.sensor_mask != 0);
+    input.tof_valid    = state.tof_valid;
+    input.dt = dt;
+    return input;
+}
+
+// -----------------------------------------------------------------------------
+// updateFlipReadiness — re-evaluate C2-C8 into the flip_ready_/flip_reason_
+// cache isFlipReady() (const) reads. Called once per compute() cycle,
+// regardless of mode/phase — see compute()'s doc for why no explicit
+// FlightState/Airborne check is needed here.
+// updateFlipReadiness — C2-C8 を再評価し、isFlipReady()（const）が読む
+// flip_ready_/flip_reason_ キャッシュを更新する。モード/フェーズに関わらず
+// compute() 周期ごとに1回呼ぶ — 明示的な FlightState/Airborne 判定が不要な
+// 理由は compute() のドキュメント参照。
+// -----------------------------------------------------------------------------
+void PidController::updateFlipReadiness(const StateEstimate& state, float dt)
+{
+    const FlipSequencer::Input input = buildFlipInput(state, dt);
+    FlipBlockReason reason = FlipBlockReason::None;
+    bool ready = flip_.ready(input, reason);
+
+    // C8 (plan §3.1): identification excitation or guidance already driving a
+    // setpoint through this same pipeline — reject rather than let two
+    // sources fight for the same channels. FlipSequencer has no knowledge of
+    // sysid/guidance (it only knows its own phases), so this is judged here,
+    // not inside ready() (plan §4.1/§4.2 INV-3: detection vs. judgment).
+    // C8（plan §3.1）: 同定励振または誘導が既にこの同じパイプラインへ設定点を
+    // 流している — 2つの出所が同一チャネルを取り合うのを避けるため拒否する。
+    // FlipSequencer は sysid/誘導を知らない（自身のフェーズのみ知る）ため、
+    // ready() の中でなくここで判定する（plan §4.1/§4.2 INV-3: 検出と判断の
+    // 分離）。
+    // An ENGAGED guidance target (API "up"/"forward" already reached, POS_HOLD
+    // holding it) is not a conflict: the API flies through guidance, so a flip
+    // right after a move is the normal Tello use. onFlip() releases the target
+    // and FlipComplete re-captures the position. Only the sysid excitation is
+    // a competing setpoint SOURCE; an in-progress API move cannot overlap a
+    // flip because ApiTask processes commands one at a time.
+    // 係合中の誘導目標（API の up/forward 到達後に POS_HOLD が保持）は競合ではない:
+    // API は誘導で飛ぶので、移動直後の宙返りが Tello の通常の使い方。onFlip() が目標を
+    // 解放し FlipComplete が位置を取り直す。競合する設定点の出所は同定励振だけ。
+    // 進行中の API 移動は ApiTask が 1 件ずつ処理するため宙返りと重ならない。
+    if (ready && excite_active_) {
+        ready = false;
+        reason = FlipBlockReason::SourceConflict;
+    }
+    // Busy: a flip is already active() — StateManager rejects a second FLIP
+    // request while state==FLIP (detailed_design.md §3.1), so this mainly
+    // guards the brief window before that transition is observed.
+    // Busy: フリップが既に active() — StateManager は state==FLIP 中の
+    // 2件目の FLIP 要求を拒否する（detailed_design.md §3.1）ため、これは
+    // 主にその遷移が観測されるまでの短い窓を守る防御。
+    if (ready && flip_.active()) {
+        ready = false;
+        reason = FlipBlockReason::Busy;
+    }
+
+    flip_ready_  = ready;
+    flip_reason_ = reason;
+}
+
+// -----------------------------------------------------------------------------
+// computeFlipAttitude — route roll/pitch/yaw setpoints for one FLIP cycle.
+// See flip_sequencer.hpp's Output doc and pid_controller.hpp's doc on this
+// method for the two-branch shape (Spin/Brake bypass the attitude PID
+// entirely; Boost/Recover/Done reuse it for a level hold).
+// computeFlipAttitude — 1 FLIP周期分の roll/pitch/yaw 設定点を配線する。
+// 2分岐の形（Spin/Brake は姿勢PIDを完全迂回、Boost/Recover/Done は水平保持に
+// 再利用）は flip_sequencer.hpp の Output ドキュメントと pid_controller.hpp
+// の本メソッドのドキュメント参照。
+// -----------------------------------------------------------------------------
+void PidController::computeFlipAttitude(const StateEstimate& state,
+                                        const FlipSequencer::Output& flip_out,
+                                        float dt,
+                                        float& rate_sp_roll, float& rate_sp_pitch,
+                                        float& rate_sp_yaw, float& roll_sp,
+                                        float& pitch_sp)
+{
+    if (!flip_out.attitude_loop) {
+        // Spin/Brake: drive the EXISTING rate PID directly with the
+        // sequencer's ramped rate setpoint — the same open-loop-setpoint path
+        // ACRO already uses (INV-1: no parallel control law). roll_sp/
+        // pitch_sp stay 0 for the Data Stream's angle_ref export (unused by
+        // any control law in this branch).
+        // Spin/Brake: 既存のレートPIDを列生成器のランプ済みレート設定点で
+        // 直接駆動する — ACROと同じ開ループ設定点経路（INV-1: 並列の制御則
+        // なし）。roll_sp/pitch_sp は Data Stream の angle_ref 出力用に0の
+        // まま（この分岐ではどの制御則も使わない）。
+        rate_sp_roll  = flip_out.rate_sp[0];
+        rate_sp_pitch = flip_out.rate_sp[1];
+        rate_sp_yaw   = flip_out.rate_sp[2];
+        roll_sp  = 0.0f;
+        pitch_sp = 0.0f;
+        return;
+    }
+
+    // Boost/Recover/Done: reuse the EXISTING attitude PID for a level hold
+    // (roll_sp=pitch_sp=0) and the shared heading-hold P law (same gains
+    // normal flight's heading hold uses) to keep the yaw captured at start().
+    // Boost/Recover/Done: 既存の姿勢PIDを水平保持（roll_sp=pitch_sp=0）に
+    // 再利用し、共有のヘディングホールド P 則（通常飛行のヘディングホールドと
+    // 同じゲイン）で start() 時に取り込んだヨーを保つ。
+    math::Quat q(state.attitude[0], state.attitude[1], state.attitude[2], state.attitude[3]);
+    math::Vec3 euler = q.to_euler();
+
+    roll_sp  = 0.0f;
+    pitch_sp = 0.0f;
+    rate_sp_roll  = att_roll_.compute(roll_sp, euler.x, dt);
+    rate_sp_pitch = att_pitch_.compute(pitch_sp, euler.y, dt);
+    rate_sp_yaw = flip_out.hold_yaw
+                      ? shortestPathYawRate(flip_.startYawRad(), euler.z,
+                                            yaw_hold_kp_, yaw_hold_rate_max_)
+                      : 0.0f;
+}
+
+// -----------------------------------------------------------------------------
+// trackFlipPhaseTransition — edge-detect Spin/Recover entry and reset the
+// rate-loop integrators exactly there (flip-maneuver-plan.md §3.3: "積分項は
+// P2開始時とP4開始時にリセットする"), in addition to the reset onFlip()
+// already does before Boost. Spin's reset clears any windup Boost's brief
+// level-hold left behind before the accel ramp begins; Recover's reset
+// clears deceleration-torque windup before the attitude PID re-engages.
+// trackFlipPhaseTransition — Spin/Recover 突入をエッジ検出し、そこで正確に
+// レートループ積分器をリセットする（plan §3.3: 「積分項はP2開始時とP4開始時に
+// リセットする」）。onFlip() が Boost 前に既に行うリセットに加えて行う。
+// Spin のリセットは、加速ランプが始まる前に Boost の短い水平保持が残した
+// 巻き上がりを消す。Recover のリセットは、姿勢PID再係合前に減速トルクの
+// 巻き上がりを消す。
+// -----------------------------------------------------------------------------
+void PidController::trackFlipPhaseTransition(FlipSequencer::Phase now)
+{
+    if (now == flip_prev_phase_) {
+        return;
+    }
+    if (now == FlipSequencer::Phase::Spin || now == FlipSequencer::Phase::Recover) {
+        rate_roll_.reset();
+        rate_pitch_.reset();
+        rate_yaw_.reset();
+    }
+    flip_prev_phase_ = now;
 }
 
 }  // namespace sf

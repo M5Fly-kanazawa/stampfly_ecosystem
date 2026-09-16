@@ -161,6 +161,20 @@ static void processControllerCommands(sf::IController& controller)
             // （params コールバックは verb を発行するだけ — タスク跨ぎで触らない）。
             controller.reloadParams();
             break;
+        case sf::ControllerCmd::Flip:
+            // FLYING -> FLIP entry (flip-maneuver-plan.md §4.1): the direction
+            // rides ControllerCommand.arg, same convention as
+            // EstimatorCommand.arg's CovScope (data_types.hpp).
+            // FLYING→FLIP突入（plan §4.1）: 方向は ControllerCommand.arg で
+            // 運ぶ（EstimatorCommand.arg の CovScope と同じ流儀、
+            // data_types.hpp 参照）。
+            controller.onFlip(static_cast<sf::FlipDirection>(cmd.arg));
+            break;
+        case sf::ControllerCmd::FlipComplete:
+            // FLIP -> FLYING exit (plan §4.1 onExit).
+            // FLIP→FLYING退出（plan §4.1 onExit）。
+            controller.onFlipComplete();
+            break;
         default:
             break;
         }
@@ -257,6 +271,20 @@ void ControlTask(void* pvParameters)
         sf::StateEstimate state = sf::estimate_state.latest();
         sf::CommandSetpoint setpoint = sf::command_setpoint.latest();
         sf::SystemMode mode = sf::system_mode.latest();
+
+        // Inject the two facts the estimator itself does not populate
+        // (core components — the controller — may not touch Pub-Sub topics)
+        // into this LOCAL copy of state, so IController::compute() can still
+        // see them via its normal state parameter. Used by the flip
+        // sequencer's C5/C6 gates (flip-maneuver-plan.md §3.1); see
+        // data_types.hpp's doc on these two StateEstimate fields.
+        // 推定器自身が埋めない2つの事実（コア部品＝制御器は Pub-Sub トピック
+        // に触れない）を、この「ローカルコピー」の state へ注入する —
+        // IController::compute() は通常の state 引数経由でこれらを見られる。
+        // フリップ列生成器の C5/C6 判定に使う（plan §3.1）。この2フィールドの
+        // ドキュメントは data_types.hpp 参照。
+        state.battery_voltage = sf::sensor_power.latest().voltage;
+        state.tof_valid       = sf::sensor_snapshot.latest().tof_valid;
 
         // =====================================================================
         // Step 2: Gate the motor output on the system arm state.
@@ -391,19 +419,29 @@ void ControlTask(void* pvParameters)
         // TAKEOFF→FLYING を駆動する（ToF 0.15m 空中エッジとは分離）。guidance_active と
         // 同じ「タスク層が事実を運ぶ」パターン。
         // flip_ready/flip_block_reason/flip_active/flip_done/flip_result (plan
-        // §4.1/§4.3) are zero-initialized here — this task adds the fields only;
-        // the flip sequencer that fills them from the real controller state is a
-        // later task (sf_controller_pid). Value-initializing the whole struct with
-        // `{}` first, then setting only the fields this task knows about, avoids a
-        // partial-aggregate-init warning as more fields are added over time.
-        // flip_ready/flip_block_reason/flip_active/flip_done/flip_result（plan
-        // §4.1/§4.3）はここではゼロ初期化のみ — 本タスクはフィールド追加のみで、実際の
-        // 制御器状態から埋める列生成器（sf_controller_pid）は後続タスク。構造体全体を
-        // `{}` でまずゼロ初期化し、本タスクが把握するフィールドだけを設定することで、
-        // 今後フィールドが増えても部分初期化警告を避けられる。
+        // §4.1/§4.3): read from the controller every cycle, same task-layer-
+        // carries-the-fact pattern as guidance_active/takeoff_reached above.
+        // flip_result is NOT cleared by the controller on FLIP->FLYING (see
+        // FlipSequencer::reset()'s doc) — it stays readable by the Tello API,
+        // which polls this topic AFTER state_task's transition, until the
+        // controller's NEXT onFlip() overwrites it.
+        // flip_ready/flip_block_reason/flip_active/flip_done/flip_result
+        // （plan §4.1/§4.3）: 毎周期制御器から読む。guidance_active/
+        // takeoff_reached と同じ「タスク層が事実を運ぶ」パターン。
+        // flip_result は制御器が FLIP→FLYING で消さない
+        // （FlipSequencer::reset() のドキュメント参照）— state_task の遷移
+        // 「後」に本トピックをポーリングする Tello API から、制御器の
+        // 「次」の onFlip() が上書きするまで読み出せる。
         sf::ControllerStatus status{};
         status.guidance_active = controller.isGuidanceActive();
         status.takeoff_reached = controller.isTakeoffComplete();
+        sf::FlipBlockReason flip_reason = sf::FlipBlockReason::None;
+        status.flip_ready = controller.isFlipReady(flip_reason);
+        status.flip_block_reason = static_cast<uint8_t>(flip_reason);
+        status.flip_active = controller.isFlipActive();
+        sf::FlipResult flip_result = sf::FlipResult::None;
+        status.flip_done = controller.isFlipDone(flip_result);
+        status.flip_result = static_cast<uint8_t>(flip_result);
         status.timestamp = static_cast<uint32_t>(esp_timer_get_time());
         sf::controller_status.publish(status);
 

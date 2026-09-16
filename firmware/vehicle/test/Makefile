@@ -35,6 +35,17 @@ TARGET = test_vehicle
 SRCS_ESKF_FLIP = test_eskf_flip_hold.cpp ../components/sf_estimator_eskf/eskf_core.cpp
 TARGET_ESKF_FLIP = test_eskf_flip_hold
 
+# Flip maneuver: setpoint sequencer (flip-maneuver-plan.md §3.2/§3.5/§7).
+# Same own-binary pattern as TARGET_ESKF_FLIP above — FlipSequencer has no
+# ESP-IDF/FreeRTOS/param-system dependency (see flip_sequencer.hpp), so its
+# own main()/TEST() framework needs only flip_sequencer.cpp itself.
+# 宙返りマニューバ: 設定点列生成器（plan §3.2/§3.5/§7）。上の TARGET_ESKF_FLIP
+# と同じ独自バイナリの形 — FlipSequencer は ESP-IDF/FreeRTOS/paramシステムに
+# 依存しない（flip_sequencer.hpp 参照）ため、own main()/TEST() フレームワークは
+# flip_sequencer.cpp 自身だけをリンクすればよい。
+SRCS_FLIP_SEQUENCER = test_flip_sequencer.cpp ../components/sf_controller_pid/flip_sequencer.cpp
+TARGET_FLIP_SEQUENCER = test_flip_sequencer
+
 # NOTE: test_state_manager is temporarily disabled. It compiled the firmware
 # state_manager/failsafe through the now-removed simulator/sils/compat shim and
 # sils_topics.cpp (deleted in the SILS clean-slate, 2026-05-31). It will be
@@ -45,7 +56,7 @@ TARGET_ESKF_FLIP = test_eskf_flip_hold
 
 .PHONY: all clean test
 
-all: $(TARGET) $(TARGET_ESKF_FLIP)
+all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
@@ -53,9 +64,13 @@ $(TARGET): $(SRCS)
 $(TARGET_ESKF_FLIP): $(SRCS_ESKF_FLIP)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+$(TARGET_FLIP_SEQUENCER): $(SRCS_FLIP_SEQUENCER)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
 test: all
 	./$(TARGET)
 	./$(TARGET_ESKF_FLIP)
+	./$(TARGET_FLIP_SEQUENCER)
 
 clean:
-	rm -f $(TARGET) $(TARGET_ESKF_FLIP) test_state_manager
+	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) test_state_manager
