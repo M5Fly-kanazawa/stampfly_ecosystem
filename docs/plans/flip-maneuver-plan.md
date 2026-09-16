@@ -291,6 +291,26 @@ FLIP 中のその他の事象:
 | `tools/stampfly_py` | `flip()` |
 | `protocol/spec/messages.yaml` | 変更なし（FLIP ビットは予約済み） |
 
+### 4.6 拡張性の検討（2026-09-16、オーナーの問い「別のモードを取り込む拡張性はあるか」への回答）
+
+vehicle は旧版の状態遷移管理の曖昧さ（`Mode` / `Control_mode` / `Throttle_control_mode` / `Alt_flag` / `Flip_flag` が
+重なり合い、優先順位が暗黙で、フラグが遷移を跨いで残る — オリジナルの Flip 不具合 §6.1 はすべてこれに由来）への
+反省から、enum 状態 × 規範表（INV-4）、単一の遷移実行者、onExit/onEnter へのリセット集約、クラス A/B の境界条件、
+検出と判断の分離（INV-3）、単一パイプライン（INV-1）を入れた。実測では TAKEOFF/LANDING を特別扱いする箇所は
+firmware 全体で 16 箇所・4 ファイル（StateManager 8、state_task 5、離着陸 MGR 2、ImuTask 1）に集中しており、
+**状態として足す限り拡張は局所的**である。当初案（制御器内オーバーライド）は旧版の `Flip_flag` の再来であり、
+この構造を迂回する拡張だった。
+
+Flip で露呈した不足は構造ではなく規則の明文化で、Phase 1 で `architecture.md` / `detailed_design.md` に書く:
+
+| # | 規則 | Flip への適用 |
+|---|------|--------------|
+| 1 | **分類規則**: 操縦者のスティックの意味・自動化される軸・フェイルセーフの解釈のどれかが変わるなら FlightState のシーケンス。変わらず設定点を作るだけなら誘導（`GuidanceTarget`）。診断オーバーレイ（同定励振）も `controller_status` で可視化 | 3 つとも変わる → `FlightState::FLIP` |
+| 2 | **チャネル別の設定点出所の宣言**: 各状態／フェーズが 姿勢・鉛直・水平・ヨー の出所（Pilot / Sequence / Zero）を表で宣言。制御器は `VerticalPhase` を出所の一般化として持つ（INV-1 は保たれる: 出所が替わるだけで制御則は替えない）。INV-2 は「姿勢の出所が Pilot 以外になれるのはリンク途絶（Zero）と操縦者が起動した有限時間のシーケンス（Sequence）だけ」と一般化 | Boost/Recover: 姿勢 Sequence(水平)・鉛直 Sequence(推力)・ヨー Sequence(保持)。Spin/Brake: 姿勢 Sequence(レート)・鉛直 Sequence(推力)・ヨー Sequence(0) |
+| 3 | **規範表の「シーケンス状態の既定行」**: エッジ保留・API 誘導拒否・DISARM/emergency/IMPACT 即時・接地リセット無し・新規シーケンス要求拒否を 1 行で定義し、各シーケンスは差分だけ書く | FLIP の差分: GYRO_ANOMALY 無視、LOW_BATTERY は FLYING 復帰後 |
+| 4 | **統合の時期**: 今は Takeoff と同じ形（`ControllerCmd` の動詞 + `controller_status` の完了フラグ + `IController` のフック）で足す。4 個目のシーケンスを足すときに `SequenceStart{kind}` / `sequence_done` / `onSequence(kind)` へ統合する | `Flip` / `FlipAbort`、`flip_done` / `flip_result`、`onFlip()` |
+| 5 | **状態追加手順のチェックリスト**: enum → 規範表（既定行 + 差分）→ StateManager 遷移 + onEnter/onExit → state_task 実行 → ControllerCmd/IController → controller_status → failsafe の判断 → notify/telemetry → API の待ち条件 → SILS シナリオ + メトリクス → `@design` タグ | Phase 2 の作業一覧そのもの |
+
 ## 5. 数値シミュレーション計画
 
 ### 5.1 平面 2 自由度モデル（設計段階、Phase 0）
@@ -412,7 +432,7 @@ FLIP 中のその他の事象:
 | Phase | 内容 | 合格基準 |
 |-------|------|---------|
 | 0 設計確定 | 本文書、平面モデルの掃引、オリジナルとの比較、最終提案 | 推奨パラメータと高度損失の見積りが数値で示され、オーナーが §9 の未決事項を決定 |
-| 1 設計文書と SILS 準備 | INV-2 例外条項、規範表の列追加、要件 §9 追記、SILS ジャイロ飽和、新メトリクス | 既存の SILS 再確認試験が全 PASS（改修による既存動作の破壊なし） |
+| 1 設計文書と SILS 準備 | §4.6 の規則 1〜5 を `architecture.md`（INV-2 の一般化、分類規則、チャネル出所の表）と `detailed_design.md`（シーケンス既定行、FLIP 行、状態追加手順）に記載、要件 §9 追記、SILS ジャイロ飽和、新メトリクス | 既存の SILS 再確認試験が全 PASS（改修による既存動作の破壊なし） |
 | 2 ファーム実装 | `FlipSequencer`、`ControllerCmd::Flip`、`controller_status` 拡張、StateManager のセル、API `cmdFlip`、推定器の窓内処理（加速度補正停止・ToF 再取り込み・回転角照合）、パラメータ定義 | 単体テスト（フェーズ進行・打ち切り・角度積算）PASS。SILS `api_flip` 4 方向 PASS（復帰後に ToF 観測が採用に戻ることを含む）。摂動族 PASS。既存シナリオ全 PASS |
 | 3 コントローラボタン | `CTRL_FLAG_FLIP` エッジ → Flip 要求、方向決定則 | SILS `rc_flip` PASS |
 | 4 実機検証 | ネット・高天井・1 方向ずつ・h = 1.5 m から。400 Hz ログ取得。SILS とのモデル一致確認 | 4 方向 × 3 回成功。高度損失 ≤ 見積り + 0.2 m。完了後 1 s 以内に ±10°。角速度異常の誤検出なし |
