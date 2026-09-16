@@ -32,6 +32,7 @@ namespace sf {
 // フライト状態 — 機体のトップレベル状態
 //
 // @design requirements.md §2 — State transition diagram               [OK]
+// @design docs/plans/flip-maneuver-plan.md §4.1 — FlightState::FLIP    [OK]
 // =============================================================================
 
 enum class FlightState : uint8_t {
@@ -42,11 +43,15 @@ enum class FlightState : uint8_t {
     TAKEOFF       = 4,   // Takeoff sequence / 離陸シーケンス
     FLYING        = 5,   // In flight (see FlightMode) / 飛行中（FlightMode参照）
     LANDING       = 6,   // Landing sequence / 着陸シーケンス
+    FLIP          = 7,   // Flip maneuver sequence, entered from FLYING only —
+                         // same shape as TAKEOFF/LANDING (flip-maneuver-plan.md
+                         // §4.1/§4.3) / 宙返りシーケンス、FLYING からのみ突入 —
+                         // TAKEOFF/LANDING と同型（plan §4.1/§4.3）
 };
 
 /// Number of flight states (for array sizing)
 /// フライト状態数（配列サイズ用）
-constexpr int FLIGHT_STATE_COUNT = 7;
+constexpr int FLIGHT_STATE_COUNT = 8;
 
 /// Get human-readable state name
 /// 状態の名前を取得する
@@ -60,6 +65,7 @@ inline const char* flightStateName(FlightState state)
         case FlightState::TAKEOFF:      return "TAKEOFF";
         case FlightState::FLYING:       return "FLYING";
         case FlightState::LANDING:      return "LANDING";
+        case FlightState::FLIP:         return "FLIP";
         default:                        return "UNKNOWN";
     }
 }
@@ -136,7 +142,8 @@ inline bool isArmed(FlightState state)
     return state == FlightState::ARMED_GROUND ||
            state == FlightState::TAKEOFF ||
            state == FlightState::FLYING ||
-           state == FlightState::LANDING;
+           state == FlightState::LANDING ||
+           state == FlightState::FLIP;
 }
 
 /// Check if a state implies airborne (in the air)
@@ -145,7 +152,8 @@ inline bool isAirborne(FlightState state)
 {
     return state == FlightState::TAKEOFF ||
            state == FlightState::FLYING ||
-           state == FlightState::LANDING;
+           state == FlightState::LANDING ||
+           state == FlightState::FLIP;
 }
 
 }  // namespace sf

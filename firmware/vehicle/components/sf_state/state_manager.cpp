@@ -177,10 +177,14 @@ bool StateManager::requestDisarm()
     // request, 2026-06-14). Touchdown then disarms (LANDING → IDLE_GROUND via the ToF
     // landing detector). A DISARM AGAIN while already LANDING falls through to the
     // immediate cut below (state_ != FLYING) — pressing twice is the abort/emergency.
+    // FLIP falls through the same way (state_ == FLIP, not FLYING): a DISARM mid-
+    // maneuver is an immediate cut, same as ACRO/STABILIZE — plan §4.3 FLIP row.
     // ALT_HOLD/POS_HOLD の FLYING 中: パイロット DISARM は即モータ停止でなく自動着陸
     // （緩降下）を開始する — 高度制御モードは自力で着陸でき、空中でモータを切ると機体が
     // 落ちるだけ（ユーザー要望 2026-06-14）。接地で DISARM（LANDING→IDLE_GROUND, ToF 着陸
     // 検出）。LANDING 中の再 DISARM は下の即カットに落ちる（state_ != FLYING）— 2回押しが中断/緊急。
+    // FLIP も同様に下へ落ちる（state_ == FLIP であり FLYING でない）: マニューバ中の
+    // DISARM は ACRO/STABILIZE と同じ即カット — plan §4.3 FLIP 行。
     if (state_ == FlightState::FLYING && mode_ >= FlightMode::ALT_HOLD) {
         ESP_LOGI(TAG, "DISARM in %s → auto-land (LANDING)", flightModeName(mode_));
         transition(FlightState::LANDING);
@@ -201,7 +205,9 @@ bool StateManager::requestEmergencyStop()
     }
     // Unconditional immediate motor cut — bypasses the ALT/POS auto-landing (API
     // `emergency`, or aborting an in-progress auto-land). Motors zero once isArmed() is false.
+    // Also the abort path out of FLIP (plan §3.5: "API emergency は既存どおり即 DISARM").
     // 無条件の即モータ停止 — ALT/POS 自動着陸を迂回（API `emergency` / 自動着陸の中断）。
+    // FLIP からの打ち切り経路も兼ねる（plan §3.5: 「API emergency は既存どおり即 DISARM」）。
     ESP_LOGW(TAG, "EMERGENCY STOP (%s → IDLE_GROUND)", flightStateName(state_));
     transition(FlightState::IDLE_GROUND);
     return true;
@@ -253,6 +259,52 @@ void StateManager::notifySoftLanding()
     transition(FlightState::ARMED_GROUND);
 }
 
+/// @design detailed_design.md §3.1 — FLIP row, "Flip request" column  [OK]
+/// @design docs/plans/flip-maneuver-plan.md §4.3                     [OK]
+bool StateManager::requestFlip(FlipDirection direction)
+{
+    // C1 gate: FLYING only. This single check also covers the "busy" cell (state_
+    // already FLIP, so state_ != FLYING) and every other non-flying state — the
+    // normative table's three FLIP-request outcomes collapse to one guard because
+    // they all reduce to "is the current state FLYING". Execution conditions
+    // C2-C8 are judged by the controller, not here (see header comment).
+    // 実行条件 C1 の判定: FLYING のみ。この単一チェックで「busy」（既に state_==FLIP
+    // ゆえ state_ != FLYING）と他の全非飛行状態も兼ねる — 規範表の3通りの Flip 要求
+    // 結果は「現在状態が FLYING か」に帰着するため単一の判定で足りる。実行条件 C2-C8
+    // はここでなく制御器が判定する（ヘッダコメント参照）。
+    if (state_ != FlightState::FLYING) {
+        ESP_LOGD(TAG, "Flip rejected: not FLYING (state=%s)", flightStateName(state_));
+        return false;
+    }
+    ESP_LOGI(TAG, "Flip requested (direction=%s)", flipDirectionName(direction));
+    flip_direction_ = direction;
+    transition(FlightState::FLIP);
+    return true;
+}
+
+/// @design docs/plans/flip-maneuver-plan.md §4.3 — FLIP → FLYING row  [OK]
+void StateManager::notifyFlipComplete()
+{
+    if (state_ != FlightState::FLIP) {
+        return;
+    }
+    ESP_LOGI(TAG, "Flip complete → FLYING");
+    transition(FlightState::FLYING);
+
+    // Deferred battery emergency (handleAlert, LOW_BATTERY/EMERGENCY case below):
+    // apply the existing rule (airborne + EMERGENCY → LANDING) now that FLIP has
+    // ended, mirroring how comm-loss deferral resolves via update() once state_
+    // becomes FLYING again (plan §3.5/§9 item 2).
+    // 保留していた電池緊急（下の handleAlert LOW_BATTERY/EMERGENCY 分岐）: FLIP 終了後に
+    // 既存則（空中+EMERGENCY→LANDING）を適用する。通信断の保留が state_ が FLYING に
+    // 戻った時点で update() 経由で解消されるのと同じ考え方（plan §3.5/§9 項目2）。
+    if (battery_emergency_pending_) {
+        battery_emergency_pending_ = false;
+        ESP_LOGE(TAG, "Deferred battery emergency → LANDING");
+        transition(FlightState::LANDING);
+    }
+}
+
 /// @design requirements.md §2 — IDLE_GROUND ↔ IDLE_HELD by ToF        [OK]
 void StateManager::notifyIdleGroundHeld(bool is_held)
 {
@@ -273,12 +325,18 @@ bool StateManager::requestModeChange(FlightMode new_mode)
     // auto-takeoff verb), and the body LEDs show the selected mode. Rejected
     // only mid-transition (INIT/TAKEOFF/LANDING — a switch flip mid-sequence
     // is applied on reaching FLYING/IDLE by the state task's per-cycle check)
-    // and while held in the hand (IDLE_HELD).
+    // and while held in the hand (IDLE_HELD). FLIP is rejected the same way as
+    // TAKEOFF/LANDING (not listed explicitly — it is simply absent from
+    // mode_change_allowed below): a switch flip during the maneuver persists
+    // and applies once FLIP → FLYING (detailed_design.md §3.1 FLIP row).
     // モード変更は「地上」（DISARM/ARM とも）と FLYING で受理する。設置時の変更が
     // 最も安全（ユーザー仕様, 2026-06-11）— 制御器は判定され（ALT/POS は自動離陸
     // verb まで推力ゼロ）、本体 LED が選択モードを表示する。拒否は遷移中のみ
     // （INIT/TAKEOFF/LANDING — シーケンス途中のスイッチは FLYING/IDLE 到達時に
-    // state task の周期チェックが適用する）と手持ち中（IDLE_HELD）。
+    // state task の周期チェックが適用する）と手持ち中（IDLE_HELD）。FLIP も
+    // TAKEOFF/LANDING と同じく拒否（下の mode_change_allowed に単に含めないだけ）:
+    // マニューバ中のスイッチ反転は持続し、FLIP → FLYING 到達時に適用される
+    // （detailed_design.md §3.1 FLIP 行）。
     const bool mode_change_allowed = (state_ == FlightState::IDLE_GROUND ||
                                       state_ == FlightState::ARMED_GROUND ||
                                       state_ == FlightState::FLYING);
@@ -324,21 +382,43 @@ void StateManager::handleAlert(const SystemAlert& alert)
     ESP_LOGW(TAG, "Alert received: type=%d severity=%d", alert.type, alert.severity);
 
     switch (type) {
-        case AlertType::IMPACT:
         case AlertType::GYRO_ANOMALY:
+            // FLIP window exception (plan §3.5/§3.7, detailed_design.md §3.1 FLIP
+            // row): a commanded flip legitimately spins past the 800 deg/s crash
+            // threshold, so the alert is IGNORED (logged only) while state_ ==
+            // FLIP. The detector (ImuAnomalyDetector) is unchanged — only the
+            // judgment here differs (INV-3: detection vs. judgment separation,
+            // architecture.md §4). Falls through to the same handling as IMPACT
+            // in every other state.
+            // FLIP 窓の例外（plan §3.5/§3.7、detailed_design.md §3.1 FLIP 行）:
+            // 指令された宙返りは正当に 800 deg/s の墜落しきい値を超えて回転するため、
+            // state_ == FLIP の間はアラートを無視する（ログのみ）。検出器
+            // （ImuAnomalyDetector）は変更せず、判断側のみが異なる（INV-3: 検出と
+            // 判断の分離、architecture.md §4）。それ以外の状態では IMPACT と同じ扱いに
+            // フォールスルーする。
+            if (state_ == FlightState::FLIP) {
+                ESP_LOGW(TAG, "Gyro anomaly ignored during %s (commanded rotation)",
+                         flightStateName(state_));
+                break;
+            }
+            [[fallthrough]];
+        case AlertType::IMPACT:
             // Crash / abnormal rate → immediate DISARM, unconditional on armed state
             // (requirements §9: no airborne-only exception). Gate on isArmed, NOT
             // isAirborne: ARMED_GROUND has idling props, and the detection layer
             // (failsafe.cpp / imu_task.cpp) already feeds samples whenever isArmed,
             // so a craft knocked over right after ARM on the ground must also DISARM.
             // transition(IDLE_GROUND) from ARMED_GROUND zeroes the motors via the
-            // same DISARM path as from the air.
+            // same DISARM path as from the air. IMPACT itself is NOT exempted during
+            // FLIP (plan §3.5: "既存どおり即 DISARM" — a real collision must still cut
+            // the motors mid-maneuver).
             // 衝突 / 異常角速度 → 状態に依らず即時DISARM（要件§9: 空中限定の例外なし）。
             // 判定条件は isAirborne でなく isArmed: ARMED_GROUND はプロペラがアイドル回転
             // しており、検出層（failsafe.cpp / imu_task.cpp）も isArmed の間は常にサンプル
             // を供給するため、ARM 直後に地上で倒した機体も DISARM する必要がある。
             // ARMED_GROUND からの transition(IDLE_GROUND) は空中と同じ DISARM 経路で
-            // モータをゼロにする。
+            // モータをゼロにする。IMPACT 自体は FLIP 中も例外にしない（plan §3.5:
+            // 「既存どおり即 DISARM」— マニューバ中の実衝突もモータを止める必要がある）。
             if (sf::isArmed(state_)) {
                 ESP_LOGE(TAG, "Impact/anomaly → emergency DISARM");
                 transition(FlightState::IDLE_GROUND);
@@ -350,19 +430,26 @@ void StateManager::handleAlert(const SystemAlert& alert)
             // (requirements §9: hover hold 3 s → auto landing). We do NOT land here:
             // arm a timer (idempotent — only the first loss while airborne arms it) and
             // let update() command FLYING → LANDING once kCommLossHoverUs elapses.
-            // Gate on isAirborne (TAKEOFF/FLYING/LANDING), NOT on FLYING only: a link
-            // lost during TAKEOFF used to be consumed here and never re-evaluated, so
-            // the craft kept climbing on the stale setpoint with no failsafe at all.
+            // Gate on isAirborne (TAKEOFF/FLYING/LANDING/FLIP), NOT on FLYING only: a
+            // link lost during TAKEOFF used to be consumed here and never re-evaluated,
+            // so the craft kept climbing on the stale setpoint with no failsafe at all.
             // The failsafe also re-raises COMM_LOST periodically while the link stays
-            // lost (level, not edge), so a missed alert is not fatal either way.
+            // lost (level, not edge), so a missed alert is not fatal either way. FLIP is
+            // included in isAirborne (flight_state.hpp), so a loss during FLIP arms the
+            // timer here but update() only fires the transition when state_ == FLYING —
+            // this naturally defers the auto-land until FLIP → FLYING, matching plan
+            // §3.5/§4.3 ("通信途絶は FLIP 完了後に既存則") with no extra state needed.
             // 通信途絶 → ホバーを維持し、猶予経過後に自動着陸（要件§9: ホバー維持3秒→
             // 自動着陸）。ここでは着陸しない: タイマを起動し（冪等 — 空中での最初の喪失
             // のみ起動）、kCommLossHoverUs 経過で update() が FLYING → LANDING を指令する。
-            // 判定条件は FLYING 限定でなく isAirborne（TAKEOFF/FLYING/LANDING）: 従来は
+            // 判定条件は FLYING 限定でなく isAirborne（TAKEOFF/FLYING/LANDING/FLIP）: 従来は
             // TAKEOFF 中の喪失がここで消費されて二度と再評価されず、機体は stale な
             // setpoint のままフェイルセーフなしで上昇し続けた。failsafe 側もリンク喪失中は
             // COMM_LOST を周期的に再発報する（エッジでなくレベル）ので、取りこぼしても致命傷
-            // にならない。
+            // にならない。FLIP は isAirborne に含まれる（flight_state.hpp）ため、FLIP 中の
+            // 喪失もここでタイマは起動するが、update() は state_ == FLYING のときだけ遷移を
+            // 実行する — これにより FLIP → FLYING まで自動着陸が自然に保留される
+            // （plan §3.5/§4.3「通信途絶は FLIP 完了後に既存則」を追加の状態なしで満たす）。
             if (isAirborne(state_) && !comm_lost_pending_) {
                 ESP_LOGW(TAG, "Comm lost → hover %lu ms then LANDING",
                          static_cast<unsigned long>(kCommLossHoverUs / 1000));
@@ -371,23 +458,44 @@ void StateManager::handleAlert(const SystemAlert& alert)
             }
             break;
 
-        case AlertType::LOW_BATTERY:
+        case AlertType::LOW_BATTERY: {
             // WARNING (3.4V): notification only (buzzer via NotifyTask).
             // EMERGENCY (3.0V): the pack is about to sag below the cutoff — land
             // NOW. Same Landing-verb path as the comm-loss auto-land (the
             // onEnter(LANDING) callback engages the controller's descent).
+            // FLIP window exception (plan §3.5/§9 item 2, §4.3 FLIP row): unlike
+            // COMM_LOST (a level alert re-raised by the failsafe, so isAirborne
+            // including FLIP + a FLYING-only firing condition in update() is enough
+            // to defer it), the EMERGENCY battery alert is an EDGE — the failsafe's
+            // batt_emergency_ latch (failsafe.cpp) raises it only ONCE. Transitioning
+            // FLIP → LANDING directly here would also skip the FLIP → FLYING onExit
+            // (position/altitude re-capture). So we defer explicitly: set a pending
+            // flag instead of transitioning, and notifyFlipComplete() re-applies this
+            // same rule once back in FLYING.
             // WARNING（3.4V）: 通知のみ（ブザーは NotifyTask）。
             // EMERGENCY（3.0V）: パックがカットオフ割れ寸前 — 即着陸。通信断の
             // 自動着陸と同じ Landing verb 経路（onEnter(LANDING) コールバックが
             // 制御器の降下を発動する）。
-            if (static_cast<AlertSeverity>(alert.severity) == AlertSeverity::EMERGENCY &&
-                isAirborne(state_) && state_ != FlightState::LANDING) {
+            // FLIP 窓の例外（plan §3.5/§9 項目2、§4.3 FLIP 行）: COMM_LOST（failsafe が
+            // 再発報するレベルアラートゆえ、FLIP を含む isAirborne ＋ update() の
+            // FLYING 限定の成立条件だけで保留できる）と異なり、EMERGENCY 電池アラートは
+            // エッジ（failsafe.cpp の batt_emergency_ ラッチが一度しか発報しない）。
+            // ここで FLIP → LANDING に直接遷移すると FLIP → FLYING の onExit（位置/高度
+            // 目標の取り直し）も飛ばす。よって明示的に保留する: 遷移せずフラグを
+            // 立て、notifyFlipComplete() が FLYING 復帰後に同じ規則を再適用する。
+            const bool emergency =
+                static_cast<AlertSeverity>(alert.severity) == AlertSeverity::EMERGENCY;
+            if (emergency && state_ == FlightState::FLIP) {
+                battery_emergency_pending_ = true;
+                ESP_LOGW(TAG, "Battery emergency deferred (FLIP in progress)");
+            } else if (emergency && isAirborne(state_) && state_ != FlightState::LANDING) {
                 ESP_LOGE(TAG, "Battery emergency → LANDING");
                 transition(FlightState::LANDING);
             } else {
                 ESP_LOGW(TAG, "Low battery warning");
             }
             break;
+        }
 
         case AlertType::USB_POWER:
             // USB power → ARM prohibited (checked in requestArm)
@@ -575,6 +683,20 @@ void StateManager::transition(FlightState new_state)
     // Update state
     // 状態を更新
     state_ = new_state;
+
+    // Clear a battery emergency deferred during FLIP (handleAlert, LOW_BATTERY/
+    // EMERGENCY case) when FLIP is left WITHOUT returning to FLYING — DISARM/
+    // impact/emergency-stop already land the craft on the ground directly, so the
+    // deferred alert is moot. Leaving it set would apply a stale emergency to some
+    // LATER, unrelated flip. The FLIP → FLYING path re-applies it explicitly in
+    // notifyFlipComplete() instead of clearing it here.
+    // FLIP を FLYING へ戻らずに抜けるとき（DISARM/衝撃/緊急停止は既に接地するため）、
+    // FLIP 中に保留した電池緊急（handleAlert の LOW_BATTERY/EMERGENCY 分岐）をクリア
+    // する — そのまま残すと無関係な「後の」flip に古い緊急事態を適用することになる。
+    // FLIP → FLYING の経路はここでクリアせず、notifyFlipComplete() が明示的に再適用する。
+    if (old_state == FlightState::FLIP && new_state != FlightState::FLYING) {
+        battery_emergency_pending_ = false;
+    }
 
     // On returning to the ground, reset the flight mode to STABILIZE so the NEXT
     // takeoff always starts in the direct-throttle mode that lifts off. Without this a

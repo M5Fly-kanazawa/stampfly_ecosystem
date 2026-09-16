@@ -211,9 +211,17 @@ sf::FlightState currentState()
 
 void publishApiVerb(sf::ApiCmd verb, sf::FlightMode mode = sf::FlightMode::POS_HOLD)
 {
+    // arg (FlipDirection, plan §4.4) is 0/unused here — every existing caller of
+    // this helper is a directionless verb (Takeoff/Land/Emergency). cmdFlip(), a
+    // later task, publishes ApiCommand directly with arg set instead of going
+    // through this helper.
+    // arg（FlipDirection、plan §4.4）はここでは 0/未使用 — このヘルパーの既存の
+    // 呼び出し元は全て方向を持たない verb（Takeoff/Land/Emergency）。cmdFlip()（後続
+    // タスク）は本ヘルパーを経由せず arg を設定した ApiCommand を直接発行する。
     sf::api_command.publish({static_cast<uint8_t>(verb),
                              static_cast<uint8_t>(mode),
-                             static_cast<uint32_t>(esp_timer_get_time())});
+                             static_cast<uint32_t>(esp_timer_get_time()),
+                             0});
 }
 
 void publishGuidance(float speed)

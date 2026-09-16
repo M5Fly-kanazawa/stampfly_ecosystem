@@ -390,10 +390,22 @@ void ControlTask(void* pvParameters)
         // takeoff_reached は自動離陸の捕捉イベントを StateTask へ運び、ALT/POS の
         // TAKEOFF→FLYING を駆動する（ToF 0.15m 空中エッジとは分離）。guidance_active と
         // 同じ「タスク層が事実を運ぶ」パターン。
-        sf::controller_status.publish(
-            sf::ControllerStatus{controller.isGuidanceActive(),
-                                 controller.isTakeoffComplete(),
-                                 static_cast<uint32_t>(esp_timer_get_time())});
+        // flip_ready/flip_block_reason/flip_active/flip_done/flip_result (plan
+        // §4.1/§4.3) are zero-initialized here — this task adds the fields only;
+        // the flip sequencer that fills them from the real controller state is a
+        // later task (sf_controller_pid). Value-initializing the whole struct with
+        // `{}` first, then setting only the fields this task knows about, avoids a
+        // partial-aggregate-init warning as more fields are added over time.
+        // flip_ready/flip_block_reason/flip_active/flip_done/flip_result（plan
+        // §4.1/§4.3）はここではゼロ初期化のみ — 本タスクはフィールド追加のみで、実際の
+        // 制御器状態から埋める列生成器（sf_controller_pid）は後続タスク。構造体全体を
+        // `{}` でまずゼロ初期化し、本タスクが把握するフィールドだけを設定することで、
+        // 今後フィールドが増えても部分初期化警告を避けられる。
+        sf::ControllerStatus status{};
+        status.guidance_active = controller.isGuidanceActive();
+        status.takeoff_reached = controller.isTakeoffComplete();
+        status.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+        sf::controller_status.publish(status);
 
         // =====================================================================
         // Step 4: Run the X-quad mixer. It reads the control_output published

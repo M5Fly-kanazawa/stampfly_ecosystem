@@ -136,7 +136,7 @@ inline PowerData power_latest()
  *
  * SystemMode のフィールド (data_types.hpp で定義):
  *   - state:    FlightState enum (INIT / IDLE_GROUND / IDLE_HELD /
- *               ARMED_GROUND / TAKEOFF / FLYING / LANDING の 7 状態) を
+ *               ARMED_GROUND / TAKEOFF / FLYING / LANDING / FLIP の 8 状態) を
  *               uint8_t で保持 (flight_state.hpp が SSOT)
  *   - sub_mode: FlightMode enum (ACRO / STABILIZE / ALTITUDE_HOLD /
  *               POSITION_HOLD) を uint8_t で保持

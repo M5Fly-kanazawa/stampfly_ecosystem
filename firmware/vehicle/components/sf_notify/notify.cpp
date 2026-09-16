@@ -42,6 +42,13 @@ static constexpr LedColor kMagenta     = {255, 0, 255};
 static constexpr LedColor kOrange      = {255, 128, 0};   // ALT_HOLD mode / 高度保持
 static constexpr LedColor kYellowGreen = {128, 255, 0};   // STABILIZE mode / 姿勢安定
 static constexpr LedColor kRed         = {255, 0, 0};     // autotune failed / autotune 失敗
+// FLIP state colour — matches the original factory firmware's flip indicator
+// (0xFF9933), deliberately distinct from LANDING's kOrange (0xFF8000) so the two
+// sequence states are not confused at a glance (flip-maneuver-plan.md §4.1).
+// FLIP 状態色 — 工場出荷ファームの宙返り表示（0xFF9933）に合わせる。LANDING の
+// kOrange（0xFF8000）とは意図的に区別し、一見して2つのシーケンス状態を
+// 混同しないようにする（plan §4.1）。
+static constexpr LedColor kFlipOrange  = {0xFF, 0x99, 0x33};   // FLIP maneuver / 宙返り
 
 // Blink timings [ms]. SOLID = always on (off_ms 0). / 点滅タイミング。SOLID は常灯。
 static constexpr uint16_t kSolidOn = 1000, kSolidOff = 0;
@@ -49,16 +56,18 @@ static constexpr uint16_t kSlowOn  = 500,  kSlowOff  = 500;   // 1 Hz blink / �
 static constexpr uint16_t kFastOn  = 100,  kFastOff  = 100;   // 5 Hz blink / 高速点滅
 
 // Flight-state LED table (legacy colours): white(INIT)→green(IDLE)→green-blink(ARMED)→
-// mode colour(FLYING)→orange-blink(LANDING). FLYING is replaced by flyingPattern().
+// mode colour(FLYING)→orange-blink(LANDING)→flip-orange-fast-blink(FLIP). FLYING is
+// replaced by flyingPattern().
 // 飛行状態 LED テーブル（旧の色）。FLYING は flyingPattern() が置き換える。
 static const LedPattern kPatternTable[FLIGHT_STATE_COUNT] = {
-    { kWhite,  kSolidOn, kSolidOff },  // INIT:         white solid     / 白 常灯（静置）
-    { kGreen,  kSolidOn, kSolidOff },  // IDLE_GROUND:  green solid      / 緑 常灯（ARM可）
-    { kCyan,   kFastOn,  kFastOff  },  // IDLE_HELD:    cyan fast blink  / シアン 高速点滅
-    { kGreen,  kSlowOn,  kSlowOff  },  // ARMED_GROUND: green slow blink / 緑 低速点滅
-    { kWhite,  kFastOn,  kFastOff  },  // TAKEOFF:      white fast blink / 白 高速点滅
-    { kGreen,  kSolidOn, kSolidOff },  // FLYING:       (overridden by flight-mode colour)
-    { kOrange, kSlowOn,  kSlowOff  },  // LANDING:      orange slow blink/ オレンジ 低速点滅
+    { kWhite,     kSolidOn, kSolidOff },  // INIT:         white solid     / 白 常灯（静置）
+    { kGreen,     kSolidOn, kSolidOff },  // IDLE_GROUND:  green solid      / 緑 常灯（ARM可）
+    { kCyan,      kFastOn,  kFastOff  },  // IDLE_HELD:    cyan fast blink  / シアン 高速点滅
+    { kGreen,     kSlowOn,  kSlowOff  },  // ARMED_GROUND: green slow blink / 緑 低速点滅
+    { kWhite,     kFastOn,  kFastOff  },  // TAKEOFF:      white fast blink / 白 高速点滅
+    { kGreen,     kSolidOn, kSolidOff },  // FLYING:       (overridden by flight-mode colour)
+    { kOrange,    kSlowOn,  kSlowOff  },  // LANDING:      orange slow blink/ オレンジ 低速点滅
+    { kFlipOrange,kFastOn,  kFastOff  },  // FLIP:         orange fast blink/ 橙(0xFF9933) 高速点滅
 };
 
 // Overlay patterns (priority over the flight-state table, see computeActivePattern):

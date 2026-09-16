@@ -162,6 +162,61 @@ public:
     /// @design requirements.md §2 — Soft landing / touch-and-go       [OK]
     void notifySoftLanding();
 
+    // =========================================================================
+    // Flip maneuver — dedicated sequence state, same shape as TAKEOFF/LANDING
+    // (FLYING → FLIP → FLYING). See flight_state.hpp::FlightState::FLIP.
+    // 宙返りマニューバ — TAKEOFF/LANDING と同型の専用シーケンス状態
+    // （FLYING → FLIP → FLYING）。flight_state.hpp::FlightState::FLIP 参照。
+    //
+    // @design docs/plans/flip-maneuver-plan.md §4.1 — FlightState::FLIP   [OK]
+    // @design docs/plans/flip-maneuver-plan.md §4.3 — normative row       [OK]
+    // =========================================================================
+
+    /// Request Flip (FLYING → FLIP). Accepted ONLY while FLYING — this is the C1
+    /// gate (detailed_design.md §3.1 FLIP row / plan §3.1); execution conditions
+    /// C2-C8 (altitude, attitude/rate, velocity, battery, estimator health,
+    /// cooldown, source conflict) are judged by the controller every cycle while
+    /// FLYING (ControllerStatus.flip_ready/flip_block_reason) and are NOT
+    /// re-checked here — the caller (state_task, on ApiCmd::Flip / the FLIP
+    /// button) is expected to gate on flip_ready first. Rejected while already
+    /// FLIP (busy) or in any other state (not flying) — a single guard covers
+    /// both cells of the normative table.
+    /// Flip リクエスト（FLYING → FLIP）。FLYING 中のみ受理 — これが実行条件 C1 の判定
+    /// （detailed_design.md §3.1 FLIP 行 / plan §3.1）。実行条件 C2-C8（高度・姿勢/
+    /// 角速度・速度・電池・推定器健全性・間隔・他ソースとの競合）は制御器が FLYING 中
+    /// 毎周期判定し（ControllerStatus.flip_ready/flip_block_reason）、ここでは
+    /// 再判定しない — 呼び出し側（state_task、ApiCmd::Flip / FLIP ボタン）が事前に
+    /// flip_ready を見る想定。既に FLIP 中（busy）でもその他の状態（not flying）でも
+    /// 拒否 — 単一の判定で規範表の両セルを兼ねる。
+    ///
+    /// @return true if the transition to FLIP succeeded
+    ///
+    /// @design detailed_design.md §3.1 — FLIP row, "Flip request" column  [OK]
+    /// @design docs/plans/flip-maneuver-plan.md §4.3                     [OK]
+    bool requestFlip(FlipDirection direction);
+
+    /// Get the direction captured by the most recent accepted requestFlip() call.
+    /// Valid once FLIP has been entered; read by the onEnter(FLIP) callback to
+    /// publish ControllerCmd::Flip{direction} (state_task.cpp).
+    /// 直近に受理された requestFlip() が捕捉した方向。FLIP 突入後に有効。onEnter(FLIP)
+    /// コールバックが ControllerCmd::Flip{direction} を発行する際に読む（state_task.cpp）。
+    FlipDirection getFlipDirection() const { return flip_direction_; }
+
+    /// Notify flip complete (FLIP → FLYING): the controller finished the maneuver
+    /// (success) or aborted mid-sequence and recovered to level flight — both are
+    /// reported as controller_status.flip_done (architecture.md §4 INV-3:
+    /// detection is the controller's fact, this method executes the judged
+    /// transition). Re-evaluates any battery emergency that was deferred while
+    /// FLIP was in progress (handleAlert, plan §3.5/§9 item 2).
+    /// フリップ完了通知（FLIP → FLYING）: 制御器がマニューバを完了（成功）または
+    /// シーケンス途中で打ち切って水平飛行へ回復した — どちらも controller_status.
+    /// flip_done として報告される（architecture.md §4 INV-3: 検出は制御器の事実、
+    /// 本メソッドが判断された遷移を実行）。FLIP 中に保留した電池緊急アラートを
+    /// ここで再評価する（handleAlert、plan §3.5/§9 項目2）。
+    ///
+    /// @design docs/plans/flip-maneuver-plan.md §4.3 — FLIP → FLYING row  [OK]
+    void notifyFlipComplete();
+
     /// Notify idle ground/held transition based on ToF
     /// ToFに基づくIDLE地上/手持ち遷移通知
     ///
@@ -287,6 +342,28 @@ private:
     // 着陸させる。着陸時または FLYING を外れた時にクリアする。
     bool     comm_lost_pending_ = false;
     uint32_t comm_lost_time_us_ = 0;
+
+    // Direction captured by the most recent accepted requestFlip() — read by the
+    // onEnter(FLYING, FLIP) callback (state_task.cpp) to publish
+    // ControllerCmd::Flip{direction}. Only meaningful while state_ == FLIP.
+    // 直近に受理された requestFlip() が捕捉した方向 — onEnter(FLYING, FLIP)
+    // コールバック（state_task.cpp）が ControllerCmd::Flip{direction} を発行する際に
+    // 読む。state_ == FLIP の間のみ意味を持つ。
+    FlipDirection flip_direction_ = FlipDirection::Back;
+
+    // Battery-emergency alert deferred while FLIP is in progress (plan §3.5/§9
+    // item 2: "窓内は StateManager が無視... 衝撃判定は維持" extended to the
+    // battery-emergency case, §4.3 FLIP row). handleAlert() sets this instead of
+    // transitioning straight to LANDING from FLIP; notifyFlipComplete() re-applies
+    // the existing rule once back in FLYING. Cleared on any FLIP exit that is NOT
+    // FLYING (DISARM/impact/emergency stop already land on the ground, so the
+    // deferred alert is moot — see transition()).
+    // FLIP 進行中に保留した電池緊急アラート（plan §3.5/§9 項目2:「窓内は StateManager
+    // が無視...衝撃判定は維持」を電池緊急にも拡張、§4.3 FLIP 行）。handleAlert() は
+    // FLIP から直接 LANDING へ遷移する代わりにこれを立て、notifyFlipComplete() が
+    // FLYING 復帰後に既存則を再適用する。FLIP を FLYING 以外へ抜けるとき（DISARM/
+    // 衝撃/緊急停止は既に接地するので保留アラートは無意味）はクリアする（transition() 参照）。
+    bool     battery_emergency_pending_ = false;
 
     // Callback lists
     // コールバックリスト

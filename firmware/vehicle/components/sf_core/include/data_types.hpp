@@ -351,6 +351,23 @@ struct ControllerStatus {
                                // 自動離陸(ALT/POS)が目標高度を捕捉した — 制御器駆動の
                                // TAKEOFF→FLYING トリガ（ToF 0.15m 空中エッジ=ESKFハンドオフ専用とは分離）。
     uint32_t timestamp;        // [us]
+    // Flip maneuver status (flip-maneuver-plan.md §4.1/§4.3). Detection layer
+    // facts published by the flip sequencer (sf_controller_pid, a later task);
+    // StateManager/state_task read them to judge/execute the FLYING<->FLIP
+    // transition (INV-3: detection vs. judgment). Default-false/None here
+    // (this task adds the fields; the sequencer that fills them is separate).
+    // 宙返りマニューバ状態（plan §4.1/§4.3）。列生成器（sf_controller_pid、後続
+    // タスク）が発行する検出層の事実。StateManager/state_task がこれを読んで
+    // FLYING<->FLIP 遷移を判断・実行する（INV-3: 検出と判断の分離）。既定は
+    // false/None（本タスクはフィールドの追加のみ、埋めるのは後続タスク）。
+    bool     flip_ready;        // execution conditions C2-C8 hold, re-evaluated every
+                                // cycle while FLYING / 実行条件 C2-C8 成立（FLYING中毎周期評価）
+    uint8_t  flip_block_reason; // FlipBlockReason — meaningful only when !flip_ready
+                                // FlipBlockReason — flip_ready が false の時のみ意味を持つ
+    bool     flip_active;       // the sequencer is running (state FLIP) / 列生成器が進行中
+    bool     flip_done;         // completed OR aborted-then-recovered (state FLIP only)
+                                // 完了 or 打ち切り後回復完了（state FLIP の間のみ意味）
+    uint8_t  flip_result;       // FlipResult / FlipResult の値
 };
 
 // =============================================================================
@@ -460,6 +477,20 @@ enum class EstimatorCmd : uint8_t {
     ReloadParams = 7,   // re-read eskf.* params, keep x and P / eskf.* を読み直す（x・P は保持）
                         // (live tuning via the param-set callback)
                         // （param set コールバック経由のライブチューニング）
+    // Flip maneuver window (flip-maneuver-plan.md §3.6/§7): the accel-attitude
+    // correction is stopped for the duration of the maneuver (gyro integration
+    // alone is accurate enough over <0.6s, plan §3.6) and resumed — with a ToF
+    // re-seed — once the controller returns to FLYING. The estimator-side
+    // implementation (actually stopping/resuming the correction) is a later
+    // task; only the verbs are defined here.
+    // 宙返りマニューバ窓（plan §3.6/§7）: マニューバの間だけ加速度観測による姿勢補正を
+    // 止める（0.6s未満ならジャイロ積分だけで十分な精度、plan §3.6）。制御器が FLYING に
+    // 戻ったら ToF 再取り込みとともに再開する。推定器側の実装（実際の停止/再開）は
+    // 後続タスク — ここでは verb のみを定義する。
+    HoldAttitudeCorrection   = 8,   // flip entry: stop accel-attitude correction
+                                    // 宙返り突入: 加速度姿勢補正を停止
+    ResumeAttitudeCorrection = 9,   // FLYING return: resume correction + re-seed ToF
+                                    // FLYING 復帰: 補正再開＋ToF 再取り込み
 };
 
 /// Covariance-inflation scope for EstimatorCmd::InflateCov. "Inflate" means re-set the
@@ -489,6 +520,112 @@ struct EstimatorCommand {
     uint16_t arg;         // CovScope for InflateCov (else 0) / InflateCov の CovScope
 };
 
+// =============================================================================
+// Flip Maneuver Types — Tello-compatible `flip l/r/f/b`
+// 宙返りマニューバ型 — Tello 互換 `flip l/r/f/b`
+//
+// FlightState::FLIP (sf_state/flight_state.hpp) is a dedicated sequence state,
+// entered from FLYING only (like TAKEOFF/LANDING). The direction is carried by
+// ApiCommand.arg / ControllerCommand.arg (both uint8_t) rather than a dedicated
+// field on every verb — the same convention as EstimatorCommand.arg's CovScope.
+// FlightState::FLIP（sf_state/flight_state.hpp）は FLYING からのみ突入する専用
+// シーケンス状態（TAKEOFF/LANDING と同型）。方向は全 verb 個別のフィールドでなく
+// ApiCommand.arg / ControllerCommand.arg（いずれも uint8_t）で運ぶ —
+// EstimatorCommand.arg の CovScope と同じ流儀。
+//
+// @design docs/plans/flip-maneuver-plan.md §3.1 — C1-C8 execution conditions  [OK]
+// @design docs/plans/flip-maneuver-plan.md §3.2 — phases / rotation axis      [OK]
+// @design docs/plans/flip-maneuver-plan.md §4.1 — FlightState::FLIP placement [OK]
+// =============================================================================
+
+/// Flip direction — Tello SDK l/r/f/b. FRD body frame: Right = +p (roll rate),
+/// Left = -p, Back = +q (pitch rate, nose-up start), Forward = -q
+/// (flip-maneuver-plan.md §3.2 table).
+/// 宙返り方向 — Tello SDK の l/r/f/b。FRD 機体座標: Right=+p（ロールレート）、
+/// Left=-p、Back=+q（ピッチレート、機首上げから）、Forward=-q（plan §3.2 表）。
+enum class FlipDirection : uint8_t {
+    Left    = 0,
+    Right   = 1,
+    Forward = 2,
+    Back    = 3,
+};
+
+/// Get human-readable flip-direction name
+/// 宙返り方向の名前を取得する
+inline const char* flipDirectionName(FlipDirection direction)
+{
+    switch (direction) {
+        case FlipDirection::Left:    return "Left";
+        case FlipDirection::Right:   return "Right";
+        case FlipDirection::Forward: return "Forward";
+        case FlipDirection::Back:    return "Back";
+        default:                     return "UNKNOWN";
+    }
+}
+
+/// Reason execution conditions C1-C8 (flip-maneuver-plan.md §3.1) are not met —
+/// the controller evaluates C2-C8 every cycle while FLYING and publishes this in
+/// ControllerStatus.flip_block_reason (meaningful only when flip_ready is false).
+/// C1 (FlightState::FLYING) is judged by StateManager itself, not the controller,
+/// so it never surfaces as a block reason here.
+/// 実行条件 C1-C8（plan §3.1）の不成立理由 — 制御器が FLYING 中に毎周期 C2-C8 を評価し
+/// ControllerStatus.flip_block_reason で発行する（flip_ready が false のときのみ意味を
+/// 持つ）。C1（FlightState::FLYING）は制御器でなく StateManager 自身が判定するため、
+/// ここには現れない。
+enum class FlipBlockReason : uint8_t {
+    None               = 0,   // no block — flip_ready may be true      / 不成立なし
+    NotFlying          = 1,   // C1: not FLYING (TAKEOFF/LANDING/etc.)  / FLYING でない
+    TooLow             = 2,   // C2: altitude < h_min                   / 高度不足
+    NotSteady          = 3,   // C3/C4: attitude/rate/velocity out of bounds / 姿勢・速度不安定
+    BatteryLow         = 4,   // C5: battery voltage < V_min under load / 電池電圧不足
+    EstimatorUnhealthy = 5,   // C6: estimator unhealthy / ToF invalid  / 推定器不健全
+    Cooldown           = 6,   // C7: less than t_gap since previous flip/ 前回からの間隔不足
+    Busy               = 7,   // already FLIP / previous flip unsettled / 実行中
+    SourceConflict     = 8,   // C8: sysid/autotune/guidance move active/ 他の励振・誘導と競合
+};
+
+/// Get human-readable flip-block-reason name
+/// フリップ不成立理由の名前を取得する
+inline const char* flipBlockReasonName(FlipBlockReason reason)
+{
+    switch (reason) {
+        case FlipBlockReason::None:               return "None";
+        case FlipBlockReason::NotFlying:          return "NotFlying";
+        case FlipBlockReason::TooLow:             return "TooLow";
+        case FlipBlockReason::NotSteady:          return "NotSteady";
+        case FlipBlockReason::BatteryLow:         return "BatteryLow";
+        case FlipBlockReason::EstimatorUnhealthy: return "EstimatorUnhealthy";
+        case FlipBlockReason::Cooldown:           return "Cooldown";
+        case FlipBlockReason::Busy:                return "Busy";
+        case FlipBlockReason::SourceConflict:      return "SourceConflict";
+        default:                                    return "UNKNOWN";
+    }
+}
+
+/// Flip outcome — published in ControllerStatus.flip_result alongside flip_done.
+/// 宙返り結果 — ControllerStatus.flip_result で flip_done と共に発行。
+enum class FlipResult : uint8_t {
+    None                  = 0,   // not engaged                          / 非係合
+    Ok                    = 1,   // completed normally                   / 正常完了
+    AbortedSpinTimeout    = 2,   // P2 spin_timeout_ms elapsed            / 回転進まず打ち切り
+    AbortedGyroLimit      = 3,   // |omega| > gyro_abort_dps              / 角速度異常で打ち切り
+    AbortedRecoverTimeout = 4,   // P4 recover_timeout_ms elapsed         / 回復整定タイムアウト
+};
+
+/// Get human-readable flip-result name
+/// 宙返り結果の名前を取得する
+inline const char* flipResultName(FlipResult result)
+{
+    switch (result) {
+        case FlipResult::None:                  return "None";
+        case FlipResult::Ok:                    return "Ok";
+        case FlipResult::AbortedSpinTimeout:    return "AbortedSpinTimeout";
+        case FlipResult::AbortedGyroLimit:      return "AbortedGyroLimit";
+        case FlipResult::AbortedRecoverTimeout: return "AbortedRecoverTimeout";
+        default:                                return "UNKNOWN";
+    }
+}
+
 /// Controller command verbs — issued by StateManager transition callbacks
 /// 制御器コマンドの種別 — StateManager の遷移コールバックが発行
 enum class ControllerCmd : uint8_t {
@@ -513,6 +650,17 @@ enum class ControllerCmd : uint8_t {
                        // mode law (ALT_HOLD captures the current altitude)
                        // 離陸完了（FLYING 突入）: 通常のモード則を係合
                        // （ALT_HOLD は現在高度を捕捉）
+    Flip         = 8,  // FLIP entry: run the angle-scheduled flip sequencer for
+                       // ControllerCommand.arg (FlipDirection) — the rate PID is
+                       // driven open-loop by the sequencer, attitude PID is bypassed
+                       // during the spin (plan §3.2/§4.1)
+                       // FLIP 突入: ControllerCommand.arg（FlipDirection）方向で角度
+                       // スケジュール型の列生成器を実行。回転中はレート PID を列生成器が
+                       // 直接駆動し姿勢 PID は経由しない（plan §3.2/§4.1）
+    FlipComplete = 9,  // FLIP → FLYING: re-capture position/altitude targets and
+                       // reset the altitude/position integrators (plan §4.1 onExit)
+                       // FLIP→FLYING: 位置/高度目標を取り直し、高度・位置積分器を
+                       // リセット（plan §4.1 onExit）
 };
 
 /// Controller command — ControlTask consumes and applies to the active IController
@@ -521,6 +669,10 @@ struct ControllerCommand {
     uint8_t  command;     // ControllerCmd value                              / ControllerCmd の値
     uint8_t  mode;        // FlightMode value (valid when command==ModeChange) / モード値
     uint32_t timestamp;   // [us]
+    uint8_t  arg;          // FlipDirection for command==Flip (else 0), same
+                           // convention as EstimatorCommand.arg / command==Flip
+                           // 時の FlipDirection（それ以外0）。EstimatorCommand.arg
+                           // と同じ流儀
 };
 
 /// Notification events — issued by StateManager/Failsafe, consumed by NotifyTask
@@ -662,6 +814,16 @@ enum class ApiCmd : uint8_t {
     Takeoff   = 3,   // mode→POS_HOLD + arm + auto-takeoff      / モード設定+ARM+自動離陸
     Land      = 4,   // autonomous landing                      / 自動着陸
     Emergency = 5,   // immediate motor cut (any state)         / 即時モータ停止
+    // NOTE: flip-maneuver-plan.md §4.4 assigns "ApiCmd::Flip = 5", but by the time
+    // this task landed, Emergency already occupied 5 in this codebase (added after
+    // that plan text was drafted). Used 6 instead of duplicating an enumerator value
+    // — flagged here per coding_and_education.md's "report design contradictions"
+    // rule rather than silently reusing 5.
+    // 注: plan §4.4 は「ApiCmd::Flip = 5」とするが、本タスク着手時点で 5 は既に
+    // Emergency が使用中（plan 執筆後に追加）。値の重複を避けるため 6 を採用 —
+    // coding_and_education.md の「設計矛盾は報告する」規則に従いここに明記する。
+    Flip      = 6,   // Tello-compatible flip l/r/f/b (flip-maneuver-plan.md §4.4)
+                     // Tello 互換 flip l/r/f/b（plan §4.4）
 };
 
 /// ApiTask → StateTask command / ApiTask → StateTask コマンド
@@ -669,6 +831,10 @@ struct ApiCommand {
     uint8_t  command;     // ApiCmd value / ApiCmd の値
     uint8_t  mode;        // FlightMode for Takeoff / Takeoff 用 FlightMode
     uint32_t timestamp;   // [us]
+    uint8_t  arg;          // FlipDirection for command==Flip (else 0), same
+                           // convention as EstimatorCommand.arg / command==Flip
+                           // 時の FlipDirection（それ以外0）。EstimatorCommand.arg
+                           // と同じ流儀
 };
 
 /// Rate-loop system-identification excitation (API `sysid` → controller). The

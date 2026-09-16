@@ -127,10 +127,10 @@ static void registerStateCallbacks(sf::StateManager& manager)
                     // （SILS crash_refly が炙り出した）。INIT は構築時 reset の素性のよい推定器
                     // から起動するため不要。
                     sf::estimator_command.publish(
-                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now});
+                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now, 0});
                 }
                 sf::estimator_command.publish(
-                    {static_cast<uint8_t>(sf::EstimatorCmd::Recalibrate), now});
+                    {static_cast<uint8_t>(sf::EstimatorCmd::Recalibrate), now, 0});
             } else {
                 // Return to ground from an armed/airborne state (DISARM / crash / land).
                 // detailed_design §3: FLYING→IDLE_GROUND and LANDING→IDLE_GROUND do an
@@ -147,7 +147,23 @@ static void registerStateCallbacks(sf::StateManager& manager)
                 // （reseedCalibration）し、reset() は加速度バイアスの凍結を解除する。
                 if (sf::isAirborne(from)) {
                     sf::estimator_command.publish(
-                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now});
+                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now, 0});
+                    // FLIP → IDLE_GROUND (DISARM/impact/emergency stop mid-maneuver):
+                    // the maneuver window's accel-attitude-correction hold (onEnter
+                    // FLIP, EstimatorCmd::HoldAttitudeCorrection) must be released even
+                    // though we are NOT returning to FLYING — ControllerCmd::FlipComplete
+                    // is deliberately NOT sent here (the existing Reset path above already
+                    // covers the controller side; plan §4.3 FLIP→IDLE_GROUND row).
+                    // FLIP → IDLE_GROUND（マニューバ中の DISARM/衝撃/緊急停止）: FLYING に
+                    // 戻らなくても、マニューバ窓の加速度姿勢補正の停止（onEnter FLIP の
+                    // EstimatorCmd::HoldAttitudeCorrection）は解除する必要がある —
+                    // ControllerCmd::FlipComplete は意図的に発行しない（上の既存 Reset 経路が
+                    // 制御器側を既にカバーする、plan §4.3 FLIP→IDLE_GROUND 行）。
+                    if (from == FlightState::FLIP) {
+                        sf::estimator_command.publish(
+                            {static_cast<uint8_t>(sf::EstimatorCmd::ResumeAttitudeCorrection),
+                             now, 0});
+                    }
                     // A controlled landing (LANDING→IDLE_GROUND) ends at rest on the
                     // ground → freeze the bias to keep "ground = frozen" (reset un-froze
                     // it). The crash/emergency path (FLYING/TAKEOFF→IDLE_GROUND) leaves it
@@ -183,7 +199,7 @@ static void registerStateCallbacks(sf::StateManager& manager)
                 //     離陸過渡を不安定化する（ヘッダ注記: SILS 掃引結果）。
                 //  3. arm 音。
                 sf::controller_command.publish(
-                    {static_cast<uint8_t>(sf::ControllerCmd::Reset), 0, now});
+                    {static_cast<uint8_t>(sf::ControllerCmd::Reset), 0, now, 0});
                 sf::estimator_command.publish(
                     {static_cast<uint8_t>(sf::EstimatorCmd::InflateCov), now,
                      static_cast<uint16_t>(sf::CovScope::Attitude)});
@@ -200,7 +216,7 @@ static void registerStateCallbacks(sf::StateManager& manager)
             // reset 集約と同じ「いつ=状態機械、どう=制御器」の分担（architecture §4）。
             // 着陸上書きは次の ARM の controller Reset で解除される。
             sf::controller_command.publish(
-                {static_cast<uint8_t>(sf::ControllerCmd::Landing), 0, now});
+                {static_cast<uint8_t>(sf::ControllerCmd::Landing), 0, now, 0});
             break;
         case FlightState::TAKEOFF:
             // ALT_HOLD/POS_HOLD flight starts with an AUTO-takeoff (2026-06-14 redesign):
@@ -217,10 +233,34 @@ static void registerStateCallbacks(sf::StateManager& manager)
             if (g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD) {
                 sf::controller_command.publish(
                     {static_cast<uint8_t>(sf::ControllerCmd::Takeoff),
-                     static_cast<uint8_t>(g_state_manager.getMode()), now});
+                     static_cast<uint8_t>(g_state_manager.getMode()), now, 0});
             }
             break;
         case FlightState::FLYING:
+            if (from == FlightState::FLIP) {
+                // FLIP → FLYING (completion OR abort-then-recover, both reported as
+                // controller_status.flip_done — plan §4.3): NOT the TakeoffComplete
+                // path below. ControllerCmd::FlipComplete tells the controller to
+                // re-capture the PRE-flip position/altitude targets and reset the
+                // altitude/position integrators (plan §4.1 onExit) — TakeoffComplete's
+                // "capture the CURRENT altitude" semantics would instead re-anchor to
+                // the post-flip altitude, defeating requirement F3 (altitude target =
+                // the value captured at flip entry). Also resumes the estimator's
+                // accel-attitude correction and lets it re-seed ToF (plan §3.6/§4.1).
+                // FLIP → FLYING（完了 or 打ち切り後回復、いずれも controller_status.
+                // flip_done として報告される — plan §4.3）: 下の TakeoffComplete 経路
+                // ではない。ControllerCmd::FlipComplete は制御器に flip 開始「前」の
+                // 位置/高度目標を取り直させ、高度・位置積分器をリセットさせる
+                // （plan §4.1 onExit）— TakeoffComplete の「現在高度を捕捉」という
+                // 意味では flip 後の高度に再アンカーしてしまい要件 F3（高度目標=
+                // flip 突入時に取り込んだ値）を満たさない。推定器の加速度姿勢補正も
+                // 再開させ ToF を再取り込ませる（plan §3.6/§4.1）。
+                sf::controller_command.publish(
+                    {static_cast<uint8_t>(sf::ControllerCmd::FlipComplete), 0, now, 0});
+                sf::estimator_command.publish(
+                    {static_cast<uint8_t>(sf::EstimatorCmd::ResumeAttitudeCorrection), now, 0});
+                break;
+            }
             // Takeoff finished: the controller leaves the auto-takeoff climb and
             // engages the normal mode law (ALT_HOLD captures the current altitude).
             // Published for every mode — a manual STABILIZE takeoff also marks the
@@ -231,7 +271,7 @@ static void registerStateCallbacks(sf::StateManager& manager)
             // 制御器を「空中」と記録し、以後の飛行中 ALT/POS 切替が離陸方法に
             // よらず同一挙動になる。
             sf::controller_command.publish(
-                {static_cast<uint8_t>(sf::ControllerCmd::TakeoffComplete), 0, now});
+                {static_cast<uint8_t>(sf::ControllerCmd::TakeoffComplete), 0, now, 0});
             break;
         // TAKEOFF → FLYING needs no class-A reset here. The "ESKF position/velocity reset"
         // of detailed_design §3 is the timing-critical ToF-synced vertical handoff (class B,
@@ -244,6 +284,27 @@ static void registerStateCallbacks(sf::StateManager& manager)
         // 経由の ~20ms 遅れ reset は POS_HOLD 姿勢を劣化させる（architecture §4）。bias 解除は
         // 見送り: ESKF 凍結機構（active_mask）は恒久センサ不在の切り分け用で地上↔飛行トグル用でない
         // ため、バイアス推定は飛行中も単にアクティブのまま。
+        case FlightState::FLIP:
+            // Flip maneuver entry (FLYING → FLIP only — StateManager::requestFlip
+            // gates this to C1). Hand the captured direction to the controller's
+            // flip sequencer and stop the estimator's accel-attitude correction for
+            // the maneuver window (plan §3.6/§4.1 onEnter: "推定器の加速度姿勢補正の
+            // 停止"). Same "WHEN = state machine, HOW = controller/estimator" split
+            // as every other transition callback here (architecture §4). The
+            // sequencer itself (reading ControllerCommand.arg as FlipDirection) is
+            // sf_controller_pid's responsibility — a later task.
+            // 宙返りマニューバ突入（FLYING → FLIP のみ — StateManager::requestFlip が
+            // C1 で判定）。捕捉した方向を制御器の列生成器へ渡し、マニューバ窓の間は
+            // 推定器の加速度姿勢補正を止める（plan §3.6/§4.1 onEnter）。「いつ=状態
+            // 機械、どう=制御器/推定器」の分担は本ファイルの他の遷移コールバックと
+            // 同じ（architecture §4）。列生成器本体（ControllerCommand.arg を
+            // FlipDirection として読む側）は sf_controller_pid の責務 — 後続タスク。
+            sf::controller_command.publish(
+                {static_cast<uint8_t>(sf::ControllerCmd::Flip), 0, now,
+                 static_cast<uint8_t>(g_state_manager.getFlipDirection())});
+            sf::estimator_command.publish(
+                {static_cast<uint8_t>(sf::EstimatorCmd::HoldAttitudeCorrection), now, 0});
+            break;
         default:
             break;
         }
@@ -256,7 +317,7 @@ static void registerStateCallbacks(sf::StateManager& manager)
         const uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
         sf::controller_command.publish(
             {static_cast<uint8_t>(sf::ControllerCmd::ModeChange),
-             static_cast<uint8_t>(new_mode), now});
+             static_cast<uint8_t>(new_mode), now, 0});
     });
 }
 
@@ -394,11 +455,14 @@ void StateTask(void* pvParameters)
             // Mode arbitration — implements the NORMATIVE event×state table in
             // detailed_design.md §3.1 (モード調停表). Two rules:
             //  EDGE:    a switch flip requests the mode; if the current state
-            //           rejects it (INIT/TAKEOFF/LANDING/IDLE_HELD), prev_want is
-            //           NOT updated, so the edge PERSISTS and retries until a
+            //           rejects it (INIT/TAKEOFF/LANDING/FLIP/IDLE_HELD), prev_want
+            //           is NOT updated, so the edge PERSISTS and retries until a
             //           state accepts it (e.g. a flip during the ~1 s TAKEOFF
             //           window applies on reaching FLYING — hole #2 found while
-            //           writing the table).
+            //           writing the table; a flip during FLIP applies the same way
+            //           once FLIP → FLYING, plan §4.3 FLIP row — no extra code:
+            //           requestModeChange() simply excludes FLIP from
+            //           mode_change_allowed, same shape as TAKEOFF/LANDING).
             //  RELEVEL: in IDLE_GROUND (parked + disarmed) the switch position
             //           IS the truth — any mismatch re-applies it (covers the
             //           crash-return STABILIZE reset under an un-moved switch —
@@ -406,10 +470,13 @@ void StateTask(void* pvParameters)
             // Armed/flying states stay edge-only: a parked transmitter can never
             // override the API mode mid-flight.
             // モード調停 — detailed_design.md §3.1 の「規範」遷移表を写す。2 規則:
-            //  エッジ:   スイッチ反転で要求。現状態が拒否（INIT/TAKEOFF/LANDING/
+            //  エッジ:   スイッチ反転で要求。現状態が拒否（INIT/TAKEOFF/LANDING/FLIP/
             //            IDLE_HELD）なら prev_want を更新せず、エッジは「持続」して
             //            受理される状態まで再試行（例: 約1秒の TAKEOFF 窓中の反転は
-            //            FLYING 到達時に適用 — 表の作成中に発見した抜け②）。
+            //            FLYING 到達時に適用 — 表の作成中に発見した抜け②。FLIP 中の
+            //            反転も同様に FLIP → FLYING 到達時に適用される、plan §4.3
+            //            FLIP 行 — 追加コード不要: requestModeChange() は単に FLIP を
+            //            mode_change_allowed から除くだけで TAKEOFF/LANDING と同型）。
             //  再適用:   IDLE_GROUND（設置・非 ARM）ではスイッチ位置が真 — 不一致は
             //            再適用（墜落復帰の STABILIZE リセット×不動スイッチ＝抜け①、
             //            実機 LED バグ）。
@@ -505,6 +572,23 @@ void StateTask(void* pvParameters)
             }
             case sf::ApiCmd::Land:
                 g_state_manager.notifyLandingRequest();
+                break;
+            case sf::ApiCmd::Flip:
+                // Gate on controller_status.flip_ready — the controller's live
+                // judgment of execution conditions C2-C8 (plan §3.1/§4.4). If not
+                // ready, do nothing: cmdFlip() (api_task.cpp, a later task) reads
+                // flip_block_reason itself and replies `error flip: <reason>`
+                // without ever seeing a state transition. If ready, requestFlip()
+                // still re-checks C1 (FLYING) as the transition guard.
+                // controller_status.flip_ready を見て判定 — 実行条件 C2-C8 の生きた
+                // 判断は制御器が行う（plan §3.1/§4.4）。不成立なら何もしない:
+                // cmdFlip()（api_task.cpp、後続タスク）が flip_block_reason を直接
+                // 読み `error flip: <reason>` を返す（遷移は一切起きない）。成立なら
+                // requestFlip() が遷移の判定として C1（FLYING）をなお再確認する。
+                if (sf::controller_status.latest().flip_ready) {
+                    g_state_manager.requestFlip(
+                        static_cast<sf::FlipDirection>(api_cmd.arg));
+                }
                 break;
             case sf::ApiCmd::None:
             default:
@@ -602,6 +686,18 @@ void StateTask(void* pvParameters)
                     : sf::system_status.latest().airborne;            // ToF off the ground
             if (complete) {
                 g_state_manager.notifyTakeoffComplete();  // → FLYING
+            }
+        } else if (fs == sf::FlightState::FLIP) {
+            // Flip sequencer reports completion OR abort-then-recovery the same way
+            // (controller_status.flip_done), same shape as takeoff_reached above —
+            // notifyFlipComplete() is itself a no-op unless state_ == FLIP, so no
+            // separate edge-latch is needed (plan §4.3 FLIP → FLYING row).
+            // 列生成器は完了と打ち切り後回復のどちらも同じフラグで報告する
+            // （controller_status.flip_done）、上の takeoff_reached と同型 —
+            // notifyFlipComplete() 自体が state_ != FLIP なら無操作なので、別途
+            // エッジ検出は不要（plan §4.3 FLIP → FLYING 行）。
+            if (sf::controller_status.latest().flip_done) {
+                g_state_manager.notifyFlipComplete();  // → FLYING
             }
         }
 

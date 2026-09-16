@@ -691,7 +691,7 @@ static void notifyControllerReload()
 {
     controller_command.publish(
         {static_cast<uint8_t>(ControllerCmd::ReloadParams), 0,
-         static_cast<uint32_t>(esp_timer_get_time())});
+         static_cast<uint32_t>(esp_timer_get_time()), 0});
 }
 
 static void notifyEstimatorReload()
