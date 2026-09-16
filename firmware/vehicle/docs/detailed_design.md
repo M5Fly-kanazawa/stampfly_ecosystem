@@ -172,15 +172,16 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 - **API設定**: ApiCmd::Takeoff によるモード設定（同一周期で ARM まで進む）
 - **接地リセット**: 空中状態→IDLE_GROUND 突入時の STABILIZE 強制（再飛行安全則）
 
-| 状態 \ 事象 | エッジ | 不一致（レベル） | API設定 | 接地リセット |
-|------------|--------|----------------|---------|------------|
-| INIT | 拒否（エッジ持続） | 無視 | 拒否 | — |
-| IDLE_GROUND | **適用** | **適用（再適用・マーカーログ）** | **適用** | （突入時に作動し、直後に不一致則が再適用） |
-| IDLE_HELD | 拒否（持続→設置時に適用） | 無視 | 拒否 | — |
-| ARMED_GROUND | **適用** | 無視（エッジのみ） | **適用** | — |
-| TAKEOFF | 拒否（持続→FLYING で適用） | 無視 | 拒否 | — |
-| FLYING | **適用** | 無視（放置送信機が API を覆せない） | （誘導目標のみ） | — |
-| LANDING | 拒否（持続→接地後に適用） | 無視 | 拒否 | — |
+| 状態 \ 事象 | エッジ | 不一致（レベル） | API設定 | 接地リセット | Flip 要求 |
+|------------|--------|----------------|---------|------------|----------|
+| INIT | 拒否（エッジ持続） | 無視 | 拒否 | — | 拒否（`error flip: not flying`） |
+| IDLE_GROUND | **適用** | **適用（再適用・マーカーログ）** | **適用** | （突入時に作動し、直後に不一致則が再適用） | 拒否（`error flip: not flying`） |
+| IDLE_HELD | 拒否（持続→設置時に適用） | 無視 | 拒否 | — | 拒否（`error flip: not flying`） |
+| ARMED_GROUND | **適用** | 無視（エッジのみ） | **適用** | — | 拒否（`error flip: not flying`） |
+| TAKEOFF | 拒否（持続→FLYING で適用） | 無視 | 拒否 | — | 拒否（`error flip: not flying`） |
+| FLYING | **適用** | 無視（放置送信機が API を覆せない） | （誘導目標のみ） | — | **受理**（実行条件は制御器が判定） |
+| FLIP | 拒否（持続 → FLYING で適用。TAKEOFF と同じ） | 無視 | 拒否 | — | 拒否（`error flip: busy`） |
+| LANDING | 拒否（持続→接地後に適用） | 無視 | 拒否 | — | 拒否（`error flip: not flying`） |
 
 検証: SILS `acro_crash_relevel`（①の固定）、`api_flight`（FLYING 不一致の無視＝API保護）、
 `modeswitch`/`alt_flight`（FLYING エッジ適用）、`alt_auto_takeoff`（IDLE_GROUND API設定）。
@@ -189,10 +190,52 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 | FLYING → LANDING | （リザーブ） | 制御器が `VerticalPhase::Landing` に切替（注6, INV-1）。鉛直チャネルが `landing_descent_rate_` で降下、姿勢はパイロット（リンク途絶時のみ水平, INV-2）。**ALT/POS でのパイロット DISARM**（注5）or 通信途絶の猶予経過で起動 |
 | FLYING → ARMED_GROUND | 高度/位置コントローラリセット | ESKFホールド |
 | FLYING → IDLE_GROUND | 高度/位置コントローラリセット | モーター停止、ESKFリセット、ブザー(disarm音)。**ACRO/STABILIZE のパイロット DISARM・衝突検知・緊急停止**（注5） |
+| FLYING → FLIP | API `flip x` またはコントローラ FLIP ボタンの立ち上がり。制御器は FLYING 中に毎周期、実行条件 C2〜C8 の成立を `controller_status.flip_ready`（不成立理由は `flip_block_reason`）として publish する（検出、INV-3）。StateManager は FLYING かつ `flip_ready` のときだけ遷移し、それ以外は遷移しない（判断）。API は `flip_block_reason` を読んで `error flip: <理由>` を返す | `ControllerCmd::Flip{dir}`（開始高度・ヨー取り込み、レート PID 積分項リセット）、`EstimatorCmd::HoldAttitudeCorrection`、LED 橙 |
+| FLIP → FLYING | 制御器: `flip_done`（完了 or 打ち切り後の回復完了、結果は `flip_result`）を publish → state_task が実行（`TakeoffComplete` と同型） | `ControllerCmd::FlipComplete`（位置目標取り直し、高度目標＝取り込み値、高度・位置積分項リセット）、`EstimatorCmd::ResumeAttitudeCorrection`（観測復帰・ToF 再取り込み） |
+| FLIP → IDLE_GROUND | DISARM操作・`emergency`・IMPACT（既存の無条件停止と同じ） | モーター停止、ESKFリセット、ブザー(disarm音)。`EstimatorCmd::ResumeAttitudeCorrection` も発行（FlipComplete は発行しない） |
 | LANDING → IDLE_GROUND | 離着陸MGR: シーケンス終了 | モーター停止、ESKFリセット、~~バイアスフリーズ~~（注3で見送り）。接地検出＝本当の DISARM |
 | ARMED_GROUND → IDLE_GROUND | （リザーブ） | モーター停止、ブザー(disarm音) |
 
 「リザーブ」は実装・テスト時に必要に応じて追加する。
+
+### シーケンス状態の既定行
+
+TAKEOFF / LANDING / FLIP はいずれも「有限時間の専用シーケンス状態」であり、モード調停・異常時の扱いに共通の既定がある（[`architecture.md`](architecture.md) §4「シーケンス状態の設計規則」規則3）。共通部分を1行で定義し、各シーケンスは差分だけを書く。
+
+| 項目 | 既定 |
+|------|------|
+| モードスイッチのエッジ | 保留（拒否、持続→通常状態に戻ってから適用） |
+| API 誘導目標（move/rotate/rc 等） | 拒否 |
+| DISARM / `emergency` / IMPACT | 即時（IDLE_GROUND へ、既存の無条件停止と同じ） |
+| 接地リセット | 無し（空中シーケンスのため対象外） |
+| 新規シーケンス要求（TAKEOFF/LANDING/FLIP） | 拒否（busy） |
+
+**シーケンスごとの差分**
+
+| シーケンス | GYRO_ANOMALY | LOW_BATTERY | リンク途絶 |
+|-----------|--------------|-------------|-----------|
+| TAKEOFF / LANDING | 既定どおり DISARM | 既定どおり（ブザー警告） | 既定どおり（R16 タイムアウトで LANDING 等へ） |
+| FLIP | **無視**（記録のみ。状態 FLIP の間の異常角速度は墜落ではないと判断） | FLYING 復帰後に既存則 | FLYING 復帰後に既存則（R16 の単一判定） |
+
+### 状態追加手順（チェックリスト）
+
+新しい `FlightState` を追加するときの標準手順。FLIP の実装作業（Phase 2）はこの手順そのもの。
+
+| # | 手順 |
+|---|------|
+| 1 | `flight_state.hpp` に enum 値を追加 |
+| 2 | 規範表（§3.1、既定行 + 差分）を先に更新する（INV-4） |
+| 3 | StateManager に遷移 + onEnter/onExit を実装 |
+| 4 | state_task に遷移実行ロジックを追加 |
+| 5 | `ControllerCmd` / `IController` にフックを追加 |
+| 6 | `controller_status` に完了フラグ・結果を追加 |
+| 7 | failsafe の判断（`StateManager::handleAlert()`）に当該状態の扱いを追加 |
+| 8 | notify（LED）/ telemetry に状態表示を追加 |
+| 9 | API 側に待ち条件を追加 |
+| 10 | SILS シナリオ + メトリクスを追加 |
+| 11 | `@design` タグを更新 |
+
+**根拠（対象範囲の実測）:** TAKEOFF/LANDING の特別扱いは 2026-09-16 時点で firmware 全体の 16 箇所・4 ファイル（StateManager 8、state_task 5、離着陸 MGR 2、ImuTask 1）に集中している（`docs/plans/flip-maneuver-plan.md` §4.6 実測）。状態として追加する限り拡張は局所的、という根拠になっている。
 
 **注1（ARM時の ESKF 処理 — SILS 掃引で確定）:** 当初は「ARM時 ESKF 全リセット」（地上の共分散収束は飛行を代表しない、という根拠）だったが、SILS のリセットタイミング掃引（8方策×飛行スイート）で、全リセット — および位置/速度/バイアスの共分散の膨張 — は離陸過渡を不安定化すると判明した。再膨張した共分散がスラスト汚染された加速度計を過信し、POS_HOLD 姿勢が発散する（pos_roll/pitch/flight 墜落）。飛行スイート全PASS は2方策のみ＝「何もしない」と「**姿勢の共分散だけ膨張**」。後者を採用：設計意図（ARM で姿勢の自信をリセット）を満たしつつ、姿勢は離陸前に地上で重力から再収束するため安定。実装は `EstimatorCmd::InflateCov(CovScope::Attitude)`（推定値 x は保持し姿勢共分散のみ初期値へ）。
 
@@ -369,7 +412,7 @@ sensor.tof → 推定コンポーネントに常に届く
 
 加速度計が観測する加速度は厳密には `[0, 0, −T/m]`（body frame）であり、ホバー以外では `R^T·g` から乖離する。15° ロールでは |a| ≈ g/cos(15°) で、ノルム判定は通過するが方向は誤りで、姿勢推定が破綻する。
 
-対策として観測ノイズを **R_actual = R_base² × (1 + k_adaptive · |a − g|²)** で動的に膨らませ、g から外れた観測の重みを下げる。`k_adaptive = 50` を default とする。旧 SILS のプロトタイピング（0.3Hz サイン応答、git 履歴）での参考値:
+対策として観測ノイズを **R_actual = R_base² × (1 + k_adaptive · |a − g|²)** で動的に膨らませ、g から外れた観測の重みを下げる。`k_adaptive = 10` を default とする（2026-09-16 修正: 本節は長らく `50` と記載していたが、実装 `sf_estimator_eskf/include/eskf_core.hpp:126` の値は `10` であり、コードと不一致だったため文書側を訂正した）。旧 SILS のプロトタイピング（0.3Hz サイン応答、git 履歴）での参考値:
 
 | 指標 | Before | After | 改善 |
 |------|--------|-------|------|

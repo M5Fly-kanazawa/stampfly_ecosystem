@@ -212,7 +212,7 @@ Boost 中の加速度計のノルムは推力 1.85 G ＋ 回転中心からの�
 | `FlightState::FLIP` | `sf_state/include/flight_state.hpp` | 専用シーケンス状態。`FLYING → FLIP`（要求 + 実行条件）→ `FLYING`（完了／打ち切り）。FLIP 中も `FlightMode`（ALT/POS 等）は保持（TAKEOFF と同じ） |
 | `FlipSequencer` クラス | `firmware/vehicle/components/sf_controller_pid/flip_sequencer.{hpp,cpp}` | フェーズ進行、回転角の積算、レート設定点・集合推力・姿勢ループの要否を毎周期返す。`start(direction)`, `update(gyro, quat, height, v_z, dt)`, `abort()`, `status()`。実行条件 C2〜C8 の判定もここ（検出層） |
 | `PidController::compute()` | 既存 | `ControllerCmd::Flip` を受けている間、列生成器の出力を設定点として既存のレート PID／姿勢 PID／ミキサーに流す。姿勢則は替えない（INV-1） |
-| `ControllerCmd::Flip{dir}` / `FlipAbort` | `sf_types` | StateManager → 制御器への指示（`Takeoff` / `TakeoffComplete` と同じ経路） |
+| `ControllerCmd::Flip{dir}` / `FlipComplete` | `sf_core` | StateManager → 制御器への指示（`Takeoff` / `TakeoffComplete` と同じ経路）。打ち切りは制御器内で Recover へ進むので専用の動詞は持たない。IDLE_GROUND への遷移では既存の Reset が走る |
 | `controller_status` 拡張 | `sf_types` | `flip_phase`、`flip_done`、`flip_result`（Ok / Rejected(reason) / Aborted(reason)）。`takeoff_reached` と同型。**遷移は制御器が行わず、state_task がこれを読んで `FLIP → FLYING` を実行する** |
 | `ApiCmd::Flip{dir}` | `sf_types` | API → StateManager |
 | `cmdFlip()` | `api_task.cpp` | 事前判定（command モード・FLYING）→ `ApiCmd::Flip` 発行 → **状態が FLIP を経て FLYING に戻るのを `waitUntil` で待つ**（`cmdTakeoff` が FLYING を待つのと同型。専用の完了カウンタは不要）→ `ok` / `error flip: <理由>`（理由は `flip_result`） |
@@ -309,7 +309,7 @@ Flip で露呈した不足は構造ではなく規則の明文化で、Phase 1 �
 | 1 | **分類規則**: 操縦者のスティックの意味・自動化される軸・フェイルセーフの解釈のどれかが変わるなら FlightState のシーケンス。変わらず設定点を作るだけなら誘導（`GuidanceTarget`）。診断オーバーレイ（同定励振）も `controller_status` で可視化 | 3 つとも変わる → `FlightState::FLIP` |
 | 2 | **チャネル別の設定点出所の宣言**: 各状態／フェーズが 姿勢・鉛直・水平・ヨー の出所（Pilot / Sequence / Zero）を表で宣言。制御器は `VerticalPhase` を出所の一般化として持つ（INV-1 は保たれる: 出所が替わるだけで制御則は替えない）。INV-2 は「姿勢の出所が Pilot 以外になれるのはリンク途絶（Zero）と操縦者が起動した有限時間のシーケンス（Sequence）だけ」と一般化 | Boost/Recover: 姿勢 Sequence(水平)・鉛直 Sequence(推力)・ヨー Sequence(保持)。Spin/Brake: 姿勢 Sequence(レート)・鉛直 Sequence(推力)・ヨー Sequence(0) |
 | 3 | **規範表の「シーケンス状態の既定行」**: エッジ保留・API 誘導拒否・DISARM/emergency/IMPACT 即時・接地リセット無し・新規シーケンス要求拒否を 1 行で定義し、各シーケンスは差分だけ書く | FLIP の差分: GYRO_ANOMALY 無視、LOW_BATTERY は FLYING 復帰後 |
-| 4 | **統合の時期**: 今は Takeoff と同じ形（`ControllerCmd` の動詞 + `controller_status` の完了フラグ + `IController` のフック）で足す。4 個目のシーケンスを足すときに `SequenceStart{kind}` / `sequence_done` / `onSequence(kind)` へ統合する | `Flip` / `FlipAbort`、`flip_done` / `flip_result`、`onFlip()` |
+| 4 | **統合の時期**: 今は Takeoff と同じ形（`ControllerCmd` の動詞 + `controller_status` の完了フラグ + `IController` のフック）で足す。4 個目のシーケンスを足すときに `SequenceStart{kind}` / `sequence_done` / `onSequence(kind)` へ統合する | `Flip` / `FlipComplete`、`flip_ready` / `flip_done` / `flip_result`、`onFlip()` / `onFlipComplete()` |
 | 5 | **状態追加手順のチェックリスト**: enum → 規範表（既定行 + 差分）→ StateManager 遷移 + onEnter/onExit → state_task 実行 → ControllerCmd/IController → controller_status → failsafe の判断 → notify/telemetry → API の待ち条件 → SILS シナリオ + メトリクス → `@design` タグ | Phase 2 の作業一覧そのもの |
 
 ## 5. 数値シミュレーション計画
@@ -497,7 +497,7 @@ Flip で露呈した不足は構造ではなく規則の明文化で、Phase 1 �
 |-------|------|---------|
 | 0 設計確定 | 本文書、平面モデルの掃引、オリジナルとの比較、最終提案 | 推奨パラメータと高度損失の見積りが数値で示され、オーナーが §9 の未決事項を決定 |
 | 1 設計文書と SILS 準備 | §4.6 の規則 1〜5 を `architecture.md`（INV-2 の一般化、分類規則、チャネル出所の表）と `detailed_design.md`（シーケンス既定行、FLIP 行、状態追加手順）に記載、要件 §9 追記、SILS ジャイロ飽和、新メトリクス | 既存の SILS 再確認試験が全 PASS（改修による既存動作の破壊なし） |
-| 2 ファーム実装 | `FlipSequencer`、`ControllerCmd::Flip`、`controller_status` 拡張、StateManager のセル、API `cmdFlip`、推定器の窓内処理（加速度補正停止・ToF 再取り込み・回転角照合）、パラメータ定義 | 単体テスト（フェーズ進行・打ち切り・角度積算）PASS。SILS `api_flip` 4 方向 PASS（復帰後に ToF 観測が採用に戻ることを含む）。摂動族 PASS。既存シナリオ全 PASS |
+| 2 ファーム実装 | `FlipSequencer`、`ControllerCmd::Flip`、`controller_status` 拡張、StateManager のセル、API `cmdFlip`、推定器の窓内処理（加速度補正停止・ToF 再取り込み・回転角照合）、パラメータ定義 | 単体テスト（フェーズ進行・打ち切り・角度積算）PASS。SILS `api_flip` 4 方向 PASS（復帰後に ToF 観測が採用に戻ることを含む）。摂動族 PASS。既存シナリオ全 PASS。`sf sils scenario api_flip.scn --video` で 4 方向の宙返りの動画を出力しオーナーに提示（2026-09-16 依頼） |
 | 3 コントローラボタン | `CTRL_FLAG_FLIP` エッジ → Flip 要求、方向決定則 | SILS `rc_flip` PASS |
 | 4 実機検証 | ネット・高天井・1 方向ずつ・h = 1.5 m から。400 Hz ログ取得。SILS とのモデル一致確認 | 4 方向 × 3 回成功。高度損失 ≤ 見積り + 0.2 m。完了後 1 s 以内に ±10°。角速度異常の誤検出なし |
 | 5 文書・SDK | API 参照、feature_status、操作手引き、Python SDK `flip()`、djitellopy 動作確認、Blockly ブロック（任意） | djitellopy の `flip_*()` が無改変で `ok` を受ける |

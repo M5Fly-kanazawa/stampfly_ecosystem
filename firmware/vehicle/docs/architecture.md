@@ -115,7 +115,7 @@
 | # | 不変条件 | 根拠／参照 |
 |---|---------|-----------|
 | INV-1 | **全鉛直フェーズ（Grounded / TakeoffClimb / Airborne / Landing）は単一の姿勢＋レートパイプラインを共有する。** いかなるフェーズも独自の姿勢則・並列の制御パイプライン（別関数での丸ごと上書き）を持ってはならない。フェーズが変えてよいのは**鉛直チャネル（推力／降下率）と、その鉛直フェーズ特有の遷移条件のみ**。 | 並列経路は前提のズレを隠す。`pid_controller.cpp::compute()` の `phase_` switch が唯一の鉛直分岐点 |
-| INV-2 | **空中の全フェーズでパイロットの姿勢操縦（roll/pitch/yaw）を奪わない。** 自動化は鉛直・水平位置など特定の並進軸に限定する。例外は「リンク途絶（パイロット不在）」のみで、その判定は設定点の新鮮さ（R16 のタイムアウト）で行い、**単一の判定で水平化**する。フェーズ名で姿勢を 0 固定しない。 | 実機バグ2件（TakeoffClimb 姿勢死・Landing 姿勢死）の再発防止 |
+| INV-2 | **空中の全フェーズで、姿勢チャネル（roll/pitch/yaw）の設定点の出所は操縦者（Pilot）である。** 出所が Pilot 以外になるのは次の 2 つに限る: (a) リンク途絶 — 設定点の新鮮さ（R16 のタイムアウト）で判定し、単一の判定で水平化する（Zero）。(b) 操縦者が明示的に起動した有限時間（0.6 s 以内）のシーケンス状態（Sequence。現状は FLIP のみ。TAKEOFF/LANDING は鉛直チャネルだけを自動化し姿勢は Pilot のまま）。フェーズ名で姿勢を 0 固定しない。シーケンスは規範表の行で自動化する軸を宣言し、終了は単一の判定で通常則に戻る。 | 実機バグ2件（TakeoffClimb 姿勢死・Landing 姿勢死）の再発防止。2026-09-16 FLIP 導入時に一般化。 |
 | INV-3 | **「検出」と「判断」を分離する。** 接地・離陸・持上げ等の検出ロジックは検出層（`sf_takeoff_landing` 等）に置き、`publish` した事実を `StateManager` が判断する。制御器や状態機械に検出ロジックを散らさない。 | 設計原則「検出と判断の分離」、§4 |
 | INV-4 | **状態機械の各 (状態 × 入力) セルは規範表（`detailed_design.md` §3.1）で全て規定される。** 表に無い暗黙の振る舞いを作らない。遷移の追加・変更は表を先に更新する。 | モード調停バグ（2026-06-11）の教訓 |
 | INV-5 | **モータミキサーへの入力は常に物理量（推力[N]・機体トルク[Nm]）とし、幾何配分（B⁻¹、線形）とモータ曲線（duty変換、非線形・機体依存）の2段に分離する。** どちらの段も経験定数1個に押し込めて隠さない（例: 旧 `k=0.25/3.7` は幾何・モータ曲線・電圧補償を1定数に丸め込んでいた）。学習者が自作するミキサーも含め、全実装がこの入出力契約を満たす。 | `sf sysid fit`/`rate-fit` がミキサーの中身を知らずに `control_output`（ミキサー手前の物理量）を直接読めるようにするため。2026-09-09、workshop/vehicleミキサー乖離バグの再発防止として策定 |
@@ -403,6 +403,7 @@ FAILSAFEは**状態ではなくイベント**として設計する。
 |------|-------------------|--------------|------|
 | 通信途絶 | `alert: COMM_LOST` | ホバー維持 → LANDING | 離着陸MGRが自動着陸 |
 | 衝撃 | `alert: IMPACT` | → IDLE_GROUND | 即DISARM |
+| 異常角速度 | `alert: GYRO_ANOMALY` | 状態 FLIP の間は無視（記録のみ）、それ以外は → IDLE_GROUND | FLIP 以外は即DISARM |
 | 低電圧 | `alert: LOW_BATTERY` | 変化なし | 通知がブザー鳴らす |
 | USB給電 | `alert: USB_POWER` | ARM禁止 | — |
 | ESKF発散 | `alert: ESKF_DIVERGED` | 変化なし | ESKFリセット |
@@ -438,6 +439,33 @@ Paired}` として設計する。FAILSAFE と同様、状態管理（StateManage
 - 遷移時にonExit(旧状態)/onEnter(新状態)コールバックを実行
 - コールバック内でリセット処理を集約（PIDクリア、ESKFリセット等）
 - 状態管理タスクの動作不具合はフェイルセーフが検知可能な構造とする
+
+### シーケンス状態の設計規則（2026-09-16、FLIP 導入時に制定）
+
+本節に先立ち、状態機械に `FlightState::FLIP`（`FLYING → FLIP → FLYING`。TAKEOFF/LANDING と同型の専用シーケンス状態）を追加した。詳細設計は [`detailed_design.md`](detailed_design.md) §3、要件は [`requirements.md`](requirements.md) §2、検討経緯は `docs/plans/flip-maneuver-plan.md` を参照。
+
+**なぜこの節があるか:** 旧版ファームの状態遷移管理は `Mode` / `Control_mode` / `Throttle_control_mode` / `Alt_flag` / `Flip_flag` の 5 つが重なり合い、優先順位が暗黙で、フラグが遷移を跨いで残っていた（オリジナル実装の Flip 不具合はすべてこれに由来する。`docs/plans/flip-maneuver-plan.md` §6.1 参照）。vehicle は enum 状態 × 規範表（INV-4）、単一の遷移実行者、onExit/onEnter へのリセット集約で反省を反映済みだが、規則そのものは各所に暗黙のまま存在していたため、FLIP 導入を機に明文化する。
+
+| # | 規則 | Flip への適用 |
+|---|------|--------------|
+| 1 | **分類規則**: 操縦者のスティックの意味・自動化される軸・フェイルセーフの解釈のどれかが変わるなら FlightState のシーケンス。変わらず設定点を作るだけなら誘導（`GuidanceTarget`）。診断オーバーレイ（同定励振）も `controller_status` で可視化 | 3 つとも変わる → `FlightState::FLIP` |
+| 2 | **チャネル別の設定点出所の宣言**: 各状態／フェーズが 姿勢・鉛直・水平・ヨー の出所（Pilot / Sequence / Zero）を表で宣言する（下表）。制御器は `VerticalPhase` を出所の一般化として持つ（INV-1 は保たれる: 出所が替わるだけで制御則は替えない）。INV-2 は「姿勢の出所が Pilot 以外になれるのはリンク途絶（Zero）と操縦者が起動した有限時間のシーケンス（Sequence）だけ」と一般化した | Boost/Recover: 姿勢 Sequence(水平)・鉛直 Sequence(推力)・ヨー Sequence(保持)。Spin/Brake: 姿勢 Sequence(レート)・鉛直 Sequence(推力)・ヨー Sequence(0) |
+| 3 | **規範表の「シーケンス状態の既定行」**: エッジ保留・API 誘導拒否・DISARM/emergency/IMPACT 即時・接地リセット無し・新規シーケンス要求拒否を 1 行で定義し、各シーケンスは差分だけ書く（[`detailed_design.md`](detailed_design.md) §3.1） | FLIP の差分: GYRO_ANOMALY 無視、LOW_BATTERY とリンク途絶は FLYING 復帰後 |
+| 4 | **統合の時期**: 今は TAKEOFF と同じ形（`ControllerCmd` の動詞 + `controller_status` の完了フラグ + `IController` のフック）で足す。4 個目のシーケンスを足すときに `SequenceStart{kind}` / `sequence_done` / `onSequence(kind)` へ統合する | `ControllerCmd::Flip` / `FlipComplete`、`controller_status.flip_ready` / `flip_done` / `flip_result`、`IController::onFlip()` / `onFlipComplete()` |
+| 5 | **状態追加手順のチェックリスト**: enum → 規範表（既定行 + 差分）→ StateManager 遷移 + onEnter/onExit → state_task 実行 → ControllerCmd/IController → controller_status → failsafe の判断 → notify/telemetry → API の待ち条件 → SILS シナリオ + メトリクス → `@design` タグ（[`detailed_design.md`](detailed_design.md) §3.2 参照） | FLIP の実装作業一覧そのもの |
+
+**チャネル別の設定点出所（規則2、2026-09-16）**
+
+| 状態／フェーズ | 姿勢 | 鉛直 | 水平 | ヨー |
+|---|---|---|---|---|
+| FLYING(ALT_HOLD) | Pilot | Mode(高度保持。スティックは上昇率) | Pilot | Pilot |
+| FLYING(POS_HOLD) | Mode(位置保持。スティックは速度) | Mode(高度保持) | Mode(位置保持) | Pilot |
+| TAKEOFF | Pilot | Sequence(速度制限上昇) | Pilot | Pilot |
+| LANDING（リンク生存） | Pilot | Sequence(緩降下) | Pilot | Pilot |
+| LANDING（リンク途絶） | Zero | Sequence(緩降下) | Zero | Zero |
+| FLIP Boost/Recover | Sequence(水平) | Sequence(推力) | — | Sequence(保持) |
+| FLIP Spin/Brake | Sequence(レート) | Sequence(推力) | — | Sequence(0) |
+| 同定励振（診断） | Sequence(レート注入・1軸) | Pilot | Pilot | Pilot |
 
 ### リセット処理の2層分類（クラスA / クラスB）
 
@@ -797,6 +825,7 @@ Control / TL Manager: operate according to target mode
 |---------|-----------------|-------------------|--------|
 | Comm loss | `alert: COMM_LOST` | Hover hold → LANDING | TL Mgr auto-lands |
 | Impact | `alert: IMPACT` | → IDLE_GROUND | Immediate DISARM |
+| Abnormal angular rate | `alert: GYRO_ANOMALY` | Ignored (log only) while in state FLIP, otherwise → IDLE_GROUND | Immediate DISARM except during FLIP |
 | Low battery | `alert: LOW_BATTERY` | No change | Notification buzzer |
 | USB power | `alert: USB_POWER` | ARM prohibited | — |
 | ESKF divergence | `alert: ESKF_DIVERGED` | No change | ESKF reset |

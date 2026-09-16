@@ -49,7 +49,7 @@ IDLE_GROUND
 - ARM/DISARMはアクション（モードではない）
 - 親状態が共通処理を保証
 - TAKEOFF/LANDINGは専用モード（離着陸マネージャーが統括）
-- シーケンス（FLIP, AUTO_LAND等）は将来拡張可能
+- FLIP は 2026-09-16 に専用シーケンス状態として導入。他のシーケンス（AUTO_LAND 等）は将来拡張可能
 - FAILSAFEは状態ではなくイベント — フェイルセーフコンポーネントが `system.alert` を発行し、状態管理が既存モードへの遷移で対応する
 
 ### 遷移条件
@@ -62,6 +62,8 @@ IDLE_GROUND
 | ARMED_GROUND → TAKEOFF | **ALT_HOLD/POS_HOLD: ARM 自体がトリガ**（スロットル入力不要）。短いスプール/整定ドウェル（0.3s, モータはゼロ）の後、自動離陸シーケンス開始: 固定上昇率＋水平姿勢で**目標高度 0.5m**（地面効果回避, config）まで。**ACRO/STABILIZE: 手動スロットル入力**（生スロットル＝推力、自動離陸なし） |
 | TAKEOFF → FLYING | 離陸完了。**ALT/POS: 制御器が目標高度 0.5m を捕捉して通知**（運動量による行き過ぎでなく目標値を捕捉）。**ACRO/STABILIZE: ToF 空中検知（0.15m）**。なお ToF 空中検知 0.15m は ESKF 鉛直ハンドオフ（ImuTask, クラスB）に役割分離され、ALT/POS の離陸完了判定には用いない |
 | サブモード切替 | コントローラからのモード切替コマンド。**地上（IDLE_GROUND/ARMED_GROUND）と FLYING で受理**（設置時の変更が最も安全なため。INIT/TAKEOFF/LANDING/IDLE_HELD 中は拒否し、遷移完了後に適用） |
+| FLYING → FLIP | API `flip x`（x = l/r/f/b）またはコントローラ FLIP ボタンの立ち上がり。実行条件（高度・姿勢・速度・電池電圧・推定器の健全性・前回からの間隔）を制御器が判定し、不成立なら遷移しない（詳細は §7） |
+| FLIP → FLYING | 宙返り完了、または打ち切り後の回復完了 |
 | FLYING → LANDING | 自動着陸の起動。**(a) ALT_HOLD/POS_HOLD でのパイロット DISARM**（高度制御モードは自力で着陸できるため、空中でモータを切らず緩降下する。空中での即カットは機体を落とすだけ）、**(b) 通信途絶のホバー猶予経過**（§安全要件）。緩降下（固定降下率, config）で接地まで |
 | LANDING → IDLE_GROUND | 着陸完了（ToF 接地検出 → 本当の DISARM、モータゼロ） |
 | FLYING → ARMED_GROUND | 静かに着陸 / タッチアンドゴー |
@@ -203,6 +205,17 @@ PairingState を参照。
 | SBUS（外部RC） | 将来（構造のみ） |
 | OTA | しない |
 
+### Tello API: flip コマンド
+
+Tello SDK 互換 API の `flip l/r/f/b`（宙返り）に対応する（2026-09-16。設計の詳細は
+`docs/plans/flip-maneuver-plan.md` を参照）。
+
+| 項目 | 内容 |
+|------|------|
+| コマンド | `flip l` / `flip r` / `flip f` / `flip b`。方向は l=左ロール、r=右ロール、f=前方（機首下げ）、b=後方（機首上げ） |
+| 実行条件 | 状態 FLYING（API は ALT_HOLD/POS_HOLD 限定）、対地高度 ≥ 1.0 m、姿勢 \|roll\|・\|pitch\| ≤ 15°、角速度 ≤ 60 °/s、速度 \|v_h\| ≤ 0.3 m/s・\|v_z\| ≤ 0.2 m/s、電池電圧 ≥ 3.6 V（負荷時）、推定器が正常かつ ToF 有効、前回の Flip 完了から 2 s 以上 |
+| 応答 | 実行条件成立かつ完了で `ok`。実行条件不成立や打ち切りで `error flip: <理由>` |
+
 ## 8. タイミング要件
 
 | タスク | 周期 | 優先度 | スタック |
@@ -227,7 +240,7 @@ PairingState を参照。
 | 条件 | 閾値 | アクション |
 |------|------|-----------|
 | 衝撃（加速度） | 3.0G × 連続2回 | 自動DISARM |
-| 異常角速度 | 800 deg/s × 連続2回 | 自動DISARM |
+| 異常角速度 | 800 deg/s × 連続2回 | 自動DISARM（状態 FLIP の間は無視。宙返りの回転は墜落ではないため。衝撃 3.0G の判定は FLIP 中も有効） |
 | 通信途絶 | 500ms | ホバリング維持3秒 → 自動着陸 |
 | LiPo低電圧 | ≤3.4V | ブザー警告のみ |
 | USB給電 | ≤3.3V | ARM禁止 |
@@ -301,7 +314,7 @@ IDLE_GROUND
 - ARM/DISARM are actions (not modes)
 - Parent state guarantees common behavior
 - TAKEOFF/LANDING are dedicated modes (managed by Takeoff/Landing Manager)
-- Sequences (FLIP, AUTO_LAND, etc.) are extensible for future use
+- FLIP was introduced as a dedicated sequence state on 2026-09-16. Other sequences (AUTO_LAND, etc.) remain extensible for future use
 - FAILSAFE is an event, not a state — Failsafe component publishes `system.alert`, State Management responds with mode transitions
 
 ### Transition Conditions
@@ -314,6 +327,8 @@ IDLE_GROUND
 | ARMED_GROUND → TAKEOFF | Throttle input |
 | TAKEOFF → FLYING | Takeoff complete (altitude threshold reached) |
 | FLYING sub-mode switch | Mode switch command from controller |
+| FLYING → FLIP | API `flip x` (x = l/r/f/b) or a rising edge of the controller's FLIP button. The controller evaluates the execution conditions (altitude, attitude, velocity, battery voltage, estimator health, time since the last Flip) and does not transition if they are not met (see §7) |
+| FLIP → FLYING | Flip complete, or recovery complete after an abort |
 | FLYING → LANDING | Starts an auto-landing: **(a) pilot DISARM in ALT_HOLD/POS_HOLD** (altitude-controlled modes can land themselves, so the craft descends gradually instead of cutting motors mid-air — a mid-air cut would just drop it); **(b) comm-loss hover grace elapsed** (see Safety). Gradual descent (fixed rate, config) to touchdown |
 | LANDING → IDLE_GROUND | Landing complete (ToF touchdown detection → the real DISARM, motors zero) |
 | FLYING → ARMED_GROUND | Soft landing / touch-and-go |
@@ -457,6 +472,17 @@ the §2 State Model for details.
 | SBUS (external RC) | Future (structure only) |
 | OTA | No |
 
+### Tello API: the flip command
+
+Supports the Tello SDK-compatible `flip l/r/f/b` command (2026-09-16; see
+`docs/plans/flip-maneuver-plan.md` for the design).
+
+| Item | Content |
+|------|---------|
+| Command | `flip l` / `flip r` / `flip f` / `flip b`. Direction: l = roll left, r = roll right, f = forward (nose down), b = backward (nose up) |
+| Execution conditions | State FLYING (the API is limited to ALT_HOLD/POS_HOLD), altitude above ground ≥ 1.0 m, attitude \|roll\|/\|pitch\| ≤ 15°, angular rate ≤ 60 °/s, velocity \|v_h\| ≤ 0.3 m/s and \|v_z\| ≤ 0.2 m/s, battery voltage ≥ 3.6 V (under load), estimator healthy with ToF valid, ≥ 2 s since the last Flip completed |
+| Response | `ok` once the conditions are met and the flip completes; `error flip: <reason>` if conditions are not met or the flip is aborted |
+
 ## 8. Timing Requirements
 
 | Task | Rate | Priority | Stack |
@@ -481,7 +507,7 @@ Task mapping for new responsibilities (Failsafe, Takeoff/Landing Manager, etc.) 
 | Condition | Threshold | Action |
 |-----------|-----------|--------|
 | Impact (acceleration) | 3.0G × 2 consecutive | Auto DISARM |
-| Abnormal angular rate | 800 deg/s × 2 consecutive | Auto DISARM |
+| Abnormal angular rate | 800 deg/s × 2 consecutive | Auto DISARM (ignored while in state FLIP, since the flip's rotation is not a crash; the 3.0G impact check stays active during FLIP) |
 | Communication loss | 500ms | Hover hold 3s → auto landing |
 | LiPo low voltage | ≤3.4V | Buzzer warning only |
 | USB power | ≤3.3V | ARM prohibited |
