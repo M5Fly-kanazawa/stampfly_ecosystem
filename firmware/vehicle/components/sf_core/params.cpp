@@ -317,10 +317,24 @@ namespace param_vars {
     float autotune_roll_reject = 0.0f, autotune_pitch_reject = 0.0f, autotune_yaw_reject = 0.0f;
 
     // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
-    // factory reads this: 0 = ESKF (15-state), 1 = complementary filter. The SILS
-    // bench swaps estimators via this parameter alone — no code change.
-    // 推定器の選択（P2: 差し替え可能）。IMU タスクのファクトリが読む: 0=ESKF, 1=相補。
+    // factory reads this: 0 = ESKF (15-state), 1 = complementary filter,
+    // 2 = SNN (CUBA-LIF, UNTRAINED Stage 1 wiring skeleton — Stroobants et al.
+    // 2025 port, arXiv:2411.13945, added 2026-09-17). The SILS bench swaps
+    // estimators via this parameter alone — no code change.
+    // 推定器の選択（P2: 差し替え可能）。IMU タスクのファクトリが読む: 0=ESKF, 1=相補,
+    // 2=SNN（CUBA-LIF、未学習のStage1配線骨格 — Stroobants et al. 2025 移植,
+    // arXiv:2411.13945、2026-09-17追加）。
     int32_t estimator_type = 0;
+
+    // Controller selection (0 = PID [default], 1 = SNN — CUBA-LIF, UNTRAINED
+    // Stage 1 wiring skeleton, added 2026-09-17 alongside estimator.type==2,
+    // same port). The control task's factory (sf::app::stock::controller())
+    // reads this every call, same pattern as estimator.type.
+    // コントローラの選択（0=PID[既定], 1=SNN — CUBA-LIF、未学習のStage1配線
+    // 骨格。estimator.type==2 と同時に2026-09-17追加、同じ移植元）。制御
+    // タスクのファクトリ（sf::app::stock::controller()）が呼び出し毎に読む
+    // （estimator.type と同じ流儀）。
+    int32_t controller_type = 0;
 
     // Telemetry WiFi mode (boot-time, sf_comm initWifi): 0 = STA — join the
     // router whose SSID/password are stored in NVS via the CLI `wifi` command
@@ -791,8 +805,13 @@ static const ParamEntry table[] = {
     {"autotune.pitch.reject",ParamType::FLOAT, &autotune_pitch_reject,0.0f, 0.0f, 10.0f, nullptr},
     {"autotune.yaw.reject",  ParamType::FLOAT, &autotune_yaw_reject,  0.0f, 0.0f, 10.0f, nullptr},
 
-    // Estimator selection (0 = ESKF, 1 = complementary) — RESET_PLAN P2.
-    {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  1.0f,   nullptr},
+    // Estimator selection (0 = ESKF, 1 = complementary, 2 = SNN placeholder) —
+    // RESET_PLAN P2 + SNN Stage 1 port (arXiv:2411.13945, 2026-09-17).
+    {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  2.0f,   nullptr},
+
+    // Controller selection (0 = PID, 1 = SNN placeholder) — SNN Stage 1 port
+    // (arXiv:2411.13945, 2026-09-17), same pattern as estimator.type.
+    {"controller.type", ParamType::INT,   &controller_type,0.0f,      0.0f,  1.0f,   nullptr},
 
     // Telemetry WiFi mode (0 = STA, 1 = SoftAP) — boot-time, no live reload
     // (the radio cannot be re-homed mid-flight).

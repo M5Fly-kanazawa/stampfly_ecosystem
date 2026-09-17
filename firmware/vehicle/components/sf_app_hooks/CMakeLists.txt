@@ -31,8 +31,11 @@ if(SF_APP_DIR)
         REQUIRES sf_controller sf_estimator
         PRIV_REQUIRES
             sf_controller_pid
+            sf_controller_snn
             sf_estimator_eskf
             sf_estimator_complementary
+            sf_estimator_snn
+            sf_snn_core
             sf_core
     )
 else()
@@ -42,8 +45,11 @@ else()
         REQUIRES sf_controller sf_estimator
         PRIV_REQUIRES
             sf_controller_pid
+            sf_controller_snn
             sf_estimator_eskf
             sf_estimator_complementary
+            sf_estimator_snn
+            sf_snn_core
             sf_core
     )
 endif()

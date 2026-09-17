@@ -40,17 +40,21 @@
 
 namespace sf::app::stock {
 
-/// The vehicle's standard controller (PidController), initialized on first
-/// call. Same instance/lifetime as the former app_default.cpp body — a
-/// function-local static constructed once, init() called exactly once.
-/// 標準コントローラ（PidController）。初回呼び出しで初期化。旧
-/// app_default.cpp と同じ寿命 — 関数内 static を1回だけ構築し、init() も
-/// 1回だけ呼ぶ。
+/// The vehicle's standard controller, selected by param controller.type
+/// (0 = PID [default], 1 = SNN — Stage 1 wiring skeleton, UNTRAINED),
+/// initialized on first call. Same instance/lifetime as the former
+/// app_default.cpp body — a function-local static constructed once, init()
+/// called exactly once per selected implementation.
+/// 標準コントローラ（controller.type で PID[既定]／SNN[Stage1配線骨格・
+/// 未学習]を選択）。初回呼び出しで初期化。旧 app_default.cpp と同じ寿命 —
+/// 選んだ実装ごとに関数内 static を1回だけ構築し、init() も1回だけ呼ぶ。
 sf::IController& controller();
 
 /// The vehicle's standard estimator, selected by param estimator.type
-/// (0 = ESKF, 1 = complementary filter), initialized on first call.
-/// 標準推定器（estimator.type で ESKF／相補を選択）。初回呼び出しで初期化。
+/// (0 = ESKF [default], 1 = complementary filter, 2 = SNN — Stage 1 wiring
+/// skeleton, UNTRAINED), initialized on first call.
+/// 標準推定器（estimator.type で ESKF[既定]／相補／SNN[Stage1配線骨格・
+/// 未学習]を選択）。初回呼び出しで初期化。
 sf::IEstimator& estimator();
 
 }  // namespace sf::app::stock

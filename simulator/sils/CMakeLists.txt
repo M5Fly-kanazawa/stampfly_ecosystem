@@ -51,8 +51,12 @@ if(SILS_BUILD_CORES_SMOKE OR SILS_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_estimator_eskf/eskf_estimator.cpp
     ${VN}/components/sf_estimator_eskf/eskf_core.cpp
     ${VN}/components/sf_estimator_complementary/complementary_estimator.cpp
+    ${VN}/components/sf_estimator_snn/snn_estimator.cpp        # SNN attitude estimator (Stage 1 wiring, UNTRAINED — arXiv:2411.13945)
     ${VN}/components/sf_controller_pid/pid_controller.cpp
     ${VN}/components/sf_controller_pid/flip_sequencer.cpp        # FLIP sequence setpoints (FlightState::FLIP, flip-maneuver-plan.md)
+    ${VN}/components/sf_controller_snn/snn_controller.cpp      # SNN attitude controller (Stage 1 wiring, UNTRAINED — arXiv:2411.13945)
+    ${VN}/components/sf_snn_core/cuba_lif_layer.cpp             # CUBA-LIF neuron math shared by sf_estimator_snn/sf_controller_snn
+    ${VN}/components/sf_snn_core/linear_readout.cpp             # linear spike readout shared by sf_estimator_snn/sf_controller_snn
     ${VN}/components/sf_app_hooks/app_default.cpp             # sf::app::controller/estimator/start default (rtos_smoke/hover_smoke/rate_tune compile imu_task.cpp/control_task.cpp directly, below, and both now call the app hooks)
     ${VN}/components/sf_app_hooks/stock_hooks.cpp               # sf::app::stock::controller/estimator body app_default.cpp delegates to (Phase 2)
     ${VN}/components/sf_takeoff_landing/takeoff_landing.cpp   # ToF ground/airborne detect (imu_task)
@@ -86,8 +90,11 @@ if(SILS_BUILD_CORES_SMOKE OR SILS_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_estimator/include
     ${VN}/components/sf_estimator_eskf/include
     ${VN}/components/sf_estimator_complementary/include
+    ${VN}/components/sf_estimator_snn/include
     ${VN}/components/sf_controller/include
     ${VN}/components/sf_controller_pid/include
+    ${VN}/components/sf_controller_snn/include
+    ${VN}/components/sf_snn_core/include
     ${VN}/components/sf_app_hooks/include      # app_hooks.hpp (sf::app::controller/estimator/start)
     ${VN}/components/sf_state/include
     ${VN}/components/sf_takeoff_landing/include

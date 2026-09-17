@@ -47,8 +47,11 @@ idf_component_register(
         sf_estimator
         sf_estimator_eskf
         sf_estimator_complementary
+        sf_estimator_snn
         sf_controller
         sf_controller_pid
+        sf_controller_snn
+        sf_snn_core
         sf_autotune
         sf_actuator
         sf_app_hooks
