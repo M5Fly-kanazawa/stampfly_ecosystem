@@ -1,0 +1,10 @@
+# SNN 姿勢推定・制御 模倣学習 (Stage 2) 専用 venv の依存パッケージ。
+# Dependencies for the SNN attitude estimation/control imitation-learning
+# (Stage 2) dedicated venv.
+#
+# GPU 不要（ネットワークが小規模なため CPU で十分）。
+# No GPU required (the network is small enough to train on CPU).
+torch
+numpy
+pandas
+matplotlib

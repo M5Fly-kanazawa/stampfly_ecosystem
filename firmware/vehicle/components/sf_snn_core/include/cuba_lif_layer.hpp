@@ -101,10 +101,10 @@ public:
     /// init() からは呼ばない。将来の一括上書き用に用意。
     void setUniformParams(float tau_mem, float tau_syn, float theta);
 
-    /// Mark neuron `index` as a fixed integrator (tau_mem=1.0, theta=1.0,
+    /// Mark neuron `index` as a fixed integrator (tau_mem=tau_syn=theta=1.0,
     /// excluded from future training) or release it back to trainable.
-    /// ニューロン `index` を固定積分器（tau_mem=1.0, theta=1.0、将来の学習対象
-    /// 外）に指定する、または解除する。
+    /// ニューロン `index` を固定積分器（tau_mem=tau_syn=theta=1.0、将来の学習
+    /// 対象外）に指定する、または解除する。
     void setFixedIntegrator(int index, bool fixed);
     bool isFixedIntegrator(int index) const { return is_fixed_[index]; }
 

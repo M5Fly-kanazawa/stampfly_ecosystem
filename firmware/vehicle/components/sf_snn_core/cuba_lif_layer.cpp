@@ -56,12 +56,19 @@ void CubaLifLayer::setFixedIntegrator(int index, bool fixed)
 {
     is_fixed_[index] = fixed;
     if (fixed) {
-        // Per design: a fixed integrator neuron has no leak (tau_mem=1.0)
-        // and a unit threshold (theta=1.0); this metadata flag is what a
-        // future trainer will check to skip these neurons.
-        // 設計通り: 固定積分ニューロンは無漏洩(tau_mem=1.0)・単位閾値
-        // (theta=1.0)。将来の学習器はこのメタデータで対象外にする。
+        // Per the paper (arXiv:2411.13945 §II-C.4): a fixed integrator
+        // neuron has tau_syn=tau_mem=theta=1.0 (all THREE, not just
+        // tau_mem/theta -- an earlier revision of this function missed
+        // tau_syn, which would have made Stage 2's trained weights behave
+        // differently here than during PyTorch training). This metadata
+        // flag is what the trainer checks to skip these neurons.
+        // 論文（arXiv:2411.13945 §II-C.4）通り: 固定積分ニューロンは
+        // tau_syn=tau_mem=theta=1.0（3つとも。tau_mem/thetaだけだった
+        // 旧版はtau_synが漏れており、Stage2の学習済み重みがここでの推論と
+        // 訓練時とで挙動が食い違う原因になっていた）。学習器はこのメタ
+        // データで対象外にする。
         tau_mem_[index] = 1.0f;
+        tau_syn_[index] = 1.0f;
         theta_[index]   = 1.0f;
     }
 }
