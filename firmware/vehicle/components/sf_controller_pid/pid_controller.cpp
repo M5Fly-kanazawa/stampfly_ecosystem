@@ -1066,10 +1066,18 @@ void PidController::learnTrim(const StateEstimate& state, const CommandSetpoint&
     // ALT_HOLD は鉛直スティックも中立を要求: 上昇/下降中（throttle_axis が中央外）は風に
     // 抗してレート追従するため機体が傾き、水平ドリフト観測を汚す。（STABILIZE は直接
     // スロットルで水平軸へのカップリングが異なるため判定しない。）
+    // A FLIP (and its settle window) is a commanded maneuver, not a hover: the
+    // velocity swing through the flip would be integrated as a phantom drift.
+    // Freezing here also drops trim_learn_init_, so the velocity reference is
+    // re-seeded after the window instead of differencing across the flip.
+    // FLIP（とその整定窓）は指令マニューバでありホバーではない: 宙返り中の速度変化を
+    // 架空のドリフトとして積分してしまう。ここで止めると trim_learn_init_ も落ちるので、
+    // 速度基準は宙返りをまたいで差分せず、窓の後で取り直される。
+    const bool flip_or_settling = flip_.active() || flip_settle_remaining_s_ > 0.0f;
     const bool hovering =
         (current_mode_ == FlightMode::STABILIZE || current_mode_ == FlightMode::ALT_HOLD) &&
         phase_ == VerticalPhase::Airborne &&
-        !guidance_active_ &&
+        !guidance_active_ && !flip_or_settling &&
         fabsf(setpoint.roll)  < kTrimLearnStickDead &&
         fabsf(setpoint.pitch) < kTrimLearnStickDead &&
         fabsf(setpoint.yaw)   < kYawHoldStickDeadband &&
@@ -1160,10 +1168,14 @@ void PidController::learnHoverThrust(float thrust_correction, float vz_up,
     // 判定: 高度ループが動く真の定常ホバーでのみ学習 — Airborne・ALT/POS・スロットル中立
     // （上昇/下降指令なし）・実際に静止（|vz| 小）。|vz| 判定が上下動中の学習を止め、過渡の
     // 補正をホバー推力誤差と誤認しない。
+    // Same FLIP/settle-window freeze as learnTrim(): the post-flip altitude
+    // recovery is a transient, not a hover-thrust error.
+    // learnTrim() と同じ FLIP/整定窓の停止: 宙返り後の高度回復は過渡でありホバー推力の誤差ではない。
+    const bool flip_or_settling = flip_.active() || flip_settle_remaining_s_ > 0.0f;
     const bool steady_hover =
         phase_ == VerticalPhase::Airborne &&
         (current_mode_ == FlightMode::ALT_HOLD || current_mode_ == FlightMode::POS_HOLD) &&
-        climb_rate_sp == 0.0f &&
+        climb_rate_sp == 0.0f && !flip_or_settling &&
         fabsf(vz_up) < kHoverLearnVzDead;
     if (!steady_hover) return;
 

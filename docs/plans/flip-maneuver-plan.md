@@ -1,7 +1,7 @@
 # 宙返り（Flip）マニューバ実装計画
 
-作成: 2026-09-16。最終更新: 2026-09-16。
-状態: **実装中**（Phase 0 完了。2026-09-16 にオーナーが §9 の 9 項目をすべて推奨どおりに決定し、Phase 1 に着手）。
+作成: 2026-09-16。最終更新: 2026-09-18。
+状態: **実装中**（Phase 0〜3 完了。Phase 3=コントローラ FLIP ボタン、2026-09-18。次は Phase 4 実機検証）。
 
 発端: Tello 互換 UDP API（`firmware/vehicle/tasks/api_task.cpp`、ポート 8889）は
 `command`/`takeoff`/`land`/移動/回頭/`rc`/クエリまで実装済みだが、Tello SDK の
@@ -217,7 +217,7 @@ Boost 中の加速度計のノルムは推力 1.85 G ＋ 回転中心からの�
 | `ApiCmd::Flip{dir}` | `sf_types` | API → StateManager |
 | `cmdFlip()` | `api_task.cpp` | 事前判定（command モード・FLYING）→ `ApiCmd::Flip` 発行 → **状態が FLIP を経て FLYING に戻るのを `waitUntil` で待つ**（`cmdTakeoff` が FLYING を待つのと同型。専用の完了カウンタは不要）→ `ok` / `error flip: <理由>`（理由は `flip_result`） |
 | StateManager | `sf_state` | 規範表（§4.3）に従い `FLYING → FLIP` を判断し `ControllerCmd::Flip` を発行。FLIP 中の事象は表のとおり処理。onEnter / onExit で取り込みとリセット |
-| state_task | `tasks/state_task.cpp` | `flip_done` の立ち上がりで `FLIP → FLYING` を実行。`CTRL_FLAG_FLIP` の立ち上がりで `ApiCmd::Flip` 相当の要求（Phase 3） |
+| state_task | `tasks/state_task.cpp` | `flip_done` の立ち上がりで `FLIP → FLYING` を実行。`CTRL_FLAG_FLIP` の立ち上がりで `ApiCmd::Flip` 相当の要求（Phase 3、実装済み・2026-09-18: `handleFlipButtonEdge()` が状態 FLYING・`controller_status.flip_ready` を確認し `determineFlipButtonDirection()`（スティック閾値超なら roll/pitch の符号、両軸未満なら `flip.button_default_direction`）で方向を決めて `requestFlipManeuver()`＝`StateManager::requestFlip()` を呼ぶ。API の `ApiCmd::Flip` 処理と同じ関数を共有） |
 | 通知・テレメトリ | `sf_notify`, `sf_telemetry` | FLIP 状態の LED 色（オリジナルの橙 `0xFF9933` を踏襲）、テレメトリの状態値 |
 
 onEnter（FLYING → FLIP）: 開始高度・ヨーの取り込み、レート PID 積分項リセット、推定器の加速度姿勢補正の停止（§7）、LED。
@@ -461,6 +461,8 @@ V_min 3.6 V、クールダウン 2 s。
 | 13 | 宙返り後にホバーが目標より 0.1〜0.15 m 低いまま数秒続き、次の宙返りが `too low` になる | FlipComplete で高度・水平速度の積分項をリセットしていたため、宙返り前に学習したホバー推力・傾きの補正が失われていた | 積分項を保持する（リセットするのは外側の位置 P ループだけ） |
 | 14 | 2 回目の宙返りが `error flip: rejected`（API は `flip_ready` を見て要求したが遷移しない） | API が読んだ約 20 ms 後に state_task が `flip_ready` を再判定し、境界上の条件で反転していた | state_task の二重判定を外す（API が事実を見て要求、StateManager は FLYING を判断、制御器が開始時に非停止で再評価） |
 | 15 | モータ遅れがあると減速開始が遅れ落ち込みが増える | 先読みのモータ遅れ 16 ms がモータ ODE の時定数だけで、伝送遅れ分が無い | `flip.motor_lag_ms` 16 → 24（ODE 16 ms + 実機同定の伝送遅れ 8〜15 ms） |
+| 16 | ALT_HOLD の前方宙返り後、整定窓終了とともに約 1 m 沈む（`rc_flip` Forward 窓、alt_drop_max 0.993m） | ヨーレートループの微分項（rate.yaw.td=0.01・eta=0.125 は dt=2.5ms で素の1段差分に退化）とプラントのローター慣性反トルクが共振し、200Hz（ナイキスト）のリミットサイクルが立ち上がる。整定窓のヨー上限が外れると torque_yaw が±1.226mN·mで交番し集合推力が削られる（バックログ #12 の根本原因） | 宙返り側では対処しない。既定ゲインを維持し、バックログ #12 に根本原因と `rate.yaw.td=0` での実測値（alt_drop_max 0.993→0.119m）を記録。制御パラメータ変更は別タスク |
+| 17 | #16 の状態で着陸→再 ARM を挟んだ3回目の自動離陸が発散する | 並進したまま着陸した際の接地衝撃で ESKF の姿勢推定が数度ずれたまま固着し、次の自動離陸がその誤推定に合わせて水平化するため実際には機体が傾く（SILS プラントは空力抗力が無く並進中の傾きが加速度計から観測できない） | 宙返り側では対処しない。バックログ #16 として別タスク化（着陸衝撃後の姿勢推定の固着と再 ARM） |
 | — | 整定の判定 1.5 s が要件 F3（完了後 1 s）より厳しい | 窓は指令の 0.1 s 前から始まり、マニューバが約 0.7 s | 判定を窓基準 2.0 s に |
 
 **残りの見直し項目**: `StateEstimate` に電池電圧・ToF 有効性を注入する暫定実装（`ControlTask` → `compute()`）は、
@@ -566,7 +568,7 @@ V_min 3.6 V、クールダウン 2 s。
 | 0 設計確定 | 本文書、平面モデルの掃引、オリジナルとの比較、最終提案 | 推奨パラメータと高度損失の見積りが数値で示され、オーナーが §9 の未決事項を決定 |
 | 1 設計文書と SILS 準備 | §4.6 の規則 1〜5 を `architecture.md`（INV-2 の一般化、分類規則、チャネル出所の表）と `detailed_design.md`（シーケンス既定行、FLIP 行、状態追加手順）に記載、要件 §9 追記、SILS ジャイロ飽和、新メトリクス | 既存の SILS 再確認試験が全 PASS（改修による既存動作の破壊なし） |
 | 2 ファーム実装（2026-09-17: 4 方向 PASS、摂動族 §5.5） | `FlipSequencer`、`ControllerCmd::Flip`、`controller_status` 拡張、StateManager のセル、API `cmdFlip`、推定器の窓内処理（加速度補正停止・ToF 再取り込み。回転角照合は未実装）、パラメータ定義 | 単体テスト PASS（11 + ESKF 4）。SILS `api_flip_roll`・`api_flip_pitch` PASS（ToF 再取り込みを含む）。摂動族: 推力効率 0.7・トルク権限 0.7 で PASS、モータ遅れ 10 ms は 1 回目 PASS（2 回目は既存のループ遅れ余裕の問題 §5.5 #12）、雑音・乱流・推力効率 0.6 は既存の離陸判定の問題（#11）で対象外。既存シナリオ全 PASS（30 PASS + 5 既知失敗）。`--video` で 4 方向の動画を出力 |
-| 3 コントローラボタン | `CTRL_FLAG_FLIP` エッジ → Flip 要求、方向決定則 | SILS `rc_flip` PASS |
+| 3 コントローラボタン（実装済み・2026-09-18） | `CTRL_FLAG_FLIP` エッジ → Flip 要求、方向決定則。`sf_command` が bit1 を `PilotRequest.flip_button` にデコード、`state_task.cpp` の `handleFlipButtonEdge()`/`determineFlipButtonDirection()` が立ち上がりエッジで判定し `requestFlipManeuver()`（API `ApiCmd::Flip` と共有）を呼ぶ。既定方向パラメータは `flip.button_default_direction`（既定 1=Right）・`flip.button_stick_threshold`（既定 0.5） | SILS `rc_flip` PASS（Right/Left/既定Right/Forward の4宙返り、58判定）。`sf sils regression`: 31 PASS + 5 既知失敗 + 1 SKIP（rc_flip 追加分、既存全 PASS）。**知見（2026-09-18 に根本原因を特定、既定ゲインは未変更）**: 単発 PITCH 宙返りの高度損失 ~1m と2回目宙返りの `NotSteady` 拒否は、ヨーレートループの微分項が起こす 200Hz リミットサイクル（バックログ #12 の根本原因、`rate.yaw.td=0` で alt_drop_max 0.993→0.119m まで解消を実測）が原因。その状態で着陸→再 ARM を挟んだ3回目離陸の発散は、着陸衝撃後に姿勢推定（ESKF）が固着したまま再 ARM することが原因で、新規バックログ #16 として切り出した（`rc_flip.scn` 冒頭コメント参照）。既定ゲインはここでは変更しない（制御パラメータ変更は別タスク）。ボタン経路自体（4方向とも動作確認）の欠陥ではなく、トリム学習（`attitude.trim.learn`）も無関係と確認済み |
 | 4 実機検証 | ネット・高天井・1 方向ずつ・h = 1.5 m から。400 Hz ログ取得。SILS とのモデル一致確認 | 4 方向 × 3 回成功。高度損失 ≤ 見積り + 0.2 m。完了後 1 s 以内に ±10°。角速度異常の誤検出なし |
 | 5 文書・SDK | API 参照、feature_status、操作手引き、Python SDK `flip()`、djitellopy 動作確認、Blockly ブロック（任意） | djitellopy の `flip_*()` が無改変で `ok` を受ける |
 
@@ -579,7 +581,7 @@ V_min 3.6 V、クールダウン 2 s。
 | 3 | 対象モード | API は ALT_HOLD/POS_HOLD（ホバリング前提）。ボタンは全 FLYING モード（ACRO/STABILIZE では回復後の高度はスティック） |
 | 4 | h_min と天井余裕 | h_min はシミュレーションの高度損失 + 0.5 m。天井は操縦者の責任として手引きに明記 |
 | 5 | 電池電圧下限 | 3.6 V（負荷時）。実機ログで見直す |
-| 6 | ボタン押下時の方向 | スティックが中立なら後方（`b`）、傾いていればその方向（オリジナル実装を確認してから決める） |
+| 6 | ボタン押下時の方向 | スティックの倒れが `flip.button_stick_threshold`（既定 0.5）を超えていればその軸・符号の方向（roll>0 右・roll<0 左・pitch>0 後・pitch<0 前）、中立なら `flip.button_default_direction`（既定 1=Right）。§9-6 のとおりオリジナルと同じ向きにするため、実機でオリジナルの正方向を確認してから既定値を決める。 |
 | 7 | 衝撃しきい値（3 G）の FLIP 中の緩和 | まず緩和せず実機ログで確認 |
 | 8 | FLIP を `FlightState` にする（§4.1 改訂案）か、制御器内オーバーライド（当初案）か | `FlightState::FLIP`。規範表・onEnter/onExit・遷移実行者の方針に沿う |
 | 9 | 設計検討スクリプト（`control/design/flip_planar_study/`）の置き場所 | 設計資産として現状のまま。実機ログと突き合わせる段階（Phase 4）で `sf` 化を検討 |

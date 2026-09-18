@@ -50,7 +50,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 
 | 種別 | 引数 | 単位・備考 |
 |------|------|-----------|
-| `rc` | `<thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz] [alt] [acro] [pos]` | 送信機スティックの模擬。詳細は次項 |
+| `rc` | `<thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz] [alt] [acro] [pos] [flip]` | 送信機スティックの模擬。詳細は次項 |
 | `rc_foreign` | `rc` と同じ引数 | **別の（ペアリングされていない）送信機 MAC** から同じ内容を送る。混信フィルタの検証用 |
 | `rc_ramp` | `<throttle\|roll\|pitch\|yaw> <from> <to> <step> <rate_hz> <arm> [alt] [acro]` | 1軸だけを `from`→`to` へ `step` 刻みで掃引（他の軸は中央値2048）。`step` は符号不要（方向は from/to から自動判定）、`rate_hz` は 1〜1000 |
 | `key` | `"<text>"` | ファームのコンソール（CLI）へ文字列をそのまま流し込む。`\n \t \r \\ \"` エスケープ可 |
@@ -64,7 +64,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 ### `rc` 行の詳細（最重要）
 
 ```
-<t>  rc  <thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz] [alt] [acro] [pos]
+<t>  rc  <thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz] [alt] [acro] [pos] [flip]
 ```
 
 - `thr`/`roll`/`pitch`/`yaw`: 12bit ADC 生値、**範囲 0〜4095、中立 2048**。送信機のスティックそのもの
@@ -74,8 +74,9 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 - `alt`（省略時 0）: 1 で ALTITUDE_HOLD（高度保持）フラグを立てる
 - `acro`（省略時 0）: 1 で ACRO（角速度）モードフラグを立てる
 - `pos`（省略時 0）: 1 で POSITION_HOLD（位置保持）フラグを立てる
+- `flip`（省略時 0）: 1 で FLIP ボタンフラグを立てる（コントローラの FLIP ボタン、Phase 3。ARM と同じ立ち上がりエッジのみで機体が宙返りを要求する — 押しっぱなしでも1回だけ）
 
-**位置引数であることに注意:** `alt`/`acro`/`pos` は `hold_ms`・`rate_hz` の**後**にしか置けない。たとえば `acro` だけを 1 にしたい行でも、`hold_ms` と `rate_hz` を省略はできない（完全な形で書く）。
+**位置引数であることに注意:** `alt`/`acro`/`pos`/`flip` は `hold_ms`・`rate_hz` の**後**にしか置けない。たとえば `acro` だけを 1 にしたい行でも、`hold_ms` と `rate_hz` を省略はできない（完全な形で書く）。`flip` を立てたい行は `alt`・`acro`・`pos` まで含めて完全な形で書く。
 
 ```
 # 良い例: acro を立てたいので hold_ms/rate_hz を明示し、alt=0, acro=1 と並べる
@@ -321,7 +322,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 
 | Channel | Args | Units / notes |
 |---------|------|---------------|
-| `rc` | `<thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz] [alt] [acro] [pos]` | Simulated transmitter sticks — see next section |
+| `rc` | `<thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz] [alt] [acro] [pos] [flip]` | Simulated transmitter sticks — see next section |
 | `rc_foreign` | same as `rc` | Injects the same content from a **different (unpaired) transmitter MAC** — used to test the crosstalk filter |
 | `rc_ramp` | `<throttle\|roll\|pitch\|yaw> <from> <to> <step> <rate_hz> <arm> [alt] [acro]` | Sweeps ONE axis from `from` to `to` in `step` increments (other axes stay centred at 2048). `step` is unsigned (direction is inferred from from/to); `rate_hz` is 1..1000 |
 | `key` | `"<text>"` | Feeds the text straight into the firmware's console (CLI). Supports `\n \t \r \\ \"` escapes |
@@ -335,7 +336,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 ### `rc` line in detail (the most important one)
 
 ```
-<t>  rc  <thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz] [alt] [acro] [pos]
+<t>  rc  <thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz] [alt] [acro] [pos] [flip]
 ```
 
 - `thr`/`roll`/`pitch`/`yaw`: raw 12-bit ADC values, **range 0..4095, centre 2048** — exactly what a real transmitter stick sends
@@ -345,8 +346,9 @@ One event per line. Blank lines and anything after `#` are ignored.
 - `alt` (default 0): 1 sets the ALTITUDE_HOLD flag
 - `acro` (default 0): 1 sets the ACRO (rate) mode flag
 - `pos` (default 0): 1 sets the POSITION_HOLD flag
+- `flip` (default 0): 1 sets the FLIP-button flag (controller FLIP button, Phase 3. Same rising-edge-only treatment as ARM — the vehicle requests one flip per press, even if held)
 
-**These trailing fields are positional:** `alt`/`acro`/`pos` can only appear AFTER `hold_ms` and `rate_hz`. To set only `acro`, you must still spell out `hold_ms` and `rate_hz` explicitly (write the full form).
+**These trailing fields are positional:** `alt`/`acro`/`pos`/`flip` can only appear AFTER `hold_ms` and `rate_hz`. To set only `acro`, you must still spell out `hold_ms` and `rate_hz` explicitly (write the full form). To set `flip`, spell out `alt`/`acro`/`pos` too.
 
 ```
 # good: hold_ms/rate_hz are explicit so acro (0 1) lands in the right slot

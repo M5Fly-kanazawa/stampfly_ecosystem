@@ -45,6 +45,7 @@ static constexpr float kAdcHalfSpan = 2048.0f;
 // ControlPacket.flags のビットマスク（プロトコル SSOT / controller_comm）。sf_comm は
 // 生の flags バイトを渡し、本 Service コンポーネントがビットを解釈する。
 static constexpr uint8_t kFlagArm     = 0x01;  // bit0: ARM
+static constexpr uint8_t kFlagFlip    = 0x02;  // bit1: FLIP button (CTRL_FLAG_FLIP)
 static constexpr uint8_t kFlagMode    = 0x04;  // bit2: ACRO (rate) mode
 static constexpr uint8_t kFlagAltMode = 0x08;  // bit3: ALTITUDE_HOLD
 static constexpr uint8_t kFlagPosMode = 0x10;  // bit4: POSITION_HOLD
@@ -144,12 +145,13 @@ void CommandProcessor::publishSetpoint(const RawControlInput& raw)
 void CommandProcessor::publishPilotRequest(const RawControlInput& raw)
 {
     PilotRequest req = {};
-    req.arm       = (raw.flags & kFlagArm)     != 0;
-    req.acro      = (raw.flags & kFlagMode)    != 0;
-    req.alt_hold  = (raw.flags & kFlagAltMode) != 0;
-    req.pos_hold  = (raw.flags & kFlagPosMode) != 0;
-    req.source    = raw.source;
-    req.timestamp = raw.timestamp;
+    req.arm         = (raw.flags & kFlagArm)     != 0;
+    req.flip_button = (raw.flags & kFlagFlip)    != 0;
+    req.acro        = (raw.flags & kFlagMode)    != 0;
+    req.alt_hold    = (raw.flags & kFlagAltMode) != 0;
+    req.pos_hold    = (raw.flags & kFlagPosMode) != 0;
+    req.source      = raw.source;
+    req.timestamp   = raw.timestamp;
 
     pilot_request.publish(req);
 }

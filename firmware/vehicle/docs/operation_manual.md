@@ -206,6 +206,8 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
 
 **宙返り（Flip）:** `flip <l/r/f/b>` は ALT_HOLD/POS_HOLD・対地高度 **1.0m 以上**・ほぼ水平で定常・電池電圧 **3.6V 以上**（負荷時）・前回の flip から 2 秒以上のときだけ実行される（不成立時は `error flip: <理由>`）。機体に上向きセンサが無いため天井までの距離は判定できない — **開始高度 + 0.6m 以上の天井余裕は操縦者の責任**。屋内では最初はネットのある場所・高天井（目安 2m 以上）で1方向ずつ試し、電池残量に余裕がある状態で行うこと。実行条件・応答語彙の詳細は [`docs/architecture/tello-api-reference.md`](../../../docs/architecture/tello-api-reference.md) を参照。
 
+**FLIP ボタン:** コントローラの FLIP ボタンでも同じ宙返りを起動できる（全 FLYING モード対応、ACRO/STABILIZE を含む）。方向はボタンを押した瞬間のロール/ピッチスティックの向きで決まる — 大きく倒している軸（閾値超）があればその方向、両軸とも中立に近ければ既定方向（工場出荷時 Right）になる。実行条件は API の `flip` と同じで、不成立時は機体側でログに記録されるだけで応答は返らない（ログを見られない操縦者への合図は今後の課題）。ボタンを押し続けても再要求はされない — 1回の押下につき1回だけ要求し、次に起動するには離してもう一度押す。
+
 ## 5. ペアリング手順
 
 機体とコントローラを1対1に束ね、複数機・複数送信機の混信を防ぐ。詳細は
@@ -480,6 +482,15 @@ replies `error flip: <reason>`. The vehicle has no upward-facing sensor, so **a
 ceiling clearance of start altitude + 0.6 m or more is the pilot's responsibility**.
 Indoors, try one direction at a time with a net and a high ceiling (roughly 2 m or
 more) first, with battery margin to spare.
+
+**FLIP button:** the controller's FLIP button starts the same maneuver (any FLYING
+mode, including ACRO/STABILIZE). The direction is read from the roll/pitch stick
+deflection at the moment the button is pressed — whichever axis is held past the
+threshold wins that direction; with both sticks near centre it falls back to the
+default direction (factory default: Right). Execution conditions are the same as the
+API `flip`; a rejection is only logged on the vehicle (no reply channel to signal the
+pilot — a future improvement). Holding the button down does not re-request — one press
+requests once; release and press again to fire the next one.
 
 ## 5. Pairing Procedure
 

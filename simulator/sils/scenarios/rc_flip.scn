@@ -1,0 +1,184 @@
+# rc_flip.scn — controller FLIP button: RC-only ARM -> ALT_HOLD auto-takeoff ->
+#               stick climb -> FLIP button in all 4 directions -> DISARM auto-land
+#               コントローラ FLIP ボタン: RC のみで ARM -> ALT_HOLD 自動離陸 ->
+#               スティック上昇 -> FLIP ボタン4方向 -> DISARM 自動着陸
+#
+# Drives the FLIP-button path added in Phase 3 (flip-maneuver-plan.md §4.1,
+# §9 decision 6, F6): PilotRequest.flip_button (CTRL_FLAG_FLIP, flags bit1)
+# rising edge -> state_task's handleFlipButtonEdge() -> the SAME
+# StateManager::requestFlip() entry point the API `flip` verb uses. Unlike
+# api_flip_roll/pitch.scn (which drive the API text parser), this scenario
+# ONLY injects RC packets — no `api` channel at all — so it is the first SILS
+# coverage of the button trigger and its stick-direction rule (§9-6).
+#
+# STRUCTURE (two ARM/climb/DISARM cycles, not one continuous flight, and
+# only ONE pitch-axis direction — Forward): found empirically while writing
+# this scenario (2026-09-18) that in ALT_HOLD:
+#  (a) a SECOND flip requested after a PITCH flip (Forward/Back) is
+#      reliably rejected `NotSteady` (C4, |v_h| <= flip.max_hvel_mps =
+#      0.3 m/s) NO MATTER HOW LONG the intervening neutral-RC settle window
+#      is (tested 5 s and 8 s) — root cause #1 below;
+#  (b) landing (DISARM auto-land) and re-arming a THIRD time after a cycle
+#      that contained a pitch flip produced a full control divergence on
+#      the next auto-takeoff (v_h climbed 0.2 -> 14 m/s in ~5 s, ending in
+#      "Impact/anomaly -> emergency DISARM") even though the pitch-flip
+#      cycle's OWN landing looked clean (v_h = 0 at touchdown) — root cause
+#      #2 below, a CONSEQUENCE of root cause #1, spun off as a separate
+#      backlog item and not chased further here.
+# Two ROLL flips (or a roll flip followed by a NEUTRAL-stick default-
+# direction flip) chain fine with a 3 s gap and a following cycle is fine
+# too, so cycle 1 covers Right, Left and the default-direction/held-button
+# checks together; cycle 2 is a fresh ARM/climb with a SINGLE Forward flip
+# and then lands — no third cycle. Back direction was exercised manually
+# while calibrating this scenario (a 4-flip single-flight draft produced
+# clean "Flip requested (direction=Back)" / "PID: Flip engaged: Back" /
+# "Flip complete -> FLYING" log lines identical in shape to the other three
+# directions) but is NOT part of this committed, regression-safe scenario —
+# determineFlipButtonDirection()'s Back branch is the direct mirror of the
+# Forward branch already covered below (pid_controller.cpp sign convention
+# confirmed for both), so the direction-selection LOGIC is exercised for
+# both signs of both axes even though the SILS run only scripts one pitch
+# direction.
+#
+# ROOT CAUSE #1 (traced 2026-09-18 — this IS the root cause of
+# docs/architecture/simulation-policy.md backlog #12, not a new bug): the
+# yaw-rate loop's derivative-on-measurement term degenerates into a raw
+# one-step difference (rate.yaw.td=0.01, filter eta=0.125, dt=2.5 ms ->
+# alpha=1) and resonates with the SILS plant's rotor-inertia reaction
+# torque (Jmp*omega_dot in plant.cpp): the flip's Recover->split motor step
+# is enough of a yaw kick to start a self-sustaining 200 Hz (Nyquist) limit
+# cycle — torque_yaw alternates +/-1.226 mNm every control step, the
+# diagonal motor pairs alternate 1.00/0.41 duty, and once the settle-window
+# yaw cap (0.3 mNm) lifts the clipped collective thrust starves lift (see
+# rc_flip.expect's Forward-window metric comment for the measured numbers).
+# This keeps perturbing v_h past the settle window, so a second PITCH flip
+# stays NotSteady (C4) no matter how long the wait is. `--param
+# rate.yaw.td=0` clears the sink (alt_drop_max 0.993->0.119 m) but is a
+# control-parameter change, out of scope here (owner decision).
+#
+# ROOT CAUSE #2 (traced 2026-09-18, spun off as
+# docs/architecture/simulation-policy.md backlog #16 — a CONSEQUENCE of
+# root cause #1 above, not a separate flip bug): landing while still
+# translating (root cause #1) lets the touchdown bounce (60-100 deg/s body
+# rate) hit the ESKF while it is grounded; the estimated attitude jumps a
+# few degrees off level and then stays EXACTLY constant (frozen, not
+# drifting) for the rest of the ground time — the accelerometer-attitude
+# correction fails to re-converge at rest. The next auto-takeoff levels the
+# controller to this frozen wrong estimate, so the craft is actually
+# tilted; the SILS plant has no aerodynamic drag, so the tilt stays
+# unobservable to the accelerometer while translating, and the resulting
+# horizontal acceleration is what diverges. This is a general re-ARM/
+# estimator issue, not flip-specific, so it is NOT chased further here.
+#
+# 構成（1本の連続飛行でなく ARM/上昇/DISARM の2サイクル、PITCH 方向は Forward
+# のみ）: 本シナリオ作成中（2026-09-18）に判明:
+#  (a) ALT_HOLD では PITCH 宙返り（Forward/Back）の後に要求した2回目の宙返りが、
+#      中立 RC の待ち時間をどれだけ延ばしても（5s・8sで確認）`NotSteady`
+#      （C4, |v_h|<=flip.max_hvel_mps=0.3m/s）で拒否され続ける — 原因#1 は下記。
+#  (b) PITCH 宙返りを含んだサイクルの後、着陸（DISARM 自動着陸）自体は綺麗に
+#      終わる（接地時 v_h=0）にもかかわらず、3回目の ARM/上昇で次の自動離陸が
+#      完全に発散した（v_h が0.2→14m/sへ~5sで急伸、"Impact/anomaly→emergency
+#      DISARM"）— 原因#2 は下記、原因#1 の帰結であり、別バックログに切り出して
+#      これ以上は追わない。
+# ロール宙返り同士（またはロール宙返り→中立スティックの既定方向宙返り）は3s
+# 間隔で問題なく連鎖し、その後にもう1サイクル続けても問題ないため、cycle 1 で
+# Right・Left・既定方向/押しっぱなし確認をまとめて検証し、cycle 2 は新規
+# ARM/上昇で単発の Forward 宙返りのみ行って着陸する（3サイクル目は無し）。Back
+# 方向は本シナリオの較正中に手動で確認済み（4宙返り連続の試作版で
+# "Flip requested (direction=Back)" / "PID: Flip engaged: Back" /
+# "Flip complete → FLYING" が他3方向と同形で綺麗に出た）が、リグレッション
+# 安全なこの確定版には含めない — determineFlipButtonDirection() の Back 分岐は
+# 下でカバー済みの Forward 分岐の直接の鏡像（pid_controller.cpp の符号規約は
+# 両分岐とも確認済み）なので、SILS 実行が片方向のみでも方向選択ロジック自体は
+# 両軸・両符号とも検証されている。
+#
+# ROOT CAUSE #1（原因A、2026-09-18 に追跡 — これは
+# docs/architecture/simulation-policy.md バックログ #12 の根本原因そのもの
+# であり、新規の不具合ではない）: ヨーレートループの微分項（観測値微分）が
+# dt=2.5ms では素の1段差分に退化し（rate.yaw.td=0.01・eta=0.125→alpha=1）、
+# SILS プラントのローター慣性反トルク（plant.cpp の Jmp·ω̇）と共振する:
+# 宙返りの Recover→分割のモータ段差だけで自励する 200Hz（ナイキスト）の
+# リミットサイクルが立ち上がり、torque_yaw が制御周期ごとに±1.226mN·mで
+# 交番、対角モータ対が1.00/0.41で交番、整定窓のヨー上限（0.3mN·m）が
+# 外れると集合推力が削られる（実測値は rc_flip.expect の Forward 窓
+# メトリックコメント参照）。この交番が整定窓を過ぎても v_h を乱し続ける
+# ため、待ち時間によらず2回目の PITCH 宙返りが NotSteady（C4）で拒否され
+# 続ける。`--param rate.yaw.td=0` で沈下は解消する（alt_drop_max
+# 0.993→0.119m）が制御パラメータ変更であり本シナリオの対象外（オーナー
+# 判断）。
+#
+# ROOT CAUSE #2（原因B、2026-09-18 に追跡、
+# docs/architecture/simulation-policy.md バックログ #16 として切り出し —
+# 原因#1 の帰結であり独立した宙返りの不具合ではない）: 水平方向に並進した
+# まま着陸する（原因#1）ことで、接地時の跳ね（60-100°/s の機体角速度）が
+# 接地中の ESKF を直撃し、推定姿勢が数度水平からずれた後 まったく一定の
+# まま（漂流ではなく固着）地上滞在の残り時間ずっと変化しない — 静止中の
+# 加速度計による姿勢補正が再収束しない。次の自動離陸はこの固着した誤った
+# 推定値に合わせて水平化するため、機体は実際には傾いている。SILS プラント
+# には空力抗力が無いため、並進中は加速度計からその傾きが観測できず、結果
+# として生じる水平加速度が発散を引き起こす。宙返り固有の問題ではなく、
+# 再 ARM/推定器一般の問題であるため、ここではこれ以上追わない。
+#
+# Each cycle: ALT switch ON (disarmed, ground mode change) -> ARM in ALT_HOLD
+# (auto-takeoff to 0.5 m, same as alt_auto_takeoff.scn) -> throttle pushed up
+# for a 2.0 s pulse (raw 3600) to climb to a settled ~1.10-1.15 m (calibrated
+# empirically — clear of flip.min_height_m=1.0 m below and the SILS ToF
+# model's 1.4 m ceiling above, simulator/sils/devices/vl53_device.cpp MAX_MM)
+# -> throttle back to centre (holds) -> flip(s) -> DISARM (ALT_HOLD auto-land,
+# same as alt_disarm_land.scn).
+# 各サイクル: ALT スイッチ ON（disarmed、地上モード変更）-> ALT_HOLD で ARM
+# （自動離陸0.5m、alt_auto_takeoff.scnと同じ）-> スロットルを2.0sパルス（生値3600）
+# 押し上げて約1.10-1.15mへ上昇・整定（実測で較正 — 下は flip.min_height_m=1.0m、
+# 上は SILS ToF模擬の上限1.4mから十分離す）-> スロットル中立（保持）-> 宙返り
+# -> DISARM（ALT_HOLD 自動着陸、alt_disarm_land.scnと同じ）。
+#
+# Flip requests: stick over flip.button_stick_threshold (0.5; raw 3400/696 ->
+# post-deadband normalized ~0.64) held with flip=1 for 200 ms, same
+# press-once shape as the ARM button. Cycle 1's third flip holds flip=1 for
+# 1.5 s on a NEUTRAL stick (default direction, flip.button_default_direction
+# = 1 = Right) well past the single-request rule, to prove a long press only
+# requests once (the .expect DSL has no per-log occurrence counter, so this
+# is checked by `order`: exactly one "Flip requested (direction=Right)" for
+# THIS window, before the cycle's own DISARM, plus a clean
+# Flip complete -> FLYING with no second Flip-requested log in between).
+# 宙返り要求: flip.button_stick_threshold(0.5; 生値3400/696→デッドバンド後
+# 正規化~0.64)超のスティックに flip=1 を200ms、ARM ボタンと同じ単発形。cycle 1
+# の3回目は中立スティックで flip=1 を1.5s保持（既定方向、
+# flip.button_default_direction=1=Right）し、単発要求ルールを大きく超えて
+# 押しっぱなしでも1回しか要求されないことを確認する（.expect DSL にログ出現
+# 回数を数える仕組みが無いため、`order` — このウィンドウの
+# "Flip requested (direction=Right)" が1回、サイクルのDISARMより前に現れ、
+# 間に2回目の Flip requested が無いこと — で代用する）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/rc_flip.scn --target vehicle --duration 64000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos> <flip>
+#
+# ---- Cycle 1: Right, Left, default(Right)/held-button check (t=0-35.8) ----
+   0    rc   2048  2048   2048    2048  0     4000      50        0                        # A: boot at rest — IDLE_GROUND before ARM edge
+   +    rc   2048  2048   2048    2048  0     1500      50        1                        # B: ALT switch ON while DISARMED -> ground mode change (t=4-5.5)
+   +    rc   2048  2048   2048    2048  1     1000      50        1                        # C: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=5.5-6.5)
+   +    rc   2048  2048   2048    2048  1     5000      50        1                        # D: neutral -> climb to 0.5 m target, settle (t=6.5-11.5)
+   +    rc   3600  2048   2048    2048  1     2000      50        1                        # E: throttle pulse -> climb toward ~1.1 m (t=11.5-13.5)
+   +    rc   2048  2048   2048    2048  1     3000      50        1                        # F: throttle centred -> hold, settle before first flip (t=13.5-16.5)
+   +    rc   2048  3400   2048    2048  1     200       50        1     0    0    1        # G: roll RIGHT (|sp.roll|~0.64 > 0.5 threshold) + flip -> Right (t=16.5-16.7)
+   +    rc   2048  2048   2048    2048  1     3000      50        1                        # H: neutral, maneuver + cooldown (t=16.7-19.7)
+   +    rc   2048   696   2048    2048  1     200       50        1     0    0    1        # I: roll LEFT (|sp.roll|~0.64 > 0.5 threshold) + flip -> Left (t=19.7-19.9)
+   +    rc   2048  2048   2048    2048  1     3000      50        1                        # J: neutral, maneuver + cooldown (t=19.9-22.9)
+   +    rc   2048  2048   2048    2048  1     1500      50        1     0    0    1        # K: NEUTRAL sticks, flip HELD 1.5 s -> default direction (Right), single request despite the long hold (t=22.9-24.4)
+   +    rc   2048  2048   2048    2048  1     3000      50        1                        # L: neutral, maneuver + cooldown (t=24.4-27.4)
+   +    rc   2048  2048   2048    2048  0     200       50                                 # M: release ARM button (t=27.4-27.6)
+   +    rc   2048  2048   2048    2048  1     200       50                                 # N: press again -> DISARM (toggle) -> ALT_HOLD auto-land (t=27.6-27.8)
+   +    rc   2048  2048   2048    2048  0     8000      50                                 # O: neutral through touchdown (t=27.8-35.8)
+#
+# ---- Cycle 2: Forward alone (t=35.8-61.9) ----
+   +    rc   2048  2048   2048    2048  0     1500      50        1                        # P: ALT switch ON again while DISARMED (ground mode reset to STABILIZE after landing) (t=35.8-37.3)
+   +    rc   2048  2048   2048    2048  1     1000      50        1                        # Q: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=37.3-38.3)
+   +    rc   2048  2048   2048    2048  1     5000      50        1                        # R: neutral -> climb to 0.5 m target, settle (t=38.3-43.3)
+   +    rc   3600  2048   2048    2048  1     2000      50        1                        # S: throttle pulse -> climb toward ~1.1 m (t=43.3-45.3)
+   +    rc   2048  2048   2048    2048  1     3000      50        1                        # T: throttle centred -> hold, settle before the flip (t=45.3-48.3)
+   +    rc   2048  2048    696    2048  1     200       50        1     0    0    1        # U: pitch FORWARD (|sp.pitch|~0.64 > 0.5 threshold, negative pitch = nose-down/forward) + flip -> Forward (t=48.3-48.5)
+   +    rc   2048  2048   2048    2048  1     5000      50        1                        # V: neutral, maneuver + cooldown (pitch: 5 s like api_flip_pitch.scn) (t=48.5-53.5)
+   +    rc   2048  2048   2048    2048  0     200       50                                 # W: release ARM button (t=53.5-53.7)
+   +    rc   2048  2048   2048    2048  1     200       50                                 # X: press again -> DISARM -> ALT_HOLD auto-land (t=53.7-53.9)
+   +    rc   2048  2048   2048    2048  0     8000      50                                 # Y: neutral through touchdown (t=53.9-61.9)

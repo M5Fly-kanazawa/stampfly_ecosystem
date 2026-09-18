@@ -628,6 +628,25 @@ namespace param_vars {
     float flip_max_vvel_mps     = 0.2f;     // [m/s] C4 / 実行条件C4
     float flip_cooldown_ms      = 2000.0f;  // [ms] C7, between flips / 実行条件C7、連続起動間隔
 
+    // FLIP button direction rule (Phase 3, flip-maneuver-plan.md §4.1/§9-6):
+    // read by state_task's determineFlipButtonDirection() at the button's
+    // rising edge, NOT cached by the controller (no reload callback needed).
+    // FLIP ボタンの方向決定則（Phase 3、plan §4.1/§9-6）: state_task の
+    // determineFlipButtonDirection() がボタン立ち上がりエッジで読む。制御器は
+    // キャッシュしない（reload コールバック不要）。
+    float flip_button_stick_threshold = 0.5f;  // [-] |roll|/|pitch| stick threshold / 方向決定のスティック閾値
+    int32_t flip_button_default_direction = 1; // FlipDirection when both sticks are below
+                                                // threshold: 0=Left,1=Right,2=Forward,3=Back.
+                                                // Default Right — the factory firmware's flip
+                                                // button is a single fixed roll direction ("left
+                                                // shoulder up" positive); which physical sign that
+                                                // is on THIS airframe is confirmed on hardware
+                                                // (flip-maneuver-plan.md §6.1), so this is a param.
+                                                // スティック閾値未満の既定方向。既定 Right — 工場
+                                                // 出荷ファームの FLIP ボタンは単一方向固定ロール
+                                                // （「左肩上がり」が正）で、この機体でどちらの物理
+                                                // 方向に当たるかは実機で確認するためパラメータ化。
+
     // ESKF process noise
     float eskf_gyro_noise   = 0.009655f;
     float eskf_accel_noise  = 0.3f;
@@ -911,6 +930,8 @@ static const ParamEntry table[] = {
     {"flip.max_hvel_mps",      ParamType::FLOAT, &flip_max_hvel_mps,      0.3f,   0.05f,   2.0f, &notifyControllerReload},
     {"flip.max_vvel_mps",      ParamType::FLOAT, &flip_max_vvel_mps,      0.2f,   0.05f,   2.0f, &notifyControllerReload},
     {"flip.cooldown_ms",       ParamType::FLOAT, &flip_cooldown_ms,     2000.0f,   0.0f, 10000.0f, &notifyControllerReload},
+    {"flip.button_stick_threshold",   ParamType::FLOAT, &flip_button_stick_threshold,   0.5f, 0.1f, 1.0f, nullptr},
+    {"flip.button_default_direction", ParamType::INT,   &flip_button_default_direction, 1.0f, 0.0f, 3.0f, nullptr},
 
     // ESKF process noise
     {"eskf.process.gyro_noise",  ParamType::FLOAT, &eskf_gyro_noise,  0.009655f, 0.001f, 1.0f,  &notifyEstimatorReload},

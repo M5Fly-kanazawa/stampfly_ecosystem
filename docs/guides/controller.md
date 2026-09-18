@@ -178,6 +178,8 @@ ESP-NOW（Espressif社の無線直接通信方式）でのペアリング手順�
 | 右ボタン | 制御モードを STABILIZE ⇔ ACRO で切り替える（画面表示が変わる） |
 | 左ボタン | 高度モードを OFF（手動高度）→ ALT HOLD（高度自動保持）→ POS HOLD（位置自動保持）→ OFF の順で切り替える（画面表示が変わる） |
 
+フリップの方向は、押した瞬間のロール/ピッチスティックの倒し方向（大きく倒している方）で決まり、両方とも中立に近ければ機体側の既定方向になる。押しっぱなしでも1回しか起動しない（離してもう一度押すと次の1回）。
+
 ## 10. 電池警告
 
 メニューの「Batt: X.XV」で、送信機の警告電圧のしきい値（3.0V〜4.0V、0.1V刻み、既定3.3V）を設定・保存できます。
@@ -396,6 +398,8 @@ The only way to switch is the "Stick: Mode 2/3" menu item (there is no power-on-
 | Pressing the other stick | Commands a flip |
 | Right button | Toggles control mode STABILIZE ⇔ ACRO (screen display changes) |
 | Left button | Cycles altitude mode OFF (manual altitude) → ALT HOLD (automatic altitude hold) → POS HOLD (automatic position hold) → OFF (screen display changes) |
+
+The flip direction is chosen from whichever roll/pitch stick is deflected the most at the moment of the press; with both sticks near centre it falls back to the vehicle's default direction. Holding the button down still fires only once — release and press again for the next flip.
 
 ## 10. Battery Warning
 

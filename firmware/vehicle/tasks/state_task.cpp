@@ -27,9 +27,12 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#include <cmath>
+
 #include "topics.hpp"
 #include "state_manager.hpp"
 #include "config.hpp"
+#include "params.hpp"
 
 static const char* TAG = "StateTask";
 
@@ -321,6 +324,100 @@ static void registerStateCallbacks(sf::StateManager& manager)
     });
 }
 
+// -----------------------------------------------------------------------------
+// FLIP button (Phase 3, flip-maneuver-plan.md §4.1/§9-6, F6): the controller's
+// FLIP button requests the same maneuver as the API `flip` verb, direction
+// chosen from stick deflection instead of a command-line token.
+// FLIP ボタン（Phase 3, plan §4.1/§9-6, F6）: コントローラの FLIP ボタンは API
+// flip verb と同じマニューバを、コマンド行トークンの代わりにスティック倒れ方向
+// から選んで要求する。
+//
+// @design docs/plans/flip-maneuver-plan.md §4.1 / §9-6   [OK]
+// @design detailed_design.md §3.1 — FLIP row, "Flip request" column [OK]
+// -----------------------------------------------------------------------------
+
+/// requestFlipManeuver — FLYING → FLIP entry point shared by the API `flip`
+/// verb (ApiCmd::Flip, below) and the RC FLIP button (handled in the main
+/// loop): both route through StateManager::requestFlip() via this one call
+/// site, so there is a single place to change if the entry point ever needs
+/// a shared side effect.
+/// requestFlipManeuver — API の flip verb（下の ApiCmd::Flip）とコントローラの
+/// FLIP ボタン（メインループ）が共有する FLYING→FLIP 突入口。どちらも
+/// StateManager::requestFlip() をこの1箇所経由で呼ぶ — 共通の副作用が要る
+/// ようになったときに直す場所を一本化する。
+static void requestFlipManeuver(sf::StateManager& manager, sf::FlipDirection direction)
+{
+    manager.requestFlip(direction);
+}
+
+/// determineFlipButtonDirection — pick a flip direction from the current stick
+/// deflection (plan §9-6). Whichever of roll/pitch has the larger magnitude
+/// wins IF it exceeds `flip.button_stick_threshold`; sign follows the same
+/// stick convention the controller already uses for POS_HOLD stick-reposition
+/// velocity (pid_controller.cpp: v_right = +roll, v_fwd = -pitch) — roll>0
+/// (right) = Right, roll<0 = Left, pitch>0 (commands nose-up / backward
+/// travel) = Back, pitch<0 (nose-down / forward travel) = Forward. Below
+/// threshold on both axes, falls back to `flip.button_default_direction`.
+/// determineFlipButtonDirection — 現在のスティック倒れ方向から宙返り方向を選ぶ
+/// （plan §9-6）。roll/pitch のうち絶対値が大きい方が `flip.button_stick_threshold`
+/// を超えていればそちらを採用。符号は制御器が POS_HOLD のスティック再配置速度に
+/// 既に使っている規約と同じ（pid_controller.cpp: v_right=+roll, v_fwd=-pitch）—
+/// roll>0（右）=Right、roll<0=Left、pitch>0（機首上げ＝後方移動指令）=Back、
+/// pitch<0（機首下げ＝前方移動指令）=Forward。両軸とも閾値未満なら
+/// `flip.button_default_direction` を使う。
+static sf::FlipDirection determineFlipButtonDirection()
+{
+    const sf::CommandSetpoint sp = sf::command_setpoint.latest();
+
+    float threshold = 0.5f;
+    sf::params::get_float("flip.button_stick_threshold", threshold);
+
+    if (fabsf(sp.roll) >= fabsf(sp.pitch) && fabsf(sp.roll) > threshold) {
+        return (sp.roll > 0.0f) ? sf::FlipDirection::Right : sf::FlipDirection::Left;
+    }
+    if (fabsf(sp.pitch) > threshold) {
+        return (sp.pitch > 0.0f) ? sf::FlipDirection::Back : sf::FlipDirection::Forward;
+    }
+
+    int32_t default_dir = 1;   // Right — see params.cpp flip.button_default_direction
+    sf::params::get_int("flip.button_default_direction", default_dir);
+    if (default_dir < 0 || default_dir > 3) default_dir = 1;
+    return static_cast<sf::FlipDirection>(default_dir);
+}
+
+/// handleFlipButtonEdge — called once per rising edge of the FLIP button
+/// (PilotRequest.flip_button). Gates on the SAME normative condition as the
+/// API (detailed_design.md §3.1 FLIP row: FLYING accepts, FLIP itself is
+/// "busy", every other state rejects) plus the controller's execution-
+/// condition fact (ControllerStatus.flip_ready, C2-C8) — unlike the API path
+/// there is no reply channel, so a rejection is logged (one line) and
+/// otherwise dropped.
+/// handleFlipButtonEdge — FLIP ボタンの立ち上がりエッジで1回呼ばれる。API と同じ
+/// 規範条件（detailed_design.md §3.1 FLIP 行: FLYING で受理、FLIP 自身は
+/// busy、他は拒否）に加え制御器の実行条件の事実（ControllerStatus.flip_ready,
+/// C2-C8）で判定する — API と違い返答先が無いので、不成立はログ1行のみで
+/// 何もしない。
+static void handleFlipButtonEdge(sf::StateManager& manager)
+{
+    const sf::FlightState fs = manager.getState();
+    if (fs == sf::FlightState::FLIP) {
+        ESP_LOGI(TAG, "Flip button: rejected (busy)");
+        return;
+    }
+    if (fs != sf::FlightState::FLYING) {
+        ESP_LOGI(TAG, "Flip button: rejected (not flying, state=%s)",
+                 sf::flightStateName(fs));
+        return;
+    }
+    const sf::ControllerStatus cs = sf::controller_status.latest();
+    if (!cs.flip_ready) {
+        ESP_LOGI(TAG, "Flip button: rejected (%s)",
+                 sf::flipBlockReasonName(static_cast<sf::FlipBlockReason>(cs.flip_block_reason)));
+        return;
+    }
+    requestFlipManeuver(manager, determineFlipButtonDirection());
+}
+
 void StateTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "StateTask started");
@@ -340,6 +437,11 @@ void StateTask(void* pvParameters)
     // Previous ARM switch state, for rising/falling edge detection across iterations.
     // 前回の ARM スイッチ状態（立上り/立下りエッジ検出用、反復間で保持）。
     bool prev_arm = false;
+    // Previous FLIP button state (Phase 3), same rising-edge-only treatment as
+    // ARM: held-down must not re-request (flip-maneuver-plan.md §4.1/§9-6).
+    // 前回の FLIP ボタン状態（Phase 3）。ARM と同じ立ち上がりエッジのみの扱い:
+    // 押しっぱなしで再要求しない（plan §4.1/§9-6）。
+    bool prev_flip_button = false;
     bool init_done = false;   // INIT → IDLE_GROUND done once / 初期化完了遷移を1回
 
     // Previous comm bind flag (pairing_complete.bound), for false→true edge detection.
@@ -416,6 +518,16 @@ void StateTask(void* pvParameters)
                 }
             }
             prev_arm = req.arm;
+
+            // FLIP button (Phase 3, plan §4.1/§9-6): rising edge only, same
+            // press-toggle discipline as ARM above — held down must not
+            // re-request, release-then-press-again requests the next one.
+            // FLIP ボタン（Phase 3, plan §4.1/§9-6）: 上の ARM と同じ立ち上がり
+            // エッジのみ — 押しっぱなしで再要求せず、離して再度押すと次の要求。
+            if (req.flip_button && !prev_flip_button) {
+                handleFlipButtonEdge(g_state_manager);
+            }
+            prev_flip_button = req.flip_button;
 
             // Derive the requested FlightMode from the mode switches (priority:
             // POS_HOLD > ALT_HOLD > ACRO > STABILIZE default), and apply it on
@@ -588,7 +700,7 @@ void StateTask(void* pvParameters)
                 // 競合した（SILS 2026-09-17、--motor-delay 10: API では成立、ここでは
                 // 不成立で API が「rejected」を返した）。StateManager は requestFlip()
                 // で C1（FLYING）を判断し、制御器が onFlip() で C2〜C8 を非停止で再評価する。
-                g_state_manager.requestFlip(static_cast<sf::FlipDirection>(api_cmd.arg));
+                requestFlipManeuver(g_state_manager, static_cast<sf::FlipDirection>(api_cmd.arg));
                 break;
             case sf::ApiCmd::None:
             default:

@@ -37,6 +37,16 @@ constexpr uint16_t kAdcCentre = 2048;
 // CTRL_FLAG_ARM bit / アームフラグ。
 constexpr uint8_t kFlagArm = 0x01;
 
+// CTRL_FLAG_FLIP bit (bit1) — the controller's FLIP button (Phase 3,
+// flip-maneuver-plan.md §4.1/§9-6). Held while the button is pressed; the
+// firmware's state_task edge-detects it the same way it edge-detects ARM.
+// Must match sf_command kFlagFlip = 0x02 / espnow_protocol.hpp CTRL_FLAG_FLIP.
+// CTRL_FLAG_FLIP ビット(bit1) — コントローラの FLIP ボタン（Phase 3, plan
+// §4.1/§9-6）。押している間 1。ファームの state_task が ARM と同じ立ち上がり
+// エッジ検出を行う。sf_command kFlagFlip=0x02 / espnow_protocol.hpp
+// CTRL_FLAG_FLIP と一致させること。
+constexpr uint8_t kFlagFlip = 0x02;
+
 // CTRL_FLAG_MODE bit (bit2) — on vehicle this selects ACRO (rate) mode
 // (sf_comm decodes it to PilotRequest.acro). Must match the protocol SSOT /
 // firmware/vehicle sf_comm kFlagMode = 0x04.

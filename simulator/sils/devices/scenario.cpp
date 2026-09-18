@@ -68,6 +68,7 @@ struct Event {
     uint8_t  alt = 0;         // 1 => CTRL_FLAG_ALT_MODE (ALTITUDE_HOLD) / 1 で高度保持
     uint8_t  acro = 0;        // 1 => CTRL_FLAG_MODE (ACRO/rate) / 1 で ACRO（角速度）
     uint8_t  pos = 0;         // 1 => CTRL_FLAG_POS_MODE (POSITION_HOLD) / 1 で位置保持
+    uint8_t  flip = 0;        // 1 => CTRL_FLAG_FLIP (FLIP button, Phase 3) / 1 で FLIP ボタン
     RcSource source = RcSource::Paired;  // which injector (see RcSource above) / 注入元
     int      hold_ms = 0;     // 0 = single frame / 0=単発
     int      rate_hz = 20;
@@ -336,6 +337,18 @@ int sils_scenario_load(const char* path)
                 if (pos != 0 && pos != 1) { err(path, lineno, "rc <pos> must be 0 or 1"); return -1; }
             }
             e.pos = (uint8_t)pos;
+            // OPTIONAL 7th token: flip (1 => CTRL_FLAG_FLIP → FLIP button,
+            // Phase 3, flip-maneuver-plan.md §4.1/§9-6). After pos, so the full
+            // form is:
+            // `rc <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos> <flip>`.
+            // Existing lines that omit it are unaffected (defaults to 0).
+            // 任意の7番目トークン flip（1 で CTRL_FLAG_FLIP → FLIP ボタン、Phase 3,
+            // plan §4.1/§9-6）。pos の後。省略した既存行の挙動は変わらない（既定0）。
+            long flip = 0;
+            if (iss >> flip) {
+                if (flip != 0 && flip != 1) { err(path, lineno, "rc <flip> must be 0 or 1"); return -1; }
+            }
+            e.flip = (uint8_t)flip;
 
         } else if (ch == "rc_ramp") {
             std::string field; long from, to, step, rate, arm;
@@ -485,7 +498,8 @@ void sils_scenario_driver_task(void* /*arg*/)
                 const uint8_t flags = (e.arm  ? sils::kFlagArm     : 0) |
                                       (e.alt  ? sils::kFlagAltMode : 0) |
                                       (e.acro ? sils::kFlagMode    : 0) |
-                                      (e.pos  ? sils::kFlagPosMode : 0);
+                                      (e.pos  ? sils::kFlagPosMode : 0) |
+                                      (e.flip ? sils::kFlagFlip    : 0);
                 // Pick the injector: the paired transmitter (rc), a different
                 // non-paired one (rc_foreign — exercises the crosstalk filter), or
                 // one of the two own-address-filter test roles (rc_ctrl_a/rc_ctrl_b

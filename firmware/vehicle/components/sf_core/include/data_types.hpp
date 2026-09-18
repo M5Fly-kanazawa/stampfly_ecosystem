@@ -202,6 +202,7 @@ struct CommandSetpoint {
 /// 判断は唯一の遷移実行者 StateManager が行う（R5: 直接呼び出しでなくトピック経由）。
 struct PilotRequest {
     bool     arm;         // ARM switch          (flags bit0) / ARM スイッチ
+    bool     flip_button; // FLIP button         (flags bit1) / FLIP ボタン
     bool     acro;        // ACRO/rate request   (flags bit2) / ACRO（レート）要求
     bool     alt_hold;    // ALTITUDE_HOLD switch(flags bit3) / 高度保持スイッチ
     bool     pos_hold;    // POSITION_HOLD switch(flags bit4) / 位置保持スイッチ
