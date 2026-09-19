@@ -374,6 +374,15 @@ inline constexpr float MOTOR_SWEEP_MAX_SEC = 10.0f;
 inline constexpr uint32_t MOTOR_SWEEP_BASELINE_US = 1000000;  // 1.0 s
 inline constexpr uint32_t MOTOR_SWEEP_REST_US     = 1000000;  // 1.0 s
 
+// Quiet time after a bench motor test ends before StateTask re-levels the
+// estimator (full reset + re-calibration, state_task.cpp). Longer than
+// MOTOR_SWEEP_REST_US so a `motor sweep` triggers it once, after its last motor,
+// not in every rest gap between motors.
+// ベンチ用モータテスト終了後、StateTask が推定器を再水平化（全リセット＋再キャリブ,
+// state_task.cpp）するまでの静穏時間。MOTOR_SWEEP_REST_US より長くし、`motor sweep`
+// ではモータ間の休止ごとではなく最後のモータの後に1回だけ発動させる。
+inline constexpr uint32_t MOTOR_TEST_SETTLE_US = 1500000;  // 1.5 s
+
 // Fraction of each motor's spin duration treated as start-up transient and
 // excluded from the current/voltage average — only the back half is sampled.
 // 各モータの回転時間のうち起動過渡として除外し平均に含めない割合 — 後半のみ

@@ -295,6 +295,13 @@ void StateTask(void* pvParameters)
     uint32_t armed_ground_since_us = 0;
     sf::FlightState prev_fs = sf::FlightState::INIT;
 
+    // Bench motor test bookkeeping: a test has run and its re-level is still owed,
+    // and the last time motor_test was seen active (start of the quiet window).
+    // ベンチ用モータテストの記録: テストが走り再水平化が未実施か、および motor_test が
+    // 最後に active だった時刻（静穏窓の起点）。
+    bool     bench_test_pending        = false;
+    uint32_t bench_test_quiet_since_us = 0;
+
     while (true) {
         // =====================================================================
         // Wake on a failsafe notification OR every 20 ms to poll the pilot's RC
@@ -659,6 +666,52 @@ void StateTask(void* pvParameters)
                 (fs_now == sf::FlightState::IDLE_GROUND ||
                  fs_now == sf::FlightState::IDLE_HELD)) {   // ground or held (2026-09-12)
                 g_state_manager.requestPairing();          // unpaired, ground/held → Pairing
+            }
+        }
+
+        // =====================================================================
+        // Bench motor test aftermath: re-level the estimator once a CLI motor test
+        // (`motor test/all/sweep`, DISARMED only) has ended and the motors have been
+        // quiet for config::MOTOR_TEST_SETTLE_US. Spinning propellers shake the IMU
+        // while the craft sits still; the attitude estimate can drift past the
+        // accel-attitude χ² gate, which then rejects the very correction that would
+        // fix it — the same latch as the placed-back-down case in onEnter(IDLE_GROUND)
+        // — and a later ARM would fly on that tilted estimate (seen on hardware: roll
+        // 16° / pitch −33° and growing after a 10% sweep, accel reading level). The
+        // craft is still level on the ground, so apply the same remedy: full ESKF
+        // reset + re-calibration (the pre-arm check then waits for the calibration).
+        // If the craft is not on the ground by then (held in hand), the owed re-level
+        // is dropped: placing it back down (IDLE_HELD → IDLE_GROUND) does it anyway.
+        // ベンチ用モータテストの後始末: CLI のモータテスト（`motor test/all/sweep`,
+        // disarmed 限定）が終わり、モータが config::MOTOR_TEST_SETTLE_US 静止したら推定器を
+        // 再水平化する。機体静止のままプロペラが回ると IMU が揺すられ、姿勢推定が
+        // accel-attitude の χ² 判定を超えて外れると、それを直す補正自体が棄却され続ける
+        // （onEnter(IDLE_GROUND) の置き直しケースと同じ latch）。その推定のまま ARM すると
+        // 傾いた推定で飛ぶことになる（実機で確認: 10% スイープ後 roll 16°/pitch −33° で
+        // なお増加、accel は水平）。機体は地上で水平のままなので同じ処置 ― ESKF 全リセット
+        // ＋再キャリブ（プリアーム判定がキャリブ完了を待つ）― を行う。その時点で地上に
+        // 無い（手持ち）なら未実施分は破棄: 置き直し（IDLE_HELD → IDLE_GROUND）が同処置を行う。
+        //
+        // @subscriber motor_test
+        // @design architecture.md §4 — reset consolidation (state machine decides WHEN) [OK]
+        // @design detailed_design.md §3 注9 — re-level after a bench motor test          [OK]
+        // =====================================================================
+        {
+            const sf::MotorTest bench = sf::motor_test.latest();
+            const uint32_t bench_now_us = static_cast<uint32_t>(esp_timer_get_time());
+            if (bench.active) {
+                bench_test_pending        = true;
+                bench_test_quiet_since_us = bench_now_us;
+            } else if (bench_test_pending &&
+                       (bench_now_us - bench_test_quiet_since_us) >= config::MOTOR_TEST_SETTLE_US) {
+                bench_test_pending = false;
+                if (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) {
+                    sf::estimator_command.publish(
+                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), bench_now_us});
+                    sf::estimator_command.publish(
+                        {static_cast<uint8_t>(sf::EstimatorCmd::Recalibrate), bench_now_us});
+                    ESP_LOGI(TAG, "Bench motor test ended → estimator reset + recalibration");
+                }
             }
         }
 
