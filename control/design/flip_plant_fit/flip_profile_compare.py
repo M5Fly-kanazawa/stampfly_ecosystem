@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Compare the flip rate-profile candidates on the SILS (nominal + robustness sweep).
-宙返りレートプロファイルの候補を SILS で比較する（公称 + 頑健性掃引）。
+宙返りレートプロファイルの候補を SILS で比較する（公称 + ロバスト性掃引）。
 
 Evidence for docs/plans/flip-maneuver-plan.md section 5.7. Needs the firmware of commit
 "feat(flip): planned 360 deg rate profile with optional feedforward" (it still has

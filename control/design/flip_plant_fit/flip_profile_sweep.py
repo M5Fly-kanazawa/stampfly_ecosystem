@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Flip rate-profile sweep harness: run SILS flip scenarios and score each flip.
-宙返りレートプロファイルの掃引ハーネス: SILS の宙返りシナリオを走らせ、1 回ごとに採点する。
+宙返りレートプロファイルの掃引プログラム: SILS の宙返りシナリオを走らせ、1 回ごとに採点する。
 
 Evidence for docs/plans/flip-maneuver-plan.md section 5.7 (step 5, 2026-10-02). Analysis
 helper only (not a user tool); the user-facing entry is `sf sils scenario`.
@@ -179,3 +179,50 @@ def fmt_row(label, flips):
             f"drop={max(x['alt_drop_m'] for x in f):.2f}  "
             f"tilt={max(x['tilt_done_deg'] for x in f):.1f}  "
             f"tdone={max(x['t_done_s'] for x in f):.2f}  res={'/'.join(str(x['result']) for x in f)}")
+
+
+# Robustness conditions on the fitted plant (same as flip_profile_compare.py).
+# ロバスト性の条件（フィット済みプラント、flip_profile_compare.py と同じ）。
+ROBUST = {
+    "ta0.5": {"plant": {"torque_authority": 0.5}}, "ta0.7": {"plant": {"torque_authority": 0.7}},
+    "md0": {"plant": {"motor_delay": 0}}, "md12": {"plant": {"motor_delay": 12}},
+    "ms12": {"plant": {"motor_slew": 12}}, "ms24": {"plant": {"motor_slew": 24}},
+    "soc0.85": {"soc": 0.85}, "soc0.95": {"soc": 0.95},
+    "up70": {"up_cm": 70}, "up80": {"up_cm": 80},
+    "weak": {"plant": {"torque_authority": 0.5, "motor_delay": 12, "motor_slew": 12}},
+    "strong": {"plant": {"torque_authority": 0.7, "motor_delay": 0, "motor_slew": 24}},
+    "pitch_weak_ta0.3": {"plant": {"torque_authority": 0.3}},
+}
+
+
+def check_defaults(out_path, params=None, workers=12):
+    """Score the firmware DEFAULT flip parameters (or `params` overrides): nominal on the fitted and
+    the default plant, then the robustness sweep on the fitted plant. Writes a text table.
+    ファームの既定パラメータ（または上書き `params`）を採点する: フィット済み・既定の両プラントで
+    公称、フィット済みプラントでロバスト性掃引。表をテキストに書く。"""
+    params = params or {}
+    cases, n = [], 0
+    for profile in ("flip_fit_2026_10", "default"):
+        for axis in ("roll", "pitch"):
+            n += 1
+            cases.append(dict(name=f"chk_{n}", axis=axis, profile=profile, params=params,
+                              label=(profile, "nominal", axis)))
+    for rname, kw in ROBUST.items():
+        for axis in ("roll", "pitch"):
+            n += 1
+            cases.append(dict(name=f"chk_{n}", axis=axis, profile="flip_fit_2026_10", params=params,
+                              label=("flip_fit_2026_10", rname, axis), **kw))
+    results = run_cases(cases, workers=workers)
+    lines = [f"firmware params override: {params or 'none (defaults)'}",
+             "ok = Ok result, rotation 360+-15 at the Brake->Recover handoff, tilt at Done <= 20 deg, "
+             "no floor contact; values are per direction (+/-)", ""]
+    for c in cases:
+        lines.append(fmt_row("%s %s %s" % c["label"], results[c["name"]][0]))
+    text = "\n".join(lines) + "\n"
+    open(out_path, "w", encoding="utf-8").write(text)
+    return text
+
+
+if __name__ == "__main__":
+    here = os.path.dirname(os.path.abspath(__file__))
+    print(check_defaults(os.path.join(here, "flip_profile_default_check.txt")))

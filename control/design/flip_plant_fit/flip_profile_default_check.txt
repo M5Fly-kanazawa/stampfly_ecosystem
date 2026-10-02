@@ -1,0 +1,33 @@
+firmware params override: none (defaults)
+ok = Ok result, rotation 360+-15 at the Brake->Recover handoff, tilt at Done <= 20 deg, no floor contact; values are per direction (+/-)
+
+flip_fit_2026_10 nominal roll                ok=Y/Y  rot=360/360  peak=1614/1615  os%=8/8  sat=0.00/0.00  err=270  drop=0.13  tilt=2.2  tdone=0.63  res=1/1
+flip_fit_2026_10 nominal pitch               ok=Y/Y  rot=361/360  peak=1463/1462  os%=4/4  sat=0.03/0.03  err=429  drop=0.16  tilt=5.4  tdone=0.67  res=1/1
+default nominal roll                         ok=Y/Y  rot=360/360  peak=1566/1566  os%=4/4  sat=0.00/0.00  err=158  drop=0.15  tilt=0.4  tdone=0.62  res=1/1
+default nominal pitch                        ok=Y/Y  rot=360/360  peak=1445/1445  os%=3/3  sat=0.01/0.01  err=314  drop=0.19  tilt=4.0  tdone=0.65  res=1/1
+flip_fit_2026_10 ta0.5 roll                  ok=Y/Y  rot=361/361  peak=1606/1606  os%=7/7  sat=0.00/0.00  err=328  drop=0.15  tilt=2.5  tdone=0.63  res=1/1
+flip_fit_2026_10 ta0.5 pitch                 ok=Y/Y  rot=361/361  peak=1466/1466  os%=5/5  sat=0.04/0.04  err=453  drop=0.17  tilt=6.0  tdone=0.68  res=1/1
+flip_fit_2026_10 ta0.7 roll                  ok=Y/Y  rot=360/360  peak=1619/1618  os%=8/8  sat=0.00/0.00  err=258  drop=0.14  tilt=0.8  tdone=0.63  res=1/1
+flip_fit_2026_10 ta0.7 pitch                 ok=Y/Y  rot=360/360  peak=1460/1460  os%=4/4  sat=0.02/0.02  err=415  drop=0.15  tilt=4.7  tdone=0.66  res=1/1
+flip_fit_2026_10 md0 roll                    ok=Y/Y  rot=361/360  peak=1579/1579  os%=5/5  sat=0.00/0.00  err=278  drop=0.14  tilt=2.6  tdone=0.62  res=1/1
+flip_fit_2026_10 md0 pitch                   ok=Y/Y  rot=361/361  peak=1460/1459  os%=4/4  sat=0.01/0.01  err=397  drop=0.18  tilt=5.3  tdone=0.66  res=1/1
+flip_fit_2026_10 md12 roll                   ok=Y/Y  rot=361/360  peak=1690/1681  os%=13/12  sat=0.00/0.00  err=337  drop=0.18  tilt=1.9  tdone=0.65  res=1/1
+flip_fit_2026_10 md12 pitch                  ok=Y/Y  rot=360/361  peak=1501/1501  os%=7/7  sat=0.12/0.12  err=565  drop=0.20  tilt=3.9  tdone=0.79  res=1/1
+flip_fit_2026_10 ms12 roll                   ok=Y/Y  rot=360/360  peak=1628/1628  os%=9/9  sat=0.00/0.00  err=320  drop=0.13  tilt=2.6  tdone=0.63  res=1/1
+flip_fit_2026_10 ms12 pitch                  ok=Y/Y  rot=361/361  peak=1466/1466  os%=5/5  sat=0.06/0.05  err=469  drop=0.11  tilt=6.3  tdone=0.68  res=1/1
+flip_fit_2026_10 ms24 roll                   ok=Y/Y  rot=361/361  peak=1609/1610  os%=7/7  sat=0.00/0.00  err=257  drop=0.14  tilt=2.4  tdone=0.63  res=1/1
+flip_fit_2026_10 ms24 pitch                  ok=Y/Y  rot=361/360  peak=1460/1461  os%=4/4  sat=0.01/0.01  err=393  drop=0.18  tilt=5.3  tdone=0.66  res=1/1
+flip_fit_2026_10 soc0.85 roll                ok=Y/Y  rot=361/361  peak=1616/1615  os%=8/8  sat=0.00/0.00  err=272  drop=0.20  tilt=2.6  tdone=0.70  res=1/1
+flip_fit_2026_10 soc0.85 pitch               ok=Y/Y  rot=360/361  peak=1463/1462  os%=4/4  sat=0.04/0.03  err=435  drop=0.21  tilt=7.3  tdone=0.71  res=1/1
+flip_fit_2026_10 soc0.95 roll                ok=Y/Y  rot=360/361  peak=1615/1615  os%=8/8  sat=0.00/0.00  err=272  drop=0.15  tilt=1.6  tdone=0.64  res=1/1
+flip_fit_2026_10 soc0.95 pitch               ok=Y/Y  rot=360/360  peak=1463/1461  os%=4/4  sat=0.03/0.03  err=432  drop=0.13  tilt=5.5  tdone=0.67  res=1/1
+flip_fit_2026_10 up70 roll                   ok=Y/Y  rot=360/360  peak=1616/1614  os%=8/8  sat=0.00/0.00  err=271  drop=0.16  tilt=2.2  tdone=0.66  res=1/1
+flip_fit_2026_10 up70 pitch                  ok=Y/Y  rot=360/360  peak=1462/1463  os%=4/4  sat=0.03/0.03  err=430  drop=0.15  tilt=5.6  tdone=0.68  res=1/1
+flip_fit_2026_10 up80 roll                   ok=Y/Y  rot=360/361  peak=1614/1615  os%=8/8  sat=0.00/0.00  err=271  drop=0.13  tilt=1.7  tdone=0.62  res=1/1
+flip_fit_2026_10 up80 pitch                  ok=Y/Y  rot=361/360  peak=1463/1462  os%=4/4  sat=0.03/0.03  err=429  drop=0.15  tilt=6.4  tdone=0.66  res=1/1
+flip_fit_2026_10 weak roll                   ok=Y/Y  rot=360/361  peak=1665/1666  os%=11/11  sat=0.11/0.11  err=521  drop=0.11  tilt=4.6  tdone=0.65  res=1/1
+flip_fit_2026_10 weak pitch                  ok=Y/Y  rot=361/361  peak=1488/1489  os%=6/6  sat=0.25/0.25  err=701  drop=0.41  tilt=1.0  tdone=0.88  res=1/1
+flip_fit_2026_10 strong roll                 ok=Y/Y  rot=361/361  peak=1577/1577  os%=5/5  sat=0.00/0.00  err=223  drop=0.14  tilt=1.1  tdone=0.62  res=1/1
+flip_fit_2026_10 strong pitch                ok=Y/Y  rot=361/361  peak=1455/1455  os%=4/4  sat=0.01/0.01  err=363  drop=0.17  tilt=5.1  tdone=0.65  res=1/1
+flip_fit_2026_10 pitch_weak_ta0.3 roll       ok=Y/Y  rot=361/361  peak=1607/1606  os%=7/7  sat=0.15/0.15  err=523  drop=0.21  tilt=3.7  tdone=0.75  res=1/1
+flip_fit_2026_10 pitch_weak_ta0.3 pitch      ok=Y/Y  rot=361/361  peak=1477/1477  os%=5/6  sat=0.28/0.28  err=633  drop=0.65  tilt=3.5  tdone=1.02  res=1/1
