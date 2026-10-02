@@ -282,9 +282,21 @@ sils::Plant::Config plant_config_from_env()
     // L=14.7/8.4/11.0ms（roll/pitch/yaw）、現状 SILS に明示的なむだ時間は無い。既定 OFF。
     if (const char* md = std::getenv("SILS_EMU_MOTOR_DELAY")) {
         float delay_ms = (float)std::atof(md);
-        if (delay_ms > 0.0f) { cfg.motor_delay_ms = delay_ms;
-            std::printf("[emu] motor transport delay ON (%.2f ms, model-match retrofit #1)\n",
-                        cfg.motor_delay_ms); }
+        // >= 0 so 0 can switch the (now default-on) delay off for A/B against the pre-fit plant.
+        // 0 以上: 0 で（既定 ON になった）遅れを切り、フィット前のプラントと A/B 比較できる。
+        if (delay_ms >= 0.0f) { cfg.motor_delay_ms = delay_ms;
+            std::printf("[emu] motor transport delay override = %.2f ms (default %.2f)\n",
+                        cfg.motor_delay_ms, sils_params::plant_fit::MOTOR_DELAY_MS); }
+    }
+    // SILS_EMU_MOTOR_SLEW = duty slew-rate limit [duty/s] (Config::motor_slew_per_s; flip-log
+    // fit 2026-10-02, default sils_params::plant_fit::MOTOR_SLEW_PER_S; 0 = off).
+    // SILS_EMU_MOTOR_SLEW = duty スルーレート制限 [duty/s]（宙返りログのフィット、既定は
+    // plant_fit::MOTOR_SLEW_PER_S、0 で OFF）。
+    if (const char* sl = std::getenv("SILS_EMU_MOTOR_SLEW")) {
+        float v = (float)std::atof(sl);
+        if (v >= 0.0f) { cfg.motor_slew_per_s = v;
+            std::printf("[emu] motor duty slew limit override = %.2f duty/s (default %.2f)\n",
+                        cfg.motor_slew_per_s, sils_params::plant_fit::MOTOR_SLEW_PER_S); }
     }
     // SILS_EMU_IMU_GYRO_RANGE_DPS / SILS_EMU_IMU_ACCEL_RANGE_G override the plant's
     // IMU measurement-range saturation (Config::imu_gyro_range_dps/imu_accel_range_g,

@@ -136,8 +136,12 @@ def build_view(spec: Dict[str, Any]) -> Dict[str, Any]:
     legacy = spec["calibration_sets"]["legacy_motor_curve"]
     legacy_params = {name: entry["value"] for name, entry in legacy["params"].items()}
 
+    plant_fit = spec["calibration_sets"]["plant_fit_flip_2026_10"]
+    plant_fit_params = {name: entry["value"] for name, entry in plant_fit["params"].items()}
+
     return {
         "constants": constants,
+        "plant_fit_params": plant_fit_params,
         "measured_params": measured_params,
         "measured_derived": derived,
         "measured_entries": measured["params"],
@@ -268,6 +272,7 @@ def render_cpp(view: Dict[str, Any]) -> str:
     m = view["measured_params"]
     d = view["measured_derived"]
     lg = view["legacy_params"]
+    pf = view["plant_fit_params"]
 
     out: List[str] = []
     out.append(_header_block("/*", " */", line_prefix=" * ").rstrip())
@@ -342,6 +347,25 @@ def render_cpp(view: Dict[str, Any]) -> str:
     out.append(f"constexpr float DM = {_cpp_float(lg['Dm'])};")
     out.append(f"constexpr float QF = {_cpp_float(lg['Qf'])};")
     out.append("}  // namespace legacy")
+    out.append("")
+    out.append("// --- calibration_sets.plant_fit_flip_2026_10 (status: adopted) ---")
+    out.append("// SILS-plant-only effective correction factors identified from the first real")
+    out.append("// flip log (2026-10-02). Consumed by plant.hpp Config defaults; the firmware")
+    out.append("// does not use them.")
+    out.append("namespace plant_fit {")
+    out.append(
+        f"constexpr float TORQUE_AUTHORITY = {_cpp_float(pf['torque_authority'])};  "
+        "///< Config::torque_authority default (roll/pitch differential-thrust ratio)"
+    )
+    out.append(
+        f"constexpr float MOTOR_DELAY_MS = {_cpp_float(pf['motor_delay_ms'])};  "
+        "///< Config::motor_delay_ms default (duty-path transport delay [ms])"
+    )
+    out.append(
+        f"constexpr float MOTOR_SLEW_PER_S = {_cpp_float(pf['motor_slew_per_s'])};  "
+        "///< Config::motor_slew_per_s default (duty slew limit [duty/s])"
+    )
+    out.append("}  // namespace plant_fit")
     out.append("")
     out.append("}  // namespace sils_params")
     out.append("")
