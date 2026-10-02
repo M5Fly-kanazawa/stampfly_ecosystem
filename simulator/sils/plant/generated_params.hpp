@@ -55,4 +55,14 @@ constexpr float DM = 3.69e-08f;
 constexpr float QF = 2.76e-05f;
 }  // namespace legacy
 
+// --- calibration_sets.plant_fit_flip_2026_10 (status: adopted) ---
+// SILS-plant-only effective correction factors identified from the first real
+// flip log (2026-10-02). Consumed by plant.hpp Config defaults; the firmware
+// does not use them.
+namespace plant_fit {
+constexpr float TORQUE_AUTHORITY = 0.6f;  ///< Config::torque_authority default (roll/pitch differential-thrust ratio)
+constexpr float MOTOR_DELAY_MS = 6.0f;  ///< Config::motor_delay_ms default (duty-path transport delay [ms])
+constexpr float MOTOR_SLEW_PER_S = 18.0f;  ///< Config::motor_slew_per_s default (duty slew limit [duty/s])
+}  // namespace plant_fit
+
 }  // namespace sils_params

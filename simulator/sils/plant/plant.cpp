@@ -156,6 +156,7 @@ void Plant::primeMotors()
         // duty, so a delayed path does not ramp up from the zero-filled boot buffer.
         // 輸送遅れリングバッファ（有効時）も目標 duty で埋める。
         for (size_t k = 0; k < delay_buf_[i].size(); ++k) delay_buf_[i][k] = motor_target_[i];
+        slewed_duty_[i] = motor_target_[i];
     }
 }
 
@@ -539,6 +540,16 @@ void Plant::substep(float h)
             delay_buf_[i][delay_head_] = motor_target_[i];  // write: this substep's target
         }
         delay_head_ = (delay_head_ + 1) % delay_n_;
+    }
+    if (cfg_.motor_slew_per_s > 0.0f) {
+        const float max_step = cfg_.motor_slew_per_s * h;
+        for (int i = 0; i < 4; ++i) {
+            float diff = duty_cmd[i] - slewed_duty_[i];
+            if (diff > max_step) diff = max_step;
+            if (diff < -max_step) diff = -max_step;
+            slewed_duty_[i] += diff;
+            duty_cmd[i] = slewed_duty_[i];
+        }
     }
     // Ground-effect lift gain at the current body height (ENU z = qpos[2]). Computed once
     // per substep and applied to every motor's thrust — near the floor the rotors make more

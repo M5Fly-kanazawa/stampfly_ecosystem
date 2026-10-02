@@ -495,7 +495,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "system ID measured L=14.7/8.4/11.0 ms roll/pitch/yaw vs the current "
                         "SILS's ~0 ms explicit dead time, docs/architecture/simulation-policy.md "
                         "backlog #1). Inserted in the duty-path before the motor's first-order "
-                        "lag. Default OFF (0 ms, byte-identical clean path).")
+                        "lag. Default = SSOT plant_fit_flip_2026_10 (6 ms, flip-log fit 2026-10-02); 0 = off.")
+    p.add_argument("--motor-slew", type=float, default=None, metavar="DUTY_PER_S",
+                   help="duty-path slew-rate limit in duty/s (Plant::Config::motor_slew_per_s, "
+                        "flip-log fit 2026-10-02, simulation-policy.md §5). Default = SSOT "
+                        "plant_fit_flip_2026_10 (18 duty/s); 0 = off (pre-fit plant).")
     p.add_argument("--thrust-eff", type=float, default=None, metavar="RATIO",
                    help="override the plant's real-vs-ideal thrust efficiency (Plant::Config::"
                         "thrust_efficiency; scales the MEAN of all 4 motor thrusts, so it cuts "
@@ -511,7 +515,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "gain-deficit injection study to model the in-flight-identified "
                         "~0.4-0.7x motor torque effectiveness without also cutting net thrust "
                         "(unlike --thrust-eff, which was found to stall takeoff at this "
-                        "magnitude). Default OFF (Config default 1.0, byte-identical).")
+                        "magnitude). Default = SSOT plant_fit_flip_2026_10 (0.60, flip-log fit 2026-10-02); 1.0 = pre-fit plant.")
     p.add_argument("--flow-scale", type=float, default=None, metavar="RATIO",
                    help="override the plant's optical-flow velocity under-read model "
                         "(Plant::Config::flow_vel_scale; multiplies synthesized flow dx/dy "
@@ -633,7 +637,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                             "sysid (simulation-policy.md §4)")
     p.add_argument("--motor-delay", type=float, default=None, metavar="MS",
                    help="motor transport delay in ms, passed through to the scenario run "
-                        "(see `sf sils scenario --motor-delay`). Default OFF (0 ms).")
+                        "(see `sf sils scenario --motor-delay`). Default = plant default (6 ms); 0 = off.")
     p.add_argument("--noise", choices=NOISE_LEVELS, default="off",
                    help="sensor noise level on the emulator Plant (default off — a clean "
                         "excitation run is what the real-hardware sysid pipeline assumes)")
@@ -1494,6 +1498,11 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
     md = getattr(args, "motor_delay", None)
     if md is not None:
         env["SILS_EMU_MOTOR_DELAY"] = str(md)
+    # --motor-slew: duty slew-rate limit [duty/s] (flip-log fit 2026-10-02); 0 = off.
+    # --motor-slew: duty スルーレート制限 [duty/s]（宙返りログのフィット）、0 で OFF。
+    msl = getattr(args, "motor_slew", None)
+    if msl is not None:
+        env["SILS_EMU_MOTOR_SLEW"] = str(msl)
 
     # --thrust-eff / --flow-scale: hikoki64 §3.3 SILS gain-deficit injection study —
     # override the plant's torque-authority and flow-velocity-under-read knobs

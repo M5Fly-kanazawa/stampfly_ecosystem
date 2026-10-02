@@ -157,8 +157,15 @@ public:
         // which does not match the real symptom (the craft flew and hovered fine; only
         // attitude TRACKING was deficient, ~0.58 achievement ratio at the divergence
         // frequency). See substep()'s longer comment for the redistribution formula.
-        // DEFAULT 1.0 (OFF) so the clean path stays byte-identical — enable per-run via
-        // SILS_EMU_TORQUE_AUTHORITY (sf sils scenario --torque-authority).
+        // DEFAULT = sils_params::plant_fit::TORQUE_AUTHORITY (0.60 since 2026-10-02): the first
+        // real flip log (logs/flip_test1) showed the hardware's duty->roll-acceleration gain is
+        // ~0.5-0.64x this plant's ODE gain (docs/architecture/simulation-policy.md §5, SSOT
+        // control/models/stampfly_physical.yaml plant_fit_flip_2026_10). Override per run via
+        // SILS_EMU_TORQUE_AUTHORITY (sf sils scenario --torque-authority; 1.0 = the pre-fit plant).
+        // 既定 = sils_params::plant_fit::TORQUE_AUTHORITY（2026-10-02 以降 0.60）: 最初の実機宙返りログ
+        // （logs/flip_test1）で、実機の duty→ロール角加速度ゲインが本プラントの ODE ゲインの
+        // 約 0.5〜0.64 倍と判明（simulation-policy.md §5、SSOT plant_fit_flip_2026_10）。
+        // SILS_EMU_TORQUE_AUTHORITY（--torque-authority、1.0 = フィット前のプラント）で実行毎に上書き。
         // ロール/ピッチ差動トルク効き — Model fidelity（hikoki64 §3.3 SILS注入実験、
         // 2026-08-02）。上の thrust_efficiency とは意図的に別ノブ: substep() が4モータ推力を
         // その平均のまわりに再配分し、平均からの偏差だけを本係数で縮小 — 正味鉛直推力
@@ -168,7 +175,7 @@ public:
         // 飛行・ホバーし、姿勢「追従」のみ発散周波数で達成度~0.58に劣化）と整合しない。
         // 再配分式は substep() の長いコメント参照。既定 1.0（OFF）でクリーン経路はバイト
         // 一致 —— SILS_EMU_TORQUE_AUTHORITY（sf sils scenario --torque-authority）で有効化。
-        float torque_authority = 1.0f;  ///< 1.0 = OFF (roll/pitch differential thrust unscaled)
+        float torque_authority = sils_params::plant_fit::TORQUE_AUTHORITY;  ///< 1.0 = unscaled differential thrust (pre-fit plant)
 
         // --- Motor path transport delay (dead time) — Model fidelity ---
         // The identified plant model G(s) = b·e^(−Ls)/(s(Ts+1)) (docs/architecture/
@@ -185,10 +192,17 @@ public:
         // yaw reaction torque all consume the SAME substep's thrust, so delaying
         // thrust itself (rather than the duty command feeding the ODE) would break
         // that same-substep consistency.
-        // DEFAULT 0 (OFF) so the clean path stays byte-identical and existing scenarios
-        // (tuned without this delay) are unaffected — enable per-scenario via
-        // SILS_EMU_MOTOR_DELAY (sf sils scenario --motor-delay), the same opt-in pattern
-        // as ge_gain/turbulence_n above.
+        // DEFAULT = sils_params::plant_fit::MOTOR_DELAY_MS (6 ms since 2026-10-02): the real
+        // flip log showed the hardware's duty->gyro delay exceeds the ODE lag alone by ~9-10 ms (open-loop fit)
+        // (simulation-policy.md §5 "2026-10-02 追記"; the 2026-07-26 finding that the ODE needs
+        // no extra delay came from small-signal hover sysid and does not hold for the flip's
+        // large-signal saturated regime). Override per scenario via SILS_EMU_MOTOR_DELAY
+        // (sf sils scenario --motor-delay; 0 = no delay, the pre-fit plant).
+        // 既定 = sils_params::plant_fit::MOTOR_DELAY_MS（2026-10-02 以降 6 ms）: 実機宙返りログで、
+        // duty→ジャイロの遅れが ODE の遅れだけより約 9〜10 ms 長いと判明（開ループフィット。残りは motor_slew_per_s）（simulation-policy.md §5
+        // 「2026-10-02 追記」。2026-07-26 の「ODE だけで追加遅れ不要」は小信号ホバー同定の結論で、
+        // 宙返りの大信号・飽和域には当てはまらない）。SILS_EMU_MOTOR_DELAY（--motor-delay、
+        // 0 = 遅れなし＝フィット前のプラント）でシナリオ毎に上書き。
         //
         // モータ経路の輸送遅れ（むだ時間）。同定モデル G(s)=b·e^(−Ls)/(s(Ts+1))
         // （simulation-policy.md §2 層1）は duty→レート応答を「純遅延 L」と「一次遅れ T」の
@@ -203,7 +217,28 @@ public:
         // 既定 0（OFF）でクリーン経路はバイト一致、既存シナリオ（遅延無しで調整済み）へ
         // 影響しない — SILS_EMU_MOTOR_DELAY（sf sils scenario --motor-delay）でシナリオ毎に
         // 有効化（上の ge_gain/turbulence_n と同じオプトイン方式）。
-        float motor_delay_ms = 0.0f;  ///< duty-path transport delay [ms] (0 = OFF/bypass)
+        float motor_delay_ms = sils_params::plant_fit::MOTOR_DELAY_MS;  ///< duty-path transport delay [ms] (0 = OFF/bypass)
+
+        // --- Motor duty slew-rate limit — Model fidelity (flip-log fit, 2026-10-02) ---
+        // The real flip log shows a duty->gyro lag of ~33-37 ms in the large-signal
+        // torque-saturated regime but only ~14-18 ms in small-signal hover. A pure delay
+        // large enough for the flip drives this SILS's hover attitude loops into a 6 Hz
+        // limit cycle (backlog #15), so only part of the lag is a transport delay
+        // (motor_delay_ms, capped at the stability limit) and the rest is this slew limit,
+        // which acts only when duty swings by ~1 within tens of ms. Applied after the
+        // transport delay, before the motor ODE. DEFAULT =
+        // sils_params::plant_fit::MOTOR_SLEW_PER_S (18 duty/s); 0 = OFF. Override via
+        // SILS_EMU_MOTOR_SLEW (sf sils scenario --motor-slew). The physical cause (ESC /
+        // driver / battery current limit) is not identified; this is an effective value.
+        // 実機宙返りログでは duty→ジャイロの遅れが、トルク飽和の大信号域で約 33〜37 ms、
+        // ホバーの小信号で約 14〜18 ms。宙返りに足りる量を純遅れで入れると SILS のホバー姿勢
+        // ループが 6 Hz のリミットサイクルに入る（バックログ #15）ため、遅れ（motor_delay_ms、
+        // 安定限界で頭打ち）と、duty が数十 ms で ~1 振れるときだけ効く本スルーレート制限に
+        // 分担させる。輸送遅れの後段、モータ ODE の手前に適用。既定 =
+        // sils_params::plant_fit::MOTOR_SLEW_PER_S（18 duty/s）、0 = OFF。SILS_EMU_MOTOR_SLEW
+        // （--motor-slew）で上書き。物理的原因（ESC・ドライバ・電池の電流制限）は未同定で、
+        // 実効値である。
+        float motor_slew_per_s = sils_params::plant_fit::MOTOR_SLEW_PER_S;
 
         // --- Ground effect — Model fidelity ---
         // Extra rotor lift near the floor: each motor's thrust is scaled by
@@ -575,6 +610,7 @@ private:
     std::vector<float> delay_buf_[4]; ///< past commanded duty targets, per motor
     int delay_head_ = 0;              ///< next write/read index into delay_buf_
     int delay_n_    = 0;              ///< delay length in substeps (0 = OFF/bypass)
+    float slewed_duty_[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< slew-limited duty state (motor_slew_per_s > 0)
 
     float last_dt_ = 0.0025f;  ///< last step dt (for flow count integration)
     float turb_t_  = 0.0f;     ///< accumulated time for the deterministic turbulence force [s]

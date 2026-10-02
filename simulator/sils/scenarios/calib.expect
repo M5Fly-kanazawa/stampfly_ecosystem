@@ -6,16 +6,16 @@
 # ホバーを ESKF 姿勢有界で飛んだことを検証する。「校正なし」側は SILS_EMU_NO_CALIB=1 の
 # 再実行で実証（ここでは判定しない）。
 #
-# XFAIL (known issue, tracked 2026-07-26): the injected IMU bias combined with the new
-# ODE plant's takeoff dynamics produces a 0.6-0.7 Hz self-oscillation, close to the
-# real-hardware ACRO ~0.9 Hz limit-cycle band (2026-06-24 diagnosis). See
-# docs/architecture/simulation-policy.md backlog #4 (motor dead-band) / #13
-# (attitude damping-margin investigation).
-# XFAIL（既知課題・追跡中 2026-07-26）: 注入IMUバイアス×新ODEプラントの離陸動特性が
-# 0.6-0.7Hz の自励振動を生む — 実機 ACRO の ~0.9Hz リミットサイクル帯域に近い
-# （2026-06-24 診断）。simulation-policy.md バックログ#4（モータ不感帯）/#13
-# （姿勢減衰余裕の調査）参照。
-xfail: injected IMU bias x new ODE-plant takeoff dynamics produce a 0.6-0.7 Hz self-oscillation, close to the ~0.9 Hz real-hardware ACRO limit-cycle band (simulation-policy backlog #4/#13)
+# History: this gate was XFAIL (tracked 2026-07-26): the injected IMU bias combined with the
+# ODE plant's takeoff dynamics produced a 0.6-0.7 Hz self-oscillation (simulation-policy backlog
+# #4/#13). The 2026-10-02 flip plant fit (torque_authority 0.60, 6 ms delay, 18 duty/s slew;
+# SSOT plant_fit_flip_2026_10) damps it and the gate now passes (XPASS), so the marker is removed.
+# This is an incidental effect of the fit, not a root-cause fix: re-check if the fit changes.
+# 履歴: 本判定は XFAIL だった（2026-07-26 追跡）: 注入 IMU バイアス×ODE プラントの離陸動特性が
+# 0.6-0.7Hz の自励振動を生んでいた（バックログ#4/#13）。2026-10-02 の宙返りプラントフィット
+# （torque_authority 0.60・遅れ 6 ms・スルーレート 18 duty/s、SSOT plant_fit_flip_2026_10）で
+# 抑えられ判定が通る（XPASS）ためマーカーを削除。フィットの副次効果であり根本修正ではない:
+# フィットを変えたら再確認すること。
 exit 0
 log_contains any "ARM accepted"                       # G1: IDLE_GROUND → ARMED_GROUND
 log_contains any "Takeoff complete"                   # G1: TAKEOFF → FLYING

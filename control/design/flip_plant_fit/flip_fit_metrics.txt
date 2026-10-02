@@ -1,0 +1,46 @@
+[HW flip_test1] spin start t=15.8750 s
+  peak_dps: 1909.451
+  t1000_ms: 82.501
+  phi@1000: 26.095
+  t1500_ms: 100.002
+  phi@1500: 49.035
+  t1800_ms: 117.493
+  phi@1800: 78.667
+  t_stop_ms: 225.143
+  phi_stop: 207.418
+  brake_decel_rad_s2: -431.817
+  spinup_rad_s2: 332.376
+  torque_sat_s: [(0.025, 0.025, 1), (0.03, 0.07, 1), (0.075, 0.075, 1), (0.12, 0.205, -1)]
+  duty_any_pinned: 0.596
+  regression b=67669+-1020 rad/s2/Nm  L=10.3 ms  T=26.7 ms
+[SILS before] spin start t=23.1720 s
+  peak_dps: 1576.951
+  t1000_ms: 70.0
+  phi@1000: 30.598
+  t1500_ms: 100.0
+  phi@1500: 69.832
+  t1800_ms: nan
+  phi@1800: nan
+  t_stop_ms: 305.0
+  phi_stop: 345.854
+  brake_decel_rad_s2: -620.049
+  spinup_rad_s2: 321.682
+  torque_sat_s: [(0.2625, 0.275, -1)]
+  duty_any_pinned: 0.071
+  regression b=126930+-3895 rad/s2/Nm  L=1.1 ms  T=28.2 ms
+[SILS after] spin start t=23.1720 s
+  peak_dps: 1847.134
+  t1000_ms: 82.5
+  phi@1000: 23.957
+  t1500_ms: 102.5
+  phi@1500: 49.946
+  t1800_ms: 122.5
+  phi@1800: 84.086
+  t_stop_ms: 230.0
+  phi_stop: 205.023
+  brake_decel_rad_s2: -411.721
+  spinup_rad_s2: 327.761
+  torque_sat_s: [(0.025, 0.0775, 1), (0.1275, 0.2075, -1), (0.5625, 0.5675, 1)]
+  duty_any_pinned: 0.091
+  regression b=64371+-731 rad/s2/Nm  L=10.5 ms  T=22.7 ms
+[open-loop forward fit, real log] s=0.494+-0.007 L=25.0+-1.5 ms kJ=0.50+-0.10 residual rms 110 dps (window 15.85-16.25 s)

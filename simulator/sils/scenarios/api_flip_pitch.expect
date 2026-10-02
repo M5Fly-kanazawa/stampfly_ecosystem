@@ -17,6 +17,16 @@
 # Thresholds are first values from the planar model (plan §5.3) and are to be
 # re-tuned against the SILS result and then hardware logs (Phase 4).
 # しきい値は平面モデル（計画 §5.3）からの初期値。SILS の結果、次に実機ログで見直す（Phase 4）。
+# XFAIL (2026-10-02, flip plant fit): the SILS plant now reproduces the hardware flip
+# dynamics identified from the first real flip log (logs/flip_test1; SSOT plant_fit_flip_2026_10).
+# On the not-yet-fixed flip logic this scenario is EXPECTED to fail the same way the
+# hardware did (gyro overshoot ~1900 dps -> abort at ~78 deg -> stops near 205 deg -> falls).
+# It is re-enabled (marker removed) in step 5 after the logic fix + retune.
+# XFAIL（2026-10-02、宙返りのプラントフィット）: SILS プラントが最初の実機宙返りログ
+# （logs/flip_test1、SSOT plant_fit_flip_2026_10）から同定した実機の宙返り動特性を再現するようになった。
+# 未修正の宙返りロジックでは、実機と同じ失敗（ジャイロ ~1900 dps へ行き過ぎ → ~78° で打ち切り →
+# ~205° で停止 → 墜落）をするのが期待どおり。ステップ 5 のロジック修正と再調整のあとで再有効化（マーカー削除）する。
+xfail: SILS now reproduces the real flip failure: after the plant fit (control/models/stampfly_physical.yaml plant_fit_flip_2026_10, from logs/flip_test1) the unfixed flip logic overshoots to ~1900 dps, trips the 1800 dps gyro abort at ~78 deg and stops near 205 deg, then falls (docs/plans/flip-maneuver-plan.md §5.6). Re-enable after the step-5 logic fix + retune.
 exit 0
 log_contains any "cmd: command"
 log_contains any "cmd: takeoff"

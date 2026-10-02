@@ -451,3 +451,65 @@ calibration_sets:
           note 参照）。firmware/vehicle/components/sf_actuator/actuator.cpp
           の MOTOR_CM が現在の唯一の消費者（2026-08-22〜、値は
           legacy_motor_curve.Cm と同一）。
+
+
+  # ----------------------------------------------------------------------------
+  # SILS plant fidelity fit from the first real flip log (2026-10-02).
+  # NOT a bench measurement of a single physical quantity: these three numbers
+  # are effective plant-level correction factors identified so that the SILS
+  # plant reproduces the hardware duty -> roll-rate dynamics of the failed flip
+  # (logs/flip_test1.sflog.zip). They are consumed ONLY by the SILS plant
+  # (simulator/sils/plant/plant.hpp Config defaults via
+  # generated_params.hpp sils_params::plant_fit::*); the firmware does not use
+  # them. Evidence and residuals: docs/architecture/simulation-policy.md §5
+  # ("2026-10-02 追記") and docs/plans/flip-maneuver-plan.md §5.6.
+  # 最初の実機宙返りログ（2026-10-02）からの SILS プラント忠実度フィット。
+  # 単一の物理量のベンチ実測ではなく、SILS プラントが失敗した宙返りの実機の
+  # duty→ロールレート動特性を再現するよう同定した、プラント全体の実効補正係数
+  # （3 値）。SILS プラント専用（plant.hpp Config 既定値、generated_params.hpp
+  # sils_params::plant_fit::* 経由）。ファームは使わない。
+  # ----------------------------------------------------------------------------
+  plant_fit_flip_2026_10:
+    status: adopted
+    coupled: true
+    params:
+      torque_authority:
+        value: 0.60
+        unit: "-"
+        method: "実機宙返りログ 1 本。開ループ最小二乗（duty→ODE→ロール角加速度）で 0.50±0.01、τ_cmd→α 回帰で 0.53、クローズドループ照合（SILS 掃引）で 0.55〜0.65 を採用"
+        method_en: "One real flip log. Open-loop least squares (duty -> ODE -> roll acceleration) gives 0.50+-0.01, the tau_cmd -> alpha regression gives 0.53, closed-loop matching (SILS sweep) accepts 0.55-0.65"
+        date: "2026-10-02"
+        note: >
+          ロール/ピッチ差動トルクの実効比（Plant::Config::torque_authority）。
+          実機の duty→角加速度ゲインは SILS ODE プラントの約 0.5〜0.64 倍
+          （2026-06 のホバー同定 b=65.4k 対 SILS ゲート 102.3k=0.64 とも整合）。
+          単一ログ・ロール軸のみ。物理的原因（実効慣性・アーム長・推力-duty 勾配）は未分離。
+      motor_delay_ms:
+        value: 6.0
+        unit: "ms"
+        method: "実機宙返りログ 1 本。開ループ最小二乗で ODE の一次遅れに加えて 9〜10 ms。クローズドループ照合では、ホバー系の安定を保つ上限として 6 ms（スルーレートと組で）を採用"
+        method_en: "One real flip log. Open-loop least squares gives 9-10 ms on top of the ODE lag. Closed-loop matching adopts 6 ms (paired with the slew limit) as the value that keeps the hover loops stable"
+        date: "2026-10-02"
+        note: >
+          duty→推力経路の輸送遅れ（Plant::Config::motor_delay_ms、モータ ODE の
+          手前に挿入）。宙返りの大信号では実機の duty→ジャイロ総遅れが約 33〜37 ms
+          （ODE の約 16 ms ＋ 追加 約 17〜21 ms）だが、全部を遅れで入れると SILS の
+          ホバー姿勢ループが追加 約 13 ms 以上で 6 Hz のリミットサイクルに入る（実機のホバーは
+          安定。バックログ #15/#13、SILS に空力減衰が無いことが一因の疑い）。スルーレートと
+          併用すると着陸中のロール振動が追加 7 ms 以上で出る（api_flight [27,33] s の傾き最大
+          3.8°→9〜15°）ため、遅れは 6 ms に留め、残りを motor_slew_per_s に割り当てた。
+      motor_slew_per_s:
+        value: 18.0
+        unit: "duty/s"
+        method: "クローズドループ照合（SILS 掃引: 実機のトルク飽和区間・ピーク角速度・制動減速に合わせる）。実機ログへの開ループ強制適合ではスルーレートのみで 11.5 duty/s（残差 178 dps、遅れモデルは 110 dps）"
+        method_en: "Closed-loop matching (SILS sweep to the real torque-saturation intervals, peak rate and brake deceleration). A forward open-loop fit to the real log with slew alone gives 11.5 duty/s (residual 178 dps vs 110 dps for the delay model)"
+        date: "2026-10-02"
+        note: >
+          duty 指令のスルーレート制限（Plant::Config::motor_slew_per_s、輸送遅れの後段）。
+          0→1 に約 56 ms かかる。ホバー近傍の小信号には効かず、宙返りのトルク飽和
+          （duty が 0 と 1 の間を数十 ms で往復する）でだけ効く大信号限定の遅れ。
+          物理的原因（ESC・ドライバ・電池の電流制限など）は未同定で、実効値である。
+          遅れとスルーレートの分担は一意でない（1 本のログでは分離できない）。副作用として
+          SILS の 200 Hz リミットサイクル（バックログ #12）の一部を抑え、yaw_hold の
+          yaw_band が 8.0°→1.5°、calib が通る。実機ではこのチャタリングが残っているため、
+          この抑制は実機と食い違う方向で、要再検討。
