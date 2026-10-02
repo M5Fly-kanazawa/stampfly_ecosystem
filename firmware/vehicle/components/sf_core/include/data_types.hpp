@@ -309,12 +309,49 @@ struct MotorOutput {
 // システムデータ型
 // =============================================================================
 
+/// Why ARM is currently refused (pre-arm gates) — the SINGLE reason, in gate priority order
+/// (first failing gate wins). Evaluated once by StateManager (the only place the gates live)
+/// and published in SystemMode.arm_block; NotifyTask (LED/tone) and the CLI read it instead
+/// of re-deriving the gates. It is independent of the flight state: None means "the gates
+/// pass", not "ARM is accepted" (requestArm() additionally requires IDLE_GROUND).
+/// ARM が今拒否される理由（ARM 前判定）— 判定の優先順で「ただ1つ」（最初に落ちた判定が勝つ）。
+/// StateManager（判定の唯一の置き場）が1回評価して SystemMode.arm_block に発行し、
+/// NotifyTask（LED/音）と CLI は判定を再導出せずこれを読む。飛行状態とは独立: None は
+/// 「判定を通る」の意で「ARM が受理される」ではない（requestArm() は更に IDLE_GROUND を要求）。
+enum class ArmBlock : uint8_t {
+    None         = 0,   // all pre-arm gates pass                        / 全判定を通る
+    Pairing      = 1,   // searching for a transmitter                   / 送信機を探索中
+    Battery      = 2,   // USB power or critically low battery          / USB 給電/危険な低電圧
+    Calibrating  = 3,   // boot gyro/accel calibration not complete      / 起動校正が未完了
+    BenchRelevel = 4,   // bench motor test active / re-level pending    / モータテスト中/再水平化待ち
+    TiltPending  = 5,   // attitude check not judged yet (~1 s after reset) / 姿勢判定が未完了
+    TiltMismatch = 6,   // estimate disagrees with gravity (place level) / 推定が重力と不一致
+};
+
+/// Get human-readable ARM-block reason name
+/// ARM 阻害理由の名前を取得する
+inline const char* armBlockName(ArmBlock reason)
+{
+    switch (reason) {
+        case ArmBlock::None:         return "None";
+        case ArmBlock::Pairing:      return "Pairing";
+        case ArmBlock::Battery:      return "Battery";
+        case ArmBlock::Calibrating:  return "Calibrating";
+        case ArmBlock::BenchRelevel: return "BenchRelevel";
+        case ArmBlock::TiltPending:  return "TiltPending";
+        case ArmBlock::TiltMismatch: return "TiltMismatch";
+        default:                     return "UNKNOWN";
+    }
+}
+
 /// Current flight state and mode
 /// 現在のフライト状態とモード
 struct SystemMode {
     uint8_t state;        // FlightState enum      / フライト状態
     uint8_t sub_mode;     // FlightMode enum       / フライトモード
     bool armed;           // Armed flag            / ARM状態
+    uint8_t arm_block;    // ArmBlock enum — why ARM is refused now (None = gates pass)
+                          // ArmBlock — 今 ARM が拒否される理由（None=判定を通る）
     uint32_t timestamp;   // [us]
 };
 
@@ -716,6 +753,7 @@ enum class NotifyEvent : uint8_t {
     AutotuneStart = 7, // autotune starting (hold steady)/ autotune 開始（定位置保持）
     AutotuneOk    = 8, // autotune succeeded             / autotune 成功
     AutotuneFail  = 9, // autotune failed (gains kept)   / autotune 失敗（ゲイン据え置き）
+    ArmRejected   = 10, // ARM request refused by a pre-arm gate (error tone) / ARM 要求が事前判定で拒否（エラー音）
 };
 
 /// Notify command — NotifyTask consumes and drives LED/buzzer (HAL direct)

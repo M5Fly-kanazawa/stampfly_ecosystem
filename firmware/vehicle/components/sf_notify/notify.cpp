@@ -74,7 +74,12 @@ static const LedPattern kPatternTable[FLIGHT_STATE_COUNT] = {
 // オーバーレイ（飛行状態テーブルより優先、computeActivePattern 参照）:
 static constexpr LedPattern kLowBatteryPattern = { kCyan,    kSlowOn, kSlowOff };  // 低電圧
 static constexpr LedPattern kPairingPattern    = { kBlue,    kFastOn, kFastOff };  // 探索中
-static constexpr LedPattern kCalibratingPattern= { kMagenta, kSlowOn, kSlowOff };  // 校正中
+static constexpr LedPattern kCalibratingPattern= { kMagenta, kSlowOn, kSlowOff };  // 待機（校正/整定）
+// Red SLOW blink = "estimate disagrees with gravity: pick the craft up and place it level".
+// Deliberately unlike the fatal red FAST blink (sf_board) and the autotune-fail red fast blink.
+// 赤の「低速」点滅 =「推定が重力と不一致: 持ち上げて水平に置き直す」。致命停止の赤「高速」
+// 点滅（sf_board）や autotune 失敗の赤高速点滅とは意図的に区別する。
+static constexpr LedPattern kTiltMismatchPattern = { kRed, kSlowOn, kSlowOff };
 
 // Below this voltage the sensor_power reading is "unknown" (power monitor absent or a
 // failed read publishes 0) — do NOT show the low-battery LED for it.
@@ -151,7 +156,7 @@ void Notify::init(const NotifyConfig& config)
 // computeStatePattern — システム状態チャネル（MCU LED）。優先度オーバーレイ。
 //
 // Mirrors the legacy vehicle's LEDManager priority order:
-//   low-battery > pairing > calibrating > flight state.
+//   autotune > low-battery > pairing > ARM-blocked (tilt / calibrating / re-level) > flight state.
 // 旧 vehicle の LEDManager 優先度を踏襲: 低電圧 > ペアリング > 校正中 > 飛行状態。
 // -----------------------------------------------------------------------------
 // autotuneOverlay — highest-priority LED cue while an autotune is running/finishing.
@@ -189,12 +194,22 @@ LedPattern Notify::computeStatePattern() const
         return kPairingPattern;
     }
 
-    // 3. Calibrating (magenta slow blink) — on the ground, boot bias not yet done.
-    // 3. 校正中（マゼンタ低速点滅）— 地上、起動バイアス校正が未完了。
+    // 3. On the ground, ARM blocked (reason published by StateManager — read, never re-derived):
+    //    tilt mismatch → red slow blink (act: place it level); calibrating / tilt check
+    //    pending / bench re-level → magenta slow blink (wait, keep still).
+    // 3. 地上で ARM 阻害中（理由は StateManager が発行 — 読むだけで再導出しない）:
+    //    傾き不一致 → 赤低速点滅（操作: 水平に置き直す）、校正中/傾き判定待ち/ベンチ再水平化
+    //    → マゼンタ低速点滅（待つ・動かさない）。
     const SystemMode mode = system_mode.latest();
     const FlightState state = static_cast<FlightState>(mode.state);
-    if (state == FlightState::IDLE_GROUND && !system_status.latest().calibrated) {
-        return kCalibratingPattern;
+    if (state == FlightState::IDLE_GROUND) {
+        switch (static_cast<ArmBlock>(mode.arm_block)) {
+            case ArmBlock::TiltMismatch:  return kTiltMismatchPattern;
+            case ArmBlock::Calibrating:
+            case ArmBlock::TiltPending:
+            case ArmBlock::BenchRelevel:  return kCalibratingPattern;
+            default:                      break;   // Pairing/Battery shown above; None → table
+        }
     }
 
     // 4. Flight state (table). The flight-mode colour lives on the BODY LEDs
@@ -416,6 +431,7 @@ void Notify::playEvent(NotifyEvent event)
         case NotifyEvent::Calibrating: buzzer_.beep();              break;
         case NotifyEvent::Ready:       buzzer_.readyTone();         break;
         case NotifyEvent::PairingMode: buzzer_.pairingTone();       break;
+        case NotifyEvent::ArmRejected: buzzer_.errorTone();         break;
         // Buzzer + a parallel LED cue (LED is reliable over motor noise): white blink
         // while sweeping (safety timeout 30s), then green/red for ~4s. update() clears it.
         // ブザー＋並行 LED 合図（騒音に強い）: 掃引中は白点滅（安全 30s）、終了で緑/赤 約4s。

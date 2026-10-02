@@ -105,7 +105,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 9 | `control_output` | `ControlOutput` | Latest | 1 | ControlTask | TelemetryTask | 400Hz | 推力・トルク出力 |
 | 9b | `controller_status` | `ControllerStatus` | Latest | 1 | ControlTask | ApiTask | 400Hz | guidance_active の事実（誘導解除を API へ同期, M-3） |
 | 10 | `actuator_motor` | `MotorOutput` | Latest | 1 | ControlTask | (motor driver) | 400Hz | モータ duty |
-| 11 | `system_mode` | `SystemMode` | Latest | 1 | StateTask | ControlTask, NotifyTask | event | ARM 状態・フライトモード |
+| 11 | `system_mode` | `SystemMode` | Latest | 1 | StateTask | ControlTask, NotifyTask, CLI | event | ARM 状態・フライトモード・`arm_block`（ARM が今拒否される理由 `ArmBlock`: None/Pairing/Battery/Calibrating/BenchRelevel/TiltPending/TiltMismatch。StateManager が ARM 前判定を1か所で評価し、変化時のみ再発行。NotifyTask の LED と CLI `status` が読む。detailed_design §3 注10）|
 | 12 | `system_alert` | `SystemAlert` | Queue | 4 | FailsafeTask | TelemetryTask, NotifyTask | event | 警告・エラー |
 | 13 | `pilot_request` | `PilotRequest` | Latest | 1 | CommTask | StateTask | 50Hz | ARM + フライトモード選択（sf_comm → StateTask） |
 | 14 | `system_status` | `SystemStatus` | Latest | 1 | ImuTask | StateManager(pre-arm), StateTask | 400Hz | 起動準備（calibrated）+ airborne + held + attitude_mismatch（地上で姿勢推定が重力と不一致、StateTask が DISARM/自己回復）+ attitude_verified（地上で判定済みかつ一致＝肯定の判定、StateManager が ARM に要求）。detailed_design §3 注10 |

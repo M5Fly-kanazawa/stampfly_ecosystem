@@ -84,17 +84,18 @@ void StateManager::notifyInitComplete()
     transition(FlightState::IDLE_GROUND);
 }
 
-/// @design requirements.md §2 — ARM from GROUND only                  [OK]
-/// @design requirements.md §9 — USB power / low-V: ARM prohibited     [OK]
-/// @design detailed_design.md §3 — ARM gated on calibration complete  [OK]
-bool StateManager::requestArm()
+/// Evaluate the pre-arm gates in priority order and return the FIRST failing one (None when
+/// all pass). The single place the gates live (INV: one source of truth) — requestArm()
+/// acts on it, update() publishes it (SystemMode.arm_block) for the LED / CLI. State-
+/// independent: the IDLE_GROUND requirement is checked by requestArm() itself.
+/// ARM 前判定を優先順に評価し、最初に落ちた理由を返す（全て通れば None）。判定の唯一の
+/// 置き場（INV: 単一の情報源）— requestArm() がこれに従い、update() が LED/CLI 向けに
+/// SystemMode.arm_block として発行する。状態非依存: IDLE_GROUND 要件は requestArm() 自身が見る。
+///
+/// @design requirements.md §9 — USB power / low-V: ARM prohibited         [OK]
+/// @design detailed_design.md §3 注9/注10 — single pre-arm reason          [OK]
+ArmBlock StateManager::evaluateArmBlock() const
 {
-    if (state_ != FlightState::IDLE_GROUND) {
-        ESP_LOGD(TAG, "ARM rejected: not in IDLE_GROUND (state=%s)",
-                 flightStateName(state_));
-        return false;
-    }
-
     // --- Pre-arm gate 0: not actively pairing -----------------------------------------
     // While searching for a transmitter (PairingState::Pairing) the link is not yet
     // bound, so ARM is refused. A vehicle that boots unpaired auto-enters Pairing; it
@@ -104,8 +105,7 @@ bool StateManager::requestArm()
     // 未バインドゆえ ARM を拒否する。未ペア起動は自動で Pairing に入り、ペア成立（→Paired）
     // するまで ARM できない。Paired と（過渡的な）NotPaired は阻まない — 探索中のみ阻む。
     if (pairing_state_ == PairingState::Pairing) {
-        ESP_LOGW(TAG, "ARM rejected: pairing in progress");
-        return false;
+        return ArmBlock::Pairing;
     }
 
     // --- Pre-arm gate 1: battery / USB power (requirements §9) ------------------------
@@ -120,9 +120,7 @@ bool StateManager::requestArm()
     params::get_float("safety.battery.usb_v", usb_v);
     const float voltage = sensor_power.latest().voltage;
     if (voltage > kVoltageValidMin && voltage <= usb_v) {
-        ESP_LOGW(TAG, "ARM rejected: battery %.2fV <= %.2fV (USB/low — unsafe to fly)",
-                 voltage, usb_v);
-        return false;
+        return ArmBlock::Battery;
     }
 
     // --- Pre-arm gate 2: boot calibration complete (requirements §9 / design §3) ------
@@ -133,8 +131,7 @@ bool StateManager::requestArm()
     // （ImuTask が system_status.calibrated を発行）。半端なバイアスで飛ばさない。状態は
     // トピック経由（R16 流）。
     if (!system_status.latest().calibrated) {
-        ESP_LOGW(TAG, "ARM rejected: boot calibration not complete");
-        return false;
+        return ArmBlock::Calibrating;
     }
 
     // --- Pre-arm gate 3: no bench motor test active / re-level pending ----------------
@@ -150,8 +147,7 @@ bool StateManager::requestArm()
     // 判定2（calibrated）が担う。
     // @design detailed_design.md §3 注9 — ARM rejected during bench test / re-level [OK]
     if (motor_test.latest().active || bench_relevel_pending_) {
-        ESP_LOGW(TAG, "ARM rejected: bench motor test active / re-level pending");
-        return false;
+        return ArmBlock::BenchRelevel;
     }
 
     // --- Pre-arm gate 4: attitude estimate agrees with gravity ------------------------
@@ -174,12 +170,10 @@ bool StateManager::requestArm()
     // Reset の後、モニタが判定できるまで約 lpf_s かかり、その窓で未検証の推定を通してはならない。
     const SystemStatus status = system_status.latest();
     if (status.attitude_mismatch) {
-        ESP_LOGW(TAG, "ARM rejected: attitude estimate disagrees with gravity");
-        return false;
+        return ArmBlock::TiltMismatch;
     }
     if (!status.attitude_verified) {
-        ESP_LOGW(TAG, "ARM rejected: attitude check not passed yet");
-        return false;
+        return ArmBlock::TiltPending;
     }
 
     // --- Pre-arm gate 5: sensor health — DEFERRED ------------------------------------
@@ -188,6 +182,66 @@ bool StateManager::requestArm()
     // that work, not here.
     // ARM 前判定5: センサ健全性 — 繰延。意味ある判定には sf_board::sensor_present()
     // （M2b の per-sensor presence、現状 false）が要るため、その作業で配線する。
+
+    return ArmBlock::None;
+}
+
+/// Log why ARM was refused (serial console; the pilot-facing cues are the LED/tone).
+/// ARM 拒否の理由をログ出力（シリアル。操縦者向けの合図は LED/音）。
+void StateManager::logArmRejected(ArmBlock reason) const
+{
+    switch (reason) {
+        case ArmBlock::Pairing:
+            ESP_LOGW(TAG, "ARM rejected: pairing in progress");
+            break;
+        case ArmBlock::Battery:
+            ESP_LOGW(TAG, "ARM rejected: battery %.2fV (USB/low — unsafe to fly)",
+                     sensor_power.latest().voltage);
+            break;
+        case ArmBlock::Calibrating:
+            ESP_LOGW(TAG, "ARM rejected: boot calibration not complete");
+            break;
+        case ArmBlock::BenchRelevel:
+            ESP_LOGW(TAG, "ARM rejected: bench motor test active / re-level pending");
+            break;
+        case ArmBlock::TiltMismatch:
+            ESP_LOGW(TAG, "ARM rejected: attitude estimate disagrees with gravity");
+            break;
+        case ArmBlock::TiltPending:
+            ESP_LOGW(TAG, "ARM rejected: attitude check not passed yet");
+            break;
+        case ArmBlock::None:
+        default:
+            break;
+    }
+}
+
+/// @design requirements.md §2 — ARM from GROUND only                  [OK]
+/// @design requirements.md §9 — USB power / low-V: ARM prohibited     [OK]
+/// @design detailed_design.md §3 — ARM gated on calibration complete  [OK]
+bool StateManager::requestArm()
+{
+    if (state_ != FlightState::IDLE_GROUND) {
+        ESP_LOGD(TAG, "ARM rejected: not in IDLE_GROUND (state=%s)",
+                 flightStateName(state_));
+        return false;
+    }
+
+    // Pre-arm gates (single reason function, see evaluateArmBlock). A refusal is logged and
+    // announced with an error tone (NotifyTask) — the LED shows the standing reason.
+    // Every caller is edge-triggered (RC button press edge, on-board click, API verb), so
+    // one request is one tone: no rate limit needed.
+    // ARM 前判定（理由関数は evaluateArmBlock）。拒否はログ出力し、エラー音で知らせる
+    // （NotifyTask）— 継続的な理由は LED が示す。呼び出し元は全て立ち上がりエッジ起因
+    // （RC ボタン押下エッジ・機体クリック・API verb）なので、1要求=1音。レート制限は不要。
+    // @design detailed_design.md §3 注9/注10 — ARM rejected with visible/audible cue [OK]
+    const ArmBlock block = evaluateArmBlock();
+    if (block != ArmBlock::None) {
+        logArmRejected(block);
+        notify_command.publish({static_cast<uint8_t>(NotifyEvent::ArmRejected),
+                                static_cast<uint32_t>(esp_timer_get_time())});
+        return false;
+    }
 
     ESP_LOGI(TAG, "ARM accepted");
     transition(FlightState::ARMED_GROUND);
@@ -629,6 +683,10 @@ void StateManager::notifyPairingComplete()
 
 void StateManager::update(uint32_t now_us)
 {
+    // Keep the published ARM-block reason current (LED / CLI read it).
+    // 発行済みの ARM 阻害理由を最新に保つ（LED/CLI が読む）。
+    refreshArmBlock();
+
     // Comm-loss failsafe: deferred FLYING → LANDING (requirements §9). Nothing pending
     // → nothing to do (the common case).
     // 通信断フェイルセーフ: 遅延 FLYING → LANDING（要件§9）。保留なしなら何もしない（通常）。
@@ -785,12 +843,27 @@ void StateManager::transition(FlightState new_state)
     publishMode();
 }
 
+/// Re-evaluate the pre-arm gates and republish system_mode only when the reason changed
+/// (the gates are cheap: topic reads, one param lookup; the publish is edge-only).
+/// ARM 前判定を再評価し、理由が変わった時だけ system_mode を再発行する（判定は軽い:
+/// トピック読み＋param 1回、発行はエッジのみ）。
+void StateManager::refreshArmBlock()
+{
+    const ArmBlock block = evaluateArmBlock();
+    if (block == arm_block_) {
+        return;
+    }
+    arm_block_ = block;
+    publishMode();
+}
+
 void StateManager::publishMode()
 {
     SystemMode mode_msg = {};
     mode_msg.state = static_cast<uint8_t>(state_);
     mode_msg.sub_mode = static_cast<uint8_t>(mode_);
     mode_msg.armed = sf::isArmed(state_);
+    mode_msg.arm_block = static_cast<uint8_t>(arm_block_);
     mode_msg.timestamp = static_cast<uint32_t>(esp_timer_get_time());
 
     system_mode.publish(mode_msg);

@@ -73,13 +73,14 @@ LED は**2 チャネル**に分かれる:
 
 ### システム状態（StampS3 内蔵 LED, GPIO21）
 
-優先度は上から（上位が下位を上書き）: 低電圧 > ペアリング > 校正中 > 飛行状態。
+優先度は上から（上位が下位を上書き）: 低電圧 > ペアリング > ARM 阻害表示（地上のみ。傾き不一致 / 待機）> 飛行状態。
 
 | 状態 | 色 | パターン |
 |------|-----|---------|
 | 低電圧（電池電圧が `safety.battery.low_v` 以下）| シアン | 低速点滅 |
 | ペアリング中（探索中）| 青 | 高速点滅 |
-| 校正中（地上・校正未完了。**静止するまで完了しない**）| マゼンタ | 低速点滅 |
+| **傾き不一致**（地上で姿勢推定が重力とずれている。**持ち上げて水平な地面に置き直す**）| **赤** | **低速点滅** |
+| **待機**（地上。校正中〔**静止するまで完了しない**〕・傾き判定待ち〔リセット/DISARM 後の約 1 秒〕・モータテスト後の再水平化待ち〔約 1.5 秒〕。**動かさず待つ**）| マゼンタ | 低速点滅 |
 | INIT（初期化中）| 白 | 常灯 |
 | IDLE_GROUND（校正済・ARM 可）| 緑 | 常灯 |
 | IDLE_HELD（手持ち検出）| シアン | 高速点滅 |
@@ -88,6 +89,8 @@ LED は**2 チャネル**に分かれる:
 | FLYING（飛行中）| 緑 | 常灯 |
 | LANDING（着陸シーケンス）| オレンジ | 低速点滅 |
 | Critical ハード故障（停止）| 赤 | 高速点滅 |
+
+赤の**低速**点滅（傾き不一致＝置き直せば復帰）と赤の**高速**点滅（Critical 故障＝停止、または autotune 失敗の合図）は別物。緑常灯（IDLE_GROUND）は ARM 前判定を全て通過＝ARM 可能を意味する。
 
 ### イベント → 音（ブザー）
 
@@ -100,6 +103,7 @@ LED は**2 チャネル**に分かれる:
 | ペアリング開始 | pairingTone | C5→G5 |
 | 低電圧警告 | lowBatteryWarning | A4 …（繰返し）|
 | エラー（フェイルセーフ）| errorTone | C4（長く低い）|
+| **ARM 拒否**（ARM 操作が ARM 前判定で拒否された。理由の別なく同じ音。理由は LED と CLI `status` の `prearm` 行）| errorTone | C4（長く低い）|
 
 ブザーは CLI `sound off` で無効化できる（NVS 保存）。LED 輝度は `led <0-255>`。
 
@@ -131,8 +135,8 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 | DISARM 操作（**ALT_HOLD/POS_HOLD で飛行中**）| → **自動着陸**（FLYING → LANDING）。空中でモータを切らず緩降下（0.3 m/s）で接地し、接地検出で本当の DISARM。**着陸中にもう一度 DISARM すると即カット（中断）** |
 | 機体ボタン クリック（地上）| ARM/DISARM トグル（飛行中のクリックは無視）|
 
-**ARM できない時**: 校正中（マゼンタ点滅）・低電圧/USB 給電・**ペアリング中**・ベンチ用モータテスト中/テスト後の再水平化待ち（約 1.5 秒）・**地上で姿勢推定が重力とずれている間**（`ARM rejected: attitude estimate disagrees with gravity`）は ARM 拒否（CLI `status`
-で確認可）。ずれは IDLE_GROUND 中に自動で（滞在ごとに1回）推定器リセットで再水平化される。起動・リセット直後は判定に約 1 秒かかり、その間は `ARM rejected: attitude check not passed yet` で拒否される。ずれが残る（機体が傾いて置かれている等）場合は、機体を持ち上げて水平な地面に置き直す（置き直しで再校正される）。
+**ARM できない時**: ARM 操作（RC ボタン・機体ボタン・API）が拒否されると**エラー音（errorTone）が 1 回**鳴り、拒否中は LED が理由を示す（赤低速点滅＝傾き不一致、マゼンタ低速点滅＝待機、青高速点滅＝ペアリング中、シアン低速点滅＝低電圧）。CLI `status` の `prearm` 行は `prearm  : ready` または `prearm  : BLOCKED (tilt mismatch - place level)` のように理由を 1 行で示す（WiFi CLI でも可）。拒否の対象: 校正中（マゼンタ点滅）・低電圧/USB 給電・**ペアリング中**・ベンチ用モータテスト中/テスト後の再水平化待ち（約 1.5 秒）・**地上で姿勢推定が重力とずれている間**（`ARM rejected: attitude estimate disagrees with gravity`）は ARM 拒否（CLI `status`
+で確認可）。ずれは IDLE_GROUND 中に自動で（滞在ごとに1回）推定器リセットで再水平化される。起動・リセット直後は判定に約 1 秒かかり、その間は `ARM rejected: attitude check not passed yet` で拒否される。ずれが残る（機体が傾いて置かれている等）場合は、LED が**赤の低速点滅**になる。機体を持ち上げて水平な地面に置き直す（置き直しで再校正される）。リセット/DISARM 直後の約 1 秒（傾き判定待ち）とモータテスト後の約 1.5 秒（再水平化待ち）は**マゼンタの低速点滅**で、動かさずに待つと緑に戻る。
 
 **地上での自動 DISARM**: ARM したまま地上（ARMED_GROUND）でプロペラを回し続け、モータ振動で姿勢推定が重力方向から約 10° 以上ずれて 0.5 秒続くと、機体は自動で DISARM（モータ停止）し、ブザーが DISARM 音を鳴らす（ログ: `Disarmed on ground: attitude estimate disagrees with gravity`）。ACRO/STABILIZE ではスロットルを上げれば状態に関係なく浮くため、傾いた推定で離陸させないための措置。DISARM 後は推定器をリセットして再水平化する（再校正はしない）。判定が通るまでの約 1 秒は ARM できない。しきい値は暫定（`safety.tilt_check.max_deg/persist_s/lpf_s`）。
 
@@ -427,13 +431,14 @@ The ARM/DISARM distinction on the ground lives on the StampS3 LED (ARMED_GROUND 
   (release the spring stick to unlock) after takeoff or an in-flight switch into ALT/POS.
   STABILIZE/ACRO keep the manual throttle takeoff (throttle = thrust, centre = off).
 
-### System state (StampS3 built-in LED, GPIO21), priority: low-battery > pairing > calibrating > flight state
+### System state (StampS3 built-in LED, GPIO21), priority: low-battery > pairing > ARM-blocked (ground only: tilt mismatch / wait) > flight state
 
 | State | Colour | Pattern |
 |-------|--------|---------|
 | Low battery (≤ `safety.battery.low_v`) | cyan | slow blink |
 | Pairing (searching) | blue | fast blink |
-| Calibrating (ground, not done; **never completes while moving**) | magenta | slow blink |
+| **Tilt mismatch** (ground; the estimate disagrees with gravity — **pick the craft up and place it level**) | **red** | **slow blink** |
+| **Wait** (ground; calibrating [**never completes while moving**], tilt check pending [~1 s after reset/DISARM], or bench re-level pending [~1.5 s]; **keep still and wait**) | magenta | slow blink |
 | INIT | white | solid |
 | IDLE_GROUND (ready) | green | solid |
 | IDLE_HELD | cyan | fast blink |
@@ -442,6 +447,8 @@ The ARM/DISARM distinction on the ground lives on the StampS3 LED (ARMED_GROUND 
 | FLYING | green | solid |
 | LANDING | orange | slow blink |
 | Critical hardware failure (halt) | red | fast blink |
+
+Red **slow** blink (tilt mismatch: recoverable by re-placing) is distinct from red **fast** blink (Critical failure = halt, or the autotune-failed cue). Solid green (IDLE_GROUND) means all pre-arm gates pass, i.e. ARM is possible.
 
 ### Event → Sound
 
@@ -454,6 +461,7 @@ The ARM/DISARM distinction on the ground lives on the StampS3 LED (ARMED_GROUND 
 | Pairing start | pairingTone | C5→G5 |
 | Low battery | lowBatteryWarning | repeated |
 | Error (failsafe) | errorTone | low/long |
+| **ARM rejected** (an ARM request was refused by a pre-arm gate; same tone for every reason — the reason is on the LED and in the `status` `prearm` line) | errorTone | low/long |
 
 Mute via `sound off` (NVS-saved); LED brightness via `led <0-255>`.
 
@@ -475,7 +483,7 @@ identical to the legacy vehicle.**
 - **Takeoff**: throttle > 0.5 in ARMED_GROUND → TAKEOFF → FLYING (ToF airborne). **Landing**: throttle
   down / DISARM.
 
-ARM is refused while calibrating, on low/USB power, while pairing, or until the attitude check has passed on the ground (about 1 s after boot/reset; refused while it disagrees with gravity) (check `status`). A craft left ARMED on the ground with spinning props whose estimate drifts ~10 deg or more from gravity for 0.5 s is disarmed automatically (the estimator is then reset to level; no recalibration, since the craft may be tilted); thresholds are provisional (`safety.tilt_check.*`).
+ARM is refused while calibrating, on low/USB power, while pairing, during/after a bench motor test (re-level pending), or until the attitude check has passed on the ground (about 1 s after boot/reset; refused while it disagrees with gravity). A refused ARM request (RC button, on-board click or API) plays the error tone once, and while refused the StampS3 LED shows why (red slow blink = tilt mismatch: place the craft level; magenta slow blink = wait and keep still; blue fast = pairing; cyan slow = low battery). `status` prints one line: `prearm  : ready` or `prearm  : BLOCKED (tilt mismatch - place level)`. A craft left ARMED on the ground with spinning props whose estimate drifts ~10 deg or more from gravity for 0.5 s is disarmed automatically (the estimator is then reset to level; no recalibration, since the craft may be tilted); thresholds are provisional (`safety.tilt_check.*`).
 
 **Flip:** sent via the Tello-style network API (`flip <l/r/f/b>`, UDP :8889 — see
 `tools/stampfly_py/` and `docs/architecture/tello-api-reference.md`). Requires

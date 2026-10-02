@@ -331,6 +331,19 @@ private:
     /// 現在の状態をsystem.modeトピックに発行する
     void publishMode();
 
+    /// Evaluate the pre-arm gates; return the first failing one (ArmBlock::None = all pass).
+    /// The single source of the ARM-refusal reason (requestArm acts on it, update publishes it).
+    /// ARM 前判定を評価し、最初に落ちたものを返す（None=全て通る）。ARM 拒否理由の唯一の源
+    /// （requestArm が従い、update が発行する）。
+    ArmBlock evaluateArmBlock() const;
+
+    /// Log the refusal reason / 拒否理由をログ出力
+    void logArmRejected(ArmBlock reason) const;
+
+    /// Re-evaluate evaluateArmBlock() and republish system_mode if it changed
+    /// evaluateArmBlock() を再評価し、変化があれば system_mode を再発行
+    void refreshArmBlock();
+
     /// Publish current PairingState to the pairing_state topic (comm/notify read it)
     /// 現在の PairingState を pairing_state トピックに発行する（comm/notify が読む）
     void publishPairingState();
@@ -349,6 +362,10 @@ private:
     // ベンチ用モータテストが走り、推定器の再水平化が未実施（setBenchRelevelPending 参照）。
     // requestArm() の ARM 前判定が読む。
     bool bench_relevel_pending_ = false;
+
+    // Last published ARM-block reason (SystemMode.arm_block); republished on change only.
+    // 最後に発行した ARM 阻害理由（SystemMode.arm_block）。変化時のみ再発行。
+    ArmBlock arm_block_ = ArmBlock::None;
 
     // Comm-loss failsafe timer (requirements §9: hover hold 3 s → auto landing).
     // Armed by handleAlert(COMM_LOST) while FLYING; update() lands once the grace

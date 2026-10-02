@@ -217,6 +217,22 @@ void quatToEulerDeg(const float q[4], float& roll, float& pitch, float& yaw)
     yaw   = std::atan2(2.0f * (w * z + x * y), 1.0f - 2.0f * (y * y + z * z)) * kRad2Deg;
 }
 
+/// Short operator-facing description of an ARM-block reason (for `status`).
+/// ARM 阻害理由の操作者向け短い説明（`status` 用）。
+const char* armBlockDescription(sf::ArmBlock block)
+{
+    switch (block) {
+        case sf::ArmBlock::Pairing:      return "pairing in progress";
+        case sf::ArmBlock::Battery:      return "battery low / USB power";
+        case sf::ArmBlock::Calibrating:  return "boot calibration running - keep still";
+        case sf::ArmBlock::BenchRelevel: return "bench motor test / re-level - wait";
+        case sf::ArmBlock::TiltPending:  return "tilt check pending - keep still";
+        case sf::ArmBlock::TiltMismatch: return "tilt mismatch - place level";
+        case sf::ArmBlock::None:
+        default:                         return "none";
+    }
+}
+
 /// `status` — flight state / mode / arm, pairing, attitude, altitude, battery, sensors.
 /// `status` — フライト状態/モード/ARM、ペアリング、姿勢、高度、電池、センサ。
 int cmd_status(int argc, char** argv)
@@ -242,17 +258,18 @@ int cmd_status(int argc, char** argv)
     std::printf("sensors : present=0x%02X healthy=0x%02X\n",
                 health.present_mask, health.healthy_mask);
 
-    // Pre-arm facts: the ESP_LOGW "ARM rejected" lines go to the serial console only,
-    // so show the inputs of the pre-arm gates here — this is what a WiFi (TCP) CLI
-    // user sees to understand why ARM is refused.
-    // ARM 前判定の事実: ESP_LOGW の "ARM rejected" はシリアルにしか出ないため、ARM 前判定の
-    // 入力をここに表示する — WiFi（TCP）CLI の利用者が ARM 拒否の理由を知る手段。
-    const sf::SystemStatus system = sf::system_status.latest();
-    const char* tilt_check = system.attitude_mismatch ? "MISMATCH"
-                           : (system.attitude_verified ? "ok" : "pending");
-    std::printf("prearm  : calibrated %s, tilt check %s, motor test %s\n",
-                system.calibrated ? "yes" : "NO", tilt_check,
-                sf::motor_test.latest().active ? "ACTIVE" : "idle");
+    // Pre-arm: the ESP_LOGW "ARM rejected" lines go to the serial console only, so show the
+    // published reason (StateManager::evaluateArmBlock, SystemMode.arm_block) — what a WiFi
+    // (TCP) CLI user sees to understand why ARM is refused. Read-only fact display.
+    // ARM 前判定: ESP_LOGW の "ARM rejected" はシリアルにしか出ないため、発行済みの理由
+    // （StateManager::evaluateArmBlock、SystemMode.arm_block）を表示する — WiFi（TCP）CLI の
+    // 利用者が ARM 拒否の理由を知る手段。読み取り専用の事実表示。
+    const auto block = static_cast<sf::ArmBlock>(mode.arm_block);
+    if (block == sf::ArmBlock::None) {
+        std::printf("prearm  : ready\n");
+    } else {
+        std::printf("prearm  : BLOCKED (%s)\n", armBlockDescription(block));
+    }
     return 0;
 }
 
