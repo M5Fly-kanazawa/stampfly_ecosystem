@@ -195,6 +195,7 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 | FLIP → IDLE_GROUND | DISARM操作・`emergency`・IMPACT（既存の無条件停止と同じ） | モーター停止、ESKFリセット、ブザー(disarm音)。`EstimatorCmd::ResumeAttitudeCorrection` も発行（FlipComplete は発行しない） |
 | LANDING → IDLE_GROUND | 離着陸MGR: シーケンス終了 | モーター停止、ESKFリセット、~~バイアスフリーズ~~（注3で見送り）。接地検出＝本当の DISARM |
 | ARMED_GROUND → IDLE_GROUND | （リザーブ） | モーター停止、ブザー(disarm音) |
+| IDLE_GROUND 滞在中: ベンチ用モータテスト終了（遷移なしのイベント, 注9） | — | `MOTOR_TEST_SETTLE_US` 静穏後に ESKF 全リセット＋再キャリブレーション（置き直しと同じ処置） |
 
 「リザーブ」は実装・テスト時に必要に応じて追加する。
 
@@ -274,6 +275,8 @@ TAKEOFF / LANDING / FLIP はいずれも「有限時間の専用シーケンス�
 - **`landing_descent_rate_` 等のparam化**は今後（現状は config 定数）。
 - **検証:** SILS `alt_auto_takeoff`/`pos_auto_takeoff`（ARM 起動・スプール中 duty=0・0.5m 捕捉）、`alt_recenter_gate`（離陸後 Case A: 上げスティック無視→中央通過で有効）、`alt_inflight_switch`（飛行中 Case B: STABILIZE→ALT_HOLD 切替でジャンプなし）、`api_flight`（0.5m 統一）。**実機未検証。**
 - **実装中の落とし穴2件（実測図つき解説）:** スロットルの中央は raw 3072（norm 0.5）で 2048 でない／TakeoffClimb の速度クランプは対称（±0.3m/s）でないと地上ブラインド窓の行き過ぎを捕捉できない。詳細・実 SILS トラジェクトリ図は [`alt_hold_takeoff_findings.md`](alt_hold_takeoff_findings.md) を参照。
+
+**注9（ベンチ用モータテスト後の再水平化 — 状態遷移を伴わないクラスA リセット）:** CLI のモータテスト（`motor test/all/sweep`, disarmed 限定）は機体を IDLE_GROUND に置いたままプロペラを回すため、IMU が揺すられて姿勢推定が accel-attitude の χ² ゲートを超えて外れうる。外れると、それを直す accel 補正自体が棄却され続けて自己復帰しない（IDLE_HELD → IDLE_GROUND の置き直しと同じ latch）。実機で確認: 10% スイープ後、accel は水平なのに推定は roll 16° / pitch −33° でなお増加。このまま ARM すると傾いた推定で離陸する。対策として StateTask が `motor_test` を監視し、テスト終了後に `MOTOR_TEST_SETTLE_US`（1.5 s）静穏が続いた時点で IDLE_GROUND なら `EstimatorCmd::Reset` と `Recalibrate` を発行する（リセットの時期を決めるのは状態機械、という architecture §4 の原則どおり）。静穏時間は `MOTOR_SWEEP_REST_US`（1 s）より長く、`motor sweep` ではモータ間の休止ごとではなく最後に1回だけ発動する。その時点で手持ち（IDLE_HELD）なら破棄する（置き直しが同じ処置を行うため）。**テスト実行中および再水平化の発行前は ARM を拒否する（ARM 前判定3）:** 拒否しないと ARM で IDLE_GROUND を離れて再水平化が破棄され、傾いた推定のまま飛ぶ（Issue #4）。StateTask が `StateManager::setBenchRelevelPending()` で待ち状態を渡し、再水平化の発行時に解除する（以後は校正完了判定＝判定2 がキャリブ完了まで ARM を阻む）。
 
 ### ペアリング状態遷移（PairingState — FlightState と並行）
 

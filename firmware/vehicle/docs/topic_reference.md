@@ -117,7 +117,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 20 | `pairing_complete` | `PairingComplete` | Latest | 1 | CommTask (ESP-NOW recv / NVS load) | StateTask | event | comm の現在のバインド状態（bound + 学習/復元した送信機 MAC）。起動時の NVS 復元と Pairing 成立の両方を運ぶ |
 | 21 | `sensor_snapshot` | `SensorSnapshot` | Latest | 1 | ImuTask (processAsyncSensors) | CLI (`sensor`), Telemetry | 400Hz | mag/baro/tof/flow の最新生値ミラー（SPSC キューを奪わず監視できるよう ImuTask が複製）|
 | 22 | `ui_command` | `UiCommand` | Queue | 4 | CLI (`sound`/`led`) | NotifyTask | event | UI 設定指令（ブザー mute / LED 輝度）。将来 WiFi/UDP からも注入可 |
-| 23 | `motor_test` | `MotorTest` | Latest | 1 | CLI (`motor`) | ControlTask | event | ベンチ用モータ単体テスト（**disarmed 限定**、active/motor_id/duty/expiry_us、既定 inactive）|
+| 23 | `motor_test` | `MotorTest` | Latest | 1 | CLI (`motor`) | ControlTask, StateTask（テスト後の再水平化）, StateManager(pre-arm) | event | ベンチ用モータ単体テスト（**disarmed 限定**、active/motor_id/duty/expiry_us、既定 inactive）|
 
 ### 3.2 予約 Topic（実体定義済み・producer 未配線、または未定義）
 
