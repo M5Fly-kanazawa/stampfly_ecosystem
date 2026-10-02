@@ -695,6 +695,7 @@ void StateTask(void* pvParameters)
         // @subscriber motor_test
         // @design architecture.md §4 — reset consolidation (state machine decides WHEN) [OK]
         // @design detailed_design.md §3 注9 — re-level after a bench motor test          [OK]
+        // @design detailed_design.md §3 注9 — ARM blocked until re-level issued (StateManager) [OK]
         // =====================================================================
         {
             const sf::MotorTest bench = sf::motor_test.latest();
@@ -702,14 +703,18 @@ void StateTask(void* pvParameters)
             if (bench.active) {
                 bench_test_pending        = true;
                 bench_test_quiet_since_us = bench_now_us;
+                g_state_manager.setBenchRelevelPending(true);   // block ARM / ARM を阻止
             } else if (bench_test_pending &&
                        (bench_now_us - bench_test_quiet_since_us) >= config::MOTOR_TEST_SETTLE_US) {
                 bench_test_pending = false;
+                // Cleared at issue time: from here the calibrated gate blocks ARM.
+                // 発行時に解除: 以後は calibrated 判定が ARM を阻む。
+                g_state_manager.setBenchRelevelPending(false);
                 if (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) {
                     sf::estimator_command.publish(
-                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), bench_now_us});
+                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), bench_now_us, 0});
                     sf::estimator_command.publish(
-                        {static_cast<uint8_t>(sf::EstimatorCmd::Recalibrate), bench_now_us});
+                        {static_cast<uint8_t>(sf::EstimatorCmd::Recalibrate), bench_now_us, 0});
                     ESP_LOGI(TAG, "Bench motor test ended → estimator reset + recalibration");
                 }
             }

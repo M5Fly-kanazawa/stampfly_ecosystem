@@ -137,11 +137,28 @@ bool StateManager::requestArm()
         return false;
     }
 
-    // --- Pre-arm gate 3: sensor health — DEFERRED ------------------------------------
+    // --- Pre-arm gate 3: no bench motor test active / re-level pending ----------------
+    // A CLI bench motor test (DISARMED only) can shake the attitude estimate off; StateTask
+    // re-levels it (reset + recalibrate) once the motors have been quiet. Until then ARM is
+    // refused, otherwise the state would leave IDLE_GROUND, the owed re-level would be
+    // dropped and the craft would fly on a tilted estimate. Once the re-level is issued the
+    // flag clears and gate 2 (calibrated) covers the window until calibration finishes.
+    // ARM 前判定3: ベンチ用モータテストが実行中/再水平化待ちでないこと。CLI のモータテスト
+    // （disarmed 限定）は姿勢推定を外しうる。StateTask がモータ静穏後に再水平化（リセット＋
+    // 再キャリブ）する。それまで ARM を拒否しないと、状態が IDLE_GROUND を離れて再水平化が
+    // 破棄され、傾いた推定のまま飛ぶ。再水平化の発行でフラグは落ち、以後はキャリブ完了まで
+    // 判定2（calibrated）が担う。
+    // @design detailed_design.md §3 注9 — ARM rejected during bench test / re-level [OK]
+    if (motor_test.latest().active || bench_relevel_pending_) {
+        ESP_LOGW(TAG, "ARM rejected: bench motor test active / re-level pending");
+        return false;
+    }
+
+    // --- Pre-arm gate 4: sensor health — DEFERRED ------------------------------------
     // A meaningful health gate needs sf_board::sensor_present() (the M2b per-sensor
     // presence infrastructure, which still returns false today), so it is wired with
     // that work, not here.
-    // ARM 前判定3: センサ健全性 — 繰延。意味ある判定には sf_board::sensor_present()
+    // ARM 前判定4: センサ健全性 — 繰延。意味ある判定には sf_board::sensor_present()
     // （M2b の per-sensor presence、現状 false）が要るため、その作業で配線する。
 
     ESP_LOGI(TAG, "ARM accepted");

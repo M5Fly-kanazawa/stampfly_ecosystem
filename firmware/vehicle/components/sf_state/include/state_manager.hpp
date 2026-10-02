@@ -144,6 +144,16 @@ public:
     /// 離陸検出通知（ARMED_GROUND → TAKEOFF）
     void notifyTakeoff();
 
+    /// Tell the manager that a bench motor test has run and its estimator re-level is
+    /// still owed (set by StateTask). While set, or while a motor test is active, ARM is
+    /// rejected so the craft never flies on an estimate shaken off by the test.
+    /// ベンチ用モータテストが走り、推定器の再水平化が未実施であることを通知する
+    /// （StateTask が設定）。設定中、またはモータテスト実行中は ARM を拒否し、テストで
+    /// 外れた推定のまま飛ばないようにする。
+    ///
+    /// @design detailed_design.md §3 注9 — ARM gated on bench-test re-level [OK]
+    void setBenchRelevelPending(bool pending) { bench_relevel_pending_ = pending; }
+
     /// Notify takeoff complete (TAKEOFF → FLYING)
     /// 離陸完了通知（TAKEOFF → FLYING）
     void notifyTakeoffComplete();
@@ -278,6 +288,12 @@ private:
     // Pairing state (parallel to FlightState). Owned here; comm reflects it.
     // ペアリング状態（FlightState と並行）。ここが所有し comm が反映する。
     PairingState pairing_state_ = PairingState::NotPaired;
+
+    // A bench motor test has run and its estimator re-level is still owed
+    // (see setBenchRelevelPending). Read by the pre-arm gate in requestArm().
+    // ベンチ用モータテストが走り、推定器の再水平化が未実施（setBenchRelevelPending 参照）。
+    // requestArm() の ARM 前判定が読む。
+    bool bench_relevel_pending_ = false;
 
     // Comm-loss failsafe timer (requirements §9: hover hold 3 s → auto landing).
     // Armed by handleAlert(COMM_LOST) while FLYING; update() lands once the grace
