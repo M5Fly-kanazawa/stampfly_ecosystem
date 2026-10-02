@@ -201,17 +201,11 @@ void PidController::loadParams()
     params::get_float("flip.rate_roll_dps",     flip_.config.rate_roll_dps);
     params::get_float("flip.rate_pitch_dps",    flip_.config.rate_pitch_dps);
     params::get_float("flip.rate_ramp_rps2",    flip_.config.rate_ramp_rps2);
-    int32_t flip_profile_mode = 0;
-    params::get_int("flip.profile_mode", flip_profile_mode);
-    flip_.config.profile_mode = static_cast<int>(flip_profile_mode);
-    params::get_float("flip.ff_gain",           flip_.config.ff_gain);
     params::get_float("flip.boost_ms",          flip_.config.boost_ms);
     params::get_float("flip.thrust_boost_ratio",   flip_.config.thrust_boost_ratio);
     params::get_float("flip.thrust_spin_hi_ratio", flip_.config.thrust_spin_hi_ratio);
     params::get_float("flip.thrust_lo_n",       flip_.config.thrust_lo_n);
     params::get_float("flip.angle_a_deg",       flip_.config.angle_a_deg);
-    params::get_float("flip.motor_lag_ms",      flip_.config.motor_lag_ms);
-    params::get_float("flip.brake_margin",      flip_.config.brake_margin);
     params::get_float("flip.recover_boost_tilt_deg", flip_.config.recover_boost_tilt_deg);
     params::get_float("flip.recover_rate_limit_dps", flip_.config.recover_rate_limit_dps);
     params::get_float("flip.spin_yaw_torque_limit_nm", flip_.config.spin_yaw_torque_limit_nm);
@@ -988,17 +982,6 @@ ControlOutput PidController::compute(
     output.torque[0] = rate_roll_.compute(rate_sp_roll, gyro_rate.x, dt);
     output.torque[1] = rate_pitch_.compute(rate_sp_pitch, gyro_rate.y, dt);
     output.torque[2] = rate_yaw_.compute(rate_sp_yaw, gyro_rate.z, dt);
-    // Flip feedforward: the sequencer provides the torque its commanded angular
-    // acceleration needs (zero outside Spin/Brake or when flip.ff_gain = 0); the same
-    // single rate loop adds it to its PID output and applies the same torque limit
-    // (INV-1: no parallel loop).
-    // 宙返りのフィードフォワード: 列生成器が指令角加速度に要るトルクを提供し（Spin/Brake
-    // 以外または flip.ff_gain = 0 ではゼロ）、同じ唯一のレートループが PID 出力に足して
-    // 同じトルク上限を掛ける（INV-1: 並列ループなし）。
-    if (flip_spinning) {
-        output.torque[0] = fmaxf(-spin_limit, fminf(spin_limit, output.torque[0] + flip_out.torque_ff[0]));
-        output.torque[1] = fmaxf(-spin_limit, fminf(spin_limit, output.torque[1] + flip_out.torque_ff[1]));
-    }
     // While the flip spins (rate-only phases), cap the yaw torque: yaw needs
     // tau/(4*kappa) of thrust per motor (0.075 N at the 1.23 mNm clamp — as much
     // as the whole per-motor collective), so a small yaw-rate error saturating

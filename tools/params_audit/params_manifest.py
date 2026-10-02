@@ -735,12 +735,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             expected=EXPECTED_IXX,
             note="SPEC_INERTIA['roll']",
         ),
-        ParamCheck(
-            file="firmware/vehicle/components/sf_controller_pid/include/flip_sequencer.hpp",
-            regex=r'kInertiaRollKgM2\s*=\s*([0-9eE.+-]+)f;',
-            expected=EXPECTED_IXX,
-            note="FlipSequencer::kInertiaRollKgM2 (flip feedforward torque)",
-        ),
     ],
     "Iyy": [
         ParamCheck(
@@ -766,12 +760,6 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
             regex=r'"pitch":\s*([0-9eE.+-]+),\s*"yaw"',
             expected=EXPECTED_IYY,
             note="SPEC_INERTIA['pitch']",
-        ),
-        ParamCheck(
-            file="firmware/vehicle/components/sf_controller_pid/include/flip_sequencer.hpp",
-            regex=r'kInertiaPitchKgM2\s*=\s*([0-9eE.+-]+)f;',
-            expected=EXPECTED_IYY,
-            note="FlipSequencer::kInertiaPitchKgM2 (flip feedforward torque)",
         ),
     ],
     "Izz": [

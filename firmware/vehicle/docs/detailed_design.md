@@ -227,10 +227,11 @@ INV-2「シーケンスは有限時間で、終了は単一の判定で通常則
 | フェーズ | 出口（先に成立したもの） | 次 |
 |---------|--------------------------|----|
 | Boost | `flip.boost_ms` 経過 | Spin |
-| Spin | φ ≥ φ_brake（通常） / ジャイロ飽和（計測 \|ω\| > `flip.gyro_abort_dps` が 3 周期連続）/ `flip.spin_timeout_ms`（直接 Recover） | Brake / Brake / Recover |
-| Brake | **\|ω\| ≤ `flip.handoff_rate_dps`（φ に関係なく）** / φ ≥ `flip.handoff_force_deg` / **`flip.brake_timeout_ms`** | Recover |
+| Spin | 計画の減速開始点（指令が掃いた角 + ω_cmd²/(2·`flip.brake_ramp_rps2`) ≥ 2π。計測角が指令角の 0.5 倍未満なら回転が始まっていないとして Recover へ）（通常） / ジャイロ飽和（計測 \|ω\| > `flip.gyro_abort_dps` が 3 周期連続）/ `flip.spin_timeout_ms`（直接 Recover） | Brake / Brake / Recover |
+| Brake | **\|ω\| ≤ `flip.handoff_rate_dps`（φ に関係なく）** / φ ≥ `flip.handoff_force_deg`（360°） / **`flip.brake_timeout_ms`** | Recover |
 | Recover | **傾き ≤ `flip.recover_boost_tilt_deg` かつ vz ≥ 0** / `flip.recover_timeout_ms` | Done → FLYING |
 
+- **レート指令は「計画 360° プロファイル」（2026-10-02、flip-maneuver-plan.md §5.7）。** 加速ランプ `flip.rate_ramp_rps2`（145 rad/s²）でピーク上限（`flip.rate_roll_dps` 1500 / `flip.rate_pitch_dps` 1400）まで上げ、平坦部、減速ランプ `flip.brake_ramp_rps2`（145 rad/s²）で下げる。減速開始は計測でなく指令の積分角で決めるので面積がちょうど 360° になり、アクチュエータの遅れは波形を時間方向にずらすだけで回転量を変えない。必要トルク I·α（ロール 1.3 mN·m / ピッチ 1.9 mN·m）は上限 7 mN·m よりはるかに低く、レートループは線形のまま（実機の失敗は、300/500 rad/s² の台形がループを上限に張り付かせ 1909 °/s まで行き過ぎたこと）。推力の切替角は計画上の減速開始角を使う。フィードフォワードは比較して採らなかった（§5.7）。レート PID は通常飛行のままで、宙返り中に変わるのはトルク上限（`flip.spin_torque_limit_nm`）だけ（INV-1）。
 - **Brake は必ず終了する。** 旧い「φ ≥ 290° 条件」（ピッチ回転でオイラー角が 270° 手前まで 180° 側の枝にいるための待ち）は廃止（`flip.handoff_min_deg` 削除）。Recover の姿勢誤差を、オイラー角でなくクォータニオン由来の傾き誤差（`FlipSequencer::levelError`）にしたため、どの角度でも姿勢ループへ渡せる。
 - **Recover は任意の姿勢（反転を含む）から水平に戻す。** 既存の姿勢 PID（INV-1）に、重力方向の最短回転ベクトル（小さな傾きでオイラー roll/pitch と一致、180° で折り返さない）を測定値として与える。出力上限は FLIP 中だけ `flip.recover_rate_limit_dps`（既定 600 °/s）に上げる（通常の 3 rad/s = 172 °/s では 155° の立て直しに約 0.9 s かかる）。ヨー保持は傾き ≤ `recover_boost_tilt_deg` のときだけ（傾いた機体のオイラーヨーは無意味）。
 - **Recover の集合推力**は傾きで決める: ほぼ水平は増強、`flip.angle_a_deg`（60°）までは `thrust_spin_hi`（差動トルク余裕）、それを超えたら上向き成分 cos(tilt) に比例して縮め、90° 以上（反転）は `flip.thrust_lo_n`。反転中の推力は下向きのため。姿勢の P 則は遅く（kp = 5 /s）トルクをほとんど要さないので、低推力でも立て直しは遅くならない（SILS `flip_abort_recover` の試行: 反転 168° から 0.2 N でも 0.03 N でも同じ傾き履歴、0.03 N の方が落下が遅い）。

@@ -77,6 +77,9 @@ static int tests_failed = 0;
 
 static constexpr float kDegToRad = 3.14159265358979f / 180.0f;
 static constexpr float kSimDt    = 1.0f / 400.0f;   // matches ControlTask's 400Hz rate / ControlTaskの400Hzと一致
+// Synthetic duty->rate lag of the test plant [s] (the hardware flip log shows ~33-37 ms in the large-signal flip).
+// テストプラントの合成 duty→レート遅れ [s]（実機の宙返りログでは大信号で約 33〜37 ms）。
+static constexpr float kPlantLagS = 0.030f;
 
 /// A "steady, safe hover" Input — every ready() gate passes. Tests that want
 /// to exercise one specific gate start from this and violate only that field.
@@ -108,13 +111,13 @@ struct FlipSimResult {
 
 /// Drive a FlipSequencer to completion (or a safety timeout) against a
 /// synthetic first-order-lag plant on the rotation axis: gyro chases the
-/// sequencer's rate_sp with time constant config.motor_lag_ms (or stays
+/// sequencer's rate_sp with time constant kPlantLagS (or stays
 /// frozen at 0 if `plant_follows` is false, simulating a stalled rotation —
 /// test_flip_spin_timeout below).
 ///
 /// FlipSequencer を完了（または安全タイムアウト）まで駆動する。回転軸に
 /// 合成一次遅れプラントを想定: ジャイロは列生成器の rate_sp を時定数
-/// config.motor_lag_ms で追う（`plant_follows` が false なら 0 に凍結 —
+/// kPlantLagS で追う（`plant_follows` が false なら 0 に凍結 —
 /// 回転が進まない状況を模す。下の test_flip_spin_timeout 参照）。
 static FlipSimResult simulateFlip(FlipSequencer::Config cfg, FlipDirection dir,
                                   bool plant_follows, float vz_up_mps,
@@ -125,7 +128,7 @@ static FlipSimResult simulateFlip(FlipSequencer::Config cfg, FlipDirection dir,
     seq.start(dir, 0.0f, 1.5f);
 
     const int axis = (dir == FlipDirection::Right || dir == FlipDirection::Left) ? 0 : 1;
-    const float tau_s = cfg.motor_lag_ms * 0.001f;
+    const float tau_s = kPlantLagS;
     const float alpha = 1.0f - expf(-kSimDt / tau_s);
     float gyro[3] = {0.0f, 0.0f, 0.0f};
 
@@ -184,21 +187,17 @@ TEST(flip_full_sequence_reaches_done)
 }
 
 // =============================================================================
-// (1b) Planned profile mode (Config::profile_mode = 1): the COMMANDED rate
-//      profile sweeps exactly 360 deg whatever the measurement does, and the
-//      ramp-up/plateau/ramp-down shape follows from the two ramps and the peak
-//      limit (flip-maneuver-plan.md section 5.7).
-// (1b) Planned プロファイルモード（Config::profile_mode = 1）: 計測がどうであれ
-//      「指令」レートのプロファイルがちょうど 360° を掃く。加速・平坦・減速の形は
-//      2 つのランプとピーク上限から決まる（plan 5.7 節）。
+// (1b) The planned rate profile: the COMMANDED rate profile sweeps exactly
+//      360 deg whatever the measurement does, and the ramp-up/plateau/ramp-down
+//      shape follows from the two ramps and the peak limit
+//      (flip-maneuver-plan.md section 5.7).
+// (1b) 計画レートプロファイル: 計測がどうであれ「指令」レートのプロファイルが
+//      ちょうど 360° を掃く。加速・平坦・減速の形は 2 つのランプとピーク上限から
+//      決まる（plan 5.7 節）。
 // =============================================================================
 struct PlannedProfile {
-    float swept_deg = 0.0f;      // integral of the commanded rate, Spin + Brake / 指令レートの積分
-    float peak_dps = 0.0f;       // largest commanded rate / 指令レートの最大
-    float plateau_s = 0.0f;      // time spent within 0.5 % of the peak / ピークの 0.5 % 以内にいた時間
-    float torque_ff_up = 0.0f;   // feedforward torque on the axis, first ramp-up cycle / 加速ランプ 1 周期目の FF トルク
-    float torque_ff_down = 0.0f; // same, last Brake cycle with a non-zero command / Brake 最終の非ゼロ指令周期
-    float torque_ff_other = 0.0f; // max |ff| on the two other axes / 他の 2 軸の FF の最大値
+    float swept_deg = 0.0f;   // integral of the commanded rate, Spin + Brake / 指令レートの積分
+    float peak_dps = 0.0f;    // largest commanded rate / 指令レートの最大
 };
 
 /// Run a planned flip against an ideal plant (gyro = previous command) and record
@@ -206,7 +205,6 @@ struct PlannedProfile {
 /// 理想プラント（ジャイロ = 直前の指令）で Planned の宙返りを走らせ、指令プロファイルを記録する。
 static PlannedProfile runPlannedProfile(FlipSequencer::Config cfg, FlipDirection dir)
 {
-    cfg.profile_mode = 1;
     cfg.handoff_rate_dps = 50.0f;     // let the whole ramp-down run before Recover / Recover の前に減速ランプ全体を走らせる
     cfg.handoff_force_deg = 360.0f;
     FlipSequencer seq;
@@ -216,9 +214,7 @@ static PlannedProfile runPlannedProfile(FlipSequencer::Config cfg, FlipDirection
 
     PlannedProfile out;
     float gyro = 0.0f;
-    bool first_spin_cycle = true;
     float swept_rad = 0.0f;
-    float last_nonzero_ff = 0.0f;
     for (int cycle = 0; cycle < 2000; ++cycle) {
         FlipSequencer::Input in = nominalInput();
         in.gyro[axis] = gyro;
@@ -231,15 +227,9 @@ static PlannedProfile runPlannedProfile(FlipSequencer::Config cfg, FlipDirection
         if (rotating) {
             swept_rad += fabsf(o.rate_sp[axis]) * kSimDt;
             out.peak_dps = fmaxf(out.peak_dps, fabsf(o.rate_sp[axis]) / kDegToRad);
-            if (first_spin_cycle) { out.torque_ff_up = o.torque_ff[axis]; first_spin_cycle = false; }
-            if (o.rate_sp[axis] != 0.0f) last_nonzero_ff = o.torque_ff[axis];
-            for (int k = 0; k < 3; ++k) {
-                if (k != axis) out.torque_ff_other = fmaxf(out.torque_ff_other, fabsf(o.torque_ff[k]));
-            }
         }
         gyro = o.attitude_loop ? 0.0f : o.rate_sp[axis];
     }
-    out.torque_ff_down = last_nonzero_ff;
     out.swept_deg = swept_rad / kDegToRad;
     return out;
 }
@@ -280,7 +270,6 @@ TEST(flip_planned_profile_sweeps_exactly_360_deg)
 TEST(flip_planned_profile_keeps_rotation_under_actuator_lag)
 {
     FlipSequencer::Config cfg;
-    cfg.profile_mode = 1;
     cfg.rate_ramp_rps2 = 145.0f;
     cfg.brake_ramp_rps2 = 145.0f;
     const FlipSimResult r = simulateFlip(cfg, FlipDirection::Left, true, 0.5f, 2.0f);
@@ -290,47 +279,15 @@ TEST(flip_planned_profile_keeps_rotation_under_actuator_lag)
 }
 
 // =============================================================================
-// (1c) Feedforward torque: ff_gain * I_axis * d(rate_cmd)/dt on the flip axis only,
-//      positive while the command ramps up, negative while it ramps down, zero when off.
-// (1c) フィードフォワードトルク: 回転軸にだけ ff_gain × I_axis × d(rate_cmd)/dt。
-//      指令の加速中は正、減速中は負、無効のときはゼロ。
+// (2) The planned profile does not depend on the measurement: a gyro that lags
+//     much more than the nominal plant does not move the point where Brake starts,
+//     and a lower peak limit gives a longer plateau, so Brake starts at a LARGER
+//     commanded angle (flip-maneuver-plan.md section 5.7).
+// (2) 計画プロファイルは計測に依存しない: 公称より大きく遅れるジャイロでも Brake の開始点は
+//     動かず、ピーク上限を下げると平坦部が長くなり、Brake は「より大きな」指令角で始まる
+//     （plan 5.7 節）。
 // =============================================================================
-TEST(flip_feedforward_torque_matches_inertia_times_ramp)
-{
-    FlipSequencer::Config cfg;
-    cfg.rate_ramp_rps2 = 145.0f;
-    cfg.brake_ramp_rps2 = 145.0f;
-    const float inertia_roll  = 9.16e-6f;    // SSOT Ixx / SSOT の Ixx
-    const float inertia_pitch = 13.3e-6f;    // SSOT Iyy / SSOT の Iyy
-
-    cfg.ff_gain = 1.0f;
-    const PlannedProfile roll = runPlannedProfile(cfg, FlipDirection::Right);
-    ASSERT_NEAR(roll.torque_ff_up, inertia_roll * 145.0f, 0.02f * inertia_roll * 145.0f);
-    ASSERT_NEAR(roll.torque_ff_down, -inertia_roll * 145.0f, 0.02f * inertia_roll * 145.0f);
-    ASSERT_TRUE(roll.torque_ff_other == 0.0f);
-
-    const PlannedProfile pitch = runPlannedProfile(cfg, FlipDirection::Forward);   // -q direction: command and torque negative / -q 方向: 指令もトルクも負
-    ASSERT_NEAR(pitch.torque_ff_up, -inertia_pitch * 145.0f, 0.02f * inertia_pitch * 145.0f);
-    ASSERT_NEAR(pitch.torque_ff_down, inertia_pitch * 145.0f, 0.02f * inertia_pitch * 145.0f);
-
-    cfg.ff_gain = 0.5f;
-    const PlannedProfile half = runPlannedProfile(cfg, FlipDirection::Right);
-    ASSERT_NEAR(half.torque_ff_up, 0.5f * inertia_roll * 145.0f, 0.02f * inertia_roll * 145.0f);
-
-    cfg.ff_gain = 0.0f;
-    const PlannedProfile off = runPlannedProfile(cfg, FlipDirection::Right);
-    ASSERT_TRUE(off.torque_ff_up == 0.0f && off.torque_ff_down == 0.0f);
-}
-
-// =============================================================================
-// (2) phi_brake is computed from the MEASURED rate every cycle: dropping
-//     rate_roll_dps (the flip peak) to 1200 must brake LATER — at a LARGER
-//     rotation angle — than the 1500 default (flip-maneuver-plan.md §3.2/§7).
-// (2) phi_brake は毎周期「計測」レートから計算される: rate_roll_dps
-//     （フリップピーク）を1200へ下げると、1500の既定より「遅く」
-//     （より大きな回転角で）減速に入る（plan §3.2/§7）。
-// =============================================================================
-TEST(flip_lower_peak_rate_brakes_at_larger_angle)
+TEST(flip_planned_brake_start_depends_on_the_command_not_the_measurement)
 {
     FlipSequencer::Config cfg_default;   // rate_roll_dps = 1500
     FlipSequencer::Config cfg_slow;
@@ -735,8 +692,7 @@ int main()
     run_flip_full_sequence_reaches_done();
     run_flip_planned_profile_sweeps_exactly_360_deg();
     run_flip_planned_profile_keeps_rotation_under_actuator_lag();
-    run_flip_feedforward_torque_matches_inertia_times_ramp();
-    run_flip_lower_peak_rate_brakes_at_larger_angle();
+    run_flip_planned_brake_start_depends_on_the_command_not_the_measurement();
     run_flip_spin_timeout_skips_brake();
     run_flip_gyro_abort_triggers_brake();
     run_flip_gyro_abort_ignores_single_sample_and_normal_overshoot();

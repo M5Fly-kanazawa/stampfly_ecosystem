@@ -82,29 +82,47 @@ public:
     // NVS 不要）。
     // =========================================================================
     struct Config {
-        // Rate-command peak, per rotation axis [deg/s] (param flip.rate_roll_dps
-        // / flip.rate_pitch_dps). Under the ramp command below, the MEASURED
-        // peak stays <=1700 deg/s (plan §5.3 v3 sweep); pitch is lower because
-        // Iyy is 1.45x Ixx and needs more deceleration margin.
-        // 回転軸別のレート指令ピーク [deg/s]（param flip.rate_roll_dps /
-        // flip.rate_pitch_dps）。下のランプ指令下で「計測」ピークは1700deg/s
-        // 以下（plan §5.3 v3掃引）。ピッチが低いのは Iyy が Ixx の1.45倍で
-        // 減速余裕を優先するため。
+        // Rate-profile peak LIMIT, per rotation axis [deg/s] (param flip.rate_roll_dps
+        // / flip.rate_pitch_dps). The rate command is a PLANNED profile whose area is
+        // exactly 360 deg (see rate_ramp_rps2 below); this caps its peak. A limit above
+        // the triangle peak sqrt(2*pi/(1/(2*a_up) + 1/(2*a_down))) (1729 deg/s at 145
+        // rad/s^2) gives a pure triangle, a lower limit adds a plateau. The MEASURED peak
+        // is ~8 % above the command (SILS fitted plant 2026-10-02: 1615 deg/s for 1500),
+        // so the limits keep it well under the gyro range (2000) and abort (1950) lines.
+        // レートプロファイルのピーク「上限」、回転軸別 [deg/s]（param flip.rate_roll_dps /
+        // flip.rate_pitch_dps）。レート指令は面積がちょうど 360° の「計画」プロファイル
+        // （下の rate_ramp_rps2 参照）で、これはそのピークを抑える。三角形のピーク
+        // sqrt(2π/(1/(2 a_up) + 1/(2 a_down)))（145 rad/s² で 1729 deg/s）より高い上限は
+        // 純粋な三角形、低い上限は平坦部が付く。「計測」ピークは指令より約 8 % 高い
+        // （SILS フィット済みプラント 2026-10-02: 指令 1500 で 1615 deg/s）ので、上限は
+        // ジャイロのレンジ（2000）と打ち切り（1950）に十分な余裕を残す値にしてある。
         float rate_roll_dps  = 1500.0f;
         float rate_pitch_dps = 1400.0f;
 
-        // Rate-setpoint ramp — the angular ACCELERATION OF THE COMMAND itself
-        // (not a control gain), used for both the Spin ramp-up and the Brake
-        // ramp-down [rad/s^2] (param flip.rate_ramp_rps2). A ramp beats a step
-        // here: less mixer saturation and less altitude loss for the same
-        // rotation (plan §5.3/§7 item 1 — this replaces the plan's earlier
-        // brake_gain/k_b formula with a single alpha_cmd used both ways).
-        // レート設定点のランプ — 「指令自体」の角加速度（制御ゲインではない）。
-        // Spin の立上げと Brake の立下げ両方に使う [rad/s^2]
-        // （param flip.rate_ramp_rps2）。同じ回転でもステップよりランプの方が
-        // ミキサー飽和・高度損失とも少ない（plan §5.3/§7-1 —
-        // brake_gain/k_b 式を、両方向に使う単一の alpha_cmd に置き換えた）。
-        float rate_ramp_rps2 = 300.0f;
+        // Rate-profile ramp-up: the angular ACCELERATION OF THE COMMAND itself (not a
+        // control gain) [rad/s^2] (param flip.rate_ramp_rps2). The command is a
+        // PLANNED profile (the owner's factory firmware does the same): ramp up at
+        // this rate to the peak, optional plateau, ramp down at brake_ramp_rps2, with
+        // the area fixed to 2*pi in advance (Brake starts when the swept command angle
+        // plus rate^2/(2*brake_ramp_rps2) reaches 2*pi, see brakeDue()). The slope is
+        // chosen so the torque it needs, I*alpha (1.3 mN*m roll / 1.9 mN*m pitch at 145),
+        // stays far below spin_torque_limit_nm: the rate loop then stays linear and an
+        // actuator lag only shifts the measured waveform in time, the area is kept. The
+        // earlier closed-loop trapezoid (300/500 rad/s^2, brake at a measured angle) drove
+        // the loop to the torque limit and overshot to 1909 deg/s on the first hardware
+        // flip (2026-10-02, flip-maneuver-plan.md section 5.7).
+        // レートプロファイルの加速ランプ: 「指令自体」の角加速度（制御ゲインではない）
+        // [rad/s²]（param flip.rate_ramp_rps2）。指令は「計画」プロファイル（オーナーの
+        // 工場出荷ファームも同方式）: この傾きでピークまで上げ、必要なら平坦部、
+        // brake_ramp_rps2 で下げる。面積は事前に 2π に固定する（掃いた指令角
+        // ＋ rate²/(2·brake_ramp_rps2) が 2π に達したら Brake、brakeDue() 参照）。傾きは
+        // 必要トルク I·α（145 でロール 1.3 mN·m / ピッチ 1.9 mN·m）が
+        // spin_torque_limit_nm を大きく下回るように選ぶ: レートループは線形のままで、
+        // アクチュエータの遅れは計測波形を時間方向にずらすだけで面積は保たれる。以前の
+        // 閉ループ台形（300/500 rad/s²、計測角で Brake）はループをトルク上限に張り付かせ、
+        // 最初の実機宙返り（2026-10-02）で 1909 deg/s まで行き過ぎた
+        // （flip-maneuver-plan.md 5.7 節）。
+        float rate_ramp_rps2 = 145.0f;
 
         // Boost duration [ms] (param flip.boost_ms): pre-spin climb so the
         // craft has upward momentum to spend while inverted. Altitude loss
@@ -157,26 +175,6 @@ public:
         // これを過ぎると推力ベクトルの上向き成分が乏しく、集合推力にトルク
         // 余裕を割く価値が薄れる。
         float angle_a_deg = 60.0f;
-
-        // Motor response lag used in the brake-angle lookahead below [ms]
-        // (param flip.motor_lag_ms) — matches the mixer/motor time constant
-        // used elsewhere in this firmware.
-        // 減速角の先読み計算に使うモータ応答遅れ [ms]（param flip.motor_lag_ms）
-        // — ファーム他所のミキサー/モータ時定数と一致。
-        float motor_lag_ms = 24.0f;   // 16 ms motor ODE lag + ~8-15 ms measured transport delay (SILS --motor-delay 10 study) / モータ ODE 16 ms + 実機同定の伝送遅れ 8〜15 ms
-
-        // Brake-angle safety factor (param flip.brake_margin): the stopping
-        // angle is computed with brake_margin * rate_ramp_rps2 as the achievable
-        // deceleration, so braking starts EARLIER than the ideal ramp needs.
-        // SILS api_flip (2026-09-16) showed the pitch axis (Iyy 1.45x roll)
-        // still turning at ~950 deg/s when it reached 360 deg with margin 1.0,
-        // overshooting to -31 deg and kicking the craft sideways under boost.
-        // 減速角の安全係数（param flip.brake_margin）: 達成できる減速度を
-        // brake_margin × rate_ramp_rps2 として制動角を計算し、理想のランプより
-        // 早めに減速を始める。SILS api_flip（2026-09-16）で、係数 1.0 だとピッチ軸
-        // （慣性がロールの 1.45 倍）が 360° 到達時にまだ約 950 °/s で回っており、
-        // −31° まで行き過ぎて増強推力で横に蹴り出された。
-        float brake_margin = 1.0f;
 
         // Recover thrust is boosted only while the true tilt is below this
         // angle (param flip.recover_boost_tilt_deg); when still tilted, the
@@ -232,52 +230,17 @@ public:
         // 大きいピッチ軸が 360° 以内で減速するのに必要（SILS 2026-09-16）。
         float spin_torque_limit_nm = 7.0e-3f;
 
-        // Brake ramp-down of the rate command [rad/s^2] (param
-        // flip.brake_ramp_rps2), separate from the accel ramp above: braking
-        // may use the full spin_torque_limit_nm authority, and a faster brake
-        // shortens the inverted time. Also the deceleration assumed by the
-        // brake-angle lookahead. SILS 2026-09-16: with the 300 rad/s^2 ramp the
-        // pitch axis reached 383 deg before stopping.
-        // レート指令の減速ランプ [rad/s²]（param flip.brake_ramp_rps2）。加速
-        // ランプとは別: 減速は spin_torque_limit_nm の権限をフルに使ってよく、
-        // 速い減速は反転時間を短くする。減速角の先読みで仮定する減速度でもある。
-        // SILS 2026-09-16: 300 rad/s² のランプではピッチ軸が 383° まで回った。
-        float brake_ramp_rps2 = 500.0f;
-
-        // Rate-profile mode (param flip.profile_mode): how the Spin -> Brake
-        // switch and the profile area are decided.
-        //   0 = BrakeAngle: closed-loop trapezoid. The command ramps to the peak at
-        //       rate_ramp_rps2 and Brake starts when the MEASURED angle reaches
-        //       phi_brake (brakeAngleDeg(), look-ahead motor_lag_ms).
-        //   1 = Planned: the profile is fixed in advance so its area is exactly
-        //       360 deg: ramp up at rate_ramp_rps2 to the peak, plateau, ramp down at
-        //       brake_ramp_rps2; the peak is the smaller of the rate_*_dps limit and
-        //       the triangle peak sqrt(2*pi / (1/(2*a_up) + 1/(2*a_down))), and the
-        //       plateau fills the rest of the area. Brake starts on TIME. A lagging
-        //       actuator only shifts the measured waveform in time, so the rotation
-        //       is preserved (the owner's factory firmware does the same).
-        // レートプロファイルのモード（param flip.profile_mode）: Spin→Brake の切替と
-        // プロファイルの面積をどう決めるか。
-        //   0 = BrakeAngle: 閉ループの台形。指令は rate_ramp_rps2 でピークへ上がり、
-        //       「計測」角が phi_brake（brakeAngleDeg()、先読み motor_lag_ms）に達したら Brake。
-        //   1 = Planned: 面積がちょうど 360° になるようプロファイルを事前に決める。
-        //       rate_ramp_rps2 でピークへ上げ、平坦部、brake_ramp_rps2 で下げる。ピークは
-        //       rate_*_dps の上限と三角形のピーク sqrt(2π / (1/(2 a_up) + 1/(2 a_down))) の
-        //       小さい方で、平坦部が残りの面積を埋める。Brake は「時間」で始まる。アクチュエータ
-        //       の遅れは計測波形を時間方向にずらすだけで回転量は保たれる（オーナーの工場出荷
-        //       ファームも同じ方式）。
-        int profile_mode = 0;
-
-        // Feedforward gain on the rate loop during Spin/Brake (param flip.ff_gain):
-        // torque_ff = ff_gain * I_axis * d(rate_cmd)/dt, added to the rate PID output
-        // by PidController (INV-1: the flip only provides the term, the one rate loop
-        // applies it). 0 = off, 1 = the torque the nominal inertia needs for the
-        // commanded angular acceleration. During the flip only.
-        // Spin/Brake 中のレートループへのフィードフォワードゲイン（param flip.ff_gain）:
-        // torque_ff = ff_gain × I_axis × d(rate_cmd)/dt を PidController がレート PID の
-        // 出力に足す（INV-1: 宙返りは項を提供するだけで、適用するのは唯一のレートループ）。
-        // 0 = 無効、1 = 指令角加速度に公称慣性が要するトルク。宙返り中のみ。
-        float ff_gain = 0.0f;
+        // Ramp-down of the rate command [rad/s^2] (param flip.brake_ramp_rps2), the
+        // same shape as rate_ramp_rps2 mirrored (symmetric triangle by default, like the
+        // factory firmware's ~150 rad/s^2). The 7 mN*m limit delivers only ~440 rad/s^2 on
+        // the hardware roll axis (first flip log), so a ramp near that (the old 500) cannot
+        // be tracked; 145 needs 1.3 mN*m (roll) / 1.9 mN*m (pitch).
+        // レート指令の減速ランプ [rad/s²]（param flip.brake_ramp_rps2）。rate_ramp_rps2 を
+        // 鏡写しにした形（既定は対称三角形、工場出荷ファームの約 150 rad/s² と同じ）。
+        // 実機のロール軸は 7 mN·m の上限で約 440 rad/s² しか出せない（最初の宙返りログ）ので、
+        // それに近いランプ（旧 500）は追従できない。145 が要るのはロール 1.3 mN·m /
+        // ピッチ 1.9 mN·m。
+        float brake_ramp_rps2 = 145.0f;
 
         // Post-flip settle window (param flip.settle_ms / flip.settle_tilt_deg):
         // for settle_ms after FlipComplete the position loop's tilt command is
@@ -301,22 +264,26 @@ public:
         // below handoff_rate_dps — at ANY rotation angle (the old "and past
         // 290 deg" gate is gone: it stranded an aborted flip in Brake for good,
         // hardware flip test 2026-10-02) — or unconditionally past
-        // handoff_force_deg (backstop if the rate never decays), or after
-        // brake_timeout_ms (backstop in time; Brake cannot last forever).
+        // handoff_force_deg (360: the rotation is complete; backstop if the rate never
+        // decays), or after brake_timeout_ms (backstop in time; Brake cannot last forever).
+        // Under the planned profile the measured rate is still ~250 deg/s when the angle
+        // reaches 360 (the lag of the waveform), so the 360 deg gate normally ends Brake.
         // 姿勢ループへの引き渡し条件（plan §3.2/§3.3/§3.5）: 「計測」レートが
         // handoff_rate_dps 未満に落ちたら、回転角に「関係なく」Brake→Recover
         // （旧「290° 超えかつ」の条件は廃止: 打ち切り後の機体を Brake に
         // 永久に取り残した — 実機宙返り試験 2026-10-02）。または handoff_force_deg
-        // を過ぎたら無条件（レートが落ちない場合の安全弁）、または brake_timeout_ms
-        // 経過（時間側の安全弁。Brake は永久には続かない）。
+        // を過ぎたら無条件（360°: 回転完了。レートが落ちない場合の安全弁）、または
+        // brake_timeout_ms 経過（時間側の安全弁。Brake は永久には続かない）。計画プロファイルでは
+        // 角度が 360° に達した時点でも計測レートは約 250 deg/s 残る（波形の遅れ）ため、通常は
+        // 360° の判定で Brake が終わる。
         float handoff_rate_dps  = 300.0f;
-        float handoff_force_deg = 350.0f;
-        float brake_timeout_ms  = 300.0f;    // Brake never settles (normal brake takes ~70-100 ms) / Brake が収束しない（通常の減速は約 70〜100 ms）
+        float handoff_force_deg = 360.0f;
+        float brake_timeout_ms  = 300.0f;    // Brake never settles (normal brake takes ~200 ms) / Brake が収束しない（通常の減速は約 200 ms）
 
         // Abort timeouts and limits (plan §3.5).
         // 打ち切りのタイムアウト・上限（plan §3.5）。
         float recover_timeout_ms = 800.0f;   // Recover never levels out and climbs  / Recover が水平化＋上昇に至らない
-        float spin_timeout_ms    = 700.0f;   // Spin never reaches phi_brake       / Spin が phi_brake に到達しない
+        float spin_timeout_ms    = 700.0f;   // Spin never reaches the planned brake point / Spin が計画の減速開始点に到達しない
 
         // Gyro-saturation abort (param flip.gyro_abort_dps): protection against
         // the IMU saturating, NOT against the commanded spin overshooting. The
@@ -389,11 +356,6 @@ public:
         float pitch_sp;    // [rad] — meaningful only if attitude_loop (always 0) / 同上
         bool  hold_yaw;    // true: hold the yaw captured at start() / true: start() 時のヨーを保持
         float thrust_n;    // [N] vertical-channel override, every phase / 鉛直チャネル上書き、全フェーズ共通
-        // [N*m] rate-loop feedforward torque R,P,Y, added to the rate PID output by
-        // PidController (zero unless attitude_loop is false and Config::ff_gain > 0).
-        // [N·m] レートループへのフィードフォワードトルク R,P,Y。PidController がレート PID
-        // 出力に足す（attitude_loop=false かつ Config::ff_gain > 0 のときだけ非ゼロ）。
-        float torque_ff[3];
     };
 
     /// Begin a flip in `dir`, capturing the yaw/height to return to.
@@ -506,7 +468,7 @@ private:
     float start_height_m_ = 0.0f; // [m] captured at start(), telemetry only / start()時に取り込み（テレメトリ用）
     float phi_rad_    = 0.0f;     // [rad] accumulated rotation angle, always >=0 / 積算回転角、常に0以上
     float rate_cmd_   = 0.0f;     // [rad/s] ramped rate setpoint, signed / ランプ済みレート設定点（符号付き）
-    float planned_phi_rad_ = 0.0f; // [rad] integral of the COMMANDED rate (Planned mode), always >=0 / 「指令」レートの積分（Planned モード）、常に0以上
+    float cmd_phi_rad_ = 0.0f;    // [rad] angle swept by the COMMANDED rate so far, always >=0 / 指令レートがここまでに掃いた角、常に0以上
     float phase_elapsed_s_ = 0.0f;
     int   gyro_over_count_ = 0;   // consecutive Spin cycles above gyro_abort_dps / gyro_abort_dps 超えの連続周期数
     FlipResult result_ = FlipResult::None;
@@ -530,6 +492,16 @@ private:
     // 「φ_b=φ_brake-20°」）。固定の幾何マージンであり調整対象でないため
     // Config に含めない — plan §3.2 参照。
     static constexpr float kBrakePrepMarginDeg = 20.0f;
+    // Sanity gate on the planned profile: when the planned brake point is reached the
+    // MEASURED angle must be at least this fraction of the COMMANDED angle, otherwise the
+    // rotation never picked up (stalled actuator, wrong axis) and the flip is aborted
+    // instead of braking a rotation that is not there. A healthy flip is at ~0.86 (the
+    // waveform lag of ~34 ms at ~1500 deg/s), so 0.5 leaves a wide margin.
+    // 計画プロファイルの健全性の判定: 計画の減速開始点に達したとき「計測」角が「指令」角の
+    // この割合以上でなければ、回転が始まっていない（アクチュエータ停止・軸違い）ので、
+    // 存在しない回転を減速せず打ち切る。健全な宙返りは約 0.86（約 1500 deg/s で波形の遅れ
+    // 約 34 ms）なので、0.5 は十分な余裕。
+    static constexpr float kMinMeasuredToCommandedAngle = 0.5f;
     // BMI270 full-scale range configured by the IMU driver [deg/s]; the gyro
     // abort limit (Config::gyro_abort_dps) must stay below it. Samples in a row
     // above the limit before the abort trips (2.5 ms/cycle -> 7.5 ms).
@@ -539,14 +511,6 @@ private:
     static constexpr float kGyroRangeDps = 2000.0f;
     static constexpr int   kGyroAbortConsecutiveSamples = 3;
     static constexpr float kPi = 3.14159265358979f;
-    // Body moments of inertia for the feedforward torque [kg*m^2]: SSOT
-    // control/models/stampfly_physical.yaml constants.Ixx / Iyy (checked against it by
-    // `sf params check` through tools/params_audit/params_manifest.py).
-    // フィードフォワードトルク用の機体慣性モーメント [kg·m²]: SSOT
-    // control/models/stampfly_physical.yaml の constants.Ixx / Iyy（`sf params check` が
-    // tools/params_audit/params_manifest.py 経由で照合する）。
-    static constexpr float kInertiaRollKgM2  = 9.16e-6f;
-    static constexpr float kInertiaPitchKgM2 = 13.3e-6f;
     // |gravity-in-body xy| below this: tilt axis undefined (level or exactly inverted).
     // 機体座標の重力 xy 成分がこれ未満: 傾き軸が不定（水平かちょうど反転）。
     static constexpr float kAxisUndefinedEpsilon = 1.0e-6f;
@@ -557,18 +521,15 @@ private:
     void  accumulatePhi(const Input& input);
     float rampRate(float current, float target, float dt, float ramp_rps2) const;
     float axisRateDps() const;
-    float brakeAngleDeg(float measured_rate_dps) const;
-    bool  planned() const { return config.profile_mode == 1; }
-    bool  plannedBrakeDue() const;
-    float plannedBrakeStartDeg() const;
-    float feedforwardTorque(float accel_rps2) const;
+    bool  brakeDue() const;
+    float brakeStartDeg() const;
     float spinThrustN(float phi_deg, float phi_brake_deg) const;
     float recoverThrustN(const Input& input) const;
     bool  withinSteadyBounds(const Input& input) const;
     bool  gyroSaturated(float measured_dps);
     void  markAbort(FlipResult cause);
     Output outputAttitudeLevel(float thrust_n) const;
-    Output outputRotating(float rate_cmd, float rate_accel_rps2, float thrust_n) const;
+    Output outputRotating(float rate_cmd, float thrust_n) const;
     Output updateBoost(const Input& input);
     Output updateSpin(const Input& input);
     Output updateBrake(const Input& input);

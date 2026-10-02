@@ -8,6 +8,14 @@
 # attitude (quaternion tilt error, not Euler angles). flip.gyro_abort_dps=1000 (the parameter's
 # minimum) trips the abort early in the spin ramp, so the flip is cut short at about 90 deg
 # and must come back to level and FLYING, then land.
+# The ramps are set back to the old 300 / 500 rad/s^2 (--param below): with the planned profile's
+# gentle 145 rad/s^2 the abort at 1000 deg/s comes later in the spin (~150 deg tilt at the stop, an
+# unrecoverable free-fall inversion from 1.1 m), which is not what this scenario tests. The
+# planned profile itself never trips the 1950 deg/s abort (peak ~1620 deg/s).
+# ランプは旧値 300 / 500 rad/s² に戻す（下の --param）: 計画プロファイルの緩い 145 rad/s² だと
+# 1000 deg/s での打ち切りがスピンの後半になり（停止時の傾き約 150°、1.1 m からの自由落下中の
+# 反転で救えない）、本シナリオの目的ではなくなる。計画プロファイル自体は 1950 deg/s の
+# 打ち切りに掛からない（ピーク約 1620 deg/s）。
 # Not covered here: a flip aborted into a free-fall inversion below ~2 m cannot be saved by any
 # attitude loop (righting from 170 deg takes ~0.4 s, the fall from 1.3 m ~0.5 s) — see
 # docs/plans/flip-maneuver-plan.md §3.5.
@@ -22,7 +30,7 @@
 # ここでは扱わない: 約 2 m 未満での、自由落下中の反転への打ち切りは、どんな姿勢ループでも
 # 救えない（170° からの立て直しに約 0.4 s、1.3 m からの落下は約 0.5 s）— plan §3.5 参照。
 #
-# Run: sf sils scenario simulator/sils/scenarios/flip_abort_recover.scn --target vehicle --duration 37000000 --param flip.enable=1 --param flip.gyro_abort_dps=1000
+# Run: sf sils scenario simulator/sils/scenarios/flip_abort_recover.scn --target vehicle --duration 37000000 --param flip.enable=1 --param flip.gyro_abort_dps=1000 --param flip.rate_ramp_rps2=300 --param flip.brake_ramp_rps2=500
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes
