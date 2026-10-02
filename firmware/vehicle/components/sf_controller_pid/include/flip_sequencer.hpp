@@ -244,6 +244,41 @@ public:
         // SILS 2026-09-16: 300 rad/s² のランプではピッチ軸が 383° まで回った。
         float brake_ramp_rps2 = 500.0f;
 
+        // Rate-profile mode (param flip.profile_mode): how the Spin -> Brake
+        // switch and the profile area are decided.
+        //   0 = BrakeAngle: closed-loop trapezoid. The command ramps to the peak at
+        //       rate_ramp_rps2 and Brake starts when the MEASURED angle reaches
+        //       phi_brake (brakeAngleDeg(), look-ahead motor_lag_ms).
+        //   1 = Planned: the profile is fixed in advance so its area is exactly
+        //       360 deg: ramp up at rate_ramp_rps2 to the peak, plateau, ramp down at
+        //       brake_ramp_rps2; the peak is the smaller of the rate_*_dps limit and
+        //       the triangle peak sqrt(2*pi / (1/(2*a_up) + 1/(2*a_down))), and the
+        //       plateau fills the rest of the area. Brake starts on TIME. A lagging
+        //       actuator only shifts the measured waveform in time, so the rotation
+        //       is preserved (the owner's factory firmware does the same).
+        // レートプロファイルのモード（param flip.profile_mode）: Spin→Brake の切替と
+        // プロファイルの面積をどう決めるか。
+        //   0 = BrakeAngle: 閉ループの台形。指令は rate_ramp_rps2 でピークへ上がり、
+        //       「計測」角が phi_brake（brakeAngleDeg()、先読み motor_lag_ms）に達したら Brake。
+        //   1 = Planned: 面積がちょうど 360° になるようプロファイルを事前に決める。
+        //       rate_ramp_rps2 でピークへ上げ、平坦部、brake_ramp_rps2 で下げる。ピークは
+        //       rate_*_dps の上限と三角形のピーク sqrt(2π / (1/(2 a_up) + 1/(2 a_down))) の
+        //       小さい方で、平坦部が残りの面積を埋める。Brake は「時間」で始まる。アクチュエータ
+        //       の遅れは計測波形を時間方向にずらすだけで回転量は保たれる（オーナーの工場出荷
+        //       ファームも同じ方式）。
+        int profile_mode = 0;
+
+        // Feedforward gain on the rate loop during Spin/Brake (param flip.ff_gain):
+        // torque_ff = ff_gain * I_axis * d(rate_cmd)/dt, added to the rate PID output
+        // by PidController (INV-1: the flip only provides the term, the one rate loop
+        // applies it). 0 = off, 1 = the torque the nominal inertia needs for the
+        // commanded angular acceleration. During the flip only.
+        // Spin/Brake 中のレートループへのフィードフォワードゲイン（param flip.ff_gain）:
+        // torque_ff = ff_gain × I_axis × d(rate_cmd)/dt を PidController がレート PID の
+        // 出力に足す（INV-1: 宙返りは項を提供するだけで、適用するのは唯一のレートループ）。
+        // 0 = 無効、1 = 指令角加速度に公称慣性が要するトルク。宙返り中のみ。
+        float ff_gain = 0.0f;
+
         // Post-flip settle window (param flip.settle_ms / flip.settle_tilt_deg):
         // for settle_ms after FlipComplete the position loop's tilt command is
         // capped at settle_tilt_deg and the yaw torque at
@@ -354,6 +389,11 @@ public:
         float pitch_sp;    // [rad] — meaningful only if attitude_loop (always 0) / 同上
         bool  hold_yaw;    // true: hold the yaw captured at start() / true: start() 時のヨーを保持
         float thrust_n;    // [N] vertical-channel override, every phase / 鉛直チャネル上書き、全フェーズ共通
+        // [N*m] rate-loop feedforward torque R,P,Y, added to the rate PID output by
+        // PidController (zero unless attitude_loop is false and Config::ff_gain > 0).
+        // [N·m] レートループへのフィードフォワードトルク R,P,Y。PidController がレート PID
+        // 出力に足す（attitude_loop=false かつ Config::ff_gain > 0 のときだけ非ゼロ）。
+        float torque_ff[3];
     };
 
     /// Begin a flip in `dir`, capturing the yaw/height to return to.
@@ -466,6 +506,7 @@ private:
     float start_height_m_ = 0.0f; // [m] captured at start(), telemetry only / start()時に取り込み（テレメトリ用）
     float phi_rad_    = 0.0f;     // [rad] accumulated rotation angle, always >=0 / 積算回転角、常に0以上
     float rate_cmd_   = 0.0f;     // [rad/s] ramped rate setpoint, signed / ランプ済みレート設定点（符号付き）
+    float planned_phi_rad_ = 0.0f; // [rad] integral of the COMMANDED rate (Planned mode), always >=0 / 「指令」レートの積分（Planned モード）、常に0以上
     float phase_elapsed_s_ = 0.0f;
     int   gyro_over_count_ = 0;   // consecutive Spin cycles above gyro_abort_dps / gyro_abort_dps 超えの連続周期数
     FlipResult result_ = FlipResult::None;
@@ -498,6 +539,14 @@ private:
     static constexpr float kGyroRangeDps = 2000.0f;
     static constexpr int   kGyroAbortConsecutiveSamples = 3;
     static constexpr float kPi = 3.14159265358979f;
+    // Body moments of inertia for the feedforward torque [kg*m^2]: SSOT
+    // control/models/stampfly_physical.yaml constants.Ixx / Iyy (checked against it by
+    // `sf params check` through tools/params_audit/params_manifest.py).
+    // フィードフォワードトルク用の機体慣性モーメント [kg·m²]: SSOT
+    // control/models/stampfly_physical.yaml の constants.Ixx / Iyy（`sf params check` が
+    // tools/params_audit/params_manifest.py 経由で照合する）。
+    static constexpr float kInertiaRollKgM2  = 9.16e-6f;
+    static constexpr float kInertiaPitchKgM2 = 13.3e-6f;
     // |gravity-in-body xy| below this: tilt axis undefined (level or exactly inverted).
     // 機体座標の重力 xy 成分がこれ未満: 傾き軸が不定（水平かちょうど反転）。
     static constexpr float kAxisUndefinedEpsilon = 1.0e-6f;
@@ -509,13 +558,17 @@ private:
     float rampRate(float current, float target, float dt, float ramp_rps2) const;
     float axisRateDps() const;
     float brakeAngleDeg(float measured_rate_dps) const;
+    bool  planned() const { return config.profile_mode == 1; }
+    bool  plannedBrakeDue() const;
+    float plannedBrakeStartDeg() const;
+    float feedforwardTorque(float accel_rps2) const;
     float spinThrustN(float phi_deg, float phi_brake_deg) const;
     float recoverThrustN(const Input& input) const;
     bool  withinSteadyBounds(const Input& input) const;
     bool  gyroSaturated(float measured_dps);
     void  markAbort(FlipResult cause);
     Output outputAttitudeLevel(float thrust_n) const;
-    Output outputRotating(float rate_cmd, float thrust_n) const;
+    Output outputRotating(float rate_cmd, float rate_accel_rps2, float thrust_n) const;
     Output updateBoost(const Input& input);
     Output updateSpin(const Input& input);
     Output updateBrake(const Input& input);

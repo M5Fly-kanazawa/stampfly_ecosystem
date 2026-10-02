@@ -201,6 +201,16 @@ sils::Plant::Config plant_config_from_env()
     if (const char* batt = std::getenv("SILS_EMU_BATTERY")) {
         if (std::strcmp(batt, "off") == 0) cfg.batt_model_enable = false;
     }
+    // SILS_EMU_BATT_INITIAL_FRAC = initial state of charge [0..1] (Config::batt_initial_frac,
+    // default 1.0 = 4.2 V open-circuit). Used by the flip robustness sweeps to start the
+    // scenario at a lower battery voltage (OCV is linear 3.3 V..4.2 V in SoC).
+    // SILS_EMU_BATT_INITIAL_FRAC = 初期充電率 [0..1]（既定 1.0 = 開放電圧 4.2 V）。宙返りの
+    // 頑健性掃引で低い電池電圧から始めるために使う（OCV は SoC に対し 3.3〜4.2 V の線形）。
+    if (const char* bf = std::getenv("SILS_EMU_BATT_INITIAL_FRAC")) {
+        const float frac = (float)std::atof(bf);
+        if (frac > 0.0f && frac <= 1.0f) { cfg.batt_initial_frac = frac;
+            std::printf("[emu] battery initial SoC override = %.3f\n", cfg.batt_initial_frac); }
+    }
 
     // Opt-in physics knobs (default OFF). SILS_EMU_GROUND_EFFECT = near-floor lift gain;
     // SILS_EMU_TURBULENCE = 1-3 Hz lateral turbulence force [N] (wobble-minimization study).

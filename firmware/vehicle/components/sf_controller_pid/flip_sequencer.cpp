@@ -39,6 +39,7 @@ void FlipSequencer::start(FlipDirection dir, float yaw_now, float height_now)
     start_height_m_ = height_now;
     phi_rad_        = 0.0f;
     rate_cmd_       = 0.0f;
+    planned_phi_rad_ = 0.0f;
     gyro_over_count_ = 0;
     result_         = FlipResult::Ok;   // stays Ok unless an abort path overwrites it / 打ち切り経路が上書きしない限りOkのまま
     enterPhase(Phase::Boost);
@@ -97,6 +98,7 @@ void FlipSequencer::reset()
     phase_elapsed_s_ = 0.0f;
     phi_rad_ = 0.0f;
     rate_cmd_ = 0.0f;
+    planned_phi_rad_ = 0.0f;
 }
 
 // -----------------------------------------------------------------------------
@@ -236,6 +238,47 @@ float FlipSequencer::brakeAngleDeg(float measured_rate_dps) const
 }
 
 // -----------------------------------------------------------------------------
+// plannedBrakeDue / plannedBrakeStartDeg — Planned profile mode (Config::
+// profile_mode = 1). The profile is decided from the COMMAND alone, no measurement:
+// the angle the command has swept so far (planned_phi_rad_) plus the angle the
+// ramp-down from the current command rate would still sweep, rate^2/(2*a_down),
+// reaches 2*pi exactly when the ramp-down must start. While the ramp-up is still
+// running this makes the profile a triangle (peak sqrt(2*pi/(1/(2*a_up) + 1/(2*a_down)))),
+// once the rate limit is hit it adds the plateau that fills the rest of the area. The
+// swept angle is integrated per cycle, so the area is exact for any control period.
+// plannedBrakeDue / plannedBrakeStartDeg — Planned プロファイルモード（Config::
+// profile_mode = 1）。プロファイルは計測を使わず「指令」だけで決める: 指令がここまでに
+// 掃いた角（planned_phi_rad_）と、現在の指令レートからの減速ランプが今後掃く角
+// rate²/(2·a_down) の和がちょうど 2π になる時点が、減速ランプの開始点。加速ランプの
+// 途中でこれに達すれば三角形（ピーク sqrt(2π/(1/(2 a_up) + 1/(2 a_down)))）、レート
+// 上限に先に達すれば残りの面積を埋める平坦部が付く。掃いた角は周期ごとに積分するので、
+// どの制御周期でも面積は正確。
+// -----------------------------------------------------------------------------
+bool FlipSequencer::plannedBrakeDue() const
+{
+    const float stop_angle_rad = (rate_cmd_ * rate_cmd_) / (2.0f * config.brake_ramp_rps2);
+    return planned_phi_rad_ + stop_angle_rad >= 2.0f * kPi;
+}
+
+float FlipSequencer::plannedBrakeStartDeg() const
+{
+    const float stop_angle_rad = (rate_cmd_ * rate_cmd_) / (2.0f * config.brake_ramp_rps2);
+    return (2.0f * kPi - stop_angle_rad) * kRadToDeg;
+}
+
+// -----------------------------------------------------------------------------
+// feedforwardTorque — torque the nominal inertia needs for the commanded angular
+// acceleration on the flip axis: ff_gain * I_axis * accel (Config::ff_gain).
+// feedforwardTorque — 回転軸の指令角加速度に公称慣性が要るトルク:
+// ff_gain × I_axis × accel（Config::ff_gain）。
+// -----------------------------------------------------------------------------
+float FlipSequencer::feedforwardTorque(float accel_rps2) const
+{
+    const float inertia = (axis_ == 0) ? kInertiaRollKgM2 : kInertiaPitchKgM2;
+    return config.ff_gain * inertia * accel_rps2;
+}
+
+// -----------------------------------------------------------------------------
 // spinThrustN — the 3-window thrust schedule of plan §3.2/§5.3: high torque
 // headroom (T_spin_hi) during the accel window and again just before the
 // brake, low collective (T_lo) while coasting inverted in between.
@@ -270,17 +313,20 @@ FlipSequencer::Output FlipSequencer::outputAttitudeLevel(float thrust_n) const
 
 // -----------------------------------------------------------------------------
 // outputRotating — shared Spin/Brake output shape: rate loop driven directly
-// on the rotation axis, the other two axes commanded to zero.
-// outputRotating — Spin/Brake 共通の出力形: レートループを回転軸に直接指令し、
-// 他の2軸はゼロを指令する。
+// on the rotation axis (plus the feedforward torque for its commanded angular
+// acceleration), the other two axes commanded to zero.
+// outputRotating — Spin/Brake 共通の出力形: レートループを回転軸に直接指令し
+// （指令角加速度へのフィードフォワードトルクを添える）、他の2軸はゼロを指令する。
 // -----------------------------------------------------------------------------
-FlipSequencer::Output FlipSequencer::outputRotating(float rate_cmd, float thrust_n) const
+FlipSequencer::Output FlipSequencer::outputRotating(float rate_cmd, float rate_accel_rps2,
+                                                    float thrust_n) const
 {
     Output out{};
     out.attitude_loop = false;
     out.rate_sp[0] = (axis_ == 0) ? rate_cmd : 0.0f;
     out.rate_sp[1] = (axis_ == 1) ? rate_cmd : 0.0f;
     out.rate_sp[2] = 0.0f;
+    out.torque_ff[axis_] = feedforwardTorque(rate_accel_rps2);
     out.hold_yaw = false;
     out.thrust_n = thrust_n;
     return out;
@@ -312,7 +358,8 @@ FlipSequencer::Output FlipSequencer::updateBoost(const Input&)
 // gyro saturation (kGyroAbortConsecutiveSamples cycles above gyro_abort_dps,
 // straight to Brake), reaching phi_brake (normal entry to Brake), or the spin
 // timeout (straight to Recover — no point braking a rotation that never
-// picked up).
+// picked up). Reaching phi_brake is decided by Config::profile_mode: the measured
+// angle (BrakeAngle) or the commanded angle (Planned, plannedBrakeDue()).
 // updateSpin — P2（plan §3.2/§3.5）: レート指令をフリップのピークへランプし、
 // 回転角で推力をスケジュールし、3通りの脱出を監視する: ジャイロ飽和
 // （gyro_abort_dps 超えが kGyroAbortConsecutiveSamples 周期連続、即 Brake へ）、
@@ -322,7 +369,10 @@ FlipSequencer::Output FlipSequencer::updateBoost(const Input&)
 FlipSequencer::Output FlipSequencer::updateSpin(const Input& input)
 {
     const float target_rate = sign_ * axisRateDps() * kDegToRad;
+    const float previous_cmd = rate_cmd_;
     rate_cmd_ = rampRate(rate_cmd_, target_rate, input.dt, config.rate_ramp_rps2);
+    const float accel_rps2 = (rate_cmd_ - previous_cmd) / input.dt;
+    planned_phi_rad_ += sign_ * rate_cmd_ * input.dt;
 
     const float measured_dps = fabsf(input.gyro[axis_]) * kRadToDeg;
     const float thrust_hi = config.thrust_spin_hi_ratio * config.max_thrust_n;
@@ -330,21 +380,22 @@ FlipSequencer::Output FlipSequencer::updateSpin(const Input& input)
     if (gyroSaturated(measured_dps)) {
         markAbort(FlipResult::AbortedGyroLimit);
         enterPhase(Phase::Brake);
-        return outputRotating(rate_cmd_, thrust_hi);
+        return outputRotating(rate_cmd_, accel_rps2, thrust_hi);
     }
 
     const float phi_deg = phi_rad_ * kRadToDeg;
-    const float phi_brake_deg = brakeAngleDeg(measured_dps);
+    const float phi_brake_deg = planned() ? plannedBrakeStartDeg() : brakeAngleDeg(measured_dps);
     const float thrust_n = spinThrustN(phi_deg, phi_brake_deg);
     const float spin_timeout_s = config.spin_timeout_ms * 0.001f;
+    const bool brake_now = planned() ? plannedBrakeDue() : (phi_deg >= phi_brake_deg);
 
-    if (phi_deg >= phi_brake_deg) {
+    if (brake_now) {
         enterPhase(Phase::Brake);
     } else if (phase_elapsed_s_ >= spin_timeout_s) {
         markAbort(FlipResult::AbortedSpinTimeout);
         enterPhase(Phase::Recover);   // rotation never picked up — nothing to brake / 回転が進んでおらず減速の意味がない
     }
-    return outputRotating(rate_cmd_, thrust_n);
+    return outputRotating(rate_cmd_, accel_rps2, thrust_n);
 }
 
 // -----------------------------------------------------------------------------
@@ -393,7 +444,10 @@ bool FlipSequencer::gyroSaturated(float measured_dps)
 // -----------------------------------------------------------------------------
 FlipSequencer::Output FlipSequencer::updateBrake(const Input& input)
 {
+    const float previous_cmd = rate_cmd_;
     rate_cmd_ = rampRate(rate_cmd_, 0.0f, input.dt, config.brake_ramp_rps2);
+    const float accel_rps2 = (rate_cmd_ - previous_cmd) / input.dt;
+    planned_phi_rad_ += sign_ * rate_cmd_ * input.dt;
 
     const float phi_deg = phi_rad_ * kRadToDeg;
     const float measured_dps = fabsf(input.gyro[axis_]) * kRadToDeg;
@@ -406,7 +460,7 @@ FlipSequencer::Output FlipSequencer::updateBrake(const Input& input)
         markAbort(FlipResult::AbortedBrakeTimeout);
         enterPhase(Phase::Recover);
     }
-    return outputRotating(rate_cmd_, config.thrust_spin_hi_ratio * config.max_thrust_n);
+    return outputRotating(rate_cmd_, accel_rps2, config.thrust_spin_hi_ratio * config.max_thrust_n);
 }
 
 // -----------------------------------------------------------------------------

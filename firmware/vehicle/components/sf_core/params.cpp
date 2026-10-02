@@ -601,6 +601,8 @@ namespace param_vars {
     float flip_rate_roll_dps    = 1500.0f;  // [deg/s] measured peak <=1700 under the ramp / ランプ下の計測ピーク1700以下
     float flip_rate_pitch_dps   = 1400.0f;  // [deg/s] lower than roll: Iyy=1.45x Ixx / ロールより低い: Iyy=Ixxの1.45倍
     float flip_rate_ramp_rps2   = 300.0f;   // [rad/s^2] command ramp, both accel and decel / 指令ランプ、加減速共通
+    int32_t flip_profile_mode   = 0;        // [-] 0 = brake-angle closed-loop trapezoid, 1 = planned 360 deg profile / 0=ブレーキ角の閉ループ台形、1=面積360°の計画プロファイル
+    float flip_ff_gain          = 0.0f;     // [-] rate-loop feedforward gain (I*d(rate_cmd)/dt) during Spin/Brake / Spin/Brake中のレートループFFゲイン
     float flip_boost_ms         = 150.0f;   // [ms] pre-spin climb / 反転前の上昇
     float flip_thrust_boost_ratio   = 0.9f;   // [-] Boost/Recover, x max_thrust_ / Boost/Recover、max_thrust_基準
     float flip_thrust_spin_hi_ratio = 0.5f;   // [-] Spin accel/decel windows + Brake / Spin加減速窓+Brake
@@ -932,6 +934,8 @@ static const ParamEntry table[] = {
     {"flip.rate_roll_dps",     ParamType::FLOAT, &flip_rate_roll_dps,    1500.0f, 500.0f, 1900.0f, &notifyControllerReload},
     {"flip.rate_pitch_dps",    ParamType::FLOAT, &flip_rate_pitch_dps,   1400.0f, 500.0f, 1900.0f, &notifyControllerReload},
     {"flip.rate_ramp_rps2",    ParamType::FLOAT, &flip_rate_ramp_rps2,    300.0f,  50.0f, 1000.0f, &notifyControllerReload},
+    {"flip.profile_mode",      ParamType::INT,   &flip_profile_mode,        0.0f,   0.0f,    1.0f, &notifyControllerReload},
+    {"flip.ff_gain",           ParamType::FLOAT, &flip_ff_gain,             0.0f,   0.0f,    2.0f, &notifyControllerReload},
     {"flip.boost_ms",          ParamType::FLOAT, &flip_boost_ms,          150.0f,   0.0f,  500.0f, &notifyControllerReload},
     {"flip.thrust_boost_ratio",   ParamType::FLOAT, &flip_thrust_boost_ratio,   0.9f,  0.5f, 1.0f, &notifyControllerReload},
     {"flip.thrust_spin_hi_ratio", ParamType::FLOAT, &flip_thrust_spin_hi_ratio, 0.5f, 0.2f, 1.0f, &notifyControllerReload},
