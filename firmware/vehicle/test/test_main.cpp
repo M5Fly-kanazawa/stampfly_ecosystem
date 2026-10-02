@@ -338,6 +338,64 @@ TEST(pid_reset)
     ASSERT_NEAR(pid.prev_error, 0.0f, 1e-6f);
 }
 
+TEST(pid_integration_hold)
+{
+    // integration_enabled == false HOLDS the integrator (value kept, not reset) while P
+    // keeps acting; re-enabling resumes accumulation from the held value.
+    // integration_enabled == false は積分器を「保持」する（値は保たれリセットされない）。
+    // P は働き続け、再許可すると保持値から蓄積が再開する。
+    sf::PID pid;
+    pid.kp = 1.0f;
+    pid.ti = 1.0f;
+    pid.td = 0;
+    pid.output_limit = 100.0f;
+
+    // Accumulate, then hold: the integral must stay constant under a constant error.
+    // 蓄積してから保持: 一定誤差の下で積分値は一定のまま。
+    for (int i = 0; i < 5; i++) {
+        pid.compute(1.0f, 0.0f, 0.1f);
+    }
+    const float held_value = pid.integral;
+    ASSERT_TRUE(held_value > 0.0f);
+
+    pid.integration_enabled = false;
+    float out_held = 0.0f;
+    for (int i = 0; i < 20; i++) {
+        out_held = pid.compute(1.0f, 0.0f, 0.1f);
+    }
+    ASSERT_NEAR(pid.integral, held_value, 1e-6f);
+    // P still acts: output = Kp·error + held integral.
+    // P は働く: 出力 = Kp·誤差 + 保持した積分値。
+    ASSERT_NEAR(out_held, 1.0f + held_value, 1e-5f);
+
+    // Re-enable: the integral grows again by kp/ti·e·dt per step (error is steady).
+    // 再許可: 積分値は再び 1 ステップあたり kp/ti·e·dt ずつ増える（誤差は一定）。
+    pid.integration_enabled = true;
+    pid.compute(1.0f, 0.0f, 0.1f);
+    ASSERT_NEAR(pid.integral, held_value + 0.1f, 1e-5f);
+}
+
+TEST(pid_integration_hold_from_reset)
+{
+    // The ground case: reset at ARM, then hold for a long time under a persistent error
+    // — the integrator must stay exactly zero (no windup), while P still responds.
+    // 地上のケース: ARM で reset し、持続誤差の下で長時間保持 — 積分器は厳密に 0 のまま
+    // （巻き上がりなし）で、P は応答する。
+    sf::PID pid;
+    pid.kp = 1.0f;
+    pid.ti = 0.7f;
+    pid.td = 0;
+    pid.output_limit = 100.0f;
+    pid.reset();
+    pid.integration_enabled = false;
+
+    for (int i = 0; i < 10000; i++) {
+        pid.compute(0.01f, 0.0f, 0.0025f);
+    }
+    ASSERT_NEAR(pid.integral, 0.0f, 1e-9f);
+    ASSERT_NEAR(pid.compute(0.01f, 0.0f, 0.0025f), 0.01f, 1e-6f);
+}
+
 TEST(pid_output_limit)
 {
     sf::PID pid;
@@ -994,6 +1052,8 @@ int main()
     run_pid_proportional();
     run_pid_integral();
     run_pid_reset();
+    run_pid_integration_hold();
+    run_pid_integration_hold_from_reset();
     run_pid_output_limit();
     run_pid_derivative_on_measurement();
 

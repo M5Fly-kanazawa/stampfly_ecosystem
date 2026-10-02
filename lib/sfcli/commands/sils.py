@@ -1120,6 +1120,20 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
             # 実際には arm されない間 `duty_max < 0.05` をアサートする。
             return 0.0
         return float(motor[cols].to_numpy().max())
+    if name == "duty_spread_max":         # peak (max - min) across the 4 motors at one instant
+        # An imbalance guard: a wound-up attitude/rate integrator on the ground shows up
+        # as a large duty spread at LOW collective thrust (stab_ground_windup.expect).
+        # 4 モータ間の瞬時 duty 差（最大-最小）の窓内最大。地上で姿勢/レート積分器が
+        # 巻き上がると、低い集合推力で大きな duty 差として現れる（stab_ground_windup.expect）。
+        motor = log.streams.get("motor")
+        if motor is None:
+            return None
+        motor = _window(motor)
+        cols = [c for c in ("duty_FR", "duty_RR", "duty_RL", "duty_FL") if c in motor.columns]
+        if not cols or motor.empty:
+            return None
+        duty = motor[cols].to_numpy()
+        return float(np.max(duty.max(axis=1) - duty.min(axis=1)))
     if name in ("roll_rmse", "pitch_rmse", "att_rmse"):   # G2: est attitude vs truth
         attitude = log.streams.get("attitude")
         if attitude is None:
@@ -1268,7 +1282,7 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               horizontal_drift_max, roll_rmse,
                                               pitch_rmse, att_rmse, alt_rmse, tilt_max,
                                               alt_band, alt_mean, alt_min, alt_max,
-                                              duty_max, yaw_band, flip_roll_deg,
+                                              duty_max, duty_spread_max, yaw_band, flip_roll_deg,
                                               flip_pitch_deg, alt_drop_max,
                                               alt_rise_max, settle_time_s
     """

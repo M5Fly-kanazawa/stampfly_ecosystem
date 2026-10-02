@@ -56,6 +56,16 @@ struct PID {
     // Output limit / 出力制限
     float output_limit = 1.0f;
 
+    // Integration switch / 積分の許可スイッチ
+    // false = HOLD the integrator: the value is kept as-is (NOT reset) and no longer
+    // accumulates, while P and D act normally. Unlike reset() this needs no per-cycle
+    // clearing and loses nothing, so integration resumes seamlessly when re-enabled.
+    // Used to stop floor-constrained windup while the craft cannot respond.
+    // false = 積分器を「保持」: 値はそのまま（リセットしない）で蓄積を止め、P と D は
+    // 通常どおり働く。reset() と違い毎周期のクリアが不要で何も失わないため、再許可すれば
+    // 途切れなく積分が再開する。機体が応答できない間の床拘束による巻き上がり防止に使う。
+    bool integration_enabled = true;
+
     // State / 状態
     float integral = 0;       // Integral accumulator / 積分蓄積値
     float deriv_filter = 0;   // Derivative filter state / 微分フィルタ状態
@@ -120,7 +130,11 @@ struct PID {
         // ">" silently disabled the integrator at the minimum allowed value).
         // Ti が有意なら積分する。境界は含む: パラメータは ti=0.01 ちょうどまで許容され、
         // その値でも積分すべき（">" だと許容最小値で積分が黙って無効化されていた）。
-        if (ti >= 0.01f) {
+        // integration_enabled == false holds the integrator (see the member comment);
+        // prev_error below still tracks, so the trapezoid has no stale term on resume.
+        // integration_enabled == false なら積分器を保持（メンバのコメント参照）。下の
+        // prev_error は更新し続けるので、再開時に台形則へ古い項が残らない。
+        if (integration_enabled && ti >= 0.01f) {
             float i_next = integral + (kp / ti) * (error + prev_error) * (dt * 0.5f);
             float out_test = p_term + i_next + d_term;
             bool push_high = (out_test >  output_limit) && (error > 0);

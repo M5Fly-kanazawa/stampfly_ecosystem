@@ -155,7 +155,7 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 | INIT → IDLE_GROUND | — | キャリブレーション管理を起動 |
 | IDLE_GROUND → IDLE_HELD | （リザーブ） | （リザーブ） |
 | IDLE_HELD → IDLE_GROUND | （リザーブ） | （リザーブ） |
-| IDLE_GROUND → ARMED_GROUND | （リザーブ） | 全PIDリセット、ESKF**姿勢共分散の膨張**（注1）、ブザー(arm音) |
+| IDLE_GROUND → ARMED_GROUND | （リザーブ） | 全PIDリセット（以後 `Grounded` の間は姿勢/レート積分器を**保持**＝積分しない、注11）、ESKF**姿勢共分散の膨張**（注1）、ブザー(arm音) |
 | ARMED_GROUND → TAKEOFF | （リザーブ） | 離着陸MGR: 離陸シーケンス開始、高度目標セット（ALT/POS は `takeoff_target_alt_`=0.5m、注4） |
 | TAKEOFF → FLYING | 離着陸MGR: シーケンス終了 | ESKF位置/速度リセット（注2: クラスB, ImuTask）、~~バイアスフリーズ解除~~（注3で見送り） |
 | サブモード切替（地上/FLYING） | 旧サブモードのコントローラリセット | 新サブモードの初期化（高度/位置キャプチャ＋ALT/POS 進入時は**スロットル再センターロック**（中央に戻すまでスロットル入力を無視）、注4）。地上では制御器の鉛直フェーズ判定（Grounded=推力ゼロ）により ALT/POS 選択でもモータは回らない |
@@ -289,6 +289,12 @@ TAKEOFF / LANDING / FLIP はいずれも「有限時間の専用シーケンス�
 - **ARM 拒否の合図（単一の理由関数、注9・注10 共通）:** ARM 前判定は `StateManager::evaluateArmBlock()` の1か所にあり、最初に落ちた判定を `ArmBlock`（None/Pairing/Battery/Calibrating/BenchRelevel/TiltPending/TiltMismatch）で返す。`requestArm()` はこれに従い、`StateManager::update()` が毎周期評価して**変化時のみ** `system_mode.arm_block` に発行する（NotifyTask と CLI は判定を再計算せずこれを読む。INV: 単一の情報源）。合図: ① StampS3 LED（地上 IDLE_GROUND）— TiltMismatch は**赤の低速点滅**（持ち上げて置き直す）、Calibrating/TiltPending/BenchRelevel は**マゼンタの低速点滅**（動かさず待つ）。Pairing（青高速）・Battery（シアン低速）は従来のパターン。② `requestArm()` が拒否すると `NotifyEvent::ArmRejected` を発行し、NotifyTask が errorTone を鳴らす（呼び出し元は RC ボタンの押下エッジ・機体ボタンのクリック・API verb で全てエッジ起因のため、1要求=1音でレート制限は不要）。③ CLI `status` の `prearm` 行は発行済みの理由を `ready` / `BLOCKED (...)` で表示する（読み取り専用）。IDLE_GROUND 以外（IDLE_HELD 等）での ARM 要求は判定対象外で無音。
 - **注9 との関係:** 注9 は「ベンチ用モータテスト後」を**事象ベース**（`motor_test` の終了＋静穏）で再水平化する。注10 は**状態ベース**（推定が重力と食い違っている事実）で、ARMED_GROUND の地上回転まで含めて検出する。両者は同じ処置（Reset＋Recalibrate）を共有し、ARM 前判定3（注9）と判定4（注10）は独立に ARM を阻む。
 
+**注11（地上 ARM 中は姿勢/レート積分器を保持 — 床拘束による二重巻き上がりの防止。2026-10-02）:** 実機ログ（`ground_spin_stab`、STABILIZE で ARMED_GROUND のまま床の上 34 s、スロットル ≤ 0.13）で、姿勢 PID の積分器が傾き推定の残差（~0.1〜0.3°）を積分し続け（34 s 時点でロールのレート目標 0.237 rad/s）、床に拘束された機体はそのレート目標に追従できないため、レート PID の積分器も巻き上がって**ロールのトルク上限 5.2 mNm に飽和**した（二重巻き上がり）。ミキサーに優先順位はなく、このトルクが小さな集合推力を圧倒して 24〜34 s のモータ duty は FR/RR/RL/FL = 0.009/0.076/0.419/0.467（差 0.458）になり、巻き上がった積分器を持ったまま離床すると離床時にロール数十度（1 軸の粗い見積り）になる。ファームの PID を実ログで再生した検証では、地上で積分を止めると duty 差は 0.026、離床時の積分器は 0 だった。スロットルでのゲート（床値）は 0.25 以上でしか効かず、状態でのゲートと同じ結果になる。
+- **修正:** `VerticalPhase::Grounded` の間、姿勢（roll/pitch）とレート（roll/pitch/yaw）の PID の**積分器を保持**する（`PID::integration_enabled=false`。値はそのまま・リセットしない・蓄積しない。P/D は通常どおり）。毎周期 `PidController::applyGroundIntegratorHold()` が `phase_` から設定する。制御則・パイプラインは全フェーズで同一（INV-1）で、変わるのは積分器の更新可否のみ。
+- **Grounded の範囲:** ARM（`ControllerCmd::Reset`）から `ControllerCmd::TakeoffComplete`（全モードで TAKEOFF→FLYING に発行）まで。ACRO/STABILIZE は手動離陸で `onTakeoff()` を呼ばないため、**TAKEOFF 状態（ToF 空中検知まで）も Grounded のまま**で、離床の過渡は P/D のみで通過する（離床の ToF 0.15 m まで）。ALT/POS は ARM 後約 0.3 s のスプールを経て `onTakeoff()` が TakeoffClimb へ進めるので保持は約 0.3 s。**空中で Grounded に戻る経路はない**（`reset()` は IDLE_GROUND→ARMED_GROUND のみ、モード切替・FLIP・LANDING・通信途絶着陸は `phase_` を Grounded にしない）。
+- **鉛直（ALT/POS）:** `alt_pos_`/`alt_vel_`/`pos_*`/`vel_*` は Grounded の間そもそも `compute()` が呼ばれない（推力ゼロ強制）ため積分しない。変更不要。
+- **検証:** host ユニットテスト `pid_integration_hold*`、SILS `stab_ground_windup`（校正後に加速度バイアス 0.07 m/s² を注入し、STABILIZE で床の上・スロットル 0.13 を 25 s 保持 → 離床。修正前: 地上 duty 差 0.586・離床で転倒（傾き 180°）、修正後: 地上 duty 差 0.006・離床時傾き 1.65°）。**実機未検証**（STABILIZE で地上 30 s 低スロットル後に離陸し `sf log wifi` で duty 差を比較する）。
+
 ### ペアリング状態遷移（PairingState — FlightState と並行）
 
 FlightState とは別の独立状態機械。StateManager が所有する（[`architecture.md`](architecture.md) §4
@@ -347,6 +353,7 @@ public:
 | 項 | 離散化 |
 |----|--------|
 | 積分（trapezoidal）| `integral += (kp/ti) · (error + prev_error) · dt/2` |
+| 積分の保持 | `integration_enabled=false` で積分値を保持（リセットせず蓄積しない、P/D は通常）。`Grounded` の間の姿勢/レート PID に適用（注11）|
 | 微分（bilinear）| α = 2·η·Td/dt、a = (α−1)/(α+1)、b = 2·Td/(dt·(α+1))<br>`d[n] = a·d[n−1] + b·(e[n] − e[n−1])`<br>Kp は filter 外で適用: `d_term = kp · d[n]` |
 
 η = 0.125、Td = 0.01、dt = 0.0025 で α = 1.0、a = 0、b = 4.0 の安定動作。定量的な検証は、新しい物理真値の判定 **G1〜G4**（`../../../simulator/sils/RESET_PLAN.md` §4）で再取得する（旧 SILS での L1〜L4 数値は削除済み・git 履歴に保存）。

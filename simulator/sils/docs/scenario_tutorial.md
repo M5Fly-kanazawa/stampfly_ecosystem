@@ -126,6 +126,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `tilt_max` | rad | 窓内の真値の傾き `hypot(roll, pitch)` の最大値（転倒していないことの確認） |
 | `yaw_band` | rad | 窓内の真値方位（クォータニオンから算出、±180°の継ぎ目でアンラップ済み）のピークtoピーク |
 | `duty_max` | 比（0〜1） | 窓内の4モータ duty の最大値（飽和していないことの確認） |
+| `duty_spread_max` | 比（0〜1） | 窓内で、同時刻の4モータ duty の（最大−最小）の最大値（モータ間の偏り。地上での積分巻き上がり検出に使う） |
 | `horizontal_drift_max` | m | 窓の**開始時点**からの水平面内の最大距離（位置保持の逸脱量） |
 | `flip_roll_deg` | deg（**度**、上記の角度系とは異なりラジアンではない） | 窓内で真値の機体角速度 `rate_x`（ロール p、FRD）を時間積分した符号付き回転角。FLIP（宙返り）の実回転量の確認用（`docs/plans/flip-maneuver-plan.md` §5.2） |
 | `flip_pitch_deg` | deg（度） | 同上、`rate_y`（ピッチ q）を積分 |
@@ -398,6 +399,7 @@ Computed from the streams inside the run's flight-log bundle (the zip-format log
 | `tilt_max` | rad | max true tilt magnitude `hypot(roll, pitch)` over the window (no-tumble check) |
 | `yaw_band` | rad | peak-to-peak true heading (from the truth quaternion, unwrapped across the ±180° seam) over the window |
 | `duty_max` | ratio (0..1) | max of the four motors' duty over the window (saturation check) |
+| `duty_spread_max` | ratio (0..1) | max over the window of (max − min) across the four motors' duty at the same instant (imbalance; used to catch integrator windup on the ground) |
 | `horizontal_drift_max` | m | max planar distance from the window's **start** point |
 | `flip_roll_deg` | deg (**degrees**, unlike the radian-valued angular metrics above) | signed rotation angle from integrating the truth body angular rate `rate_x` (roll p, FRD) over the window in time. For checking the actual rotation of a FLIP maneuver (`docs/plans/flip-maneuver-plan.md` §5.2) |
 | `flip_pitch_deg` | deg | same, integrating `rate_y` (pitch q) |

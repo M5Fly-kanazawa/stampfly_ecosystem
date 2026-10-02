@@ -1,0 +1,27 @@
+# stab_ground_windup.expect — the attitude/rate integrators are held while Grounded, so a
+# residual tilt-estimate error on the floor does not wind up and the craft lifts off clean.
+# Grounded の間は姿勢/レート積分器を保持するので、床の上での傾き推定の残差が巻き上がらず、
+# 機体はきれいに離床する。
+#
+# Measured (2026-10-02). BEFORE the fix (gate disabled): ground duty_spread_max 0.586,
+# duty_max 0.586, then the craft tumbles at liftoff (tilt 180 deg, emergency DISARM; no
+# "Takeoff complete"). AFTER: ground duty_spread_max 0.006, duty_max 0.280, liftoff tilt
+# 1.65 deg. Windows are in seconds: ground [8,29.5], liftoff+climb [30,33.5].
+# 実測（2026-10-02）。修正前（ゲート無効）: 地上 duty_spread_max 0.586、duty_max 0.586、
+# 離床で転倒（傾き 180 deg、緊急 DISARM、"Takeoff complete" なし）。修正後: 地上
+# duty_spread_max 0.006、duty_max 0.280、離床時傾き 1.65 deg。窓は秒: 地上 [8,29.5]、離床+上昇 [30,33.5]。
+exit 0
+log_contains any "ARM accepted"
+log_contains any "Takeoff detected"
+log_contains any "Takeoff complete"            # TAKEOFF → FLYING (baseline tumbles and never gets here)
+log_contains any "DISARM accepted"              # pilot DISARM, not the impact/emergency cut
+order "ARM accepted" "Takeoff detected"
+order "Takeoff detected" "Takeoff complete"
+order "Takeoff complete" "DISARM accepted"
+# On the floor at low throttle the four motors must stay balanced (no wound-up torque).
+# 床の上・低スロットルでは4モータが釣り合っていること（巻き上がったトルクがない）。
+metric duty_spread_max < 0.05 in 8.0 29.5
+metric duty_max < 0.35 in 8.0 29.5
+# Liftoff and climb stay level (the wound-up integrator used to flip the craft).
+# 離床と上昇は水平を保つ（巻き上がった積分器が機体を転倒させていた）。
+metric tilt_max < 0.0873 in 30.0 33.5  # 5.0 deg

@@ -1,0 +1,43 @@
+# stab_ground_windup.scn — STABILIZE ARMED_GROUND integrator windup regression (vehicle, Layer 2)
+# STABILIZE 地上 ARM 中の積分巻き上がり回帰（vehicle, Layer 2）
+#
+# Reproduces the real-log finding (ground_spin_stab.sflog.zip): STABILIZE, ARMED on the
+# floor for 34 s at low throttle. A small residual tilt-estimate error is integrated by the
+# attitude PID into a rate setpoint the floor-constrained craft cannot follow, which winds
+# the rate PID up to its torque limit; the mixer has no priority, so motor duty spreads
+# (hardware: FR/RR/RL/FL = .009/.076/.419/.467) and the craft leaves the floor with a
+# wound-up integrator. The fix holds the attitude/rate integrators while
+# VerticalPhase::Grounded (pid_controller.cpp applyGroundIntegratorHold).
+# 実ログの所見を再現: STABILIZE で床の上に 34 s ARM したまま低スロットル。傾き推定の
+# 小さな残差が姿勢 PID で積分され、床に拘束された機体が追従できないレート設定点となって
+# レート PID をトルク上限まで巻き上げる。ミキサーに優先順位はなく、モータ duty が散らばり
+# （実機 FR/RR/RL/FL = .009/.076/.419/.467）、巻き上がった積分器を持ったまま離床する。
+# 修正は VerticalPhase::Grounded の間、姿勢/レート積分器を保持する。
+#
+# The accel bias is injected AFTER the boot calibration (which would otherwise measure and
+# remove it), so the estimator carries a residual tilt error while sitting on the floor.
+# 加速度バイアスは起動校正の「後」に注入する（校正が測って除去してしまうため）。
+# 結果として機体は床の上で残差の傾き推定誤差を持つ。
+#
+# Sticks are raw 12-bit ADC, centre 2048, throttle_norm = (raw-2048)/2048.
+# raw 2314 -> 0.13 (below the 0.5 takeoff threshold, ~ the real log), raw 3243 -> 0.58 (takeoff).
+# スティックは raw 12bit ADC（中央2048）。raw 2314 -> 0.13（離陸閾値 0.5 未満、実ログ相当）、
+# raw 3243 -> 0.58（離陸）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/stab_ground_windup.scn --target vehicle --duration 40000000
+#
+# Timeline [s]: 0-4 boot calibration, 4-5 ARM, 5 bias injected, 5-30 low throttle on the
+# floor, 30-32 takeoff, 32-33.5 hover, then DISARM.
+# 時系列 [s]: 0-4 起動校正、4-5 ARM、5 バイアス注入、5-30 床の上で低スロットル、
+# 30-32 離陸、32-33.5 ホバー、DISARM。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     4000      50       # A: disarmed 4 s → boot calibration, IDLE_GROUND
+   +    rc   2048  2048   2048    2048  1     1000      50       # B: ARM rising edge → ARMED_GROUND, idle throttle 1 s
+   +    bias 0.0   0.07   0.0     0.0   0.0   0.0                # C: residual accel bias AFTER calibration (tilt-estimate error on the floor)
+   +    rc   2314  2048   2048    2048  1     25000     50       # D: low throttle 0.13 on the floor 25 s (no takeoff)
+   +    rc   3243  2048   2048    2048  1     2000      50       # E: throttle up (>0.5) → TAKEOFF → FLYING, liftoff
+   +    rc   3176  2048   2048    2048  1     1500      50       # F: near-hover, sticks centred
+   +    rc   2048  2048   2048    2048  0     200       50       # release ARM button / ボタン離し
+   +    rc   2048  2048   2048    2048  1     200       50       # press again → DISARM (toggle) / 再押下=DISARM
+   +    rc   2048  2048   2048    2048  0     600       50       # settle disarmed / disarm 後整定

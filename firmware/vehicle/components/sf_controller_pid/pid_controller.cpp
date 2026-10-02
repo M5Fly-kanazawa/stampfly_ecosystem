@@ -251,6 +251,35 @@ void PidController::applyAltVelTiForPhase()
                       ? alt_vel_ti_hover_ : alt_vel_ti_climb_;
 }
 
+// Hold the attitude (roll/pitch) and rate (roll/pitch/yaw) integrators while Grounded.
+// WHY: on the floor the craft cannot follow its setpoints, so any residual tilt-estimate
+// error (~0.1-0.3 deg) is integrated by the attitude PID into a rate setpoint the rate
+// loop can never reach, which winds the rate integrator up to its torque limit (real log
+// ground_spin_stab, STABILIZE ARMED_GROUND 34 s: roll rate-I saturated at 5.2 mNm, motor
+// duty spread 0.458 while thrust was ~0.1). Mixer has no priority, so that torque swamps
+// the thrust and the craft leaves the floor with a wound-up integrator (tens of degrees of
+// roll at liftoff). Holding keeps the P/D action and the zero state set by reset() at ARM.
+// Same pipeline and law in every phase (INV-1): only the integrator update is gated.
+// Grounded ends at TakeoffComplete (STABILIZE/ACRO: ToF airborne; ALT/POS: onTakeoff()).
+// 地上（Grounded）の間は姿勢（roll/pitch）・レート（roll/pitch/yaw）の積分器を保持する。
+// 理由: 床の上では機体は設定点に追従できず、傾き推定の残差（~0.1-0.3 deg）が姿勢PIDで
+// 積分され、レートループが到達できないレート設定点となり、レート積分器をトルク上限まで
+// 巻き上げる（実ログ ground_spin_stab、STABILIZE ARMED_GROUND 34 s: ロールのレート積分が
+// 5.2 mNm で飽和、推力 ~0.1 のままモータ duty 差 0.458）。ミキサーに優先順位はなく、そのトルクが
+// 推力を圧倒し、巻き上がった積分器を持ったまま離床する（離床時にロール数十度）。保持しても
+// P/D 動作と ARM 時の reset() によるゼロ状態は保たれる。全フェーズで同一パイプライン・
+// 同一制御則（INV-1）: 変わるのは積分器の更新可否のみ。Grounded は TakeoffComplete で終わる
+// （STABILIZE/ACRO: ToF 空中検知、ALT/POS: onTakeoff()）。
+void PidController::applyGroundIntegratorHold()
+{
+    const bool integrate = (phase_ != VerticalPhase::Grounded);
+    att_roll_.integration_enabled   = integrate;
+    att_pitch_.integration_enabled  = integrate;
+    rate_roll_.integration_enabled  = integrate;
+    rate_pitch_.integration_enabled = integrate;
+    rate_yaw_.integration_enabled   = integrate;
+}
+
 ControlOutput PidController::compute(
     const StateEstimate& state,
     const CommandSetpoint& setpoint,
@@ -269,6 +298,10 @@ ControlOutput PidController::compute(
     math::Quat q(state.attitude[0], state.attitude[1],
                  state.attitude[2], state.attitude[3]);
     math::Vec3 euler = q.to_euler();
+
+    // Hold the attitude/rate integrators while Grounded (floor-constrained windup).
+    // Grounded の間は姿勢/レート積分器を保持（床拘束による巻き上がり防止）。
+    applyGroundIntegratorHold();
 
     // Flip maneuver (docs/plans/flip-maneuver-plan.md §3/§4/§7).
     //

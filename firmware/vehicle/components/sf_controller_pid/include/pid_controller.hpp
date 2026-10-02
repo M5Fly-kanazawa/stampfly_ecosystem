@@ -80,6 +80,12 @@ private:
     /// ずれないようにする。
     void applyAltVelTiForPhase();
 
+    /// Hold (or release) the attitude and rate integrators for the current phase:
+    /// held while Grounded. Called once per compute() cycle.
+    /// 現在のフェーズに応じて姿勢・レート積分器を保持（または解放）する: Grounded では保持。
+    /// compute() の毎周期に1回呼ぶ。
+    void applyGroundIntegratorHold();
+
     /// POS_HOLD cascade: position/velocity error → tilt setpoints (roll/pitch).
     /// Writes roll_sp/pitch_sp [rad], overriding the stick values in the caller.
     /// Roll/pitch sticks REPOSITION the hold point (deflect to move, release to hold): a
@@ -113,7 +119,9 @@ private:
     // The phase gates the vertical loop (raw throttle→thrust makes no sense in
     // ALT/POS, and Landing must descend regardless of mode):
     //   Grounded     — armed on the ground: thrust forced to ZERO (props stopped;
-    //                  without this gate ALT_HOLD would command hover thrust at ARM)
+    //                  without this gate ALT_HOLD would command hover thrust at ARM);
+    //                  attitude/rate PID integrators are HELD (floor-constrained windup,
+    //                  applyGroundIntegratorHold(); ends at TakeoffComplete)
     //   TakeoffClimb — auto-takeoff (ControllerCmd::Takeoff): the altitude cascade
     //                  climbs toward takeoff_target_alt_ (0.5m), velocity-limited to
     //                  takeoff_climb_rate_. Attitude is the PILOT's (INV-2) — only the
@@ -135,7 +143,8 @@ private:
     // 鉛直飛行フェーズ。INV-1: 全フェーズが compute() の単一姿勢+レートパイプラインを共有
     // し、フェーズが変えてよいのは鉛直チャネル（推力/上昇/降下）と自身の脱出条件のみ。姿勢則は
     // 変えない。フェーズ別の制御関数は意図的に持たない。フェーズは鉛直ループを判定する:
-    //   Grounded     — 地上 ARM 中: 推力を強制ゼロ（プロペラ停止）
+    //   Grounded     — 地上 ARM 中: 推力を強制ゼロ（プロペラ停止）。姿勢/レート PID の
+    //                  積分器は保持（床拘束による巻き上がり防止、TakeoffComplete で終了）
     //   TakeoffClimb — 自動離陸: 高度カスケードが目標(0.5m)へ速度制限上昇。姿勢はパイロット
     //                  （INV-2, 鉛直のみ自動）。目標近傍で減速し捕捉、isTakeoffComplete() が報告。
     //   Airborne     — 通常のモード則（捕捉した目標 or 飛行中切替で現在高度を保持）。
