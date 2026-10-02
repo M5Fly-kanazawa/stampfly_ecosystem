@@ -56,6 +56,8 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `rate_ref` | `rate_ref.csv` | RateRef (unified packet 0x50 fixed part) | 400 Hz | - |
 | `motor` | `motor.csv` | Duty400 (0x4A) | 400 Hz | - |
 | `ctrl_output` | `ctrl_output.csv` | ControlOutput400 (0x4B) | 400 Hz | - |
+| `flight_phase` | `flight_phase.csv` | FlightPhase400 (0x4C) | 400 Hz | - |
+| `flight_flags` | `flight_flags.csv` | FlightFlags (0x4D) | 50 Hz | - |
 | `pilot` | `pilot.csv` | Control (0x42) | 50 Hz | - |
 | `ctrl_ref` | `ctrl_ref.csv` | CtrlRef (0x48) | 50 Hz | - |
 | `baro` | `baro.csv` | Baro (0x45) | 50 Hz | - |
@@ -172,6 +174,34 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `torque_roll` | float | N*m | ミキサー手前のコントローラ指令ロールトルク。 |
 | `torque_pitch` | float | N*m | ミキサー手前のコントローラ指令ピッチトルク。 |
 | `torque_yaw` | float | N*m | ミキサー手前のコントローラ指令ヨートルク。 |
+
+#### flight_phase（`flight_phase.csv`）
+
+由来: FlightPhase400 (0x4C) ／ 公称レート: 400 Hz ／ 必須: 任意
+
+| 列名 | 型 | 単位 | 説明 |
+|---|---|---|---|
+| `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ。imu.csv と同一パケット由来で、 同じ `seq` の imu.csv 行と同じ値になる（重複し得る。行の識別は `seq`）。 |
+| `seq` | int | n/a | 制御周期の通し番号。実機取得では統合パケット 0x50 のヘッダ sequence（16bit、巻き戻りを取得側で展開）× 8 + パケット内 インデックス。SILS では制御周期カウンタ。旧 JSONL からの変換 では、imu ストリームの (timestamp_us, 同一時刻内の出現順) に 対応付けた imu 側の行番号を使う。対応が取れない行は空欄。 |
+| `flight_state` | int | enum | 飛行状態（FlightState）を 400Hz で記録。status.csv の同名列は 1Hz なので、状態遷移の時刻はこちらで読むこと。 |
+| `flip_phase` | int | enum | フリップ列生成器のフェーズ。0=Idle（未係合）, 1=Boost, 2=Spin, 3=Brake, 4=Recover, 5=Done。 |
+| `flip_result` | int | enum | フリップの結果（FlipResult）。0=None, 1=Ok, 2=AbortedSpinTimeout, 3=AbortedGyroLimit, 4=AbortedRecoverTimeout。次のフリップが始まる まで直前の結果を保持する（disarm 中は 0）。 |
+| `flip_phi` | float | rad | フリップ開始からの積算回転角（符号付き ∫ω dt をフリップ方向に正に 取ったもの、0 未満はクランプ）。Idle では 0。電文は rad×1000 の int16 （分解能 0.001 rad）。 |
+
+#### flight_flags（`flight_flags.csv`）
+
+由来: FlightFlags (0x4D) ／ 公称レート: 50 Hz ／ 必須: 任意
+
+| 列名 | 型 | 単位 | 説明 |
+|---|---|---|---|
+| `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ（統合パケット最終サンプルの IMU 時刻）。 |
+| `pilot_arm` | int | 0/1 | 送信機の ARM スイッチ（制御フラグ bit0）。 |
+| `pilot_flip` | int | 0/1 | 送信機の FLIP ボタン（制御フラグ bit1）。 |
+| `flip_ready` | int | 0/1 | 制御器のフリップ実行条件 C2-C8 が成立（ControllerStatus.flip_ready）。 制御器が最後に発行した値で、disarm 中は更新されない（flight_phase の flight_state と合わせて読む）。 |
+| `flip_block_reason` | int | enum | フリップ不成立理由（FlipBlockReason）。0=None, 1=NotFlying, 2=TooLow, 3=NotSteady, 4=BatteryLow, 5=EstimatorUnhealthy, 6=Cooldown, 7=Busy, 8=SourceConflict, 9=Disabled（flip.enable=0）。flip_ready=0 のときのみ意味を持つ。 |
+| `arm_block` | int | enum | ARM 前判定の阻害理由（ArmBlock、SystemMode.arm_block）。0=None（判定を通る）, 1=Pairing, 2=Battery, 3=Calibrating, 4=BenchRelevel, 5=TiltPending, 6=TiltMismatch。 |
+| `attitude_mismatch` | int | 0/1 | 地上で推定姿勢が重力方向と不一致（SystemStatus.attitude_mismatch）。 |
+| `attitude_verified` | int | 0/1 | 地上で姿勢チェックが判定済みかつ一致（SystemStatus.attitude_verified）。ARM に必須。 |
 
 #### pilot（`pilot.csv`）
 
@@ -407,6 +437,8 @@ Encoding utf-8, header row, no comment rows. Column 1 is always `timestamp_us` (
 | `rate_ref` | `rate_ref.csv` | RateRef (unified packet 0x50 fixed part) | 400 Hz | - |
 | `motor` | `motor.csv` | Duty400 (0x4A) | 400 Hz | - |
 | `ctrl_output` | `ctrl_output.csv` | ControlOutput400 (0x4B) | 400 Hz | - |
+| `flight_phase` | `flight_phase.csv` | FlightPhase400 (0x4C) | 400 Hz | - |
+| `flight_flags` | `flight_flags.csv` | FlightFlags (0x4D) | 50 Hz | - |
 | `pilot` | `pilot.csv` | Control (0x42) | 50 Hz | - |
 | `ctrl_ref` | `ctrl_ref.csv` | CtrlRef (0x48) | 50 Hz | - |
 | `baro` | `baro.csv` | Baro (0x45) | 50 Hz | - |
@@ -523,6 +555,34 @@ Source: ControlOutput400 (0x4B) / Nominal rate: 400 Hz / Required: no
 | `torque_roll` | float | N*m | PRE-MIXER commanded roll body torque. |
 | `torque_pitch` | float | N*m | PRE-MIXER commanded pitch body torque. |
 | `torque_yaw` | float | N*m | PRE-MIXER commanded yaw body torque. |
+
+#### flight_phase (`flight_phase.csv`)
+
+Source: FlightPhase400 (0x4C) / Nominal rate: 400 Hz / Required: no
+
+| Column | Type | Unit | Description |
+|---|---|---|---|
+| `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp. Same packet as imu.csv, so equal to the imu.csv row with the same `seq` (may repeat; identify rows by `seq`). |
+| `seq` | int | n/a | Control-cycle sequential number. For a real vehicle capture: the unified packet (0x50) header sequence (16-bit, unwrapped by the capture tool) x 8 + the in-packet sub-index. For SILS: the control-cycle counter. When converted from legacy JSONL: the imu stream's row number, matched by (timestamp_us, occurrence order within that timestamp). Empty when no match is found. |
+| `flight_state` | int | enum | Flight state (FlightState) at 400 Hz. status.csv has the same column at only 1 Hz -- read state-transition times from this stream. |
+| `flip_phase` | int | enum | Flip-sequencer phase. 0=Idle (not engaged), 1=Boost, 2=Spin, 3=Brake, 4=Recover, 5=Done. |
+| `flip_result` | int | enum | Flip outcome (FlipResult). 0=None, 1=Ok, 2=AbortedSpinTimeout, 3=AbortedGyroLimit, 4=AbortedRecoverTimeout. Holds the last result until the next flip starts (0 while disarmed). |
+| `flip_phi` | float | rad | Rotation angle accumulated since the flip started (integral of omega dt, positive along the flip direction, clamped at 0). 0 when Idle. Sent as int16 rad x 1000 (0.001 rad resolution). |
+
+#### flight_flags (`flight_flags.csv`)
+
+Source: FlightFlags (0x4D) / Nominal rate: 50 Hz / Required: no
+
+| Column | Type | Unit | Description |
+|---|---|---|---|
+| `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp (IMU time of the unified packet's last sample). |
+| `pilot_arm` | int | 0/1 | Transmitter ARM switch (control flags bit0). |
+| `pilot_flip` | int | 0/1 | Transmitter FLIP button (control flags bit1). |
+| `flip_ready` | int | 0/1 | Controller flip execution conditions C2-C8 hold (ControllerStatus.flip_ready). The last value the controller published; not updated while disarmed (read together with flight_phase.flight_state). |
+| `flip_block_reason` | int | enum | Why a flip is blocked (FlipBlockReason). 0=None, 1=NotFlying, 2=TooLow, 3=NotSteady, 4=BatteryLow, 5=EstimatorUnhealthy, 6=Cooldown, 7=Busy, 8=SourceConflict, 9=Disabled (flip.enable=0). Meaningful only when flip_ready=0. |
+| `arm_block` | int | enum | Pre-arm gate block reason (ArmBlock, SystemMode.arm_block). 0=None (gates pass), 1=Pairing, 2=Battery, 3=Calibrating, 4=BenchRelevel, 5=TiltPending, 6=TiltMismatch. |
+| `attitude_mismatch` | int | 0/1 | On the ground the estimated attitude disagrees with gravity (SystemStatus.attitude_mismatch). |
+| `attitude_verified` | int | 0/1 | On the ground the attitude check has judged and agrees (SystemStatus.attitude_verified). Required for ARM. |
 
 #### pilot (`pilot.csv`)
 

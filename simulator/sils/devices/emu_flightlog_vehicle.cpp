@@ -52,10 +52,12 @@
 #include "topics.hpp"       // sf::sensor_imu, sf::estimate_state, sf::control_output, ...
 #include "data_types.hpp"   // sf::ImuData, sf::StateEstimate, sf::ControlOutput, ...
 #include "params.hpp"       // sf::params::get_float — SSOT rate-loop gains
+#include "flight_state.hpp" // sf::isArmed — controller_status is only live while armed
 
 namespace {
 
 constexpr int kCtrlRefDecimation = 8;    // 400Hz / 8 = 50Hz, matches CtrlRef's real rate
+constexpr int kFlightFlagsDecimation = 8;   // 400Hz / 8 = 50Hz, matches FlightFlags' real rate
 constexpr int kStatusDecimation  = 400;  // 400Hz / 400 = 1Hz, matches Status's real rate
 
 // eskf_status bitmask literal. Not a live topic -- the real firmware's own
@@ -206,6 +208,48 @@ void write_motor_row(int64_t seq, const sf::MotorOutput& motor)
     std::fprintf(f, "%lld,%lld,%.7g,%.7g,%.7g,%.7g\n",
         (long long)motor.timestamp, (long long)seq,
         (double)motor.duty[0], (double)motor.duty[1], (double)motor.duty[2], (double)motor.duty[3]);
+}
+
+// --- flight_phase.csv (400Hz, keyed on the IMU edge) / flight_flags.csv (50Hz) ---
+// Mirror the firmware Data Stream's FlightPhase400 (0x4C) / FlightFlags (0x4D)
+// entries. controller_status is only republished by ControlTask while armed
+// (the firmware's disarmed log record is zero-filled), so the flip fields read
+// 0 on the ground for flight_phase; flight_flags keeps the last published
+// value, exactly like the real Data Stream.
+// ファームの Data Stream の FlightPhase400（0x4C）/ FlightFlags（0x4D）エントリを
+// 写す。controller_status は armed 中のみ ControlTask が再発行する（disarm 中の
+// ログレコードはゼロ埋め）ため、flight_phase の flip 系は地上で 0。flight_flags は
+// 実 Data Stream と同じく最後に発行された値を保持する。
+
+void write_flight_phase_row(int64_t ts, int64_t seq)
+{
+    std::FILE* f = sils_emu_flightlog_stream("flight_phase",
+        "timestamp_us,seq,flight_state,flip_phase,flip_result,flip_phi");
+    if (f == nullptr) return;
+    const sf::SystemMode mode = sf::system_mode.latest();
+    const bool armed = sf::isArmed(static_cast<sf::FlightState>(mode.state));
+    const sf::ControllerStatus status = sf::controller_status.latest();
+    std::fprintf(f, "%lld,%lld,%d,%d,%d,%.7g\n", (long long)ts, (long long)seq,
+        (int)mode.state,
+        armed ? (int)status.flip_phase : 0,
+        armed ? (int)status.flip_result : 0,
+        armed ? (double)status.flip_phi_rad : 0.0);
+}
+
+void write_flight_flags_row(int64_t ts)
+{
+    std::FILE* f = sils_emu_flightlog_stream("flight_flags",
+        "timestamp_us,pilot_arm,pilot_flip,flip_ready,flip_block_reason,arm_block,"
+        "attitude_mismatch,attitude_verified");
+    if (f == nullptr) return;
+    const sf::SystemMode       mode   = sf::system_mode.latest();
+    const sf::SystemStatus     sys    = sf::system_status.latest();
+    const sf::PilotRequest     pilot  = sf::pilot_request.latest();
+    const sf::ControllerStatus status = sf::controller_status.latest();
+    std::fprintf(f, "%lld,%d,%d,%d,%d,%d,%d,%d\n", (long long)ts,
+        (int)pilot.arm, (int)pilot.flip_button, (int)status.flip_ready,
+        (int)status.flip_block_reason, (int)mode.arm_block,
+        (int)sys.attitude_mismatch, (int)sys.attitude_verified);
 }
 
 // --- ctrl_ref.csv (50Hz, decimated at the call site) ---
@@ -361,6 +405,8 @@ extern "C" void sils_emu_flightlog_firmware_sample(int64_t now_us)
     const sf::StateEstimate est = sf::estimate_state.latest();
     write_attitude_row(ts, seq, est);
     write_posvel_row(ts, seq, est);
+    write_flight_phase_row(ts, seq);
+    if (seq % kFlightFlagsDecimation == 0) write_flight_flags_row(ts);
 
     const sf::ControlOutput ctrl  = sf::control_output.latest();
     const sf::MotorOutput   motor = sf::actuator_motor.latest();

@@ -70,7 +70,7 @@ def test_render_other_modes_synthetic_bundle(synthetic_bundle, tmp_path):
     合成一式では自分自身の全パネルを描く。"""
     log = visualize_stream.load_bundle(synthetic_bundle)
 
-    for mode in ('attitude', 'sensors', 'position', 'eskf'):
+    for mode in ('attitude', 'sensors', 'position', 'eskf', 'flip'):
         out_png = tmp_path / f"viz_{mode}.png"
         n_panels = visualize_stream.render(log, "synthetic", save_path=str(out_png), show=False, mode=mode)
 

@@ -249,7 +249,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         description="Plot a flight-log bundle: every stream at its own native "
                      "rate (gyro + rate_ref, accel, attitude, position/velocity, "
                      "motor duty, control output, pilot sticks, baro/ToF/flow/mag, "
-                     "battery). -i opens an interactive Plotly dashboard instead.",
+                     "battery, flight state/flip phase). -i opens an interactive "
+                     "Plotly dashboard instead.",
     )
     viz_parser.add_argument(
         "bundle",
@@ -259,7 +260,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     viz_parser.add_argument(
         "--mode",
-        choices=["all", "attitude", "sensors", "position", "eskf"],
+        choices=["all", "attitude", "sensors", "position", "eskf", "flip"],
         default="all",
         help="Panel group (default: all)",
     )

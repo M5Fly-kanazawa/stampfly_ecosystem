@@ -21,6 +21,11 @@ Packet IDs:
     0x4B  Control output (400Hz, unified-packet entry, 8 samples/entry --
           PRE-MIXER commanded thrust+torque, mixer-agnostic plant input for
           `sf sysid fit`/`rate-fit`, see data_stream_wire.hpp kPktCtrlOutput400)
+    0x4C  Flight phase (400Hz, unified-packet entry, 8 samples/entry --
+          flight_state + flip phase/result/angle, see data_stream_wire.hpp
+          kPktFlightPhase400)
+    0x4D  Flight flags (50Hz, unified-packet entry -- pilot ARM/FLIP buttons,
+          flip readiness, ArmBlock, attitude verdicts, see kPktFlightFlags)
     0x4F  Status / Heartbeat (1Hz)
     0x50  Unified packet: header carries a 16-bit `sequence`, unwrapped here
           and combined with each sub-sample's in-packet index to form the
@@ -80,6 +85,8 @@ PKT_CTRL_REF  = 0x48
 PKT_ESKF_PDIAG = 0x49
 PKT_DUTY400   = 0x4A  # 400Hz motor duty (unified-packet entry, 8 samples/entry)
 PKT_CTRL_OUTPUT400 = 0x4B  # 400Hz pre-mixer commanded thrust+torque (8 samples/entry)
+PKT_FLIGHT_PHASE400 = 0x4C  # 400Hz flight_state + flip phase/result/angle (8 samples/entry)
+PKT_FLIGHT_FLAGS    = 0x4D  # 50Hz pilot buttons + flip/arm readiness flags and block reasons
 PKT_RATE_REF  = 0x99  # virtual ID for 400Hz rate_ref (fixed part of unified packet)
 PKT_STATUS    = 0x4F
 PKT_UNIFIED   = 0x50  # 8x IMU+ESKF + 8x PosVel + 8x RateRef + variable entries
@@ -95,7 +102,8 @@ PKT_UNIFIED   = 0x50  # 8x IMU+ESKF + 8x PosVel + 8x RateRef + variable entries
 # LOCKSTEP_STREAMS の由来そのもの（imu/attitude は PKT_IMU_ESKF を共有、
 # posvel/rate_ref/motor/ctrl_output は1対1）--
 # UDPTelemetryCapture._process_datagram() 参照。
-UNIFIED_SEQ_PACKET_TYPES = (PKT_IMU_ESKF, PKT_POS_VEL, PKT_RATE_REF, PKT_DUTY400, PKT_CTRL_OUTPUT400)
+UNIFIED_SEQ_PACKET_TYPES = (PKT_IMU_ESKF, PKT_POS_VEL, PKT_RATE_REF, PKT_DUTY400,
+                            PKT_CTRL_OUTPUT400, PKT_FLIGHT_PHASE400)
 
 CMD_START_LOG  = 0xF0
 CMD_STOP_LOG   = 0xF1
@@ -113,6 +121,15 @@ UDP_LOG_PORT = 8890
 # 物理単位（rad/s, rad）に戻る。
 RATE_REF_WIRE_SCALE = 1000.0
 ANGLE_REF_WIRE_SCALE = 10000.0
+FLIP_PHI_WIRE_SCALE = 1000.0   # int16 rad x 1000 (WireFlightPhase400.flip_phi)
+
+# WireFlightFlags bit layout (data_stream_wire.hpp kPilotButton* / kFlag*)
+# WireFlightFlags のビット配置（data_stream_wire.hpp の kPilotButton* / kFlag*）
+PILOT_BUTTON_ARM = 0x01
+PILOT_BUTTON_FLIP = 0x02
+FLAG_FLIP_READY = 0x01
+FLAG_ATTITUDE_MISMATCH = 0x02
+FLAG_ATTITUDE_VERIFIED = 0x04
 
 # hPa -> Pa: the wire carries barometric pressure as raw hPa
 # (data_stream_wire.hpp WireBaro), but v1's baro.csv unifies on SI Pa
@@ -192,6 +209,18 @@ assert struct.calcsize(FMT_DUTY400) == 8
 #   thrust(f) + torque_roll(f) + torque_pitch(f) + torque_yaw(f)
 FMT_CTRL_OUTPUT400 = '<4f'
 assert struct.calcsize(FMT_CTRL_OUTPUT400) == 16
+
+# FlightPhase400Sample: 5 bytes (one of 8 packed into a 40B kPktFlightPhase400
+# entry) -- mirrors WireFlightPhase400 in data_stream_wire.hpp.
+#   flight_state(B) + flip_phase(B) + flip_result(B) + flip_phi(h, rad x 1000)
+FMT_FLIGHT_PHASE400 = '<3Bh'
+assert struct.calcsize(FMT_FLIGHT_PHASE400) == 5
+
+# FlightFlags: 8 bytes (one kPktFlightFlags entry) -- mirrors WireFlightFlags.
+#   timestamp_us(I) + pilot_buttons(B) + status_flags(B) + flip_block_reason(B)
+#   + arm_block(B)
+FMT_FLIGHT_FLAGS = '<I4B'
+assert struct.calcsize(FMT_FLIGHT_FLAGS) == 8
 
 # Header: 4 bytes
 FMT_HEADER = '<B H B'
@@ -402,6 +431,39 @@ def parse_packet(data: bytes) -> list:
                         'ctrl_output_torque_yaw': tq_yaw,
                         '_idx': j,
                     }))
+            # Flight phase (0x4C): 8 sub-samples per entry, index-paired with the
+            # packet's IMU timestamps (same convention as duty400).
+            # 飛行フェーズ（0x4C）: 1エントリ8サブサンプル。パケットの IMU
+            # タイムスタンプと index で対応（duty400 と同じ規約）。
+            elif (sensor_id == PKT_FLIGHT_PHASE400 and data_size == 40
+                    and offset + data_size <= len(data) - 1):
+                for j in range(8):
+                    state, phase, result, phi = struct.unpack_from(
+                        FMT_FLIGHT_PHASE400, data, offset + j * 5)
+                    results.append((PKT_FLIGHT_PHASE400, {
+                        'timestamp_us': imu_timestamps[j],
+                        'flight_state': state,
+                        'flip_phase': phase,
+                        'flip_result': result,
+                        'flip_phi': phi / FLIP_PHI_WIRE_SCALE,
+                        '_idx': j,
+                    }))
+            # Flight flags (0x4D): one 50Hz record per packet.
+            # 飛行フラグ（0x4D）: パケットあたり 50Hz で1件。
+            elif (sensor_id == PKT_FLIGHT_FLAGS and data_size == 8
+                    and offset + data_size <= len(data) - 1):
+                ts, buttons, flags, block, arm_block = struct.unpack_from(
+                    FMT_FLIGHT_FLAGS, data, offset)
+                results.append((PKT_FLIGHT_FLAGS, {
+                    'timestamp_us': ts,
+                    'pilot_arm': int(bool(buttons & PILOT_BUTTON_ARM)),
+                    'pilot_flip': int(bool(buttons & PILOT_BUTTON_FLIP)),
+                    'flip_ready': int(bool(flags & FLAG_FLIP_READY)),
+                    'flip_block_reason': block,
+                    'arm_block': arm_block,
+                    'attitude_mismatch': int(bool(flags & FLAG_ATTITUDE_MISMATCH)),
+                    'attitude_verified': int(bool(flags & FLAG_ATTITUDE_VERIFIED)),
+                }))
             elif sensor_id in SAMPLE_INFO and offset + data_size <= len(data) - 1:
                 _, fmt, sample_size = SAMPLE_INFO[sensor_id]
                 if data_size == sample_size:
@@ -537,6 +599,11 @@ _ATTITUDE_KEYS = (
 )
 _POSVEL_KEYS = ('timestamp_us', 'seq', 'pos_x', 'pos_y', 'pos_z', 'vel_x', 'vel_y', 'vel_z')
 _MOTOR_KEYS = ('timestamp_us', 'seq', 'duty_FR', 'duty_RR', 'duty_RL', 'duty_FL')
+_FLIGHT_PHASE_KEYS = ('timestamp_us', 'seq', 'flight_state', 'flip_phase',
+                      'flip_result', 'flip_phi')
+_FLIGHT_FLAGS_KEYS = ('timestamp_us', 'pilot_arm', 'pilot_flip', 'flip_ready',
+                      'flip_block_reason', 'arm_block', 'attitude_mismatch',
+                      'attitude_verified')
 _ESKF_COV_KEYS = (
     'timestamp_us',
     'p_pos_x', 'p_pos_y', 'p_pos_z',
@@ -1017,6 +1084,16 @@ class UDPTelemetryCapture:
             print("  400Hz control_output (0x4B): NOT present -- "
                   "`sf sysid fit` falls back to duty-based (--mixer) reconstruction")
 
+        # 400Hz flight phase (0x4C) / 50Hz flight flags (0x4D): flip analysis
+        # aids. Absent on firmware older than 2026-10-02 (informational only).
+        # 400Hz 飛行フェーズ（0x4C）/ 50Hz 飛行フラグ（0x4D）: フリップ解析用。
+        # 2026-10-02 より古いファームには無い（情報表示のみ）。
+        for label, pkt in (('flight phase', PKT_FLIGHT_PHASE400),
+                           ('flight flags', PKT_FLIGHT_FLAGS)):
+            n = self.sample_count.get(pkt, 0)
+            state = f'present ({n} samples)' if n else 'NOT present (older firmware)'
+            print(f"  {label} (0x{pkt:02X}): {state}")
+
         # 1Hz Status packet (0x4F) presence -- source of status.csv's
         # `voltage` column, needed only by `sf sysid fit --mixer vehicle`
         # (actuator.cpp's nonlinear thrust-to-duty motor curve is
@@ -1116,6 +1193,12 @@ class UDPTelemetryCapture:
         if self.samples.get(PKT_CTRL_OUTPUT400):
             streams['ctrl_output'] = self._build_stream(
                 [_ctrl_output_row(s) for s in self.samples[PKT_CTRL_OUTPUT400]], 'seq')
+        if self.samples.get(PKT_FLIGHT_PHASE400):
+            streams['flight_phase'] = self._build_stream(
+                [_select(s, _FLIGHT_PHASE_KEYS) for s in self.samples[PKT_FLIGHT_PHASE400]], 'seq')
+        if self.samples.get(PKT_FLIGHT_FLAGS):
+            streams['flight_flags'] = self._build_stream(
+                [_select(s, _FLIGHT_FLAGS_KEYS) for s in self.samples[PKT_FLIGHT_FLAGS]], 'timestamp_us')
         if self.samples.get(PKT_CONTROL):
             streams['pilot'] = self._build_stream(
                 [_pilot_row(s) for s in self.samples[PKT_CONTROL]], 'timestamp_us')
