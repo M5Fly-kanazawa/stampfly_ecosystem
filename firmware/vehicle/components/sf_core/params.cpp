@@ -628,6 +628,19 @@ namespace param_vars {
     float flip_max_vvel_mps     = 0.2f;     // [m/s] C4 / 実行条件C4
     float flip_cooldown_ms      = 2000.0f;  // [ms] C7, between flips / 実行条件C7、連続起動間隔
 
+    // FLIP master switch. OFF by default: the first hardware flip (Phase 4,
+    // 2026-10-02) failed — the craft went inverted and crashed — and the root
+    // cause analysis is still open. While 0, the controller's flip preflight
+    // reports FlipBlockReason::Disabled, so BOTH the FLIP button and the API
+    // `flip` command are rejected. Set 1 (`param set flip.enable 1`, takes
+    // effect immediately) only for supervised tests over a safety net.
+    // FLIP のマスタースイッチ。既定は OFF: 実機初回の宙返り（Phase 4、2026-10-02）
+    // は機体が反転して墜落し、原因解析は未了。0 の間は制御器の flip 事前判定が
+    // FlipBlockReason::Disabled を返し、FLIP ボタンと API `flip` の「両方」を拒否する。
+    // 1 にする（`param set flip.enable 1`、即時反映）のは、ネットを張った監督下の
+    // 試験に限る。
+    int32_t flip_enable = 0;
+
     // FLIP button direction rule (Phase 3, flip-maneuver-plan.md §4.1/§9-6):
     // read by state_task's determineFlipButtonDirection() at the button's
     // rising edge, NOT cached by the controller (no reload callback needed).
@@ -913,6 +926,7 @@ static const ParamEntry table[] = {
 
     // Flip maneuver — see the param_vars comment above (flip-maneuver-plan.md §3.4/§5.3).
     // 宙返りマニューバ — 上の param_vars コメント参照（plan §3.4/§5.3）。
+    {"flip.enable",            ParamType::INT,   &flip_enable,              0.0f,   0.0f,    1.0f, &notifyControllerReload},
     {"flip.rate_roll_dps",     ParamType::FLOAT, &flip_rate_roll_dps,    1500.0f, 500.0f, 1900.0f, &notifyControllerReload},
     {"flip.rate_pitch_dps",    ParamType::FLOAT, &flip_rate_pitch_dps,   1400.0f, 500.0f, 1900.0f, &notifyControllerReload},
     {"flip.rate_ramp_rps2",    ParamType::FLOAT, &flip_rate_ramp_rps2,    300.0f,  50.0f, 1000.0f, &notifyControllerReload},

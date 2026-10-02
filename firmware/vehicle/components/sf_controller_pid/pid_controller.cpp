@@ -191,6 +191,13 @@ void PidController::loadParams()
     // NVS パラメータではない — 本制御器自身の max_thrust_ を複写し、
     // FlipSequencer の推力比率が PidController に依存せず [N] に変換できる
     // ようにする（FlipSequencer::Config のドキュメント参照）。
+    // Master switch (default OFF). Read here so `param set flip.enable` applies
+    // live through notifyControllerReload, like every other flip.* param.
+    // マスタースイッチ（既定OFF）。他の flip.* と同様、`param set flip.enable` が
+    // notifyControllerReload 経由で即時反映されるようここで読む。
+    int32_t flip_enable = 0;
+    params::get_int("flip.enable", flip_enable);
+    flip_enabled_ = (flip_enable != 0);
     params::get_float("flip.rate_roll_dps",     flip_.config.rate_roll_dps);
     params::get_float("flip.rate_pitch_dps",    flip_.config.rate_pitch_dps);
     params::get_float("flip.rate_ramp_rps2",    flip_.config.rate_ramp_rps2);
@@ -2119,6 +2126,18 @@ FlipSequencer::Input PidController::buildFlipInput(const StateEstimate& state, f
 // -----------------------------------------------------------------------------
 void PidController::updateFlipReadiness(const StateEstimate& state, float dt)
 {
+    // Master switch first: the one gate both the FLIP button (state_task) and
+    // the API `flip` verb (api_task) read via controller_status.flip_ready, so
+    // disabling here rejects both entry points (reason: Disabled).
+    // マスタースイッチを最初に判定: FLIP ボタン（state_task）と API `flip`
+    // （api_task）はどちらも controller_status.flip_ready を読むため、ここで無効に
+    // すれば両経路が拒否される（理由: Disabled）。
+    if (!flip_enabled_) {
+        flip_ready_  = false;
+        flip_reason_ = FlipBlockReason::Disabled;
+        return;
+    }
+
     const FlipSequencer::Input input = buildFlipInput(state, dt);
     FlipBlockReason reason = FlipBlockReason::None;
     bool ready = flip_.ready(input, reason);

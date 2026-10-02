@@ -1,7 +1,7 @@
 # 宙返り（Flip）マニューバ実装計画
 
-作成: 2026-09-16。最終更新: 2026-09-18。
-状態: **実装中**（Phase 0〜3 完了。Phase 3=コントローラ FLIP ボタン、2026-09-18。次は Phase 4 実機検証）。
+作成: 2026-09-16。最終更新: 2026-10-02。
+状態: **見直し中**（Phase 0〜3 完了。Phase 4 実機検証の初回は 2026-10-02 に失敗: 機体が反転して真下へ墜落。原因解析中のため、`flip.enable`（既定 0）で FLIP を既定無効にした）。
 
 発端: Tello 互換 UDP API（`firmware/vehicle/tasks/api_task.cpp`、ポート 8889）は
 `command`/`takeoff`/`land`/移動/回頭/`rc`/クエリまで実装済みだが、Tello SDK の
@@ -569,7 +569,7 @@ V_min 3.6 V、クールダウン 2 s。
 | 1 設計文書と SILS 準備 | §4.6 の規則 1〜5 を `architecture.md`（INV-2 の一般化、分類規則、チャネル出所の表）と `detailed_design.md`（シーケンス既定行、FLIP 行、状態追加手順）に記載、要件 §9 追記、SILS ジャイロ飽和、新メトリクス | 既存の SILS 再確認試験が全 PASS（改修による既存動作の破壊なし） |
 | 2 ファーム実装（2026-09-17: 4 方向 PASS、摂動族 §5.5） | `FlipSequencer`、`ControllerCmd::Flip`、`controller_status` 拡張、StateManager のセル、API `cmdFlip`、推定器の窓内処理（加速度補正停止・ToF 再取り込み。回転角照合は未実装）、パラメータ定義 | 単体テスト PASS（11 + ESKF 4）。SILS `api_flip_roll`・`api_flip_pitch` PASS（ToF 再取り込みを含む）。摂動族: 推力効率 0.7・トルク権限 0.7 で PASS、モータ遅れ 10 ms は 1 回目 PASS（2 回目は既存のループ遅れ余裕の問題 §5.5 #12）、雑音・乱流・推力効率 0.6 は既存の離陸判定の問題（#11）で対象外。既存シナリオ全 PASS（30 PASS + 5 既知失敗）。`--video` で 4 方向の動画を出力 |
 | 3 コントローラボタン（実装済み・2026-09-18） | `CTRL_FLAG_FLIP` エッジ → Flip 要求、方向決定則。`sf_command` が bit1 を `PilotRequest.flip_button` にデコード、`state_task.cpp` の `handleFlipButtonEdge()`/`determineFlipButtonDirection()` が立ち上がりエッジで判定し `requestFlipManeuver()`（API `ApiCmd::Flip` と共有）を呼ぶ。既定方向パラメータは `flip.button_default_direction`（既定 1=Right）・`flip.button_stick_threshold`（既定 0.5） | SILS `rc_flip` PASS（Right/Left/既定Right/Forward の4宙返り、58判定）。`sf sils regression`: 31 PASS + 5 既知失敗 + 1 SKIP（rc_flip 追加分、既存全 PASS）。**知見（2026-09-18 に根本原因を特定、既定ゲインは未変更）**: 単発 PITCH 宙返りの高度損失 ~1m と2回目宙返りの `NotSteady` 拒否は、ヨーレートループの微分項が起こす 200Hz リミットサイクル（バックログ #12 の根本原因、`rate.yaw.td=0` で alt_drop_max 0.993→0.119m まで解消を実測）が原因。その状態で着陸→再 ARM を挟んだ3回目離陸の発散は、着陸衝撃後に姿勢推定（ESKF）が固着したまま再 ARM することが原因で、新規バックログ #16 として切り出した（`rc_flip.scn` 冒頭コメント参照）。既定ゲインはここでは変更しない（制御パラメータ変更は別タスク）。ボタン経路自体（4方向とも動作確認）の欠陥ではなく、トリム学習（`attitude.trim.learn`）も無関係と確認済み |
-| 4 実機検証 | ネット・高天井・1 方向ずつ・h = 1.5 m から。400 Hz ログ取得。SILS とのモデル一致確認 | 4 方向 × 3 回成功。高度損失 ≤ 見積り + 0.2 m。完了後 1 s 以内に ±10°。角速度異常の誤検出なし |
+| 4 実機検証（初回 2026-10-02 失敗: 機体が反転して真下へ墜落。原因解析中。`flip.enable`（既定 0）で既定無効化。有効化は `param set flip.enable 1`（即時反映、再起動不要）で、ネットを張った監督下の試験に限る。無効の間は FLIP ボタン・API `flip` とも `FlipBlockReason::Disabled`（API 応答 `error flip: disabled`）で拒否される。ログ: `logs/flip_test1.sflog.zip`） | ネット・高天井・1 方向ずつ・h = 1.5 m から。400 Hz ログ取得。SILS とのモデル一致確認 | 4 方向 × 3 回成功。高度損失 ≤ 見積り + 0.2 m。完了後 1 s 以内に ±10°。角速度異常の誤検出なし |
 | 5 文書・SDK | API 参照、feature_status、操作手引き、Python SDK `flip()`、djitellopy 動作確認、Blockly ブロック（任意） | djitellopy の `flip_*()` が無改変で `ok` を受ける |
 
 ## 9. 決定事項（2026-09-16 オーナー決定: 全項目を著者の推奨どおりに採用）

@@ -150,7 +150,7 @@
 # "Flip requested (direction=Right)" が1回、サイクルのDISARMより前に現れ、
 # 間に2回目の Flip requested が無いこと — で代用する）。
 #
-# Run: sf sils scenario simulator/sils/scenarios/rc_flip.scn --target vehicle --duration 64000000
+# Run: sf sils scenario simulator/sils/scenarios/rc_flip.scn --target vehicle --duration 64000000 --param flip.enable=1
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos> <flip>
 #

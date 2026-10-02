@@ -1,0 +1,12 @@
+# flip_disabled.expect — flip.enable = 0 (default) rejects both API and button
+# 既定（flip.enable = 0）で API もボタンも拒否される
+exit 0
+log_contains any "cmd: flip r"
+log_contains any "error flip: disabled"
+log_contains any "Flip button: rejected (Disabled)"
+log_absent  any "Flip requested"
+log_absent  any "Flip complete"
+log_contains any "cmd: land"
+# Hover held at flip height throughout (no flip happened). / 宙返りせず高度を保つ。
+metric alt_mean > 0.90 in 21.5 24.9
+metric tilt_max < 0.2618 in 22.0 25.0  # 15.0 deg

@@ -461,6 +461,7 @@ const char* flipBlockErrorText(sf::FlipBlockReason reason)
         case sf::FlipBlockReason::Cooldown:           return "cooldown";
         case sf::FlipBlockReason::Busy:               return "busy";
         case sf::FlipBlockReason::SourceConflict:     return "busy";
+        case sf::FlipBlockReason::Disabled:           return "disabled";
         default:                                       return "not ready";
     }
 }

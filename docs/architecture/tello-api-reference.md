@@ -109,6 +109,7 @@ Tello 実機の映像ポート（UDP 11111）は StampFly には無い（カメ�
 |---|---|
 | `ok` | 正常完了 |
 | `error flip: bad direction` | `l`/`r`/`f`/`b` 以外 |
+| `error flip: disabled` | `flip.enable` が 0（既定。実機初回の宙返りが失敗したため既定無効。ネット下の監督試験のみ `param set flip.enable 1`） |
 | `error flip: not flying` | FLYING でない（TAKEOFF/LANDING 等） |
 | `error flip: busy` | 既に flip 実行中、または実行条件表の「他の励振・誘導移動」に抵触 |
 | `error flip: mode` | ACRO/STABILIZE（API からは ALT_HOLD/POS_HOLD のみ） |

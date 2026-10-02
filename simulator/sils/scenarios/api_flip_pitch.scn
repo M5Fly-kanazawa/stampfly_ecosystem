@@ -21,7 +21,7 @@
 # 約 3 m）→ 4 方向の宙返り（各 FLYING → FLIP → FLYING、
 # 間隔 3 s = マニューバ約 0.6 s + クールダウン 2 s）→ 自動着陸。全行程 RC は中立のまま。
 #
-# Run: sf sils scenario simulator/sils/scenarios/api_flip_pitch.scn --target vehicle --duration 41000000
+# Run: sf sils scenario simulator/sils/scenarios/api_flip_pitch.scn --target vehicle --duration 41000000 --param flip.enable=1
 #      (add --video to render the maneuver / --video で動画を出力)
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>

@@ -761,6 +761,10 @@ private:
     // 評価を自ら呼べない。isTakeoffComplete()/isGuidanceActive() が
     // オンデマンド計算でなくキャッシュ済みフラグを読むのと同じ理由。
     bool            flip_ready_  = false;
+    // Master switch cached from param flip.enable (default OFF, first hardware
+    // flip failed 2026-10-02). / param flip.enable のマスタースイッチ（既定OFF、
+    // 実機初回の宙返りが失敗、2026-10-02）。
+    bool            flip_enabled_ = false;
     FlipBlockReason flip_reason_ = FlipBlockReason::NotFlying;
 
     /// Build this cycle's FlipSequencer::Input from the state estimate.

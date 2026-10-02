@@ -211,6 +211,8 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
 
 **安全則:** ①ペアリング済み送信機を中立で保持（スティックを動かすと API 誘導は即解除＝パイロット優先。モードスイッチはエッジ適用なので置いたままの位置は API を妨げない）②通信断フェイルセーフ（自動着陸）は API の下で常に有効 ③移動は1回 3m・高度 0.2〜2.0m にクランプ。
 
+**宙返り（Flip）は既定で無効（`flip.enable` = 0）。** 実機での初回の宙返り（2026-10-02）が失敗し、原因解析中のためである。無効の間は API `flip` が `error flip: disabled` を返し、FLIP ボタンも拒否される（機体側のログに `Flip button: rejected (Disabled)`）。有効にするのは、ネットを張った監督下の試験に限る: `param set flip.enable 1`（即時反映、再起動不要。NVS に保存するなら `param save`）、試験後は `param set flip.enable 0`。
+
 **宙返り（Flip）:** `flip <l/r/f/b>` は ALT_HOLD/POS_HOLD・対地高度 **1.0m 以上**・ほぼ水平で定常・電池電圧 **3.6V 以上**（負荷時）・前回の flip から 2 秒以上のときだけ実行される（不成立時は `error flip: <理由>`）。機体に上向きセンサが無いため天井までの距離は判定できない — **開始高度 + 0.6m 以上の天井余裕は操縦者の責任**。屋内では最初はネットのある場所・高天井（目安 2m 以上）で1方向ずつ試し、電池残量に余裕がある状態で行うこと。実行条件・応答語彙の詳細は [`docs/architecture/tello-api-reference.md`](../../../docs/architecture/tello-api-reference.md) を参照。
 
 **FLIP ボタン:** コントローラの FLIP ボタンでも同じ宙返りを起動できる（全 FLYING モード対応、ACRO/STABILIZE を含む）。方向はボタンを押した瞬間のロール/ピッチスティックの向きで決まる — 大きく倒している軸（閾値超）があればその方向、両軸とも中立に近ければ既定方向（工場出荷時 Right）になる。実行条件は API の `flip` と同じで、不成立時は機体側でログに記録されるだけで応答は返らない（ログを見られない操縦者への合図は今後の課題）。ボタンを押し続けても再要求はされない — 1回の押下につき1回だけ要求し、次に起動するには離してもう一度押す。
@@ -484,6 +486,8 @@ identical to the legacy vehicle.**
   down / DISARM.
 
 ARM is refused while calibrating, on low/USB power, while pairing, during/after a bench motor test (re-level pending), or until the attitude check has passed on the ground (about 1 s after boot/reset; refused while it disagrees with gravity). A refused ARM request (RC button, on-board click or API) plays the error tone once, and while refused the StampS3 LED shows why (red slow blink = tilt mismatch: place the craft level; magenta slow blink = wait and keep still; blue fast = pairing; cyan slow = low battery). `status` prints one line: `prearm  : ready` or `prearm  : BLOCKED (tilt mismatch - place level)`. A craft left ARMED on the ground with spinning props whose estimate drifts ~10 deg or more from gravity for 0.5 s is disarmed automatically (the estimator is then reset to level; no recalibration, since the craft may be tilted); thresholds are provisional (`safety.tilt_check.*`).
+
+**Flip is disabled by default (`flip.enable` = 0).** The first hardware flip (2026-10-02) failed and the analysis is still open. While disabled, the API `flip` replies `error flip: disabled` and the FLIP button is rejected too (vehicle log: `Flip button: rejected (Disabled)`). Enable it only for supervised tests over a safety net: `param set flip.enable 1` (applies immediately, no reboot; `param save` to persist) and set it back to 0 afterwards.
 
 **Flip:** sent via the Tello-style network API (`flip <l/r/f/b>`, UDP :8889 — see
 `tools/stampfly_py/` and `docs/architecture/tello-api-reference.md`). Requires

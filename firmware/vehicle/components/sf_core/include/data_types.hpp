@@ -647,6 +647,7 @@ enum class FlipBlockReason : uint8_t {
     Cooldown           = 6,   // C7: less than t_gap since previous flip/ 前回からの間隔不足
     Busy               = 7,   // already FLIP / previous flip unsettled / 実行中
     SourceConflict     = 8,   // C8: sysid/autotune/guidance move active/ 他の励振・誘導と競合
+    Disabled           = 9,   // param flip.enable == 0 (default; first hardware flip failed 2026-10-02) / flip.enable が 0（既定。実機初回の宙返りが失敗）
 };
 
 /// Get human-readable flip-block-reason name
@@ -663,6 +664,7 @@ inline const char* flipBlockReasonName(FlipBlockReason reason)
         case FlipBlockReason::Cooldown:           return "Cooldown";
         case FlipBlockReason::Busy:                return "Busy";
         case FlipBlockReason::SourceConflict:      return "SourceConflict";
+        case FlipBlockReason::Disabled:            return "Disabled";
         default:                                    return "UNKNOWN";
     }
 }

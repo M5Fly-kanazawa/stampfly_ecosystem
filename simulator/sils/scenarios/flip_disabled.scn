@@ -1,0 +1,31 @@
+# flip_disabled.scn — FLIP is OFF by default (param flip.enable = 0): API and button are rejected
+#                     FLIP は既定で無効（param flip.enable = 0）: API もボタンも拒否される
+#
+# The first hardware flip (Phase 4, 2026-10-02) failed, so FlipBlockReason::Disabled
+# is the first check of the controller's flip preflight. This scenario runs with the
+# DEFAULT param (no --param flip.enable=1) at flip height and drives both entry
+# points that read controller_status.flip_ready:
+#   1. API `flip r`            -> reply "error flip: disabled" (api_task flipPreflight)
+#   2. FLIP button (RC flag)   -> "Flip button: rejected (Disabled)" (state_task)
+# and requires that no FLIP state is ever entered ("Flip requested" absent).
+# 実機初回の宙返り（Phase 4、2026-10-02）が失敗したため、制御器の flip 事前判定は
+# FlipBlockReason::Disabled を最初に判定する。本シナリオは既定 param（--param
+# flip.enable=1 なし）で宙返り高度に達し、controller_status.flip_ready を読む両入口
+# を駆動する。1. API `flip r` → "error flip: disabled"、2. FLIP ボタン →
+# "Flip button: rejected (Disabled)"。FLIP 状態に入らない（"Flip requested" なし）こと。
+#
+# Run: sf sils scenario simulator/sils/scenarios/flip_disabled.scn --target vehicle --duration 30000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos> <flip>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes
+   +    api  "command"                                                           # B: enter SDK mode (t=6)
+   +    api  "takeoff"                                                           # C: take off → POS_HOLD hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC while the API flies (t=6-18)
+   +    api  "up 60"                                                             # E: climb to ~1.1 m (t=18)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # F: settle at flip height (t=18-23)
+   +    api  "flip r"                                                            # G: REJECTED — flip disabled (t=23)
+   +    rc   2048  2048   2048    2048  0     1000      50                       # H: (t=23-24)
+   +    rc   2048  2048   2048    2048  0     200       50        0     0    1    1   # I: FLIP button edge → REJECTED (t=24-24.2)
+   +    rc   2048  2048   2048    2048  0     1000      50                       # J: (t=24.2-25.2)
+   +    api  "land"                                                              # K: autonomous landing (t=25.2)
+   +    rc   2048  2048   2048    2048  0     4800      50                       # L: neutral RC through touchdown (t=25.2-30)
