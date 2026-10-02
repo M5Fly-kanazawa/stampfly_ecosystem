@@ -79,6 +79,10 @@ inline constexpr uint8_t kPktCtrlRef   = 0x48;  // outer-loop refs + duty (50Hz 
 inline constexpr uint8_t kPktDuty400   = 0x4A;  // 400Hz motor duty (8 samples/entry)
 inline constexpr uint8_t kPktCtrlOutput400 = 0x4B;  // 400Hz commanded thrust+torque,
                                                      // pre-mixer (8 samples/entry)
+inline constexpr uint8_t kPktFlightPhase400 = 0x4C;  // 400Hz flight state + flip phase/result/angle
+                                                      // (8 samples/entry)
+inline constexpr uint8_t kPktFlightFlags    = 0x4D;  // 50Hz pilot buttons + pre-arm/flip readiness
+                                                      // flags and block reasons
 inline constexpr uint8_t kPktStatus    = 0x4F;  // standalone 1Hz packet
 inline constexpr uint8_t kPktUnified   = 0x50;  // 50Hz batched packet
 
@@ -122,6 +126,18 @@ inline constexpr float kBiasScale    = 10000.0f;  // int16 = value × 10000
 inline constexpr float kRateRefScale = 1000.0f;   // int16 = value × 1000
 inline constexpr float kAngleRefScale = 10000.0f; // int16 = value × 10000
 inline constexpr float kDutyScale     = 65535.0f; // uint16 = duty(0..1) × 65535
+inline constexpr float kFlipPhiScale  = 1000.0f;  // int16 = flip rotation angle [rad] × 1000
+
+// WireFlightFlags::pilot_buttons bits (transmitter flags byte, mirrors PilotRequest)
+// WireFlightFlags::pilot_buttons のビット（送信機 flags バイト、PilotRequest を写す）
+inline constexpr uint8_t kPilotButtonArm  = 0x01;   // ARM switch   / ARM スイッチ
+inline constexpr uint8_t kPilotButtonFlip = 0x02;   // FLIP button  / FLIP ボタン
+
+// WireFlightFlags::status_flags bits (controller + system status facts)
+// WireFlightFlags::status_flags のビット（制御器・システム状態の事実）
+inline constexpr uint8_t kFlagFlipReady          = 0x01;   // ControllerStatus.flip_ready
+inline constexpr uint8_t kFlagAttitudeMismatch   = 0x02;   // SystemStatus.attitude_mismatch
+inline constexpr uint8_t kFlagAttitudeVerified   = 0x04;   // SystemStatus.attitude_verified
 
 // =============================================================================
 // Wire structs (packed; little-endian on both ESP32 and the host PC)
@@ -232,6 +248,43 @@ struct WireControlOutput400 {
     float torque[3];   // [Nm] commanded body torque R, P, Y
 };
 static_assert(sizeof(WireControlOutput400) == 16, "wire drift");
+
+/// 400Hz flight-state / flip-sequencer sample — lets a flip be reconstructed
+/// phase by phase at full rate (status.csv carries flight_state at only 1 Hz,
+/// so state transitions were known only to +-1 s). One kPktFlightPhase400 ENTRY
+/// carries kSamplesPerPacket (8) of these (40B total payload), paired by INDEX
+/// with the same-cycle ImuEskf samples — same convention as WireDuty400. A
+/// parser that does not know entry id 0x4C skips it via the [id][size] framing.
+/// 400Hz 飛行状態/フリップ列生成器サンプル — フリップをフェーズ単位で全レートに
+/// 再構成できるようにする（status.csv の flight_state は 1Hz のみで、状態遷移は
+/// ±1 s の精度しか分からなかった）。kPktFlightPhase400 の1エントリに
+/// kSamplesPerPacket（8）個分（payload計40B）を積み、同周期の ImuEskf と index で
+/// 対応させる（WireDuty400 と同じ考え方）。0x4C を判別できないパーサは
+/// [id][size] 枠組みで単純にスキップする。
+struct WireFlightPhase400 {
+    uint8_t flight_state;   // FlightState                  / 飛行状態
+    uint8_t flip_phase;     // FlipPhase (0 = Idle)         / フリップのフェーズ
+    uint8_t flip_result;    // FlipResult                   / フリップの結果
+    int16_t flip_phi;       // flip angle [rad] × kFlipPhiScale / フリップ積算回転角
+};
+static_assert(sizeof(WireFlightPhase400) == 5, "wire drift");
+
+/// 50Hz flags entry — pilot buttons, controller flip readiness, pre-arm block
+/// reason and attitude-check verdicts. These are slow facts (a button press
+/// lasts >= 20 ms), so one record per unified packet (50 Hz, the pilot-record
+/// rate) is enough. Entry id 0x4D; an unknown-id parser skips it by size.
+/// 50Hz フラグエントリ — 操縦ボタン、制御器のフリップ準備状態、ARM 前の阻害理由、
+/// 姿勢チェックの判定。遅い事実（ボタン押下は 20 ms 以上続く）なので統合パケット
+/// あたり 1 件（50Hz、pilot レコードと同じレート）で足りる。エントリ id 0x4D。
+/// id を判別できないパーサは size でスキップする。
+struct WireFlightFlags {
+    uint32_t timestamp_us;
+    uint8_t  pilot_buttons;       // kPilotButton* bits
+    uint8_t  status_flags;        // kFlag* bits
+    uint8_t  flip_block_reason;   // FlipBlockReason (meaningful when !flip_ready)
+    uint8_t  arm_block;           // ArmBlock (0 = pre-arm gates pass)
+};
+static_assert(sizeof(WireFlightFlags) == 8, "wire drift");
 
 /// 50Hz pilot input entry — FMT_CONTROL '<I 4f' (20B)
 struct WireControl {
@@ -346,6 +399,13 @@ inline uint16_t quantizeDuty(float duty)
     if (scaled <= 0.0f) return 0;
     if (scaled >= kDutyScale) return static_cast<uint16_t>(kDutyScale);
     return static_cast<uint16_t>(scaled + 0.5f);
+}
+
+/// Quantize a flip rotation angle [rad] to int16 (× kFlipPhiScale, saturating).
+/// フリップ積算回転角 [rad] を int16 へ量子化（× kFlipPhiScale、飽和）。
+inline int16_t quantizeFlipPhi(float phi_rad)
+{
+    return quantize(phi_rad, kFlipPhiScale);
 }
 
 /// XOR checksum over a byte range — matches udp_capture.py's verifier.

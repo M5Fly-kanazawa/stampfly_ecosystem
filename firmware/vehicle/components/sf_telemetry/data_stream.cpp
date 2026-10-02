@@ -313,6 +313,45 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
     countDrop(builder.addEntry(datastream::kPktCtrlOutput400, ctrl_output400,
                                sizeof(ctrl_output400)));
 
+    // 400Hz flight state + flip phase/result/angle (8 samples, index-paired like
+    // duty400). Placed after the system-identification entries so a full packet
+    // drops it before them (see countDrop()).
+    // 400Hz 飛行状態＋フリップのフェーズ/結果/角度（8サンプル、duty400 と同じ index
+    // 対応）。同定用エントリの後に置き、パケット満杯時はそちらより先に落ちるようにする
+    // （countDrop() 参照）。
+    datastream::WireFlightPhase400 phase400[datastream::kSamplesPerPacket] = {};
+    for (int i = 0; i < datastream::kSamplesPerPacket; ++i) {
+        phase400[i].flight_state = batch_[i].flight_state;
+        phase400[i].flip_phase   = batch_[i].flip_phase;
+        phase400[i].flip_result  = batch_[i].flip_result;
+        phase400[i].flip_phi     = datastream::quantizeFlipPhi(batch_[i].flip_phi_rad);
+    }
+    countDrop(builder.addEntry(datastream::kPktFlightPhase400, phase400,
+                               sizeof(phase400)));
+
+    // 50Hz flags: pilot buttons, flip readiness, pre-arm block reason, attitude verdicts.
+    // The controller-derived facts (flip_ready/flip_block_reason) keep the last value
+    // ControlTask published: controller_status is not republished while disarmed, so read
+    // them together with flight_state (flight_phase stream).
+    // 50Hz フラグ: 操縦ボタン、フリップ準備、ARM 阻害理由、姿勢判定。制御器由来の事実
+    // （flip_ready/flip_block_reason）は ControlTask が最後に発行した値のまま:
+    // disarm 中は controller_status が再発行されないため、flight_state
+    // （flight_phase ストリーム）と合わせて読むこと。
+    const SystemMode       flag_mode   = system_mode.latest();
+    const SystemStatus     flag_status = system_status.latest();
+    const PilotRequest     flag_pilot  = pilot_request.latest();
+    const ControllerStatus flag_ctrl   = controller_status.latest();
+    datastream::WireFlightFlags flags = {};
+    flags.timestamp_us = batch_[datastream::kSamplesPerPacket - 1].timestamp;   // IMU clock / IMU 時計
+    flags.pilot_buttons = (flag_pilot.arm ? datastream::kPilotButtonArm : 0) |
+                          (flag_pilot.flip_button ? datastream::kPilotButtonFlip : 0);
+    flags.status_flags  = (flag_ctrl.flip_ready ? datastream::kFlagFlipReady : 0) |
+                          (flag_status.attitude_mismatch ? datastream::kFlagAttitudeMismatch : 0) |
+                          (flag_status.attitude_verified ? datastream::kFlagAttitudeVerified : 0);
+    flags.flip_block_reason = flag_ctrl.flip_block_reason;
+    flags.arm_block         = flag_mode.arm_block;
+    countDrop(builder.addEntry(datastream::kPktFlightFlags, &flags, sizeof(flags)));
+
     // Pilot input (50Hz cadence — one per packet, like the old vehicle).
     // パイロット入力（50Hz — 旧 vehicle と同じくパケットあたり 1 件）。
     const CommandSetpoint setpoint = command_setpoint.latest();

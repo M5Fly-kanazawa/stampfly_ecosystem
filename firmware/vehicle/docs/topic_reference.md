@@ -103,7 +103,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 7 | `estimate_state` | `StateEstimate` | Latest | 1 | ImuTask | ControlTask, TelemetryTask | 400Hz | 姿勢・位置・速度 |
 | 8 | `command_setpoint` | `CommandSetpoint` | Latest | 1 | CommTask (ESP-NOW recv) | ControlTask | 50Hz | パイロット指令 |
 | 9 | `control_output` | `ControlOutput` | Latest | 1 | ControlTask | TelemetryTask | 400Hz | 推力・トルク出力 |
-| 9b | `controller_status` | `ControllerStatus` | Latest | 1 | ControlTask | ApiTask | 400Hz | guidance_active の事実（誘導解除を API へ同期, M-3） |
+| 9b | `controller_status` | `ControllerStatus` | Latest | 1 | ControlTask | ApiTask | 400Hz | guidance_active の事実（誘導解除を API へ同期, M-3）。フリップ関連は `flip_ready`/`flip_block_reason`/`flip_active`/`flip_done`/`flip_result` に加え、フライトログ用の `flip_phase`（`FlipPhase`: Idle/Boost/Spin/Brake/Recover/Done）と `flip_phi_rad`（積算回転角）。ControlTask が armed 中のみ発行（disarm 中は最後の値のまま）。Data Stream が 400Hz `flight_phase`・50Hz `flight_flags` として記録（`protocol/spec/flight_log.yaml`） |
 | 10 | `actuator_motor` | `MotorOutput` | Latest | 1 | ControlTask | (motor driver) | 400Hz | モータ duty |
 | 11 | `system_mode` | `SystemMode` | Latest | 1 | StateTask | ControlTask, NotifyTask, CLI | event | ARM 状態・フライトモード・`arm_block`（ARM が今拒否される理由 `ArmBlock`: None/Pairing/Battery/Calibrating/BenchRelevel/TiltPending/TiltMismatch。StateManager が ARM 前判定を1か所で評価し、変化時のみ再発行。NotifyTask の LED と CLI `status` が読む。detailed_design §3 注10）|
 | 12 | `system_alert` | `SystemAlert` | Queue | 4 | FailsafeTask | TelemetryTask, NotifyTask | event | 警告・エラー |

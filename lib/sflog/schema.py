@@ -94,6 +94,28 @@ STREAMS = {   'imu': {   'file': 'imu.csv',
                                       ('torque_roll', 'float', 'N*m'),
                                       ('torque_pitch', 'float', 'N*m'),
                                       ('torque_yaw', 'float', 'N*m'))},
+    'flight_phase': {   'file': 'flight_phase.csv',
+                        'source': 'FlightPhase400 (0x4C)',
+                        'nominal_rate_hz': 400,
+                        'required': False,
+                        'columns': (   ('timestamp_us', 'int', 'us'),
+                                       ('seq', 'int', 'n/a'),
+                                       ('flight_state', 'int', 'enum'),
+                                       ('flip_phase', 'int', 'enum'),
+                                       ('flip_result', 'int', 'enum'),
+                                       ('flip_phi', 'float', 'rad'))},
+    'flight_flags': {   'file': 'flight_flags.csv',
+                        'source': 'FlightFlags (0x4D)',
+                        'nominal_rate_hz': 50,
+                        'required': False,
+                        'columns': (   ('timestamp_us', 'int', 'us'),
+                                       ('pilot_arm', 'int', '0/1'),
+                                       ('pilot_flip', 'int', '0/1'),
+                                       ('flip_ready', 'int', '0/1'),
+                                       ('flip_block_reason', 'int', 'enum'),
+                                       ('arm_block', 'int', 'enum'),
+                                       ('attitude_mismatch', 'int', '0/1'),
+                                       ('attitude_verified', 'int', '0/1'))},
     'pilot': {   'file': 'pilot.csv',
                  'source': 'Control (0x42)',
                  'nominal_rate_hz': 50,
@@ -259,7 +281,7 @@ REQUIRED_STREAMS_BY_SOURCE = {'vehicle': ['imu'], 'sils': ['imu', 'truth'], 'sim
 # なかった周期は時刻を再利用する。各ストリームの timestamp_us/seq
 # の説明を参照）。"'seq' 列を持つ" として導出するため、YAML との
 # 乖離が起こらない。
-LOCKSTEP_STREAMS = ['imu', 'attitude', 'posvel', 'rate_ref', 'motor', 'ctrl_output']
+LOCKSTEP_STREAMS = ['imu', 'attitude', 'posvel', 'rate_ref', 'motor', 'ctrl_output', 'flight_phase']
 
 # Full per-column metadata (name/type/unit/description in both
 # languages). Keyed by stream name; used by schema_for() to build the
@@ -693,6 +715,158 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                            'unit': 'N*m',
                            'description_ja': 'ミキサー手前のコントローラ指令ヨートルク。',
                            'description_en': 'PRE-MIXER commanded yaw body torque.'}],
+    'flight_phase': [   {   'name': 'timestamp_us',
+                            'type': 'int',
+                            'unit': 'us',
+                            'description_ja': '機体起動基準のマイクロ秒タイムスタンプ。imu.csv と同一パケット由来で、 '
+                                              '同じ `seq` の imu.csv 行と同じ値になる（重複し得る。行の識別は '
+                                              '`seq`）。',
+                            'description_en': 'Vehicle boot-relative microsecond '
+                                              'timestamp. Same packet as imu.csv, so '
+                                              'equal to the imu.csv row with the same '
+                                              '`seq` (may repeat; identify rows by '
+                                              '`seq`).'},
+                        {   'name': 'seq',
+                            'type': 'int',
+                            'unit': 'n/a',
+                            'description_ja': '制御周期の通し番号。実機取得では統合パケット 0x50 のヘッダ '
+                                              'sequence（16bit、巻き戻りを取得側で展開）× 8 + パケット内 '
+                                              'インデックス。SILS では制御周期カウンタ。旧 JSONL からの変換 '
+                                              'では、imu ストリームの (timestamp_us, 同一時刻内の出現順) '
+                                              'に 対応付けた imu 側の行番号を使う。対応が取れない行は空欄。',
+                            'description_en': 'Control-cycle sequential number. For a '
+                                              'real vehicle capture: the unified '
+                                              'packet (0x50) header sequence (16-bit, '
+                                              'unwrapped by the capture tool) x 8 + '
+                                              'the in-packet sub-index. For SILS: the '
+                                              'control-cycle counter. When converted '
+                                              "from legacy JSONL: the imu stream's row "
+                                              'number, matched by (timestamp_us, '
+                                              'occurrence order within that '
+                                              'timestamp). Empty when no match is '
+                                              'found.'},
+                        {   'name': 'flight_state',
+                            'type': 'int',
+                            'unit': 'enum',
+                            'description_ja': '飛行状態（FlightState）を 400Hz で記録。status.csv '
+                                              'の同名列は 1Hz なので、状態遷移の時刻はこちらで読むこと。',
+                            'description_en': 'Flight state (FlightState) at 400 Hz. '
+                                              'status.csv has the same column at only '
+                                              '1 Hz -- read state-transition times '
+                                              'from this stream.'},
+                        {   'name': 'flip_phase',
+                            'type': 'int',
+                            'unit': 'enum',
+                            'description_ja': 'フリップ列生成器のフェーズ。0=Idle（未係合）, 1=Boost, '
+                                              '2=Spin, 3=Brake, 4=Recover, 5=Done。',
+                            'description_en': 'Flip-sequencer phase. 0=Idle (not '
+                                              'engaged), 1=Boost, 2=Spin, 3=Brake, '
+                                              '4=Recover, 5=Done.'},
+                        {   'name': 'flip_result',
+                            'type': 'int',
+                            'unit': 'enum',
+                            'description_ja': 'フリップの結果（FlipResult）。0=None, 1=Ok, '
+                                              '2=AbortedSpinTimeout, '
+                                              '3=AbortedGyroLimit, '
+                                              '4=AbortedRecoverTimeout。次のフリップが始まる '
+                                              'まで直前の結果を保持する（disarm 中は 0）。',
+                            'description_en': 'Flip outcome (FlipResult). 0=None, '
+                                              '1=Ok, 2=AbortedSpinTimeout, '
+                                              '3=AbortedGyroLimit, '
+                                              '4=AbortedRecoverTimeout. Holds the last '
+                                              'result until the next flip starts (0 '
+                                              'while disarmed).'},
+                        {   'name': 'flip_phi',
+                            'type': 'float',
+                            'unit': 'rad',
+                            'description_ja': 'フリップ開始からの積算回転角（符号付き ∫ω dt をフリップ方向に正に '
+                                              '取ったもの、0 未満はクランプ）。Idle では 0。電文は rad×1000 '
+                                              'の int16 （分解能 0.001 rad）。',
+                            'description_en': 'Rotation angle accumulated since the '
+                                              'flip started (integral of omega dt, '
+                                              'positive along the flip direction, '
+                                              'clamped at 0). 0 when Idle. Sent as '
+                                              'int16 rad x 1000 (0.001 rad '
+                                              'resolution).'}],
+    'flight_flags': [   {   'name': 'timestamp_us',
+                            'type': 'int',
+                            'unit': 'us',
+                            'description_ja': '機体起動基準のマイクロ秒タイムスタンプ（統合パケット最終サンプルの IMU '
+                                              '時刻）。',
+                            'description_en': 'Vehicle boot-relative microsecond '
+                                              'timestamp (IMU time of the unified '
+                                              "packet's last sample)."},
+                        {   'name': 'pilot_arm',
+                            'type': 'int',
+                            'unit': '0/1',
+                            'description_ja': '送信機の ARM スイッチ（制御フラグ bit0）。',
+                            'description_en': 'Transmitter ARM switch (control flags '
+                                              'bit0).'},
+                        {   'name': 'pilot_flip',
+                            'type': 'int',
+                            'unit': '0/1',
+                            'description_ja': '送信機の FLIP ボタン（制御フラグ bit1）。',
+                            'description_en': 'Transmitter FLIP button (control flags '
+                                              'bit1).'},
+                        {   'name': 'flip_ready',
+                            'type': 'int',
+                            'unit': '0/1',
+                            'description_ja': '制御器のフリップ実行条件 C2-C8 '
+                                              'が成立（ControllerStatus.flip_ready）。 '
+                                              '制御器が最後に発行した値で、disarm '
+                                              '中は更新されない（flight_phase の flight_state '
+                                              'と合わせて読む）。',
+                            'description_en': 'Controller flip execution conditions '
+                                              'C2-C8 hold '
+                                              '(ControllerStatus.flip_ready). The last '
+                                              'value the controller published; not '
+                                              'updated while disarmed (read together '
+                                              'with flight_phase.flight_state).'},
+                        {   'name': 'flip_block_reason',
+                            'type': 'int',
+                            'unit': 'enum',
+                            'description_ja': 'フリップ不成立理由（FlipBlockReason）。0=None, '
+                                              '1=NotFlying, 2=TooLow, 3=NotSteady, '
+                                              '4=BatteryLow, 5=EstimatorUnhealthy, '
+                                              '6=Cooldown, 7=Busy, 8=SourceConflict, '
+                                              '9=Disabled（flip.enable=0）。flip_ready=0 '
+                                              'のときのみ意味を持つ。',
+                            'description_en': 'Why a flip is blocked '
+                                              '(FlipBlockReason). 0=None, 1=NotFlying, '
+                                              '2=TooLow, 3=NotSteady, 4=BatteryLow, '
+                                              '5=EstimatorUnhealthy, 6=Cooldown, '
+                                              '7=Busy, 8=SourceConflict, 9=Disabled '
+                                              '(flip.enable=0). Meaningful only when '
+                                              'flip_ready=0.'},
+                        {   'name': 'arm_block',
+                            'type': 'int',
+                            'unit': 'enum',
+                            'description_ja': 'ARM '
+                                              '前判定の阻害理由（ArmBlock、SystemMode.arm_block）。0=None（判定を通る）, '
+                                              '1=Pairing, 2=Battery, 3=Calibrating, '
+                                              '4=BenchRelevel, 5=TiltPending, '
+                                              '6=TiltMismatch。',
+                            'description_en': 'Pre-arm gate block reason (ArmBlock, '
+                                              'SystemMode.arm_block). 0=None (gates '
+                                              'pass), 1=Pairing, 2=Battery, '
+                                              '3=Calibrating, 4=BenchRelevel, '
+                                              '5=TiltPending, 6=TiltMismatch.'},
+                        {   'name': 'attitude_mismatch',
+                            'type': 'int',
+                            'unit': '0/1',
+                            'description_ja': '地上で推定姿勢が重力方向と不一致（SystemStatus.attitude_mismatch）。',
+                            'description_en': 'On the ground the estimated attitude '
+                                              'disagrees with gravity '
+                                              '(SystemStatus.attitude_mismatch).'},
+                        {   'name': 'attitude_verified',
+                            'type': 'int',
+                            'unit': '0/1',
+                            'description_ja': '地上で姿勢チェックが判定済みかつ一致（SystemStatus.attitude_verified）。ARM '
+                                              'に必須。',
+                            'description_en': 'On the ground the attitude check has '
+                                              'judged and agrees '
+                                              '(SystemStatus.attitude_verified). '
+                                              'Required for ARM.'}],
     'pilot': [   {   'name': 'timestamp_us',
                      'type': 'int',
                      'unit': 'us',

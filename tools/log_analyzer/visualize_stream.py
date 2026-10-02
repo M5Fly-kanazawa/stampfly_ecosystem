@@ -65,7 +65,7 @@ NM_TO_MNM = 1000.0
 
 # Grid layout: panels are laid out in `cols` columns (default 3) so the
 # whole overview fits one screen without squashing the panels vertically
-# (a single 15-panel column made the y-axis tick labels overlap once the
+# (a single 16-panel column made the y-axis tick labels overlap once the
 # window was maximised).
 # 格子配置: パネルを `cols` 列（既定 3）に並べ、縦に潰さずに一画面へ収める
 # （15 段の 1 列配置は最大化すると縦軸の目盛りラベルが重なっていた）。
@@ -665,6 +665,38 @@ def panel_status(ax, log, t0_us) -> bool:
     return True
 
 
+@requires('flight_phase')
+def panel_flight_phase(ax, log, t0_us) -> bool:
+    """Flip analysis: flight_state and flip_phase (0=Idle 1=Boost 2=Spin
+    3=Brake 4=Recover 5=Done) as step lines on the left axis, and the
+    accumulated flip angle flip_phi [deg] on a twin right axis. Written for
+    reading a (failed) flip phase by phase at 400 Hz.
+    フリップ解析: flight_state と flip_phase（0=Idle 1=Boost 2=Spin 3=Brake
+    4=Recover 5=Done）をステップ線（左軸）、積算回転角 flip_phi [deg] を
+    右の双子軸に描く。（失敗した）フリップを 400Hz でフェーズ単位に読むため。
+    """
+    df = log.streams['flight_phase']
+    t = _t(df, t0_us)
+    ax.step(t, df['flight_state'].to_numpy(), 'k-', where='post',
+            linewidth=LINE_WIDTH_MEASURED, label='flight_state')
+    ax.step(t, df['flip_phase'].to_numpy(), 'C3-', where='post',
+            linewidth=LINE_WIDTH_MEASURED, label='flip_phase')
+    ax.set_ylabel('state / phase [enum]')
+
+    ax_phi = ax.twinx()
+    ax_phi.plot(t, df['flip_phi'].to_numpy() * RAD_TO_DEG, 'C0-',
+                linewidth=LINE_WIDTH_MEASURED, label='flip_phi [deg]')
+    ax_phi.set_ylabel('flip angle [deg]')
+
+    lines_l, labels_l = ax.get_legend_handles_labels()
+    lines_r, labels_r = ax_phi.get_legend_handles_labels()
+    ax.legend(lines_l + lines_r, labels_l + labels_r, loc='upper right',
+              fontsize=LEGEND_FONT_SIZE, framealpha=LEGEND_FRAME_ALPHA, ncol=3)
+    ax.set_title('Flight State / Flip Phase', fontsize=PANEL_TITLE_FONT_SIZE)
+    ax.grid(True, alpha=0.3)
+    return True
+
+
 # =============================================================================
 # Panel groups selectable via --mode / mode 引数で選べるパネル群
 # =============================================================================
@@ -675,11 +707,13 @@ PANEL_GROUPS = {
         panel_attitude, panel_accel, panel_position, panel_velocity,
         panel_motor_duty, panel_ctrl_output, panel_pilot, panel_height,
         panel_flow, panel_mag, panel_gyro_bias_mode, panel_status,
+        panel_flight_phase,
     ],
     'attitude': [panel_rate_roll, panel_rate_pitch, panel_rate_yaw, panel_attitude],
     'sensors': [panel_accel, panel_gyro_raw, panel_height, panel_flow, panel_mag],
     'position': [panel_position, panel_velocity, panel_height, panel_pilot],
     'eskf': [panel_attitude, panel_position, panel_velocity, panel_gyro_bias_mode, panel_accel_bias],
+    'flip': [panel_flight_phase, panel_rate_roll, panel_rate_pitch, panel_attitude, panel_motor_duty],
 }
 
 

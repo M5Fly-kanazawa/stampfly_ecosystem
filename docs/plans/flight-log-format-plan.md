@@ -174,7 +174,9 @@ Stream の電文定義も `protocol/spec/` には無く、
 | `rate_ref.csv` | 統合パケット固定部 | 400 Hz | `seq`, `rate_ref_roll/pitch/yaw` |
 | `motor.csv` | Duty400 (0x4A) | 400 Hz | `seq`, `duty_FR/RR/RL/FL` |
 | `ctrl_output.csv` | ControlOutput400 (0x4B) | 400 Hz | `seq`, `thrust`, `torque_roll/pitch/yaw` |
+| `flight_phase.csv` | FlightPhase400 (0x4C) | 400 Hz | `seq`, `flight_state`, `flip_phase`, `flip_result`, `flip_phi`（2026-10-02 追加。任意ストリームの追加なので版は v1 のまま。旧ファームの一式には無い） |
 | `pilot.csv` | Control (0x42) | 50 Hz | `throttle`, `roll`, `pitch`, `yaw` |
+| `flight_flags.csv` | FlightFlags (0x4D) | 50 Hz | `pilot_arm`, `pilot_flip`, `flip_ready`, `flip_block_reason`, `arm_block`, `attitude_mismatch`, `attitude_verified`（2026-10-02 追加。上と同じ扱い） |
 | `ctrl_ref.csv` | CtrlRef (0x48) | 50 Hz | `flight_mode`, `angle_ref_roll/pitch`, `total_thrust`, `duty_FR/RR/RL/FL`, `alt_setpoint`, `alt_vel_target`, `climb_rate_cmd`, `pos_setpoint_x/y` |
 | `baro.csv` | Baro (0x45) | 50 Hz | `altitude`, `pressure` |
 | `tof_bottom.csv` / `tof_front.csv` | ToF (0x44 / 0x47) | 30 Hz | `distance`, `status` |

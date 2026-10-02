@@ -265,14 +265,7 @@ public:
 
     /// Phase of the flip state machine (flip-maneuver-plan.md §3.2/§7).
     /// フリップ状態機械のフェーズ（plan §3.2/§7）。
-    enum class Phase : uint8_t {
-        Idle,     // not engaged / 未係合
-        Boost,    // pre-spin climb, level attitude / 反転前の上昇、水平姿勢
-        Spin,     // rate-loop-only spin-up + inverted coast / レートループのみで加速+反転惰性
-        Brake,    // rate-loop-only deceleration / レートループのみで減速
-        Recover,  // attitude-loop level hold + climb / 姿勢ループで水平保持+上昇
-        Done,     // terminal — call reset() to arm the next flip / 終端 — 次のフリップは reset() で再係合
-    };
+    using Phase = FlipPhase;   // defined in data_types.hpp (shared with the flight log) / data_types.hpp で定義（フライトログと共有）
 
     /// One cycle's estimator input (flip-maneuver-plan.md §3.1/§3.2/§3.6).
     /// 1周期分の推定器入力（plan §3.1/§3.2/§3.6）。
@@ -346,6 +339,9 @@ public:
     /// Rotation angle accumulated since start() [deg] (telemetry/tests).
     /// start() からの積算回転角 [deg]（テレメトリ/テスト用）。
     float rotationAngleDeg() const;
+
+    /// Same angle in radians (flight-log telemetry). / 同じ角度を rad で（フライトログ用）。
+    float rotationAngleRad() const { return phi_rad_; }
 
     /// Yaw captured at start() [rad] (used by PidController's Boost/Recover
     /// heading hold — see pid_controller.cpp computeFlipAttitude()).

@@ -23,13 +23,13 @@
 
 namespace {
 
-// Fixed-size stream table (name -> lazily-opened FILE*). 20 covers every
+// Fixed-size stream table (name -> lazily-opened FILE*). 24 covers every
 // stream protocol/spec/flight_log.yaml defines today (imu/attitude/posvel/
 // rate_ref/motor/ctrl_output/pilot/ctrl_ref/baro/tof_bottom/tof_front/flow/
-// mag/status/eskf_cov/truth/events) with headroom.
-// 固定サイズのストリーム表（名前→遅延オープンした FILE*）。20 は
+// mag/status/eskf_cov/truth/events + flight_phase/flight_flags) with headroom.
+// 固定サイズのストリーム表（名前→遅延オープンした FILE*）。24 は
 // flight_log.yaml が現在定義する全ストリームに余裕を持って収まる数。
-constexpr int kMaxStreams = 20;
+constexpr int kMaxStreams = 24;
 
 // truth.csv virtual-clock cadence: 2500us = 400Hz, matching the vehicle's own
 // control-cycle rate so a SILS run and a real flight carry comparable row

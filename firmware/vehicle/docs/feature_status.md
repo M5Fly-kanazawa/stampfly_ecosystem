@@ -64,6 +64,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | SSOT プロトコル準拠 | ControlPacket 14B（protocol/spec 準拠、コントローラ無改変） | 実機 |
 | Telemetry | UDP 50Hz 状態モニタ。受信は `sf telemetry`（ターミナル、`--web` でブラウザ。UDP→SSE プロキシ — requirements §7 の WebSocket は stdlib 等価の SSE で実現） | 実機＋ループバック E2E |
 | Data Stream | 制御周期 400Hz の解析ログ。**旧 vehicle 電文完全互換**（UDP 8890 / 0x50 統合パケット）で `sf log wifi` → `sf log viz` が無改造で動く | 実機 E2E（全センサ設計レート、欠損ゼロ） |
+| Data Stream のフリップ解析用エントリ | 0x4C（400Hz: `flight_state`・フリップのフェーズ/結果/積算角、40B）と 0x4D（50Hz: 操縦 ARM/FLIP ボタン・`flip_ready`/`flip_block_reason`・`arm_block`・姿勢判定、8B）。計約 +2.6 KB/s。旧ファームのログには無い（`sf log` 各コマンドは両方を読める） | ホスト単体試験＋SILS（`api_flip_roll`） |
 | Blackbox | SPIFFS バイナリ記録、ARM→DISARM で1セッション | 実装済（SPIFFS 無しはグレースフル無効） |
 | CLI（USB＋TCP） | esp_console レジストリ（R6）。USB-CDC REPL＋**TCP ポート23**（電池駆動ベンチ用） | 実機（モータテストで使用） |
 | WiFi STA/AP 両対応 | `wifi.mode` パラメータ＋CLI `wifi`、ESP-NOW チャネル共存 | 実機 |

@@ -901,6 +901,102 @@ TEST(wire_ctrl_output400_entry)
     ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
 }
 
+// kPktFlightPhase400 (0x4C) — 400Hz flight_state + flip phase/result/angle, and
+// kPktFlightFlags (0x4D) — 50Hz pilot buttons / readiness flags. Same approach
+// as wire_duty400_entry (data_stream.cpp is not host-buildable): pack with the
+// wire structs and check the byte layout the PC side (udp_capture.py) decodes.
+// kPktFlightPhase400（0x4C）— 400Hz の飛行状態＋フリップのフェーズ/結果/角度、
+// kPktFlightFlags（0x4D）— 50Hz の操縦ボタン/準備フラグ。wire_duty400_entry と
+// 同じ手法（data_stream.cpp はホストビルド不可）: 電文構造体で詰め、PC 側
+// （udp_capture.py）が復号するバイト配置を検査する。
+TEST(wire_flight_phase_and_flags_entries)
+{
+    using namespace sf::datastream;
+
+    sf::LogStreamSample samples[kSamplesPerPacket] = {};
+    UnifiedPacketBuilder builder;
+    builder.begin(0, samples);
+
+    WireFlightPhase400 phase400[kSamplesPerPacket] = {};
+    for (int i = 0; i < kSamplesPerPacket; ++i) {
+        phase400[i].flight_state = 7;                       // FLIP
+        phase400[i].flip_phase   = static_cast<uint8_t>(i % 6);
+        phase400[i].flip_result  = 3;                       // AbortedGyroLimit
+        phase400[i].flip_phi     = quantizeFlipPhi(0.5f * static_cast<float>(i));
+    }
+    static_assert(sizeof(phase400) == 40, "wire drift");
+    ASSERT_TRUE(builder.addEntry(kPktFlightPhase400, phase400, sizeof(phase400)));
+
+    WireFlightFlags flags = {};
+    flags.timestamp_us      = 123456;
+    flags.pilot_buttons     = kPilotButtonArm | kPilotButtonFlip;
+    flags.status_flags      = kFlagFlipReady | kFlagAttitudeVerified;
+    flags.flip_block_reason = 9;
+    flags.arm_block         = 6;
+    ASSERT_TRUE(builder.addEntry(kPktFlightFlags, &flags, sizeof(flags)));
+
+    const size_t length = builder.finish();
+    const uint8_t* buf = builder.buffer();
+
+    // Fixed part ends at 916; entry_count = 2; phase entry [id][size=40][40B];
+    // flags entry [id][size=8][8B]; checksum last.
+    ASSERT_TRUE(buf[916] == 2);
+    ASSERT_TRUE(buf[917] == kPktFlightPhase400 && buf[918] == 40);
+    // Sample 3: phase = 3, phi = round(1.5 * 1000) = 1500 (int16 LE at +3).
+    // サンプル 3: phase = 3、phi = round(1.5×1000) = 1500（+3 に int16 LE）。
+    const int base3 = 919 + 3 * 5;
+    ASSERT_TRUE(buf[base3 + 0] == 7 && buf[base3 + 1] == 3 && buf[base3 + 2] == 3);
+    int16_t phi3;
+    memcpy(&phi3, &buf[base3 + 3], 2);
+    ASSERT_TRUE(phi3 == 1500);
+
+    const int flags_at = 919 + 40;
+    ASSERT_TRUE(buf[flags_at] == kPktFlightFlags && buf[flags_at + 1] == 8);
+    uint32_t ts;
+    memcpy(&ts, &buf[flags_at + 2], 4);
+    ASSERT_TRUE(ts == 123456);
+    ASSERT_TRUE(buf[flags_at + 6] == 0x03 && buf[flags_at + 7] == 0x05);
+    ASSERT_TRUE(buf[flags_at + 8] == 9 && buf[flags_at + 9] == 6);
+
+    ASSERT_TRUE(length == flags_at + 10 + 1);
+    ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
+}
+
+TEST(wire_quantize_flip_phi_saturation)
+{
+    using namespace sf::datastream;
+    ASSERT_TRUE(quantizeFlipPhi(6.283f) == 6283);       // one full turn
+    ASSERT_TRUE(quantizeFlipPhi(1000.0f) == 32767);     // saturate, not wrap / 巻き戻らず飽和
+    ASSERT_TRUE(quantizeFlipPhi(-1000.0f) == -32767);
+}
+
+// Worst case: every entry the firmware can emit in one packet must fit under
+// kUnifiedMaxSize, otherwise addEntry() silently drops the LAST one (mag) —
+// see the kUnifiedMaxSize doc. Sizes mirror DataStream::appendEntries().
+// 最悪ケース: 1 パケットにファームが積み得る全エントリが kUnifiedMaxSize に収まる
+// こと。収まらないと addEntry() が最後（mag）を黙って弾く。サイズは
+// DataStream::appendEntries() と対応。
+TEST(wire_unified_worst_case_fits)
+{
+    using namespace sf::datastream;
+    constexpr size_t kEntryHeader = 2;
+    constexpr size_t kFixedPart   = 917;   // header + 8 blocks + entry_count
+    constexpr size_t kDuty        = kEntryHeader + sizeof(WireDuty400) * kSamplesPerPacket;
+    constexpr size_t kCtrlOutput  = kEntryHeader + sizeof(WireControlOutput400) * kSamplesPerPacket;
+    constexpr size_t kPhase       = kEntryHeader + sizeof(WireFlightPhase400) * kSamplesPerPacket;
+    constexpr size_t kFlags       = kEntryHeader + sizeof(WireFlightFlags);
+    constexpr size_t kControl     = kEntryHeader + sizeof(WireControl);
+    constexpr size_t kCtrlRef     = kEntryHeader + sizeof(WireCtrlRef);
+    constexpr size_t kFlow        = (kEntryHeader + sizeof(WireFlow)) * 2;   // 2 per packet at 100 Hz
+    constexpr size_t kTof         = kEntryHeader + sizeof(WireTof);
+    constexpr size_t kBaro        = kEntryHeader + sizeof(WireBaro);
+    constexpr size_t kMag         = kEntryHeader + sizeof(WireMag);
+    constexpr size_t kChecksum    = 1;
+    constexpr size_t kTotal = kFixedPart + kDuty + kCtrlOutput + kPhase + kFlags + kControl +
+                              kCtrlRef + kFlow + kTof + kBaro + kMag + kChecksum;
+    ASSERT_TRUE(kTotal <= kUnifiedMaxSize);
+}
+
 // =============================================================================
 // TakeoffLandingMgr tests — touchdown detection (firm ground + stalled descent)
 // 離着陸マネージャ — 接地検出（確実な接地＋降下停滞）
@@ -1065,6 +1161,9 @@ int main()
     run_wire_duty400_entry();
     run_wire_quantize_duty_saturation();
     run_wire_ctrl_output400_entry();
+    run_wire_flight_phase_and_flags_entries();
+    run_wire_quantize_flip_phi_saturation();
+    run_wire_unified_worst_case_fits();
 
     printf("\n[Tello state]\n");
     run_tello_state_all_keys_present();

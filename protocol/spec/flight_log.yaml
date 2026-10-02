@@ -15,6 +15,19 @@
 format: stampfly-flight-log
 version: 1
 
+# Versioning / バージョン規則:
+# Adding an OPTIONAL stream (or a trailing optional column) is backward
+# compatible and keeps `version: 1`: readers ignore unknown streams, and a
+# bundle from older firmware simply lacks the new file ("absent, not invented").
+# `version` is bumped only for a change that breaks existing readers (renaming
+# or retyping a column, changing a unit). Streams added after v1.0:
+#   flight_phase (400 Hz), flight_flags (50 Hz) -- 2026-10-02.
+# 任意ストリーム（または末尾の任意列）の追加は後方互換で `version: 1` のまま:
+# 読み込み側は未知のストリームを無視し、旧ファームの一式は新ファイルを
+# 単に持たない（「無いものは無い」）。`version` を上げるのは既存の読み込み側を
+# 壊す変更（列名・型・単位の変更）のときだけ。v1.0 以後に追加したストリーム:
+#   flight_phase（400 Hz）, flight_flags（50 Hz）-- 2026-10-02。
+
 # =============================================================================
 # Container (plan section 2.1)
 # 容器（計画書 2.1節）
@@ -121,9 +134,10 @@ units:
   quaternion: "unitless (w,x,y,z)"
   # seq (control-cycle sequence number) has no physical unit -- see the
   # `seq` column description on each lockstep stream (imu, attitude,
-  # posvel, rate_ref, motor, ctrl_output) below.
+  # posvel, rate_ref, motor, ctrl_output, flight_phase) below.
   # seq（制御周期の通し番号）に物理単位は無い -- 各ロックステップ系
-  # ストリーム（imu, attitude, posvel, rate_ref, motor, ctrl_output）の
+  # ストリーム（imu, attitude, posvel, rate_ref, motor, ctrl_output,
+  # flight_phase）の
   # `seq` 列の説明を参照。
   #
   # Baro (0x45)'s wire struct sends pressure as raw hPa, not Pa (see
@@ -579,6 +593,137 @@ streams:
         unit: "N*m"
         description_ja: ミキサー手前のコントローラ指令ヨートルク。
         description_en: "PRE-MIXER commanded yaw body torque."
+
+  - name: flight_phase
+    file: flight_phase.csv
+    source: "FlightPhase400 (0x4C)"
+    nominal_rate_hz: 400
+    required: false
+    # Added after v1.0 as an additive, optional stream (see `versioning` above):
+    # bundles from older firmware simply have no flight_phase.csv.
+    # v1.0 の後に追加した「任意・追加のみ」のストリーム（上の `versioning` 参照）:
+    # 旧ファームの一式には flight_phase.csv が無い。
+    columns:
+      - name: timestamp_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          機体起動基準のマイクロ秒タイムスタンプ。imu.csv と同一パケット由来で、
+          同じ `seq` の imu.csv 行と同じ値になる（重複し得る。行の識別は `seq`）。
+        description_en: >-
+          Vehicle boot-relative microsecond timestamp. Same packet as imu.csv,
+          so equal to the imu.csv row with the same `seq` (may repeat; identify
+          rows by `seq`).
+      - *seq_column
+      - name: flight_state
+        type: int
+        unit: "enum"
+        description_ja: >-
+          飛行状態（FlightState）を 400Hz で記録。status.csv の同名列は 1Hz
+          なので、状態遷移の時刻はこちらで読むこと。
+        description_en: >-
+          Flight state (FlightState) at 400 Hz. status.csv has the same column
+          at only 1 Hz -- read state-transition times from this stream.
+      - name: flip_phase
+        type: int
+        unit: "enum"
+        description_ja: >-
+          フリップ列生成器のフェーズ。0=Idle（未係合）, 1=Boost, 2=Spin,
+          3=Brake, 4=Recover, 5=Done。
+        description_en: >-
+          Flip-sequencer phase. 0=Idle (not engaged), 1=Boost, 2=Spin,
+          3=Brake, 4=Recover, 5=Done.
+      - name: flip_result
+        type: int
+        unit: "enum"
+        description_ja: >-
+          フリップの結果（FlipResult）。0=None, 1=Ok, 2=AbortedSpinTimeout,
+          3=AbortedGyroLimit, 4=AbortedRecoverTimeout。次のフリップが始まる
+          まで直前の結果を保持する（disarm 中は 0）。
+        description_en: >-
+          Flip outcome (FlipResult). 0=None, 1=Ok, 2=AbortedSpinTimeout,
+          3=AbortedGyroLimit, 4=AbortedRecoverTimeout. Holds the last result
+          until the next flip starts (0 while disarmed).
+      - name: flip_phi
+        type: float
+        unit: "rad"
+        description_ja: >-
+          フリップ開始からの積算回転角（符号付き ∫ω dt をフリップ方向に正に
+          取ったもの、0 未満はクランプ）。Idle では 0。電文は rad×1000 の int16
+          （分解能 0.001 rad）。
+        description_en: >-
+          Rotation angle accumulated since the flip started (integral of omega
+          dt, positive along the flip direction, clamped at 0). 0 when Idle.
+          Sent as int16 rad x 1000 (0.001 rad resolution).
+
+  - name: flight_flags
+    file: flight_flags.csv
+    source: "FlightFlags (0x4D)"
+    nominal_rate_hz: 50
+    required: false
+    # Added after v1.0 as an additive, optional stream (see `versioning` above).
+    # v1.0 の後に追加した「任意・追加のみ」のストリーム（上の `versioning` 参照）。
+    columns:
+      - name: timestamp_us
+        type: int
+        unit: "us"
+        description_ja: 機体起動基準のマイクロ秒タイムスタンプ（統合パケット最終サンプルの IMU 時刻）。
+        description_en: "Vehicle boot-relative microsecond timestamp (IMU time of the unified packet's last sample)."
+      - name: pilot_arm
+        type: int
+        unit: "0/1"
+        description_ja: 送信機の ARM スイッチ（制御フラグ bit0）。
+        description_en: "Transmitter ARM switch (control flags bit0)."
+      - name: pilot_flip
+        type: int
+        unit: "0/1"
+        description_ja: 送信機の FLIP ボタン（制御フラグ bit1）。
+        description_en: "Transmitter FLIP button (control flags bit1)."
+      - name: flip_ready
+        type: int
+        unit: "0/1"
+        description_ja: >-
+          制御器のフリップ実行条件 C2-C8 が成立（ControllerStatus.flip_ready）。
+          制御器が最後に発行した値で、disarm 中は更新されない（flight_phase の
+          flight_state と合わせて読む）。
+        description_en: >-
+          Controller flip execution conditions C2-C8 hold
+          (ControllerStatus.flip_ready). The last value the controller
+          published; not updated while disarmed (read together with
+          flight_phase.flight_state).
+      - name: flip_block_reason
+        type: int
+        unit: "enum"
+        description_ja: >-
+          フリップ不成立理由（FlipBlockReason）。0=None, 1=NotFlying, 2=TooLow,
+          3=NotSteady, 4=BatteryLow, 5=EstimatorUnhealthy, 6=Cooldown, 7=Busy,
+          8=SourceConflict, 9=Disabled（flip.enable=0）。flip_ready=0 のときのみ意味を持つ。
+        description_en: >-
+          Why a flip is blocked (FlipBlockReason). 0=None, 1=NotFlying,
+          2=TooLow, 3=NotSteady, 4=BatteryLow, 5=EstimatorUnhealthy,
+          6=Cooldown, 7=Busy, 8=SourceConflict, 9=Disabled (flip.enable=0).
+          Meaningful only when flip_ready=0.
+      - name: arm_block
+        type: int
+        unit: "enum"
+        description_ja: >-
+          ARM 前判定の阻害理由（ArmBlock、SystemMode.arm_block）。0=None（判定を通る）,
+          1=Pairing, 2=Battery, 3=Calibrating, 4=BenchRelevel, 5=TiltPending,
+          6=TiltMismatch。
+        description_en: >-
+          Pre-arm gate block reason (ArmBlock, SystemMode.arm_block).
+          0=None (gates pass), 1=Pairing, 2=Battery, 3=Calibrating,
+          4=BenchRelevel, 5=TiltPending, 6=TiltMismatch.
+      - name: attitude_mismatch
+        type: int
+        unit: "0/1"
+        description_ja: 地上で推定姿勢が重力方向と不一致（SystemStatus.attitude_mismatch）。
+        description_en: "On the ground the estimated attitude disagrees with gravity (SystemStatus.attitude_mismatch)."
+      - name: attitude_verified
+        type: int
+        unit: "0/1"
+        description_ja: 地上で姿勢チェックが判定済みかつ一致（SystemStatus.attitude_verified）。ARM に必須。
+        description_en: "On the ground the attitude check has judged and agrees (SystemStatus.attitude_verified). Required for ARM."
 
   - name: pilot
     file: pilot.csv

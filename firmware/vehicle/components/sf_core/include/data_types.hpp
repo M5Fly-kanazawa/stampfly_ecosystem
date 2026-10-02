@@ -290,6 +290,10 @@ struct LogStreamSample {
     float duty[4];          // motor duty FR,RR,RL,FL        / モータ duty
     uint8_t flight_mode;    // FlightMode value              / フライトモード
     uint8_t flight_state;   // FlightState value             / フライト状態
+    uint8_t flip_phase;     // FlipPhase value (0 = Idle)    / フリップのフェーズ（0=Idle）
+    uint8_t flip_result;    // FlipResult value              / フリップの結果
+    float   flip_phi_rad;   // [rad] flip rotation angle accumulated so far
+                            //                               / フリップの積算回転角
 };
 
 // =============================================================================
@@ -433,6 +437,10 @@ struct ControllerStatus {
     bool     flip_done;         // completed OR aborted-then-recovered (state FLIP only)
                                 // 完了 or 打ち切り後回復完了（state FLIP の間のみ意味）
     uint8_t  flip_result;       // FlipResult / FlipResult の値
+    uint8_t  flip_phase;        // FlipPhase — sequencer phase (Idle when not engaged), for the
+                                // flight log / シーケンサのフェーズ（未係合は Idle）。フライトログ用
+    float    flip_phi_rad;      // [rad] rotation accumulated since the flip started (0 when
+                                // Idle) / フリップ開始からの積算回転角（Idle では 0）
 };
 
 // =============================================================================
@@ -666,6 +674,36 @@ inline const char* flipBlockReasonName(FlipBlockReason reason)
         case FlipBlockReason::SourceConflict:      return "SourceConflict";
         case FlipBlockReason::Disabled:            return "Disabled";
         default:                                    return "UNKNOWN";
+    }
+}
+
+/// Phase of the flip state machine (flip-maneuver-plan.md §3.2/§7) — published in
+/// ControllerStatus.flip_phase and recorded by the Data Stream (flight_phase stream).
+/// The numeric values are part of the log format (protocol/spec/flight_log.yaml).
+/// フリップ状態機械のフェーズ（plan §3.2/§7）— ControllerStatus.flip_phase で発行し、
+/// Data Stream（flight_phase ストリーム）が記録する。数値はログ形式の一部
+/// （protocol/spec/flight_log.yaml）。
+enum class FlipPhase : uint8_t {
+    Idle    = 0,   // not engaged / 未係合
+    Boost   = 1,   // pre-spin climb, level attitude / 反転前の上昇、水平姿勢
+    Spin    = 2,   // rate-loop-only spin-up + inverted coast / レートループのみで加速+反転惰性
+    Brake   = 3,   // rate-loop-only deceleration / レートループのみで減速
+    Recover = 4,   // attitude-loop level hold + climb / 姿勢ループで水平保持+上昇
+    Done    = 5,   // terminal — next flip needs reset() / 終端 — 次のフリップは reset() で再係合
+};
+
+/// Get human-readable flip-phase name
+/// 宙返りフェーズの名前を取得する
+inline const char* flipPhaseName(FlipPhase phase)
+{
+    switch (phase) {
+        case FlipPhase::Idle:    return "Idle";
+        case FlipPhase::Boost:   return "Boost";
+        case FlipPhase::Spin:    return "Spin";
+        case FlipPhase::Brake:   return "Brake";
+        case FlipPhase::Recover: return "Recover";
+        case FlipPhase::Done:    return "Done";
+        default:                 return "UNKNOWN";
     }
 }
 

@@ -56,6 +56,8 @@ public:
     void onFlipComplete() override;
     bool isFlipReady(FlipBlockReason& reason) const override;
     bool isFlipActive() const override { return flip_.active(); }
+    FlipPhase flipPhase() const override { return flip_.phase(); }
+    float flipRotationRad() const override { return flip_.rotationAngleRad(); }
     bool isFlipDone(FlipResult& result) const override { return flip_.done(result); }
 
     /// One-shot fetch of a completed stepped-sine point (autotune). Returns

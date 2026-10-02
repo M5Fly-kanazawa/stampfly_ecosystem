@@ -69,7 +69,7 @@ TaskHandle_t control_handle() { return s_control_handle; }
 /// @design requirements.md §7 — Data Stream（解析用・全レート）          [OK]
 /// @design architecture.md §5 — ログフロー: Data Stream                  [OK]
 static void publishLogStream(const sf::ControlOutput& control, uint8_t state,
-                             uint8_t sub_mode)
+                             uint8_t sub_mode, const sf::ControllerStatus& status)
 {
     const sf::ImuData       imu   = sf::sensor_imu.latest();
     const sf::StateEstimate est   = sf::estimate_state.latest();
@@ -96,6 +96,11 @@ static void publishLogStream(const sf::ControlOutput& control, uint8_t state,
     sample.thrust        = control.thrust;
     sample.flight_mode   = sub_mode;
     sample.flight_state  = state;
+    // Flip sequencer progress: lets a failed flip be reconstructed phase by phase.
+    // フリップのシーケンサ進行: 失敗したフリップをフェーズ単位で再構成できる。
+    sample.flip_phase    = status.flip_phase;
+    sample.flip_result   = status.flip_result;
+    sample.flip_phi_rad  = status.flip_phi_rad;
     sf::log_stream.publish(sample);
 }
 
@@ -338,7 +343,7 @@ void ControlTask(void* pvParameters)
             // ground data — at-rest sensor noise, handling — matters for analysis.
             // disarm 中も Data Stream は記録を続ける（制御ゼロのレコード）:
             // 静止時センサノイズやハンドリング等の地上データも解析に必要。
-            publishLogStream({}, mode.state, mode.sub_mode);
+            publishLogStream({}, mode.state, mode.sub_mode, sf::ControllerStatus{});
             continue;
         }
 
@@ -442,6 +447,8 @@ void ControlTask(void* pvParameters)
         sf::FlipResult flip_result = sf::FlipResult::None;
         status.flip_done = controller.isFlipDone(flip_result);
         status.flip_result = static_cast<uint8_t>(flip_result);
+        status.flip_phase = static_cast<uint8_t>(controller.flipPhase());
+        status.flip_phi_rad = controller.flipRotationRad();
         status.timestamp = static_cast<uint32_t>(esp_timer_get_time());
         sf::controller_status.publish(status);
 
@@ -463,6 +470,6 @@ void ControlTask(void* pvParameters)
         // actuator_motor.latest() が「この周期」の duty を持つようにする）。
         // =====================================================================
 
-        publishLogStream(control, mode.state, mode.sub_mode);
+        publishLogStream(control, mode.state, mode.sub_mode, status);
     }
 }

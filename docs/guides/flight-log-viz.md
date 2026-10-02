@@ -96,6 +96,7 @@ sf log viz logs/flight_20260911T121243.sflog.zip --time-range 5 15
 | Magnetometer | 地磁気 x/y/z | µT | `mag.csv` |
 | Gyro Bias / Flight Mode | ESKF（拡張カルマンフィルタ）のジャイロバイアス推定値と `flight_mode` | deg/s | `attitude.csv`（`gyro_bias_x/y/z`）+ `ctrl_ref.csv`（`flight_mode`） |
 | Battery Status | バッテリ電圧・電流 | V / mA | `status.csv` |
+| Flight State / Flip Phase | 飛行状態（`flight_state`）とフリップのフェーズ（`flip_phase`: 0=Idle 1=Boost 2=Spin 3=Brake 4=Recover 5=Done）を 400 Hz のステップ線で、積算回転角 `flip_phi` を deg で重ねる。フリップの失敗解析用 | enum / deg | `flight_phase.csv` |
 
 ### モード（`--mode`）
 
@@ -106,6 +107,7 @@ sf log viz logs/flight_20260911T121243.sflog.zip --time-range 5 15
 | `sensors` | Acceleration、Raw Gyro（`imu.csv` の `gyro_raw_x/y/z`）、Height/Distance、Optical Flow、Magnetometer |
 | `position` | Position、Velocity、Height/Distance、Pilot Input |
 | `eskf` | Attitude、Position、Velocity、Gyro Bias/Flight Mode、Accelerometer Bias（`attitude.csv` の `accel_bias_x/y/z`） |
+| `flip` | Flight State/Flip Phase、Roll/Pitch Rate、Attitude、Motor duty（フリップ解析用） |
 
 ```bash
 sf log viz logs/flight_20260911T121243.sflog.zip --mode attitude
@@ -277,6 +279,7 @@ Each panel is automatically skipped when its required stream (CSV) is absent fro
 | Magnetometer | Magnetic field x/y/z | uT | `mag.csv` |
 | Gyro Bias / Flight Mode | ESKF (Error-State Kalman Filter) gyro bias estimate and `flight_mode` | deg/s | `attitude.csv` (`gyro_bias_x/y/z`) + `ctrl_ref.csv` (`flight_mode`) |
 | Battery Status | Battery voltage/current | V / mA | `status.csv` |
+| Flight State / Flip Phase | `flight_state` and the flip phase (`flip_phase`: 0=Idle 1=Boost 2=Spin 3=Brake 4=Recover 5=Done) as 400 Hz step lines, with the accumulated rotation `flip_phi` in deg overlaid. For analysing a failed flip | enum / deg | `flight_phase.csv` |
 
 ### Modes (`--mode`)
 
@@ -287,6 +290,7 @@ Each panel is automatically skipped when its required stream (CSV) is absent fro
 | `sensors` | Acceleration, Raw Gyro (`imu.csv`'s `gyro_raw_x/y/z`), Height/Distance, Optical Flow, Magnetometer |
 | `position` | Position, Velocity, Height/Distance, Pilot Input |
 | `eskf` | Attitude, Position, Velocity, Gyro Bias/Flight Mode, Accelerometer Bias (`attitude.csv`'s `accel_bias_x/y/z`) |
+| `flip` | Flight State/Flip Phase, Roll/Pitch Rate, Attitude, Motor duty (for flip analysis) |
 
 ```bash
 sf log viz logs/flight_20260911T121243.sflog.zip --mode attitude
@@ -302,6 +306,10 @@ sf log viz logs/flight_20260911T121243.sflog.zip --mode position
 
 ```bash
 sf log viz logs/flight_20260911T121243.sflog.zip --mode eskf
+```
+
+```bash
+sf log viz logs/flight_20260911T121243.sflog.zip --mode flip
 ```
 
 ### Interactive display

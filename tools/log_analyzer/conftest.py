@@ -162,7 +162,23 @@ def build_synthetic_log(duration_s: float = DURATION_S) -> sflog.FlightLog:
         'pid_yaw_kp': 1.2e-3, 'pid_yaw_ti': 1.0, 'pid_yaw_td': 0.0,
     })
 
+    # Flip-analysis streams: Idle -> Boost -> Spin -> Brake -> Recover -> Done over the run.
+    # フリップ解析用ストリーム: 実行中に Idle→Boost→Spin→Brake→Recover→Done。
+    phase_cycle = [0, 1, 2, 3, 4, 5]
+    flip_phase = [phase_cycle[min(i * len(phase_cycle) // len(ts), 5)] for i in range(len(ts))]
+    flight_phase = pd.DataFrame({
+        'timestamp_us': ts, 'seq': seq,
+        'flight_state': 5, 'flip_phase': flip_phase, 'flip_result': 1,
+        'flip_phi': [p * 1.2 for p in flip_phase],
+    })
+    flight_flags = pd.DataFrame({
+        'timestamp_us': ts_50,
+        'pilot_arm': 1, 'pilot_flip': 0, 'flip_ready': 1, 'flip_block_reason': 0,
+        'arm_block': 0, 'attitude_mismatch': 0, 'attitude_verified': 1,
+    })
+
     streams = {
+        'flight_phase': flight_phase, 'flight_flags': flight_flags,
         'imu': imu, 'attitude': attitude, 'posvel': posvel, 'rate_ref': rate_ref,
         'motor': motor, 'ctrl_output': ctrl_output, 'pilot': pilot,
         'ctrl_ref': ctrl_ref, 'baro': baro, 'tof_bottom': tof_bottom,

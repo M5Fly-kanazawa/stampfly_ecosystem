@@ -239,6 +239,14 @@ public:
     /// 宙返りマニューバが現在進行中か。既定 false。
     virtual bool isFlipActive() const { return false; }
 
+    /// Current flip-sequencer phase (telemetry). Default Idle.
+    /// 現在の宙返りシーケンサのフェーズ（テレメトリ用）。既定 Idle。
+    virtual FlipPhase flipPhase() const { return FlipPhase::Idle; }
+
+    /// Rotation angle accumulated since the flip started [rad] (telemetry). Default 0.
+    /// 宙返り開始からの積算回転角 [rad]（テレメトリ用）。既定 0。
+    virtual float flipRotationRad() const { return 0.0f; }
+
     /// Whether the in-progress (or just-finished) flip has reached its
     /// terminal state (completed normally OR aborted-then-recovered).
     /// `result` carries the outcome. Default: never done (no flip capability).
