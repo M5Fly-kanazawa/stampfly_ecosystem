@@ -58,6 +58,12 @@ sf sils gui            # ブラウザが自動で開く（http://127.0.0.1:8765�
 - 「変更をクリア」で全て既定に戻します。
 - 仕組み: 変更は `SILS_EMU_PARAMS_FILE`（`name value` 行）で emu 起動時に `params::set_*` へ適用。
 
+### 表示言語を切り替える
+
+- ヘッダー右端の「言語」で 中文 / English / 日本語 を切り替えます（ページを再読み込み）。
+- 選択はブラウザに保存されます。未選択のときはブラウザの言語設定に従い、中国語・日本語以外は英語で表示します。
+- 文言は `static/app.js` の `I18N` 辞書にあります（日本語が元の文言）。文言を追加・変更するときは 3 言語をそろえてください。
+
 ## 3. 仕組み（開発者向け）
 
 | 部品 | ファイル | 役割 |
@@ -100,6 +106,11 @@ sf sils gui        # opens the browser at http://127.0.0.1:8765
   `scenarios/` or just run the edited list. For the `.scn` grammar and how to write the
   matching `.expect` (no GUI support for that — hand-write it), see
   [`../docs/scenario_tutorial.md`](../docs/scenario_tutorial.md).
+- **UI language**: the "Language" selector at the right end of the header switches between
+  中文 / English / 日本語 (the page reloads). The choice is remembered per browser; otherwise
+  the browser language is used (English unless Chinese or Japanese). Strings live in the
+  `I18N` dictionary in `static/app.js` (Japanese = the original wording) — keep all three
+  languages in step when adding or changing a string.
 - **Parameters**: the "パラメータ" tab — edit any of the 54 firmware params; only the
   changed ones are applied to the run (no rebuild), via `SILS_EMU_PARAMS_FILE`.
 

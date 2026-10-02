@@ -22,6 +22,159 @@ const api = {
   },
 };
 const $ = (id) => document.getElementById(id);
+
+// ============================================================================ i18n
+// UI strings in 中文 / English / 日本語. Static HTML carries data-i18n* keys; dynamic
+// strings go through L(key). The choice is kept per browser (localStorage); default
+// follows the browser language. A missing key falls back to Japanese, then the key.
+// UI 文字列（中文 / English / 日本語）。静的 HTML は data-i18n* キー、動的文字列は L(key)
+// 経由。選択はブラウザごとに保存（localStorage）、既定はブラウザ言語。未定義キーは日本語→キー名へ。
+const I18N = {
+  zh: {
+    language: '语言', scenario: '剧本', scenario_title: '已保存的剧本', duration: '时长[s]',
+    noise: '噪声', battery: '电池模型', run: '▶ 运行',
+    tab_builder: '编排剧本', tab_params: '参数',
+    builder_hint: '在时间轴上添加事件来编排飞机的动作。<code>+</code> = 紧接上一个事件之后。',
+    ev_rc: 'rc（摇杆）', ev_rc_ramp: 'rc_ramp（扫描）', ev_wind: 'wind（阵风扰动）',
+    ev_fault: 'fault（电机故障）', ev_bias: 'bias（IMU 零偏）', ev_handle: 'handle（拿起放下）',
+    add_event: '＋ 添加事件', save_name_ph: '保存名（例如 my_test）', save_scn: '💾 保存 .scn',
+    show_scn: '查看 .scn', params_hint: '只有改过的参数会用于本次运行（无需重新编译）。',
+    clear_changes: '清除修改', param_search_ph: '🔍 按参数名筛选',
+    anim_title: '飞行动画', anim_hint: '（拖动旋转视角 / 双指缩放）',
+    scene_idle: '选择剧本后点"▶ 运行"即可回放', trail: '轨迹',
+    exag_title: '机体实际尺寸 82mm，相对飞行范围很小，可以放大显示', airframe: '机体', actual_size: '实际尺寸',
+    graphs_title: '图表', graphs_hint: '（可缩放 · 悬停看数值 · 时间光标同步）',
+    checks_title: '判定结果', run_log: '运行日志（末尾）',
+    err_3d: '3D 错误：', new_scenario: '— 新建（从空白开始）—', load_failed: '读取失败：',
+    f_thr: '油门', f_roll: '横滚', f_pitch: '俯仰', f_yaw: '偏航', f_hold_ms: '保持ms', f_axis: '轴',
+    f_gust_ms: '阵风ms', f_motor: '电机0-3', f_gain: '增益', f_height: '高度m', f_place_x: '放置x',
+    f_place_y: '放置y', f_lift_ms: '拿起ms', f_carry_ms: '搬运ms', f_place_ms: '放下ms',
+    ch_rc: 'rc 摇杆', ch_rc_ramp: 'rc_ramp 扫描', ch_wind: 'wind 阵风', ch_fault: 'fault 电机故障',
+    ch_bias: 'bias IMU 零偏', ch_handle: 'handle 拿起放下',
+    drag_reorder: '拖动排序', at_title: '时间：0=绝对毫秒 / +=紧接上一事件 / +500=上一事件后 500ms',
+    delete: '删除', note: '备注', default: '默认',
+    pg_rate: '角速度控制', pg_attitude: '姿态控制', pg_altitude: '高度控制', pg_position: '位置控制',
+    pg_eskf: '估计器 ESKF', pg_safety: '安全', pg_calibration: '校准', pg_estimator: '估计器选择', pg_other: '其他',
+    running: '运行中…', running_msg: '运行中… 正在进行物理仿真', error: '错误', request_error: '通信错误：',
+    failed: '失败', no_expect: '（没有 .expect → 按退出码判定）', no_checks: '无检查项',
+    alt_true: '高度 真值', estimate: '估计', roll_true: 'roll 真值', roll_est: 'roll 估计',
+    pitch_true: 'pitch 真值', pitch_est: 'pitch 估计',
+    plot_alt: '高度 [m]', plot_att: '姿态 roll/pitch [deg]', plot_motor: '电机 duty [0-1]',
+    no_trajectory: '这次运行没有轨迹数据', preview_unavailable: '（无法生成预览）',
+    params_cleared: '已清除参数修改', enter_name: '请输入保存名', save_failed: '保存失败：', saved: '已保存：',
+  },
+  en: {
+    language: 'Language', scenario: 'Scenario', scenario_title: 'Saved scenarios', duration: 'Duration [s]',
+    noise: 'Noise', battery: 'Battery model', run: '▶ Run',
+    tab_builder: 'Build scenario', tab_params: 'Parameters',
+    builder_hint: 'Add events to the timeline to script the flight. <code>+</code> = right after the previous event.',
+    ev_rc: 'rc (sticks)', ev_rc_ramp: 'rc_ramp (sweep)', ev_wind: 'wind (gust)',
+    ev_fault: 'fault (motor failure)', ev_bias: 'bias (IMU bias)', ev_handle: 'handle (pick up & place)',
+    add_event: '+ Add event', save_name_ph: 'Save as (e.g. my_test)', save_scn: '💾 Save .scn',
+    show_scn: 'Show .scn', params_hint: 'Only changed parameters apply to the run (no rebuild needed).',
+    clear_changes: 'Clear changes', param_search_ph: '🔍 Filter by parameter name',
+    anim_title: 'Flight animation', anim_hint: '(drag to orbit / pinch to zoom)',
+    scene_idle: 'Pick a scenario and press "▶ Run" to play it', trail: 'Trail',
+    exag_title: 'The airframe is 82 mm, small next to the flight; you can enlarge it', airframe: 'Airframe',
+    actual_size: 'True size',
+    graphs_title: 'Charts', graphs_hint: '(zoom · hover for values · time cursor synced)',
+    checks_title: 'Checks', run_log: 'Run log (tail)',
+    err_3d: '3D error: ', new_scenario: '— New (blank) —', load_failed: 'Load failed: ',
+    f_thr: 'Throttle', f_roll: 'Roll', f_pitch: 'Pitch', f_yaw: 'Yaw', f_hold_ms: 'hold ms', f_axis: 'axis',
+    f_gust_ms: 'gust ms', f_motor: 'motor 0-3', f_gain: 'gain', f_height: 'height m', f_place_x: 'place x',
+    f_place_y: 'place y', f_lift_ms: 'lift ms', f_carry_ms: 'carry ms', f_place_ms: 'place ms',
+    ch_rc: 'rc sticks', ch_rc_ramp: 'rc_ramp sweep', ch_wind: 'wind gust', ch_fault: 'fault motor failure',
+    ch_bias: 'bias IMU bias', ch_handle: 'handle pick & place',
+    drag_reorder: 'Drag to reorder', at_title: 'Time: 0 = absolute ms / + = right after previous / +500 = 500 ms after previous',
+    delete: 'Delete', note: 'Note', default: 'default',
+    pg_rate: 'Rate control', pg_attitude: 'Attitude control', pg_altitude: 'Altitude control',
+    pg_position: 'Position control', pg_eskf: 'Estimator ESKF', pg_safety: 'Safety',
+    pg_calibration: 'Calibration', pg_estimator: 'Estimator select', pg_other: 'Other',
+    running: 'Running…', running_msg: 'Running… physics simulation in progress', error: 'Error',
+    request_error: 'Request error: ', failed: 'Failed', no_expect: '(no .expect → judged by exit code)',
+    no_checks: 'No checks',
+    alt_true: 'alt true', estimate: 'estimate', roll_true: 'roll true', roll_est: 'roll est',
+    pitch_true: 'pitch true', pitch_est: 'pitch est',
+    plot_alt: 'Altitude [m]', plot_att: 'Attitude roll/pitch [deg]', plot_motor: 'Motor duty [0-1]',
+    no_trajectory: 'This run has no trajectory', preview_unavailable: '(preview unavailable)',
+    params_cleared: 'Parameter changes cleared', enter_name: 'Please enter a name', save_failed: 'Save failed: ',
+    saved: 'Saved: ',
+  },
+  ja: {
+    language: '言語', scenario: 'シナリオ', scenario_title: '保存済みシナリオ', duration: '時間[s]',
+    noise: 'ノイズ', battery: '電池モデル', run: '▶ 実行',
+    tab_builder: 'シナリオ作成', tab_params: 'パラメータ',
+    builder_hint: 'タイムラインにイベントを足して機体の動きを作ります。<code>+</code>＝直前イベントの後。',
+    ev_rc: 'rc（スティック）', ev_rc_ramp: 'rc_ramp（掃引）', ev_wind: 'wind（外乱風）',
+    ev_fault: 'fault（モータ故障）', ev_bias: 'bias（IMUバイアス）', ev_handle: 'handle（拾い上げ）',
+    add_event: '＋ イベント追加', save_name_ph: '保存名 (例 my_test)', save_scn: '💾 .scn 保存',
+    show_scn: '.scn を表示', params_hint: '変更したパラメータだけが走行に反映されます（再ビルド不要）。',
+    clear_changes: '変更をクリア', param_search_ph: '🔍 パラメータ名で絞り込み',
+    anim_title: '飛行アニメーション', anim_hint: '（ドラッグで視点回転 / 2本指でズーム）',
+    scene_idle: 'シナリオを選んで「▶ 実行」を押すと再生されます', trail: '軌跡',
+    exag_title: '機体は実寸82mm。飛行に対し小さいので拡大表示も選べます', airframe: '機体', actual_size: '実寸',
+    graphs_title: 'グラフ', graphs_hint: '（拡大縮小・ホバーで値表示・時刻カーソル同期）',
+    checks_title: '合否判定', run_log: '実行ログ（末尾）',
+    err_3d: '3D エラー: ', new_scenario: '— 新規（空から作る）—', load_failed: '読込失敗: ',
+    f_thr: 'ｽﾛｯﾄﾙ', f_roll: 'ﾛｰﾙ', f_pitch: 'ﾋﾟｯﾁ', f_yaw: 'ﾖｰ', f_hold_ms: '保持ms', f_axis: '軸',
+    f_gust_ms: '突風ms', f_motor: 'モータ0-3', f_gain: 'ゲイン', f_height: '高さm', f_place_x: '置x',
+    f_place_y: '置y', f_lift_ms: '持上ms', f_carry_ms: '運搬ms', f_place_ms: '設置ms',
+    ch_rc: 'rc スティック', ch_rc_ramp: 'rc_ramp 掃引', ch_wind: 'wind 外乱風', ch_fault: 'fault モータ故障',
+    ch_bias: 'bias IMUバイアス', ch_handle: 'handle 拾い上げ',
+    drag_reorder: 'ドラッグで並べ替え', at_title: '時刻: 0=絶対ms / +=直前の後 / +500=後500ms',
+    delete: '削除', note: 'メモ', default: '既定',
+    pg_rate: 'レート制御', pg_attitude: '姿勢制御', pg_altitude: '高度制御', pg_position: '位置制御',
+    pg_eskf: '推定器 ESKF', pg_safety: '安全', pg_calibration: '校正', pg_estimator: '推定器選択', pg_other: 'その他',
+    running: '実行中…', running_msg: '実行中… 物理シミュレーションを動かしています', error: 'エラー',
+    request_error: '通信エラー: ', failed: '失敗', no_expect: '（.expect 無し → exit code 判定）',
+    no_checks: 'チェックなし',
+    alt_true: '高度 真値', estimate: '推定', roll_true: 'roll 真', roll_est: 'roll 推',
+    pitch_true: 'pitch 真', pitch_est: 'pitch 推',
+    plot_alt: '高度 [m]', plot_att: '姿勢 roll/pitch [deg]', plot_motor: 'モータ duty [0-1]',
+    no_trajectory: 'この走行には軌跡がありません', preview_unavailable: '(プレビュー生成不可)',
+    params_cleared: 'パラメータ変更をクリア', enter_name: '保存名を入れてください', save_failed: '保存失敗: ',
+    saved: '保存しました: ',
+  },
+};
+const LANG_NAMES = { zh: '中文', en: 'English', ja: '日本語' };
+const LANG_STORE_KEY = 'sils_gui_lang';
+
+// Pick the UI language: saved choice → browser language → English.
+// UI 言語を決める: 保存済みの選択 → ブラウザ言語 → 英語。
+function detectLang() {
+  try {
+    const saved = localStorage.getItem(LANG_STORE_KEY);
+    if (saved && I18N[saved]) return saved;
+  } catch (e) { /* storage blocked → fall through / 保存領域が使えない → 次へ */ }
+  const nav = (navigator.language || '').toLowerCase();
+  if (nav.startsWith('zh')) return 'zh';
+  if (nav.startsWith('ja')) return 'ja';
+  return 'en';
+}
+const LANG = detectLang();
+
+// Translate one key (fallback: Japanese, then the key itself).
+// キーを1つ翻訳する（未定義なら日本語、それも無ければキー名）。
+function L(key) { return I18N[LANG][key] ?? I18N.ja[key] ?? key; }
+
+// Apply translations to the static HTML and build the language selector.
+// 静的 HTML に翻訳を適用し、言語セレクタを組み立てる。
+function applyStaticI18n() {
+  document.documentElement.lang = { zh: 'zh-CN', en: 'en', ja: 'ja' }[LANG];
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = L(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = L(el.dataset.i18nHtml); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = L(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = L(el.dataset.i18nTitle); });
+  const sel = $('langSel');
+  sel.innerHTML = Object.entries(LANG_NAMES)
+    .map(([code, name]) => `<option value="${code}">${name}</option>`).join('');
+  sel.value = LANG;
+  sel.onchange = () => {
+    try { localStorage.setItem(LANG_STORE_KEY, sel.value); } catch (e) { /* not persisted / 保存不可 */ }
+    location.reload();   // simplest full re-render / 最も単純な全再描画
+  };
+}
+
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2200);
@@ -30,15 +183,16 @@ function toast(msg) {
 // JS エラーを無視せず 3D メッセージ欄とコンソールに出す。
 window.addEventListener('error', (e) => {
   console.error('PAGEERR', e.message, (e.filename || '') + ':' + (e.lineno || ''));
-  const m = $('scene-msg'); if (m) { m.style.display = 'flex'; m.textContent = '3D エラー: ' + e.message; }
+  const m = $('scene-msg'); if (m) { m.style.display = 'flex'; m.textContent = L('err_3d') + e.message; }
 });
 
 // ============================================================================ boot
 async function boot() {
+  applyStaticI18n();
   S.scenarios = await api.get('/api/scenarios');
   S.params = await api.get('/api/params');
   const sel = $('scnSelect');
-  sel.innerHTML = '<option value="">— 新規（空から作る）—</option>' +
+  sel.innerHTML = `<option value="">${L('new_scenario')}</option>` +
     S.scenarios.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
   sel.onchange = () => loadScenario(sel.value);
   buildParamPanel();
@@ -53,7 +207,7 @@ async function boot() {
 async function loadScenario(name) {
   if (!name) { S.events = []; S.currentName = null; S.currentMode = 'custom'; renderEvents(); return; }
   const d = await api.get('/api/scenario?name=' + encodeURIComponent(name));
-  if (d.error) { toast('読込失敗: ' + d.error); return; }
+  if (d.error) { toast(L('load_failed') + d.error); return; }
   S.events = d.events; S.currentName = name; S.currentMode = 'saved';
   $('durSec').value = Math.round((d.duration_us || 25e6) / 1e6);
   renderEvents();
@@ -61,19 +215,20 @@ async function loadScenario(name) {
 
 // Field schema per channel — drives the builder form. 各チャネルの編集フィールド定義。
 const FIELDS = {
-  rc: [['thr', 'ｽﾛｯﾄﾙ', 2048], ['roll', 'ﾛｰﾙ', 2048], ['pitch', 'ﾋﾟｯﾁ', 2048], ['yaw', 'ﾖｰ', 2048],
-       ['arm', 'arm', 0], ['hold_ms', '保持ms', 1000], ['rate_hz', 'Hz', 50],
+  rc: [['thr', 'f_thr', 2048], ['roll', 'f_roll', 2048], ['pitch', 'f_pitch', 2048], ['yaw', 'f_yaw', 2048],
+       ['arm', 'arm', 0], ['hold_ms', 'f_hold_ms', 1000], ['rate_hz', 'Hz', 50],
        ['alt', 'ALT', 0], ['acro', 'ACRO', 0], ['pos', 'POS', 0]],
-  rc_ramp: [['field', '軸', 'throttle'], ['from', 'from', 2048], ['to', 'to', 3000],
+  rc_ramp: [['field', 'f_axis', 'throttle'], ['from', 'from', 2048], ['to', 'to', 3000],
        ['step', 'step', 10], ['rate_hz', 'Hz', 50], ['arm', 'arm', 1], ['alt', 'ALT', 0], ['acro', 'ACRO', 0]],
-  wind: [['fx', 'Fx[N]', 0], ['fy', 'Fy[N]', 0], ['fz', 'Fz↓[N]', 0], ['dur_ms', '突風ms', 0]],
-  fault: [['motor', 'モータ0-3', 0], ['gain', 'ゲイン', 1.0]],
+  wind: [['fx', 'Fx[N]', 0], ['fy', 'Fy[N]', 0], ['fz', 'Fz↓[N]', 0], ['dur_ms', 'f_gust_ms', 0]],
+  fault: [['motor', 'f_motor', 0], ['gain', 'f_gain', 1.0]],
   bias: [['ax', 'ax', 0], ['ay', 'ay', 0], ['az', 'az', 0], ['gx', 'gx', 0], ['gy', 'gy', 0], ['gz', 'gz', 0]],
-  handle: [['carry_alt', '高さm', 0.4], ['px', '置x', 0], ['py', '置y', 0],
-       ['lift_ms', '持上ms', 1200], ['carry_ms', '運搬ms', 1200], ['place_ms', '設置ms', 1200]],
+  handle: [['carry_alt', 'f_height', 0.4], ['px', 'f_place_x', 0], ['py', 'f_place_y', 0],
+       ['lift_ms', 'f_lift_ms', 1200], ['carry_ms', 'f_carry_ms', 1200], ['place_ms', 'f_place_ms', 1200]],
 };
-const CH_LABEL = { rc: 'rc スティック', rc_ramp: 'rc_ramp 掃引', wind: 'wind 外乱風',
-  fault: 'fault モータ故障', bias: 'bias IMUバイアス', handle: 'handle 拾い上げ' };
+// Field labels above are i18n keys (plain tokens like 'arm'/'Hz' pass through L() unchanged).
+// 上のフィールド表示名は i18n キー（'arm'/'Hz' 等の素の語は L() をそのまま素通り）。
+const chLabel = (ch) => { const k = 'ch_' + ch, v = L(k); return v === k ? ch : v; };
 
 function renderEvents() {
   const list = $('eventList');
@@ -85,14 +240,14 @@ function eventCard(e, i) {
   div.className = 'event';
   const fields = FIELDS[e.ch] || [];
   div.innerHTML = `<div class="event-h">
-      <span class="grip" title="ドラッグで並べ替え" draggable="true">⠿</span>
-      <input class="at" value="${e.at ?? '+'}" title="時刻: 0=絶対ms / +=直前の後 / +500=後500ms"/>
-      <span class="ch">${CH_LABEL[e.ch] || e.ch}</span>
-      <button class="del" title="削除">✕</button>
+      <span class="grip" title="${L('drag_reorder')}" draggable="true">⠿</span>
+      <input class="at" value="${e.at ?? '+'}" title="${L('at_title')}"/>
+      <span class="ch">${chLabel(e.ch)}</span>
+      <button class="del" title="${L('delete')}">✕</button>
     </div>
     <div class="event-fields">${fields.map(([k, lbl, dv]) =>
-      `<label>${lbl}<input data-k="${k}" value="${e[k] ?? dv}"/></label>`).join('')}</div>
-    <input class="comment" data-k="comment" placeholder="メモ" value="${e.comment || ''}"/>`;
+      `<label>${L(lbl)}<input data-k="${k}" value="${e[k] ?? dv}"/></label>`).join('')}</div>
+    <input class="comment" data-k="comment" placeholder="${L('note')}" value="${e.comment || ''}"/>`;
   div.querySelector('.at').oninput = (ev) => { e.at = ev.target.value; };
   div.querySelectorAll('input[data-k]').forEach(inp => {
     inp.oninput = (ev) => {
@@ -127,10 +282,16 @@ function buildParamPanel() {
   const wrap = $('paramList'); wrap.innerHTML = '';
   Object.entries(groups).forEach(([g, ps]) => {
     const det = document.createElement('details'); det.className = 'pgroup'; det.open = false;
-    det.innerHTML = `<summary>${g} (${ps.length})</summary>`;
+    det.innerHTML = `<summary>${groupLabel(g, ps)} (${ps.length})</summary>`;
     ps.forEach(p => det.appendChild(paramRow(p)));
     wrap.appendChild(det);
   });
+}
+// Group title by the params' name prefix (e.g. 'rate.'), falling back to the server title.
+// グループ名は param 名の接頭辞（例 'rate.'）で翻訳し、無ければサーバの表示名を使う。
+function groupLabel(serverTitle, ps) {
+  const key = 'pg_' + String(ps[0].name).split('.')[0], v = L(key);
+  return v === key ? (serverTitle.includes('/') ? L('pg_other') : serverTitle) : v;
 }
 function paramRow(p) {
   const div = document.createElement('div');
@@ -138,7 +299,7 @@ function paramRow(p) {
   const isBool = p.type === 'BOOL';
   const cur = S.paramOverrides[p.name] ?? p.default;
   div.innerHTML = `<div><div class="pname">${p.name}</div>
-      <div class="pmeta">${p.type} 既定 ${fmt(p.default)} · [${fmt(p.min)}, ${fmt(p.max)}]</div></div>`;
+      <div class="pmeta">${p.type} ${L('default')} ${fmt(p.default)} · [${fmt(p.min)}, ${fmt(p.max)}]</div></div>`;
   let input;
   if (isBool) {
     input = document.createElement('input'); input.type = 'checkbox'; input.className = 'bool';
@@ -162,8 +323,8 @@ function fmt(v) { return Math.abs(v) < 1e-3 && v !== 0 ? v.toExponential(2) : St
 // ============================================================================ run
 async function run() {
   const btn = $('runBtn'); btn.disabled = true;
-  setVerdict('run', '実行中…');
-  $('scene-msg').textContent = '実行中… 物理シミュレーションを動かしています';
+  setVerdict('run', L('running'));
+  $('scene-msg').textContent = L('running_msg');
   $('scene-msg').style.display = 'flex';
   const sel = $('scnSelect').value;
   // If the events were edited (or it's a new scenario), run as custom; else run the saved file.
@@ -177,9 +338,9 @@ async function run() {
   };
   let r;
   try { r = await api.post('/api/run', req); }
-  catch (err) { setVerdict('bad', 'エラー'); toast('通信エラー: ' + err); btn.disabled = false; return; }
+  catch (err) { setVerdict('bad', L('error')); toast(L('request_error') + err); btn.disabled = false; return; }
   btn.disabled = false;
-  if (r.error) { setVerdict('bad', '失敗'); toast(r.error); $('scene-msg').textContent = r.error; return; }
+  if (r.error) { setVerdict('bad', L('failed')); toast(r.error); $('scene-msg').textContent = r.error; return; }
   renderResults(r);
   loadTrajectory(r.trajectory, r.timeline);
 }
@@ -191,14 +352,14 @@ function renderResults(r) {
   const passN = checks.filter(c => c.pass && !c.skipped).length;
   const total = checks.filter(c => !c.skipped).length;
   const pass = r.results && r.results.pass;
-  setVerdict(pass ? 'ok' : 'bad', pass ? `✅ ${passN}/${total}` : (r.ok ? `❌ ${passN}/${total}` : '❌ 失敗'));
-  $('gateSummary').textContent = total ? `${passN}/${total} PASS` : '（.expect 無し → exit code 判定）';
+  setVerdict(pass ? 'ok' : 'bad', pass ? `✅ ${passN}/${total}` : (r.ok ? `❌ ${passN}/${total}` : '❌ ' + L('failed')));
+  $('gateSummary').textContent = total ? `${passN}/${total} PASS` : L('no_expect');
   $('checks').innerHTML = checks.map(c => {
     const cls = c.skipped ? 'skip' : (c.pass ? 'pass' : 'fail');
     const badge = c.skipped ? 'SKIP' : (c.pass ? 'PASS' : 'FAIL');
     return `<div class="check ${cls}"><span class="badge">${badge}</span>
       <span>${c.name}</span><span class="detail">${c.detail || ''}</span></div>`;
-  }).join('') || '<div class="muted">チェックなし</div>';
+  }).join('') || `<div class="muted">${L('no_checks')}</div>`;
   $('cliTail').textContent = r.cli_tail || '';
 }
 
@@ -220,16 +381,16 @@ function drawGraphs(tr) {
   const line = (y, name, color, dash) => ({ x: t, y, name, mode: 'lines',
     line: { color, width: 1.6, dash: dash || 'solid' }, hovertemplate: '%{y:.3f}' });
   Plotly.react('graphAlt', [
-    line(d.alt, '高度 真値', '#22d3ee'), line(d.alt_est, '推定', '#a78bfa', 'dot'),
-  ], PLOT_LAYOUT('高度 [m]'), PLOT_CFG);
+    line(d.alt, L('alt_true'), '#22d3ee'), line(d.alt_est, L('estimate'), '#a78bfa', 'dot'),
+  ], PLOT_LAYOUT(L('plot_alt')), PLOT_CFG);
   Plotly.react('graphAtt', [
-    line(d.roll, 'roll 真', '#22d3ee'), line(d.roll_est, 'roll 推', '#0ea5b7', 'dot'),
-    line(d.pitch, 'pitch 真', '#fbbf24'), line(d.pitch_est, 'pitch 推', '#b8860b', 'dot'),
-  ], PLOT_LAYOUT('姿勢 roll/pitch [deg]'), PLOT_CFG);
+    line(d.roll, L('roll_true'), '#22d3ee'), line(d.roll_est, L('roll_est'), '#0ea5b7', 'dot'),
+    line(d.pitch, L('pitch_true'), '#fbbf24'), line(d.pitch_est, L('pitch_est'), '#b8860b', 'dot'),
+  ], PLOT_LAYOUT(L('plot_att')), PLOT_CFG);
   Plotly.react('graphMotor', [
     line(d.m0, 'M1', '#34d399'), line(d.m1, 'M2', '#22d3ee'),
     line(d.m2, 'M3', '#a78bfa'), line(d.m3, 'M4', '#f87171'),
-  ], PLOT_LAYOUT('モータ duty [0-1]'), PLOT_CFG);
+  ], PLOT_LAYOUT(L('plot_motor')), PLOT_CFG);
 }
 let _cursorThrottle = 0;
 function updateCursor(tsec) {
@@ -485,7 +646,7 @@ function buildDrone() {
 
 function loadTrajectory(tr, timeline) {
   if (!tr || !tr.data || !tr.data.t || !tr.data.t.length) {
-    $('scene-msg').textContent = 'この走行には軌跡がありません'; $('scene-msg').style.display = 'flex';
+    $('scene-msg').textContent = L('no_trajectory'); $('scene-msg').style.display = 'flex';
     return;
   }
   S.traj = tr; S.frame = 0; S.playing = true; S.lastWall = performance.now();
@@ -574,10 +735,10 @@ function wireUI() {
     if (!pre.hidden) { pre.hidden = true; return; }
     const r = await api.post('/api/save', { name: '__preview__', events: S.events, dry: true });
     // /api/save writes; for preview we just generate client-side via a no-op run path:
-    pre.textContent = r.text || '(プレビュー生成不可)'; pre.hidden = false;
+    pre.textContent = r.text || L('preview_unavailable'); pre.hidden = false;
   };
   $('paramSearch').oninput = (e) => filterParams(e.target.value.toLowerCase());
-  $('resetParamsBtn').onclick = () => { S.paramOverrides = {}; buildParamPanel(); toast('パラメータ変更をクリア'); };
+  $('resetParamsBtn').onclick = () => { S.paramOverrides = {}; buildParamPanel(); toast(L('params_cleared')); };
   $('playBtn').onclick = () => {
     S.playing = !S.playing; S.lastWall = performance.now();
     $('playBtn').textContent = S.playing ? '⏸' : '▶';
@@ -606,14 +767,14 @@ function filterParams(q) {
 }
 async function saveScenario() {
   const name = $('saveName').value.trim();
-  if (!name) { toast('保存名を入れてください'); return; }
+  if (!name) { toast(L('enter_name')); return; }
   const r = await api.post('/api/save', { name, events: S.events,
     header: `${name}.scn — built with the SILS GUI` });
-  if (r.error) { toast('保存失敗: ' + r.error); return; }
-  toast('保存しました: ' + r.path);
+  if (r.error) { toast(L('save_failed') + r.error); return; }
+  toast(L('saved') + r.path);
   S.scenarios = await api.get('/api/scenarios');
   const sel = $('scnSelect');
-  sel.innerHTML = '<option value="">— 新規（空から作る）—</option>' +
+  sel.innerHTML = `<option value="">${L('new_scenario')}</option>` +
     S.scenarios.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
   sel.value = name; S.currentName = name; S.currentMode = 'saved';
 }
