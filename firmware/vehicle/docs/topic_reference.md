@@ -108,7 +108,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 11 | `system_mode` | `SystemMode` | Latest | 1 | StateTask | ControlTask, NotifyTask | event | ARM 状態・フライトモード |
 | 12 | `system_alert` | `SystemAlert` | Queue | 4 | FailsafeTask | TelemetryTask, NotifyTask | event | 警告・エラー |
 | 13 | `pilot_request` | `PilotRequest` | Latest | 1 | CommTask | StateTask | 50Hz | ARM + フライトモード選択（sf_comm → StateTask） |
-| 14 | `system_status` | `SystemStatus` | Latest | 1 | ImuTask | StateManager(pre-arm), StateTask | 400Hz | 起動準備（calibrated）+ airborne + held |
+| 14 | `system_status` | `SystemStatus` | Latest | 1 | ImuTask | StateManager(pre-arm), StateTask | 400Hz | 起動準備（calibrated）+ airborne + held + attitude_mismatch（地上で姿勢推定が重力と不一致、StateTask が DISARM/自己回復）+ attitude_verified（地上で判定済みかつ一致＝肯定の判定、StateManager が ARM に要求）。detailed_design §3 注10 |
 | 15 | `estimator_command` | `EstimatorCommand` | Queue | 4 | StateManager callbacks | ImuTask | event | 推定器 reset / 位置速度reset / bias freeze / recalibrate 指令（onEnter/onExit 集約） |
 | 16 | `controller_command` | `ControllerCommand` | Queue | 4 | StateManager callbacks | ControlTask | event | 制御器 reset 指令（onEnter/onExit 集約） |
 | 17 | `notify_command` | `NotifyCommand` | Queue | 8 | StateManager / Failsafe | NotifyTask | event | LED/ブザー通知指令（arm/disarm 音等。配線は Phase 6） |

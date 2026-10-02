@@ -734,6 +734,18 @@ namespace param_vars {
     float safety_comm_timeout = 500.0f;
     float safety_low_v       = 3.4f;
     float safety_usb_v       = 3.3f;
+    // Tilt consistency monitor (detailed_design §3 注10). PROVISIONAL defaults: basis is
+    // the single real log vehicle_hover_20260908T121243 (1.0 s LPF mismatch: pre-spin ground
+    // p99 0.98 deg, 0.45 s ground spin max 5.7 deg, first 2 s after liftoff max 7.3 deg,
+    // hover p99 5.0 deg / max 5.3 deg; Issue #4 drift reached 16-33 deg). To be confirmed
+    // with a long ground-spin log.
+    // 傾き整合モニタ（detailed_design §3 注10）。既定値は暫定: 根拠は実ログ1本
+    // （vehicle_hover_20260908T121243、LPF 1.0 s の不一致: 回転前の地上 p99 0.98°、
+    // 地上回転 0.45 s で最大 5.7°、離陸後 2 s 最大 7.3°、ホバー p99 5.0°/最大 5.3°、
+    // Issue #4 のドリフトは 16〜33°）。地上長時間回転ログで要確認。
+    float safety_tilt_max_deg   = 10.0f;
+    float safety_tilt_persist_s = 0.5f;
+    float safety_tilt_lpf_s     = 1.0f;
 
     // Calibration — boot gyro/accel bias calibration on/off (ImuTask seeds the
     // estimator at rest before flight). Default on.
@@ -983,6 +995,11 @@ static const ParamEntry table[] = {
     {"safety.comm.timeout_ms", ParamType::FLOAT, &safety_comm_timeout, 500.0f, 100.0f, 5000.0f, nullptr},
     {"safety.battery.low_v",   ParamType::FLOAT, &safety_low_v,       3.4f,   3.0f,   4.2f,    nullptr},
     {"safety.battery.usb_v",   ParamType::FLOAT, &safety_usb_v,       3.3f,   2.5f,   3.5f,    nullptr},
+    // Tilt consistency monitor — PROVISIONAL defaults (see param_vars comment). Read at boot.
+    // 傾き整合モニタ — 暫定の既定値（param_vars のコメント参照）。起動時に読む。
+    {"safety.tilt_check.max_deg",   ParamType::FLOAT, &safety_tilt_max_deg,   10.0f, 3.0f,  45.0f, nullptr},
+    {"safety.tilt_check.persist_s", ParamType::FLOAT, &safety_tilt_persist_s, 0.5f,  0.1f,  5.0f,  nullptr},
+    {"safety.tilt_check.lpf_s",     ParamType::FLOAT, &safety_tilt_lpf_s,     1.0f,  0.1f,  5.0f,  nullptr},
 
     // Calibration — boot gyro/accel bias calibration on/off
     {"calibration.enable",     ParamType::BOOL,  &calibration_enable, 1.0f,   0.0f,   1.0f,    nullptr},

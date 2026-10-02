@@ -5,3 +5,4 @@ test_flip_sequencer
 test_state_manager
 *.o
 *.out
+test_tilt_consistency

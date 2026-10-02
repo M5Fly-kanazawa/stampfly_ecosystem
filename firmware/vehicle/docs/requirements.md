@@ -68,7 +68,7 @@ IDLE_GROUND
 | LANDING → IDLE_GROUND | 着陸完了（ToF 接地検出 → 本当の DISARM、モータゼロ） |
 | FLYING → ARMED_GROUND | 静かに着陸 / タッチアンドゴー |
 | FLYING → IDLE_GROUND | **衝突検知**（緊急 DISARM）or **ACRO/STABILIZE でのパイロット DISARM**（手動推力モードは自動着陸を持たないため即カット）or **緊急停止**（API `emergency`／着陸中の再 DISARM＝中断）|
-| ARMED_GROUND → IDLE_GROUND | DISARMアクション（地上は常に即カット） |
+| ARMED_GROUND → IDLE_GROUND | DISARMアクション（地上は常に即カット）。地上で姿勢推定が重力と不一致の場合は自動 DISARM（§9）。いずれも ESKF をリセットして再水平化（再校正はしない） |
 
 ### ペアリング状態（PairingState）
 
@@ -244,6 +244,7 @@ Tello SDK 互換 API の `flip l/r/f/b`（宙返り）に対応する（2026-09-
 | 通信途絶 | 500ms | ホバリング維持3秒 → 自動着陸 |
 | LiPo低電圧 | ≤3.4V | ブザー警告のみ |
 | USB給電 | ≤3.3V | ARM禁止 |
+| 地上での姿勢推定と重力の不一致 | 暫定: 10° × 0.5s 継続（LPF 1.0s、`safety.tilt_check.*`） | 判定が通るまで ARM禁止（IDLE_GROUND）・自動DISARM（ARMED_GROUND）・推定器リセットで再水平化（再校正はしない、detailed_design §3 注10） |
 | ESKF発散 | 位置100m or 速度50m/s | ESKFリセット |
 
 ## 10. 教育・拡張性要件
@@ -511,6 +512,7 @@ Task mapping for new responsibilities (Failsafe, Takeoff/Landing Manager, etc.) 
 | Communication loss | 500ms | Hover hold 3s → auto landing |
 | LiPo low voltage | ≤3.4V | Buzzer warning only |
 | USB power | ≤3.3V | ARM prohibited |
+| Attitude estimate vs gravity on the ground | Provisional: 10 deg for 0.5 s (1.0 s LPF, `safety.tilt_check.*`) | ARM prohibited until the check passes (IDLE_GROUND), auto-DISARM (ARMED_GROUND), re-level by estimator reset (no recalibration; detailed_design §3 note 10) |
 | ESKF divergence | Position 100m or velocity 50m/s | ESKF reset |
 
 ## 10. Education and Extensibility Requirements

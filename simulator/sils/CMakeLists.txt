@@ -60,6 +60,7 @@ if(SILS_BUILD_CORES_SMOKE OR SILS_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_app_hooks/app_default.cpp             # sf::app::controller/estimator/start default (rtos_smoke/hover_smoke/rate_tune compile imu_task.cpp/control_task.cpp directly, below, and both now call the app hooks)
     ${VN}/components/sf_app_hooks/stock_hooks.cpp               # sf::app::stock::controller/estimator body app_default.cpp delegates to (Phase 2)
     ${VN}/components/sf_takeoff_landing/takeoff_landing.cpp   # ToF ground/airborne detect (imu_task)
+    ${VN}/components/sf_estimator/tilt_consistency.cpp        # attitude-vs-gravity monitor on the ground (imu_task)
     ${VN}/components/sf_calibration/calibration.cpp           # boot gyro/accel bias calib (imu_task)
     ${VN}/components/sf_failsafe/failsafe.cpp                 # ImuAnomalyDetector (imu_task, 400Hz impact/gyro)
     ${VN}/components/sf_core/params.cpp

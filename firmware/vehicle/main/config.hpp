@@ -383,6 +383,15 @@ inline constexpr uint32_t MOTOR_SWEEP_REST_US     = 1000000;  // 1.0 s
 // ではモータ間の休止ごとではなく最後のモータの後に1回だけ発動させる。
 inline constexpr uint32_t MOTOR_TEST_SETTLE_US = 1500000;  // 1.5 s
 
+// Tilt consistency monitor (TiltConsistencyMonitor, detailed_design §3 注10): plausibility
+// band for the accelerometer norm. Samples (and filtered values) outside it are glitches and
+// are ignored. The thresholds themselves are parameters safety.tilt_check.*.
+// 傾き整合モニタ（TiltConsistencyMonitor、detailed_design §3 注10）: 加速度ノルムの
+// もっともらしさの帯。帯の外のサンプル（とフィルタ値）はグリッチとして無視する。
+// 判定しきい値自体はパラメータ safety.tilt_check.*。
+inline constexpr float TILT_CHECK_ACCEL_NORM_MIN = 4.9f;    // [m/s²] 0.5 g
+inline constexpr float TILT_CHECK_ACCEL_NORM_MAX = 14.7f;   // [m/s²] 1.5 g
+
 // Fraction of each motor's spin duration treated as start-up transient and
 // excluded from the current/voltage average — only the back half is sampled.
 // 各モータの回転時間のうち起動過渡として除外し平均に含めない割合 — 後半のみ

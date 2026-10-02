@@ -139,16 +139,30 @@ static void registerStateCallbacks(sf::StateManager& manager)
                 // detailed_design §3: FLYING→IDLE_GROUND and LANDING→IDLE_GROUND do an
                 // ESKF full reset (clear in-flight/diverged state — re-fly readiness,
                 // requirement ①); ARMED_GROUND→IDLE_GROUND (disarm without flying) does
-                // NOT (the estimator was never disturbed). So gate the reset on
-                // isAirborne(from). imu_task re-seeds the boot calibration after the reset
+                // it too, because spinning propellers on the ground (ACRO/STABILIZE raw
+                // throttle below TAKEOFF_THROTTLE_THRESH) can shake the estimate off and
+                // latch the accel-attitude χ² gate (Issue #4) (§3 注10). Reset ONLY, never
+                // Recalibrate, on these automatic paths: the calibration assumes a level
+                // craft and nothing here knows that (a tip-over / impact disarm can leave
+                // it tilted), so a tilted calibration would inject gravity into the accel
+                // bias. A human placing the craft down (IDLE_HELD→IDLE_GROUND) can, and
+                // does recalibrate. imu_task re-seeds the boot calibration after the reset
                 // (reseedCalibration), and reset() un-freezes the accel bias.
                 // 武装/空中状態からの接地復帰（DISARM/墜落/着陸）。detailed_design §3:
                 // FLYING→IDLE_GROUND と LANDING→IDLE_GROUND は ESKF を全リセット（飛行中・
                 // 発散状態を一掃 — 再飛行 readiness 要件①）、ARMED_GROUND→IDLE_GROUND
-                // （飛ばずに DISARM）はしない（推定器は乱れていない）。よって reset は
-                // isAirborne(from) で判定する。reset 後に imu_task が起動校正を再注入
-                // （reseedCalibration）し、reset() は加速度バイアスの凍結を解除する。
-                if (sf::isAirborne(from)) {
+                // （飛ばずに DISARM）も行う。地上でプロペラが回る（ACRO/STABILIZE の生
+                // スロットルが TAKEOFF_THROTTLE_THRESH 未満）と推定が振動で外れ accel-attitude
+                // の χ² 判定が latch しうるため（Issue #4、§3 注10）。これらの自動経路は
+                // Reset のみで Recalibrate はしない: 校正は機体が水平である前提で、ここでは
+                // それを知り得ない（転倒・衝撃による DISARM では傾いていうる）ため、傾いた
+                // まま校正すると重力成分が加速度バイアスに混入する。人が置き直す場合
+                // （IDLE_HELD→IDLE_GROUND）は水平と分かるので再校正する。reset 後に imu_task が
+                // 起動校正を再注入（reseedCalibration）し、reset() は加速度バイアスの凍結を解除する。
+                if (from == FlightState::ARMED_GROUND) {
+                    sf::estimator_command.publish(
+                        {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now, 0});
+                } else if (sf::isAirborne(from)) {
                     sf::estimator_command.publish(
                         {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now, 0});
                     // FLIP → IDLE_GROUND (DISARM/impact/emergency stop mid-maneuver):
@@ -418,6 +432,62 @@ static void handleFlipButtonEdge(sf::StateManager& manager)
     requestFlipManeuver(manager, determineFlipButtonDirection());
 }
 
+/// Edge/once bookkeeping for handleAttitudeMismatch().
+/// handleAttitudeMismatch() のエッジ/1回限りの記録。
+struct AttitudeMismatchTracker {
+    bool previous_mismatch = false;   // Previous flag, for the rising edge / 前回値（立ち上がり用）
+    bool self_healed       = false;   // Self-heal already used this IDLE_GROUND stay / 今回の滞在で使用済み
+};
+
+/// Act on system_status.attitude_mismatch (detected by ImuTask's TiltConsistencyMonitor,
+/// INV-3: detection there, decision here). Only ground states act — never an airborne one:
+///  - ARMED_GROUND: DISARM. Refusing the TAKEOFF transition would not stop liftoff in
+///    ACRO/STABILIZE (thrust follows the throttle regardless of state), so the remedy is to
+///    cut the motors; onEnter(IDLE_GROUND) from ARMED_GROUND then re-levels the estimator.
+///  - IDLE_GROUND: on the rising edge, re-level with an estimator Reset ONLY (never
+///    Recalibrate: the calibration assumes a level craft, which an automatic path cannot
+///    know), and at most ONCE per IDLE_GROUND stay — a craft lying tilted would otherwise
+///    re-trigger every ~1.5 s. If the mismatch persists, ARM stays rejected until a human
+///    picks the craft up and places it down (IDLE_HELD→IDLE_GROUND recalibrates).
+/// system_status.attitude_mismatch（ImuTask の TiltConsistencyMonitor が検出、INV-3: 検出は
+/// あちら、判断はここ）に対処する。作用するのは地上状態のみ — 空中状態では決して動かない:
+///  - ARMED_GROUND: DISARM。TAKEOFF 遷移を拒否しても ACRO/STABILIZE ではスロットルに推力が
+///    追従して浮上を止められないので、モータを切る。ARMED_GROUND からの onEnter(IDLE_GROUND)
+///    が推定器を再水平化する。
+///  - IDLE_GROUND: 立ち上がりエッジで推定器 Reset のみで再水平化する（Recalibrate はしない:
+///    校正は水平前提で、自動経路はそれを知り得ない）。かつ IDLE_GROUND 滞在ごとに最大1回 —
+///    傾いて横たわる機体で約1.5秒毎に再発火するのを防ぐ。不一致が続く場合は、人が持ち上げて
+///    置き直す（IDLE_HELD→IDLE_GROUND で再校正）まで ARM は拒否され続ける。
+///
+/// @subscriber system_status
+/// @design architecture.md INV-3 — detection (ImuTask) vs decision (here)           [OK]
+/// @design architecture.md §4 — reset consolidation (state machine decides WHEN)    [OK]
+/// @design detailed_design.md §3 注10 — attitude/gravity mismatch on the ground     [OK]
+static void handleAttitudeMismatch(AttitudeMismatchTracker& tracker)
+{
+    const bool mismatch = sf::system_status.latest().attitude_mismatch;
+    const sf::FlightState state = g_state_manager.getState();
+
+    // The once-per-stay allowance is re-armed whenever the state is not IDLE_GROUND.
+    // 1回限りの許可は、状態が IDLE_GROUND でない間に再装填される。
+    if (state != sf::FlightState::IDLE_GROUND) {
+        tracker.self_healed = false;
+    }
+
+    if (mismatch && state == sf::FlightState::ARMED_GROUND) {
+        ESP_LOGW(TAG, "Disarmed on ground: attitude estimate disagrees with gravity");
+        g_state_manager.requestDisarm();
+    } else if (mismatch && !tracker.previous_mismatch && !tracker.self_healed &&
+               state == sf::FlightState::IDLE_GROUND) {
+        const uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+        sf::estimator_command.publish(
+            {static_cast<uint8_t>(sf::EstimatorCmd::Reset), now, 0});
+        tracker.self_healed = true;
+        ESP_LOGW(TAG, "Attitude estimate disagrees with gravity → estimator reset (once per ground stay)");
+    }
+    tracker.previous_mismatch = mismatch;
+}
+
 void StateTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "StateTask started");
@@ -464,6 +534,10 @@ void StateTask(void* pvParameters)
     // 最後に active だった時刻（静穏窓の起点）。
     bool     bench_test_pending        = false;
     uint32_t bench_test_quiet_since_us = 0;
+
+    // Edge / once-per-stay bookkeeping for the attitude mismatch self-heal in IDLE_GROUND.
+    // IDLE_GROUND の姿勢不一致の自己回復用の、エッジ/滞在ごと1回の記録。
+    AttitudeMismatchTracker attitude_mismatch_tracker;
 
     while (true) {
         // =====================================================================
@@ -927,6 +1001,12 @@ void StateTask(void* pvParameters)
                 }
             }
         }
+
+        // Attitude/gravity mismatch on the ground: disarm (ARMED_GROUND) / self-heal
+        // (IDLE_GROUND, rising edge, once per stay). See handleAttitudeMismatch().
+        // 地上での姿勢/重力の不一致: DISARM（ARMED_GROUND）/ 自己回復（IDLE_GROUND、
+        // 立ち上がりエッジ）。handleAttitudeMismatch() 参照。
+        handleAttitudeMismatch(attitude_mismatch_tracker);
 
         // =====================================================================
         // Process system alerts from failsafe

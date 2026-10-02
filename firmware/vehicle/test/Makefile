@@ -46,6 +46,13 @@ TARGET_ESKF_FLIP = test_eskf_flip_hold
 SRCS_FLIP_SEQUENCER = test_flip_sequencer.cpp ../components/sf_controller_pid/flip_sequencer.cpp
 TARGET_FLIP_SEQUENCER = test_flip_sequencer
 
+# Tilt consistency monitor (detailed_design §3 注10). Pure logic — own binary, same
+# pattern as above; links only tilt_consistency.cpp (sf_math is header-only).
+# 傾き整合モニタ（detailed_design §3 注10）。純粋ロジック — 上と同じ独自バイナリの形で、
+# tilt_consistency.cpp のみリンクする（sf_math はヘッダのみ）。
+SRCS_TILT_CONSISTENCY = test_tilt_consistency.cpp ../components/sf_estimator/tilt_consistency.cpp
+TARGET_TILT_CONSISTENCY = test_tilt_consistency
+
 # NOTE: test_state_manager is temporarily disabled. It compiled the firmware
 # state_manager/failsafe through the now-removed simulator/sils/compat shim and
 # sils_topics.cpp (deleted in the SILS clean-slate, 2026-05-31). It will be
@@ -56,7 +63,7 @@ TARGET_FLIP_SEQUENCER = test_flip_sequencer
 
 .PHONY: all clean test
 
-all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER)
+all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
@@ -67,10 +74,14 @@ $(TARGET_ESKF_FLIP): $(SRCS_ESKF_FLIP)
 $(TARGET_FLIP_SEQUENCER): $(SRCS_FLIP_SEQUENCER)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+$(TARGET_TILT_CONSISTENCY): $(SRCS_TILT_CONSISTENCY)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
 test: all
 	./$(TARGET)
 	./$(TARGET_ESKF_FLIP)
 	./$(TARGET_FLIP_SEQUENCER)
+	./$(TARGET_TILT_CONSISTENCY)
 
 clean:
-	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) test_state_manager
+	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) test_state_manager

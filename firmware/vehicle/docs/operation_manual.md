@@ -131,8 +131,11 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 | DISARM 操作（**ALT_HOLD/POS_HOLD で飛行中**）| → **自動着陸**（FLYING → LANDING）。空中でモータを切らず緩降下（0.3 m/s）で接地し、接地検出で本当の DISARM。**着陸中にもう一度 DISARM すると即カット（中断）** |
 | 機体ボタン クリック（地上）| ARM/DISARM トグル（飛行中のクリックは無視）|
 
-**ARM できない時**: 校正中（マゼンタ点滅）・低電圧/USB 給電・**ペアリング中**・ベンチ用モータテスト中/テスト後の再水平化待ち（約 1.5 秒）は ARM 拒否（CLI `status`
-で確認可）。
+**ARM できない時**: 校正中（マゼンタ点滅）・低電圧/USB 給電・**ペアリング中**・ベンチ用モータテスト中/テスト後の再水平化待ち（約 1.5 秒）・**地上で姿勢推定が重力とずれている間**（`ARM rejected: attitude estimate disagrees with gravity`）は ARM 拒否（CLI `status`
+で確認可）。ずれは IDLE_GROUND 中に自動で（滞在ごとに1回）推定器リセットで再水平化される。起動・リセット直後は判定に約 1 秒かかり、その間は `ARM rejected: attitude check not passed yet` で拒否される。ずれが残る（機体が傾いて置かれている等）場合は、機体を持ち上げて水平な地面に置き直す（置き直しで再校正される）。
+
+**地上での自動 DISARM**: ARM したまま地上（ARMED_GROUND）でプロペラを回し続け、モータ振動で姿勢推定が重力方向から約 10° 以上ずれて 0.5 秒続くと、機体は自動で DISARM（モータ停止）し、ブザーが DISARM 音を鳴らす（ログ: `Disarmed on ground: attitude estimate disagrees with gravity`）。ACRO/STABILIZE ではスロットルを上げれば状態に関係なく浮くため、傾いた推定で離陸させないための措置。DISARM 後は推定器をリセットして再水平化する（再校正はしない）。判定が通るまでの約 1 秒は ARM できない。しきい値は暫定（`safety.tilt_check.max_deg/persist_s/lpf_s`）。
+
 
 ### フライトモード切替（flags）
 
@@ -472,7 +475,7 @@ identical to the legacy vehicle.**
 - **Takeoff**: throttle > 0.5 in ARMED_GROUND → TAKEOFF → FLYING (ToF airborne). **Landing**: throttle
   down / DISARM.
 
-ARM is refused while calibrating, on low/USB power, or while pairing (check `status`).
+ARM is refused while calibrating, on low/USB power, while pairing, or until the attitude check has passed on the ground (about 1 s after boot/reset; refused while it disagrees with gravity) (check `status`). A craft left ARMED on the ground with spinning props whose estimate drifts ~10 deg or more from gravity for 0.5 s is disarmed automatically (the estimator is then reset to level; no recalibration, since the craft may be tilted); thresholds are provisional (`safety.tilt_check.*`).
 
 **Flip:** sent via the Tello-style network API (`flip <l/r/f/b>`, UDP :8889 — see
 `tools/stampfly_py/` and `docs/architecture/tello-api-reference.md`). Requires

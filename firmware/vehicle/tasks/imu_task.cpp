@@ -39,6 +39,7 @@
 #include "estimator.hpp"
 #include "app_hooks.hpp"
 #include "takeoff_landing.hpp"
+#include "tilt_consistency.hpp"   // TiltConsistencyMonitor (attitude vs gravity on the ground)
 #include "calibration.hpp"
 #include "failsafe.hpp"     // ImuAnomalyDetector (400Hz impact/gyro checks)
 #include "bmi270_wrapper.hpp"
@@ -91,6 +92,22 @@ static sf::TakeoffLandingMgr g_takeoff_landing;
 /// サンプル毎に与える — 従来の PowerTask での 10Hz latest() 覗き見はミリ秒オーダーの
 /// 墜落スパイクをほぼ確実に取りこぼしていた。
 static sf::ImuAnomalyDetector g_imu_anomaly;
+
+/// Tilt consistency monitor — detects, on the ground, that the attitude estimate disagrees
+/// with the gravity direction the accelerometer measures (Issue #4: ground-spin vibration
+/// shakes the estimate off and the accel-attitude chi2 gate then latches). Owned here for the
+/// same reason as the takeoff/landing detector: it needs the estimator output, the raw accel
+/// and the on-ground flag together. Detection only (INV-3): the DECISION is StateManager's
+/// (ARM rejection) and StateTask's (disarm / re-level) via system_status.attitude_mismatch.
+/// 傾き整合モニタ — 地上で、姿勢推定が加速度計の測る重力方向と不一致であることを検出する
+/// （Issue #4: 地上回転の振動で推定が外れ、accel-attitude の χ² 判定が latch する）。
+/// 推定器出力・生加速度・接地フラグが同時に要るため、離着陸検出器と同じ理由で本タスクが所有。
+/// 検出のみ（INV-3）: 判断は system_status.attitude_mismatch を介して StateManager（ARM 拒否）
+/// と StateTask（DISARM・再水平化）が行う。
+///
+/// @design architecture.md INV-3 — detection here, decision in StateManager/StateTask [OK]
+/// @design detailed_design.md §3 注10 — attitude/gravity mismatch on the ground       [OK]
+static sf::TiltConsistencyMonitor g_tilt_monitor;
 
 /// CalibrationMgr — boot gyro/accel bias calibration, owned by ImuTask because it has
 /// the IMU samples. Measures the at-rest bias on the ground and seeds the estimator
@@ -414,11 +431,39 @@ static void publishSystemStatus(uint32_t now_us)
 {
     sf::SystemStatus st{};
     st.calibrated = g_calibrated;
+    st.attitude_mismatch = g_tilt_monitor.mismatch();   // auto-disarm / self-heal (注10)
+    st.attitude_verified = g_tilt_monitor.verified();   // ARM requires it (注10)
     st.airborne   = !g_takeoff_landing.isOnGround();
     st.held       = g_takeoff_landing.isHeld();           // IDLE_GROUND ↔ IDLE_HELD
     st.landing    = g_takeoff_landing.isLandingDetected(); // LANDING → IDLE_GROUND
     st.timestamp  = now_us;
     sf::system_status.publish(st);
+}
+
+/// Build the tilt monitor configuration from the safety.tilt_check.* parameters
+/// (PROVISIONAL defaults, params.cpp) and the accel norm band (config.hpp), then init it.
+/// safety.tilt_check.* パラメータ（暫定の既定値、params.cpp）と加速度ノルム帯（config.hpp）
+/// から傾き整合モニタの設定を構築し、初期化する。
+static void initTiltMonitor()
+{
+    sf::TiltConsistencyConfig tilt_config;
+    sf::params::get_float("safety.tilt_check.max_deg",   tilt_config.max_deg);
+    sf::params::get_float("safety.tilt_check.persist_s", tilt_config.persist_s);
+    sf::params::get_float("safety.tilt_check.lpf_s",     tilt_config.lpf_s);
+    tilt_config.norm_min_mps2 = config::TILT_CHECK_ACCEL_NORM_MIN;
+    tilt_config.norm_max_mps2 = config::TILT_CHECK_ACCEL_NORM_MAX;
+    g_tilt_monitor.init(tilt_config);
+}
+
+/// Feed the tilt monitor one IMU cycle: raw accel, the estimate after this cycle's
+/// predict + updates, and the ToF on-ground flag.
+/// 傾き整合モニタに IMU 1周期分を与える: 生加速度、この周期の predict＋更新後の推定、
+/// ToF の接地フラグ。
+static void updateTiltMonitor(const sf::ImuData& imu)
+{
+    const sf::StateEstimate estimate = g_estimator->getState();
+    g_tilt_monitor.update(config::IMU_DT, imu.accel, estimate.attitude,
+                          g_takeoff_landing.isOnGround());
 }
 
 /// Set up the boot gyro/accel bias calibration (called once in ImuTask setup). Reads
@@ -587,6 +632,7 @@ static void processEstimatorCommands()
         switch (static_cast<sf::EstimatorCmd>(cmd.command)) {
         case sf::EstimatorCmd::Reset:
             g_estimator->reset();
+            g_tilt_monitor.reset();   // re-seed the tilt filter from the fresh attitude / 新姿勢で再シード
             reseedCalibration();   // reset zeroed the bias — re-apply the calibration
             break;
         case sf::EstimatorCmd::ResetPosVel:
@@ -723,6 +769,10 @@ void ImuTask(void* pvParameters)
     // IMU レート異常検出器を初期化（衝撃/ジャイロ異常）。閾値は safety.* パラメータ
     // （params SSOT）から取得し、struct 既定値の暗黙使用にしない。
     g_imu_anomaly.init(sf::loadFailsafeConfigFromParams());
+
+    // Initialize the tilt consistency monitor (attitude vs gravity on the ground).
+    // 傾き整合モニタを初期化（地上での姿勢 vs 重力）。
+    initTiltMonitor();
 
     // The vertical ground-hold applies only when ToF is the vertical sensor (a
     // barometer would anchor altitude from the ground, making the hold unnecessary
@@ -882,6 +932,12 @@ void ImuTask(void* pvParameters)
         if (g_tof_vertical) {
             applyVerticalGroundHandoff();
         }
+
+        // Tilt consistency (on the ground: estimated attitude vs measured gravity), after
+        // predict + updates and before the status publish that carries its flag.
+        // 傾き整合（地上: 推定姿勢 vs 測定した重力）。predict＋更新の後、フラグを載せる
+        // ステータス発行の前に実行。
+        updateTiltMonitor(imu);
 
         // Publish boot/system readiness (calibrated + ToF airborne) for the pre-arm
         // check (requestArm) and the takeoff sequencer (StateTask: TAKEOFF → FLYING).

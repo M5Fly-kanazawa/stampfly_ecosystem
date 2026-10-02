@@ -194,7 +194,9 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 | FLIP → FLYING | 制御器: `flip_done`（完了 or 打ち切り後の回復完了、結果は `flip_result`）を publish → state_task が実行（`TakeoffComplete` と同型） | `ControllerCmd::FlipComplete`（位置目標取り直し、高度目標＝取り込み値、高度・位置積分項リセット）、`EstimatorCmd::ResumeAttitudeCorrection`（観測復帰・ToF 再取り込み） |
 | FLIP → IDLE_GROUND | DISARM操作・`emergency`・IMPACT（既存の無条件停止と同じ） | モーター停止、ESKFリセット、ブザー(disarm音)。`EstimatorCmd::ResumeAttitudeCorrection` も発行（FlipComplete は発行しない） |
 | LANDING → IDLE_GROUND | 離着陸MGR: シーケンス終了 | モーター停止、ESKFリセット、~~バイアスフリーズ~~（注3で見送り）。接地検出＝本当の DISARM |
-| ARMED_GROUND → IDLE_GROUND | （リザーブ） | モーター停止、ブザー(disarm音) |
+| ARMED_GROUND → IDLE_GROUND | （リザーブ） | モーター停止、**ESKF全リセットのみ（注10。地上でプロペラが回り推定が振動で外れた可能性があるため、飛ばずに DISARM した場合も行う。再キャリブレーションはしない — 校正は水平前提で、自動経路は水平を知り得ない）**、ブザー(disarm音) |
+| ARMED_GROUND 滞在中: `system_status.attitude_mismatch`（遷移の入力、注10） | — | StateTask が DISARM を要求（`requestDisarm()`）→ 上行で再水平化。**空中状態（TAKEOFF/FLYING/FLIP/LANDING）では作用しない** |
+| IDLE_GROUND 滞在中: `attitude_mismatch` の立ち上がりエッジ（遷移なしのイベント, 注10） | — | ESKF 全リセットのみ（自己回復。再キャリブレーションはしない。**IDLE_GROUND 滞在ごとに最大1回**、IDLE_GROUND を出ると再装填）。判定が通るまで ARM 前判定4 が ARM を拒否 |
 | IDLE_GROUND 滞在中: ベンチ用モータテスト終了（遷移なしのイベント, 注9） | — | `MOTOR_TEST_SETTLE_US` 静穏後に ESKF 全リセット＋再キャリブレーション（置き直しと同じ処置） |
 
 「リザーブ」は実装・テスト時に必要に応じて追加する。
@@ -277,6 +279,14 @@ TAKEOFF / LANDING / FLIP はいずれも「有限時間の専用シーケンス�
 - **実装中の落とし穴2件（実測図つき解説）:** スロットルの中央は raw 3072（norm 0.5）で 2048 でない／TakeoffClimb の速度クランプは対称（±0.3m/s）でないと地上ブラインド窓の行き過ぎを捕捉できない。詳細・実 SILS トラジェクトリ図は [`alt_hold_takeoff_findings.md`](alt_hold_takeoff_findings.md) を参照。
 
 **注9（ベンチ用モータテスト後の再水平化 — 状態遷移を伴わないクラスA リセット）:** CLI のモータテスト（`motor test/all/sweep`, disarmed 限定）は機体を IDLE_GROUND に置いたままプロペラを回すため、IMU が揺すられて姿勢推定が accel-attitude の χ² ゲートを超えて外れうる。外れると、それを直す accel 補正自体が棄却され続けて自己復帰しない（IDLE_HELD → IDLE_GROUND の置き直しと同じ latch）。実機で確認: 10% スイープ後、accel は水平なのに推定は roll 16° / pitch −33° でなお増加。このまま ARM すると傾いた推定で離陸する。対策として StateTask が `motor_test` を監視し、テスト終了後に `MOTOR_TEST_SETTLE_US`（1.5 s）静穏が続いた時点で IDLE_GROUND なら `EstimatorCmd::Reset` と `Recalibrate` を発行する（リセットの時期を決めるのは状態機械、という architecture §4 の原則どおり）。静穏時間は `MOTOR_SWEEP_REST_US`（1 s）より長く、`motor sweep` ではモータ間の休止ごとではなく最後に1回だけ発動する。その時点で手持ち（IDLE_HELD）なら破棄する（置き直しが同じ処置を行うため）。**テスト実行中および再水平化の発行前は ARM を拒否する（ARM 前判定3）:** 拒否しないと ARM で IDLE_GROUND を離れて再水平化が破棄され、傾いた推定のまま飛ぶ（Issue #4）。StateTask が `StateManager::setBenchRelevelPending()` で待ち状態を渡し、再水平化の発行時に解除する（以後は校正完了判定＝判定2 がキャリブ完了まで ARM を阻む）。
+
+**注10（地上での姿勢/重力の不一致 — ARM 拒否・自動 DISARM・再水平化。2026-10-02）:** 地上でプロペラが回っている間（ARMED_GROUND の ACRO/STABILIZE でスロットルが `TAKEOFF_THROTTLE_THRESH`=0.5 未満のとき、生スロットルが推力を決め、地上ゲートも時間制限もない）、モータ振動で ESKF の姿勢推定が外れうる。誤差が accel-attitude の χ² ゲートを超えると、直すための accel 更新が棄却され続けて自己復帰しない（latch、Issue #4）。注9 はベンチ用モータテストだけを扱ったが、ARMED_GROUND 滞在中の地上回転にも同じ latch が起こり、(a) 飛ばずに DISARM しても旧仕様では ESKF をリセットしない（旧「推定器は乱れていない」という前提が偽）、(b) スロットルを上げるとその傾いた推定で離陸する、という問題が生じる。対策は検出と判断の分離（INV-3）で構成する。
+- **検出（ImuTask）:** 純粋ロジックの `TiltConsistencyMonitor`（`sf_estimator`）が毎 IMU 周期、LPF（時定数 `safety.tilt_check.lpf_s`）した加速度方向と、推定姿勢が示す body 系の「上」（`R^T·[0,0,-1]`、ESKF の期待重力 `R^T·[0,0,-g]` と同じ規約）の成す角を評価する。接地中（`g_takeoff_landing.isOnGround()`）に角が `safety.tilt_check.max_deg` を `safety.tilt_check.persist_s` 連続で超えたら `system_status.attitude_mismatch` を立て、下回れば下ろす。加速度ノルムが妥当帯（0.5 g〜1.5 g、`config::TILT_CHECK_ACCEL_NORM_MIN/MAX`）を外れるサンプルはグリッチとして無視し状態・タイマを保持する。接地でなければ false＋タイマリセット。推定器の Reset 時にモニタも reset し、LPF を新姿勢で再シードする。
+- **判断（StateManager / StateTask）:** ① **ARM 前判定4:** ARM には**肯定の判定** `system_status.attitude_verified`（接地中でモニタが判定済み、かつ角が `max_deg` 以内）が必要。不一致の間は `ARM rejected: attitude estimate disagrees with gravity`、未判定（起動・推定器 Reset の後、約 `lpf_s`）の間は `ARM rejected: attitude check not passed yet` で拒否する。不一致のないことだけでは足りない（未判定窓で未検証の推定を通さないため）。② **IDLE_GROUND 滞在中:** `attitude_mismatch` の立ち上がりエッジで ESKF **Reset のみ**を発行する（自己回復）。**IDLE_GROUND 滞在ごとに最大1回**で、IDLE_GROUND を出る（IDLE_HELD・ARMED_GROUND 等）と再装填される。傾いて横たわる機体では Reset→不一致再検出が約1.5秒周期で繰り返され収束を妨げるため。1回の Reset 後も不一致が続けば、人が持ち上げて置き直す（IDLE_HELD→IDLE_GROUND、再校正を行う）まで ARM は拒否されたままになる。③ **ARMED_GROUND 滞在中:** `attitude_mismatch` で DISARM を要求する（`Disarmed on ground: attitude estimate disagrees with gravity`）。遷移後の onEnter(IDLE_GROUND) が再水平化を行う（上表）。
+- **なぜ Reset のみ（Recalibrate しない）か:** 再校正（`sf_calibration`）は機体が水平であることを前提に、加速度平均に重力を Z 軸のみで補正して加速度バイアスを求め、静止判定も加速度のノルムしか見ない。傾いたまま再校正すると重力成分がバイアスに混入する（30°傾斜で約 4.9 m/s²）。自動経路（IDLE_GROUND 自己回復、ARMED_GROUND からの DISARM — 転倒・衝撃後は傾いていうる）は水平を知り得ないので Reset のみとする。Reset は姿勢を水平に再シードし、起動校正済みのバイアスを再適用する（`reseedCalibration`）。再校正は、水平と分かる場合 — 起動、人が置き直す IDLE_HELD→IDLE_GROUND、机上のベンチモータテスト（注9）— に限る。
+- **なぜ DISARM か:** ACRO/STABILIZE では状態に関わらず推力がスロットルに追従するため、TAKEOFF 遷移を拒否しても離陸は止められない。止める手段はモータを切ることだけである。ALT_HOLD/POS_HOLD は地上で Grounded（推力ゼロ）だが、同じ規則で統一する。
+- **暫定パラメータ:** 既定値 `max_deg`=10.0、`persist_s`=0.5、`lpf_s`=1.0 は**暫定**。根拠は実ログ1本（`analysis/datasets/flightlog/vehicle_hover_20260908T121243.sflog.zip`）の LPF 1.0 s での不一致: 回転前の地上 p99 0.98°、地上回転（0.45 s のみ）最大 5.7°、離陸後2 s 最大 7.3°、ホバー p99 5.0°／最大 5.3°。一方 Issue #4 のドリフトは 16〜33° に達した。長時間の地上回転ログで確認・調整する。
+- **注9 との関係:** 注9 は「ベンチ用モータテスト後」を**事象ベース**（`motor_test` の終了＋静穏）で再水平化する。注10 は**状態ベース**（推定が重力と食い違っている事実）で、ARMED_GROUND の地上回転まで含めて検出する。両者は同じ処置（Reset＋Recalibrate）を共有し、ARM 前判定3（注9）と判定4（注10）は独立に ARM を阻む。
 
 ### ペアリング状態遷移（PairingState — FlightState と並行）
 
@@ -538,9 +548,11 @@ firmware/vehicle/
 │   │   └── include/
 │   │       ├── state_manager.hpp  # 状態遷移、onExit/onEnter
 │   │       └── flight_state.hpp   # enum定義
-│   ├── sf_estimator/              # 状態推定インターフェース
+│   ├── sf_estimator/              # 状態推定インターフェース＋推定器側の検出
+│   │   ├── tilt_consistency.cpp   # 傾き整合モニタ（地上で姿勢推定 vs 重力、注10）
 │   │   └── include/
-│   │       └── estimator.hpp      # IEstimator定義
+│   │       ├── estimator.hpp      # IEstimator定義
+│   │       └── tilt_consistency.hpp
 │   ├── sf_estimator_eskf/         # ESKF実装
 │   ├── sf_controller/             # 制御インターフェース
 │   │   └── include/

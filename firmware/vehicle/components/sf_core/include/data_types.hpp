@@ -347,6 +347,18 @@ struct SystemStatus {
     bool landing;         // landing-complete detection (low altitude + low vertical
                           // velocity sustained). Drives LANDING → IDLE_GROUND.
                           // 着陸完了検出（低高度＋低鉛直速度の持続）。LANDING→IDLE地上。
+    bool attitude_mismatch;  // On the ground, the estimated attitude disagrees with the
+                          // gravity direction measured by the accel (sustained). Detected
+                          // by TiltConsistencyMonitor (ImuTask); StateManager rejects ARM
+                          // and StateTask disarms / re-levels (detailed_design §3 注10).
+                          // 地上で、推定姿勢が加速度計の測る重力方向と不一致（持続）。
+                          // TiltConsistencyMonitor（ImuTask）が検出し、StateManager が ARM を
+                          // 拒否、StateTask が DISARM / 再水平化する（detailed_design §3 注10）。
+    bool attitude_verified;  // POSITIVE verdict: on the ground, the monitor has judged and the
+                          // estimate agrees with gravity. False while unjudged (after boot /
+                          // an estimator reset, ~lpf_s) or while disagreeing. ARM requires it.
+                          // 肯定の判定: 地上で、モニタが判定済みかつ推定が重力と一致。未判定
+                          // （起動/推定器リセット後の約 lpf_s）や不一致の間は false。ARM に必須。
     uint32_t timestamp;   // [us]
 };
 

@@ -154,11 +154,39 @@ bool StateManager::requestArm()
         return false;
     }
 
-    // --- Pre-arm gate 4: sensor health — DEFERRED ------------------------------------
+    // --- Pre-arm gate 4: attitude estimate agrees with gravity ------------------------
+    // ImuTask detects (TiltConsistencyMonitor) that, on the ground, the estimated attitude
+    // disagrees with the gravity direction the accelerometer measures — the estimate was
+    // shaken off (e.g. ground-spin vibration) and the accel-attitude chi2 gate may have
+    // latched. Flying on that estimate tilts the takeoff. StateTask resets the estimator once
+    // per IDLE_GROUND stay; until the check passes ARM is refused (a craft that stays tilted
+    // needs a human to pick it up and place it down, which recalibrates).
+    // ARM 前判定4: 姿勢推定が重力と一致していること。地上で推定姿勢が加速度計の測る重力方向と
+    // 不一致（ImuTask の TiltConsistencyMonitor が検出）なら、推定が（地上回転の振動等で）
+    // 外れ、accel-attitude の χ² 判定が latch している可能性がある。その推定で飛ぶと離陸が
+    // 傾く。IDLE_GROUND 中は StateTask が滞在ごとに1回推定器を Reset し、判定が通るまで ARM を
+    // 拒否する（傾いたままの機体は人が持ち上げて置き直す＝再校正が要る）。
+    // @design detailed_design.md §3 注10 — ARM rejected on attitude/gravity mismatch [OK]
+    // ARM needs a POSITIVE verdict (attitude_verified), not just the absence of a mismatch:
+    // after boot or an estimator Reset the monitor needs ~lpf_s to judge, and that window
+    // must not let an unverified estimate through.
+    // ARM には「不一致でない」だけでなく肯定の判定（attitude_verified）が要る: 起動や推定器
+    // Reset の後、モニタが判定できるまで約 lpf_s かかり、その窓で未検証の推定を通してはならない。
+    const SystemStatus status = system_status.latest();
+    if (status.attitude_mismatch) {
+        ESP_LOGW(TAG, "ARM rejected: attitude estimate disagrees with gravity");
+        return false;
+    }
+    if (!status.attitude_verified) {
+        ESP_LOGW(TAG, "ARM rejected: attitude check not passed yet");
+        return false;
+    }
+
+    // --- Pre-arm gate 5: sensor health — DEFERRED ------------------------------------
     // A meaningful health gate needs sf_board::sensor_present() (the M2b per-sensor
     // presence infrastructure, which still returns false today), so it is wired with
     // that work, not here.
-    // ARM 前判定4: センサ健全性 — 繰延。意味ある判定には sf_board::sensor_present()
+    // ARM 前判定5: センサ健全性 — 繰延。意味ある判定には sf_board::sensor_present()
     // （M2b の per-sensor presence、現状 false）が要るため、その作業で配線する。
 
     ESP_LOGI(TAG, "ARM accepted");
