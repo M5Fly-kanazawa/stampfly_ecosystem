@@ -20,6 +20,7 @@ utils/ に置く）。
 
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -152,3 +153,46 @@ def install_hint(explicit_editor_example: str) -> List[str]:
     lines.append("")
     lines.append(f"  Or specify explicitly:  {explicit_editor_example}")
     return lines
+
+
+# Editors that run inside the terminal and therefore must be waited for.
+# Anything else (VSCode, Notepad, ...) is a GUI window and is launched
+# without waiting, so the prompt returns immediately and the learner can
+# keep the editor open while running `sf lesson build` etc.
+# 端末内で動くエディタ（終了まで待つ必要がある）。それ以外（VSCode・メモ帳等）は
+# GUI ウィンドウなので待たずに起動し、すぐプロンプトを返す。エディタを開いたまま
+# `sf lesson build` 等を実行できるようにするため（Windows でメモ帳を閉じるまで
+# コマンドプロンプトが固まる問題の対策）。
+TERMINAL_EDITORS = ("vi", "vim", "nvim", "nano", "emacs", "micro", "hx")
+
+
+def is_terminal_editor(cmd: List[str]) -> bool:
+    """True if the editor runs inside the terminal (must be waited for).
+    エディタが端末内で動く（終了を待つ必要がある）なら True"""
+    stem = Path(cmd[0]).stem.lower()
+    return stem in TERMINAL_EDITORS
+
+
+def launch(cmd: List[str]) -> int:
+    """Launch the editor; wait only for terminal editors.
+    エディタを起動する。終了を待つのは端末内エディタのときだけ
+
+    Returns the editor's exit code for terminal editors, 0 once a GUI
+    editor has been started.
+    端末内エディタなら終了コード、GUI エディタなら起動できた時点で 0 を返す。
+    """
+    if is_terminal_editor(cmd):
+        return subprocess.run(cmd).returncode
+
+    # Detach from the console: no shared stdio, and on POSIX a new session
+    # so Ctrl+C in this terminal does not kill the editor.
+    # コンソールから切り離す: 標準入出力を共有せず、POSIX では別セッションにして
+    # この端末での Ctrl+C がエディタを巻き込まないようにする。
+    subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=(sys.platform != "win32"),
+    )
+    return 0

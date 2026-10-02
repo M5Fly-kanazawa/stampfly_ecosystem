@@ -599,10 +599,9 @@ def run_edit(args: argparse.Namespace) -> int:
     console.print(f"  Path: {target_file}")
 
     try:
-        # shell=False is safe: command + path are passed as a list
-        # shell=False で安全: コマンドとパスをリストで渡す
-        result = subprocess.run(full_cmd)
-        return result.returncode
+        # GUI editors return immediately; terminal editors (vi) are waited for
+        # GUI エディタは即座に戻る。端末内エディタ（vi 等）は終了を待つ
+        return editor.launch(full_cmd)
     except FileNotFoundError:
         console.error(f"Failed to launch editor: {' '.join(full_cmd)}")
         return 1
