@@ -241,6 +241,18 @@ int cmd_status(int argc, char** argv)
     std::printf("battery : %.2f V, %.0f mA\n", power.voltage, power.current);
     std::printf("sensors : present=0x%02X healthy=0x%02X\n",
                 health.present_mask, health.healthy_mask);
+
+    // Pre-arm facts: the ESP_LOGW "ARM rejected" lines go to the serial console only,
+    // so show the inputs of the pre-arm gates here — this is what a WiFi (TCP) CLI
+    // user sees to understand why ARM is refused.
+    // ARM 前判定の事実: ESP_LOGW の "ARM rejected" はシリアルにしか出ないため、ARM 前判定の
+    // 入力をここに表示する — WiFi（TCP）CLI の利用者が ARM 拒否の理由を知る手段。
+    const sf::SystemStatus system = sf::system_status.latest();
+    const char* tilt_check = system.attitude_mismatch ? "MISMATCH"
+                           : (system.attitude_verified ? "ok" : "pending");
+    std::printf("prearm  : calibrated %s, tilt check %s, motor test %s\n",
+                system.calibrated ? "yes" : "NO", tilt_check,
+                sf::motor_test.latest().active ? "ACTIVE" : "idle");
     return 0;
 }
 
