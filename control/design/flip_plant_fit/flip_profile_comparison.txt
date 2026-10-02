@@ -1,0 +1,38 @@
+## FITTED plant (flip_fit_2026_10), nominal: worst of the two directions; success = Ok, rotation 360+-15, tilt at Done <= 20 deg, no floor contact
+candidate                          axis  ok  rot[deg] peak[dps] os%  sat   err[dps] drop[m] tilt[deg] t_done[s]
+B0 trapezoid (main before step 5)  roll  Y    350- 353     1866    24  0.29     1183    0.48      1.7     0.84
+B0 trapezoid (main before step 5)  pitch Y    352- 352     1432     2  0.30     1120    0.87      4.4     1.04
+C1 (1) trapezoid retuned           roll  Y    351- 351     1636     9  0.15      608    0.10      2.3     0.58
+C1 (1) trapezoid retuned           pitch Y    350- 352     1467     5  0.10      629    0.19      4.1     0.68
+C2 (2) planned 360 deg             roll  Y    360- 360     1615     8  0.00      270    0.13      2.2     0.63
+C2 (2) planned 360 deg             pitch Y    360- 361     1463     4  0.03      429    0.16      5.4     0.67
+C3 (3) planned + feedforward       roll  Y    361- 361     1623     8  0.00      244    0.15      0.5     0.62
+C3 (3) planned + feedforward       pitch Y    360- 360     1449     4  0.07      398    0.15      5.1     0.66
+C4 (4) trapezoid retuned + ff      roll  Y    351- 351     1597     6  0.27      546    0.11      6.2     0.61
+C4 (4) trapezoid retuned + ff      pitch Y    350- 350     1458     4  0.28      556    0.09      4.2     0.62
+TRI factory-like triangle          roll  Y    360- 360     1939    11  0.13      637    0.27      4.0     0.79
+TRI factory-like triangle          pitch Y    360- 362     1756     1  0.09      479    0.28      2.2     0.79
+
+## DEFAULT plant (pre-fit), nominal: worst of the two directions; success = Ok, rotation 360+-15, tilt at Done <= 20 deg, no floor contact
+candidate                          axis  ok  rot[deg] peak[dps] os%  sat   err[dps] drop[m] tilt[deg] t_done[s]
+B0 trapezoid (main before step 5)  roll  Y    345- 345     1578     5  0.06      496    0.08      7.5     0.55
+B0 trapezoid (main before step 5)  pitch Y    351- 351     1454     4  0.01      834    0.11      3.8     0.57
+C1 (1) trapezoid retuned           roll  N    335- 335     1575     5  0.00      267    0.08      7.1     0.59
+C1 (1) trapezoid retuned           pitch Y    351- 351     1454     4  0.01      497    0.13      1.7     0.60
+C2 (2) planned 360 deg             roll  Y    360- 360     1566     4  0.00      158    0.15      0.4     0.62
+C2 (2) planned 360 deg             pitch Y    360- 360     1445     3  0.01      314    0.19      4.0     0.65
+C3 (3) planned + feedforward       roll  Y    356- 356     1556     4  0.00       66    0.14      1.0     0.60
+C3 (3) planned + feedforward       pitch Y    360- 360     1432     2  0.01      233    0.20      3.4     0.65
+C4 (4) trapezoid retuned + ff      roll  N    326- 326     1586     6  0.00      179    0.22      5.2     0.69
+C4 (4) trapezoid retuned + ff      pitch Y    351- 351     1440     3  0.01      368    0.15      1.1     0.59
+TRI factory-like triangle          roll  Y    361- 361     1813     4  0.00      281    0.15      2.4     0.61
+TRI factory-like triangle          pitch Y    361- 361     1650    -5  0.01      313    0.25      4.2     0.70
+
+## Robustness on the fitted plant (12 conditions x roll/pitch = 24 runs of 2 flips each)
+candidate                          pass/24  worst drop[m]  worst tilt[deg]  worst sat  max os%  failed conditions
+B0 trapezoid (main before step 5)   10/24         1.12            7.9       0.34       25   ta0.5/roll, ta0.5/pitch, md12/roll, md12/pitch, ms12/roll, ms12/pitch, soc0.85/roll, soc0.85/pitch, soc0.95/roll, soc0.95/pitch, up70/roll, up80/roll, weak/roll, weak/pitch
+C1 (1) trapezoid retuned            24/24         0.69            6.0       0.30       18   -
+C2 (2) planned 360 deg              24/24         0.41            7.3       0.25       13   -
+C3 (3) planned + feedforward        24/24         0.57            7.0       0.35       14   -
+C4 (4) trapezoid retuned + ff       22/24         0.37            6.6       0.41       12   weak/roll, strong/roll
+TRI factory-like triangle           23/24         0.74            7.2       0.28       18   weak/roll
