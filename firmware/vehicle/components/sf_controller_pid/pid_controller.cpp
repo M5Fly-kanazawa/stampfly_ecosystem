@@ -209,14 +209,15 @@ void PidController::loadParams()
     params::get_float("flip.motor_lag_ms",      flip_.config.motor_lag_ms);
     params::get_float("flip.brake_margin",      flip_.config.brake_margin);
     params::get_float("flip.recover_boost_tilt_deg", flip_.config.recover_boost_tilt_deg);
+    params::get_float("flip.recover_rate_limit_dps", flip_.config.recover_rate_limit_dps);
     params::get_float("flip.spin_yaw_torque_limit_nm", flip_.config.spin_yaw_torque_limit_nm);
     params::get_float("flip.spin_torque_limit_nm", flip_.config.spin_torque_limit_nm);
     params::get_float("flip.brake_ramp_rps2",   flip_.config.brake_ramp_rps2);
     params::get_float("flip.settle_ms",         flip_.config.settle_ms);
     params::get_float("flip.settle_tilt_deg",   flip_.config.settle_tilt_deg);
-    params::get_float("flip.handoff_min_deg",   flip_.config.handoff_min_deg);
     params::get_float("flip.handoff_rate_dps",  flip_.config.handoff_rate_dps);
     params::get_float("flip.handoff_force_deg", flip_.config.handoff_force_deg);
+    params::get_float("flip.brake_timeout_ms",  flip_.config.brake_timeout_ms);
     params::get_float("flip.recover_timeout_ms", flip_.config.recover_timeout_ms);
     params::get_float("flip.spin_timeout_ms",   flip_.config.spin_timeout_ms);
     params::get_float("flip.gyro_abort_dps",    flip_.config.gyro_abort_dps);
@@ -364,6 +365,18 @@ ControlOutput PidController::compute(
         flip_settle_remaining_s_ -= dt;   // post-flip settle window (Config::settle_ms) / 宙返り後の整定窓
     }
     const bool flip_settling = !flip_active && flip_settle_remaining_s_ > 0.0f;
+
+    // Attitude-loop output cap: the flip's own (Config::recover_rate_limit_dps)
+    // while a flip is active, normal flight's otherwise. Assigned every cycle, so
+    // there is no state to forget to restore on any exit from FLIP.
+    // 姿勢ループの出力上限: 宙返り中は宙返り専用（Config::recover_rate_limit_dps）、
+    // それ以外は通常飛行の値。毎周期代入するので、FLIP のどの出口でも戻し忘れる
+    // 状態がない。
+    constexpr float kFlipDegToRad = 3.14159265358979f / 180.0f;
+    const float att_rate_limit = flip_active
+        ? flip_.config.recover_rate_limit_dps * kFlipDegToRad : max_att_rate_sp_;
+    att_roll_.output_limit  = att_rate_limit;
+    att_pitch_.output_limit = att_rate_limit;
 
     // Guidance cancel-on-stick-movement: any stick departing from its engage
     // snapshot hands control back to the pilot instantly (the pilot always wins).
@@ -2217,22 +2230,44 @@ void PidController::computeFlipAttitude(const StateEstimate& state,
     }
 
     // Boost/Recover/Done: reuse the EXISTING attitude PID for a level hold
-    // (roll_sp=pitch_sp=0) and the shared heading-hold P law (same gains
-    // normal flight's heading hold uses) to keep the yaw captured at start().
+    // (roll_sp=pitch_sp=0). The measurement is the quaternion-based tilt error
+    // (FlipSequencer::levelError), NOT Euler roll/pitch: after an aborted flip
+    // Recover must right the craft from ANY attitude, and Euler angles wrap at
+    // 180 deg and jump at the pitch singularity. For small tilts the two are
+    // identical, so the normal Boost/Done level hold is unchanged.
+    // Yaw: the shared heading-hold P law (same gains normal flight's heading
+    // hold uses) keeps the yaw captured at start(), but only while the craft is
+    // within recover_boost_tilt_deg of level — the Euler yaw of a tilted or
+    // inverted craft is meaningless (it jumps 180 deg through a pitch flip), and
+    // chasing it would spin the craft while it is still being righted.
     // Boost/Recover/Done: 既存の姿勢PIDを水平保持（roll_sp=pitch_sp=0）に
-    // 再利用し、共有のヘディングホールド P 則（通常飛行のヘディングホールドと
-    // 同じゲイン）で start() 時に取り込んだヨーを保つ。
-    math::Quat q(state.attitude[0], state.attitude[1], state.attitude[2], state.attitude[3]);
-    math::Vec3 euler = q.to_euler();
+    // 再利用する。計測値はオイラーの roll/pitch ではなくクォータニオンベースの
+    // 傾き誤差（FlipSequencer::levelError）: 打ち切り後の Recover は「どの姿勢
+    // からでも」機体を立て直す必要があり、オイラー角は 180° で折り返し、ピッチ
+    // 特異点で跳ぶ。小さな傾きでは両者は同一なので、通常の Boost/Done の
+    // 水平保持は変わらない。
+    // ヨー: 共有のヘディングホールド P 則（通常飛行のヘディングホールドと同じ
+    // ゲイン）で start() 時のヨーを保つが、水平から recover_boost_tilt_deg 以内の
+    // ときだけ — 傾いた/反転した機体のオイラーヨーは無意味（ピッチ宙返りで
+    // 180° 跳ぶ）で、それを追うと立て直し中の機体を回してしまう。
+    float roll_meas = 0.0f;
+    float pitch_meas = 0.0f;
+    FlipSequencer::levelError(state.attitude, roll_meas, pitch_meas);
 
     roll_sp  = 0.0f;
     pitch_sp = 0.0f;
-    rate_sp_roll  = att_roll_.compute(roll_sp, euler.x, dt);
-    rate_sp_pitch = att_pitch_.compute(pitch_sp, euler.y, dt);
-    rate_sp_yaw = flip_out.hold_yaw
-                      ? shortestPathYawRate(flip_.startYawRad(), euler.z,
-                                            yaw_hold_kp_, yaw_hold_rate_max_)
-                      : 0.0f;
+    rate_sp_roll  = att_roll_.compute(roll_sp, roll_meas, dt);
+    rate_sp_pitch = att_pitch_.compute(pitch_sp, pitch_meas, dt);
+
+    const bool near_level = FlipSequencer::tiltRad(state.attitude) <=
+                            flip_.config.recover_boost_tilt_deg * (3.14159265f / 180.0f);
+    if (flip_out.hold_yaw && near_level) {
+        const math::Quat q(state.attitude[0], state.attitude[1], state.attitude[2], state.attitude[3]);
+        rate_sp_yaw = shortestPathYawRate(flip_.startYawRad(), q.to_euler().z,
+                                          yaw_hold_kp_, yaw_hold_rate_max_);
+    } else {
+        rate_sp_yaw = 0.0f;
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -2258,6 +2293,14 @@ void PidController::trackFlipPhaseTransition(FlipSequencer::Phase now)
         rate_roll_.reset();
         rate_pitch_.reset();
         rate_yaw_.reset();
+    }
+    if (now == FlipSequencer::Phase::Recover) {
+        // The attitude PID was idle through Spin/Brake; start its integrator and
+        // derivative from zero against the (possibly large) tilt error.
+        // 姿勢PIDは Spin/Brake の間は休止していた。（大きいことがある）傾き誤差に
+        // 対し積分・微分をゼロから始める。
+        att_roll_.reset();
+        att_pitch_.reset();
     }
     flip_prev_phase_ = now;
 }

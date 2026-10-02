@@ -474,6 +474,7 @@ const char* flipAbortErrorText(sf::FlipResult result)
         case sf::FlipResult::AbortedSpinTimeout:    return "spin_timeout";
         case sf::FlipResult::AbortedGyroLimit:      return "gyro_limit";
         case sf::FlipResult::AbortedRecoverTimeout: return "recover_timeout";
+        case sf::FlipResult::AbortedBrakeTimeout:   return "brake_timeout";
         default:                                     return "unknown";
     }
 }

@@ -39,6 +39,7 @@ void FlipSequencer::start(FlipDirection dir, float yaw_now, float height_now)
     start_height_m_ = height_now;
     phi_rad_        = 0.0f;
     rate_cmd_       = 0.0f;
+    gyro_over_count_ = 0;
     result_         = FlipResult::Ok;   // stays Ok unless an abort path overwrites it / 打ち切り経路が上書きしない限りOkのまま
     enterPhase(Phase::Boost);
 }
@@ -308,13 +309,15 @@ FlipSequencer::Output FlipSequencer::updateBoost(const Input&)
 // -----------------------------------------------------------------------------
 // updateSpin — P2 (plan §3.2/§3.5): ramp the rate command toward the flip
 // peak, schedule thrust by rotation angle, and watch for the three ways out:
-// the gyro-abort limit (straight to Brake), reaching phi_brake (normal entry
-// to Brake), or the spin timeout (straight to Recover — no point braking a
-// rotation that never picked up).
+// gyro saturation (kGyroAbortConsecutiveSamples cycles above gyro_abort_dps,
+// straight to Brake), reaching phi_brake (normal entry to Brake), or the spin
+// timeout (straight to Recover — no point braking a rotation that never
+// picked up).
 // updateSpin — P2（plan §3.2/§3.5）: レート指令をフリップのピークへランプし、
-// 回転角で推力をスケジュールし、3通りの脱出を監視する: ジャイロ異常上限
-// （即 Brake へ）、phi_brake 到達（通常の Brake 突入）、spin タイムアウト
-// （即 Recover へ — 進まなかった回転を減速する意味はない）。
+// 回転角で推力をスケジュールし、3通りの脱出を監視する: ジャイロ飽和
+// （gyro_abort_dps 超えが kGyroAbortConsecutiveSamples 周期連続、即 Brake へ）、
+// phi_brake 到達（通常の Brake 突入）、spin タイムアウト（即 Recover へ —
+// 進まなかった回転を減速する意味はない）。
 // -----------------------------------------------------------------------------
 FlipSequencer::Output FlipSequencer::updateSpin(const Input& input)
 {
@@ -324,8 +327,8 @@ FlipSequencer::Output FlipSequencer::updateSpin(const Input& input)
     const float measured_dps = fabsf(input.gyro[axis_]) * kRadToDeg;
     const float thrust_hi = config.thrust_spin_hi_ratio * config.max_thrust_n;
 
-    if (measured_dps > config.gyro_abort_dps) {
-        result_ = FlipResult::AbortedGyroLimit;
+    if (gyroSaturated(measured_dps)) {
+        markAbort(FlipResult::AbortedGyroLimit);
         enterPhase(Phase::Brake);
         return outputRotating(rate_cmd_, thrust_hi);
     }
@@ -338,19 +341,55 @@ FlipSequencer::Output FlipSequencer::updateSpin(const Input& input)
     if (phi_deg >= phi_brake_deg) {
         enterPhase(Phase::Brake);
     } else if (phase_elapsed_s_ >= spin_timeout_s) {
-        result_ = FlipResult::AbortedSpinTimeout;
+        markAbort(FlipResult::AbortedSpinTimeout);
         enterPhase(Phase::Recover);   // rotation never picked up — nothing to brake / 回転が進んでおらず減速の意味がない
     }
     return outputRotating(rate_cmd_, thrust_n);
 }
 
 // -----------------------------------------------------------------------------
-// updateBrake — P3 (plan §3.2/§3.3): ramp the rate command toward zero at
-// constant thrust_spin_hi. Hands off to Recover once the rotation has turned
-// far enough AND slowed down enough, or unconditionally past handoff_force_deg.
-// updateBrake — P3（plan §3.2/§3.3）: レート指令を一定推力 thrust_spin_hi の
-// もとゼロへランプ。十分回りかつ十分減速したら、または無条件で
-// handoff_force_deg を過ぎたら Recover へ引き渡す。
+// markAbort — record WHY the flip was aborted. First cause wins: a later
+// consequence (e.g. the Recover timeout after a gyro abort) must not hide the
+// event that started the abort in the reported result.
+// markAbort — フリップが「なぜ」打ち切られたかを記録する。最初の原因を優先:
+// 後続の帰結（例: ジャイロ打ち切り後の Recover タイムアウト）が、打ち切りを
+// 始めた事象を報告結果から隠してはならない。
+// -----------------------------------------------------------------------------
+void FlipSequencer::markAbort(FlipResult cause)
+{
+    if (result_ == FlipResult::Ok) {
+        result_ = cause;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// gyroSaturated — true once the measured rate has exceeded the abort limit
+// (clamped to the sensor range) for kGyroAbortConsecutiveSamples consecutive
+// cycles. A cycle below the limit restarts the count.
+// gyroSaturated — 計測レートが打ち切り上限（センサレンジでクランプ）を
+// kGyroAbortConsecutiveSamples 周期連続で超えたら true。上限以下の周期が
+// 1回あればカウントは最初からやり直し。
+// -----------------------------------------------------------------------------
+bool FlipSequencer::gyroSaturated(float measured_dps)
+{
+    const float limit_dps = fminf(config.gyro_abort_dps, kGyroRangeDps);
+    gyro_over_count_ = (measured_dps > limit_dps) ? gyro_over_count_ + 1 : 0;
+    return gyro_over_count_ >= kGyroAbortConsecutiveSamples;
+}
+
+// -----------------------------------------------------------------------------
+// updateBrake — P3 (plan §3.2/§3.3/§3.5): ramp the rate command toward zero at
+// constant thrust_spin_hi. ALWAYS terminates: hands off to Recover as soon as
+// the measured rate is below handoff_rate_dps (at any rotation angle, so an
+// aborted flip that stopped part-way is recovered too), or past
+// handoff_force_deg, or after brake_timeout_ms (the latter two are backstops;
+// only the timeout marks the result AbortedBrakeTimeout).
+// updateBrake — P3（plan §3.2/§3.3/§3.5）: レート指令を一定推力 thrust_spin_hi
+// のもとゼロへランプ。「必ず終了する」: 計測レートが handoff_rate_dps 未満に
+// なったら（回転角に関係なく。途中で止まった打ち切りも回復させる）、または
+// handoff_force_deg を過ぎたら、または brake_timeout_ms 経過で Recover へ
+// 引き渡す（後ろ2つは安全弁で、結果を AbortedBrakeTimeout にするのは
+// タイムアウトのみ）。
 // -----------------------------------------------------------------------------
 FlipSequencer::Output FlipSequencer::updateBrake(const Input& input)
 {
@@ -358,53 +397,119 @@ FlipSequencer::Output FlipSequencer::updateBrake(const Input& input)
 
     const float phi_deg = phi_rad_ * kRadToDeg;
     const float measured_dps = fabsf(input.gyro[axis_]) * kRadToDeg;
-    const bool settled = phi_deg >= config.handoff_min_deg &&
-                         measured_dps <= config.handoff_rate_dps;
+    const bool stopped = measured_dps <= config.handoff_rate_dps;
     const bool forced  = phi_deg >= config.handoff_force_deg;
-    if (settled || forced) {
+    const bool timed_out = phase_elapsed_s_ >= config.brake_timeout_ms * 0.001f;
+    if (stopped || forced) {
+        enterPhase(Phase::Recover);
+    } else if (timed_out) {
+        markAbort(FlipResult::AbortedBrakeTimeout);
         enterPhase(Phase::Recover);
     }
     return outputRotating(rate_cmd_, config.thrust_spin_hi_ratio * config.max_thrust_n);
 }
 
 // -----------------------------------------------------------------------------
-// updateRecover — P4 (plan §3.2/§3.5): level attitude, boosted thrust, until
-// the craft is climbing again (vz>=0) or recover_timeout_ms elapses (still
-// reaches Done either way — plan §3.5: "Doneにはする").
-// updateRecover — P4（plan §3.2/§3.5）: 水平姿勢・増強推力を、上昇に転じる
+// updateRecover — P4 (plan §3.2/§3.5): level attitude, thrust managed by
+// recoverThrustN(), until the craft is back within recover_boost_tilt_deg of
+// level AND climbing again (vz>=0), or recover_timeout_ms elapses (still
+// reaches Done either way — plan §3.5: "Doneにはする"). Requiring "levelled"
+// matters for an aborted flip: it enters Recover tilted/inverted while vz may
+// still be >=0 from the Boost climb, and must not be released to the normal
+// law before the attitude loop has actually righted it.
+// updateRecover — P4（plan §3.2/§3.5）: 水平姿勢、推力は recoverThrustN() で
+// 管理し、水平から recover_boost_tilt_deg 以内に戻り「かつ」上昇に転じる
 // （vz>=0）か recover_timeout_ms 経過まで（いずれにせよ Done にはする —
-// plan §3.5「Doneにはする」）。
+// plan §3.5「Doneにはする」）。「水平に戻った」を要求するのは打ち切り後の
+// ため: 傾いた/反転した状態で Recover に入り、Boost の上昇で vz が
+// まだ >=0 のことがあり、姿勢ループが実際に立て直す前に通常則へ放して
+// はならない。
 // -----------------------------------------------------------------------------
 FlipSequencer::Output FlipSequencer::updateRecover(const Input& input)
 {
     const float recover_s = config.recover_timeout_ms * 0.001f;
-    if (input.vertical_velocity_up_mps >= 0.0f) {
+    const bool levelled = tiltRad(input.quat) <= config.recover_boost_tilt_deg * kDegToRad;
+    if (levelled && input.vertical_velocity_up_mps >= 0.0f) {
         enterPhase(Phase::Done);
     } else if (phase_elapsed_s_ >= recover_s) {
-        result_ = FlipResult::AbortedRecoverTimeout;
+        markAbort(FlipResult::AbortedRecoverTimeout);
         enterPhase(Phase::Done);
     }
     return outputAttitudeLevel(recoverThrustN(input));
 }
 
 // -----------------------------------------------------------------------------
-// recoverThrustN — boost only once (nearly) level; keep the spin-window
-// collective while the attitude loop is still bringing the craft back
-// (Config::recover_boost_tilt_deg). Tilt from the estimator quaternion:
-// cos(tilt) = R33 = 1 - 2(x^2 + y^2).
-// recoverThrustN — ほぼ水平に戻ってから増強し、姿勢ループが戻している間は
-// 回転窓の集合推力に留める（Config::recover_boost_tilt_deg）。傾きは推定
-// クォータニオンから cos(tilt) = R33 = 1 − 2(x² + y²) で求める。
+// recoverThrustN — collective thrust while the attitude loop brings the craft
+// back, by tilt: near level (<= recover_boost_tilt_deg) boost; up to angle_a_deg
+// (the same angle where the spin's accel window ends: the thrust vector still
+// points mostly up) the spin-window collective thrust_spin_hi, which keeps
+// differential-torque headroom for the attitude loop; beyond angle_a_deg it is
+// scaled down in proportion to the upward component cos(tilt) (= R33) to
+// thrust_lo_n at 90 deg and stays there while inverted, because inverted thrust
+// points DOWN. The attitude P law (kp = 5 /s) is slow and needs almost no
+// torque, so the low collective does not slow the righting: SILS
+// flip_abort_recover (2026-10-02, stopped at 168 deg tilt) reached the same
+// tilt with 0.03 N as with 0.2 N while falling less fast, and a constant
+// thrust_spin_hi accelerated the 2026-10-02 hardware craft at ~1.9 g.
+// recoverThrustN — 姿勢ループが機体を戻している間の集合推力を傾きで決める:
+// ほぼ水平（<= recover_boost_tilt_deg）は増強。angle_a_deg（スピンの加速窓が
+// 終わるのと同じ角度: 推力ベクトルがまだ概ね上向き）までは回転窓の集合推力
+// thrust_spin_hi で、姿勢ループの差動トルク余裕を残す。angle_a_deg を超えたら
+// 上向き成分 cos(tilt)（= R33）に比例して縮め、90° で thrust_lo_n、反転中は
+// それを保つ（反転中の推力は「下向き」のため）。姿勢の P 則（kp = 5 /s）は遅く、
+// ほとんどトルクを要しないので、集合推力を低くしても立て直しは遅くならない:
+// SILS flip_abort_recover（2026-10-02, 傾き 168° で停止）は 0.2 N でも 0.03 N でも
+// 同じ傾きに戻り、0.03 N の方が落下は遅かった。一定の thrust_spin_hi だと
+// 2026-10-02 の実機は約 1.9 g で加速した。
 // -----------------------------------------------------------------------------
 float FlipSequencer::recoverThrustN(const Input& input) const
 {
-    const float qx = input.quat[1];
-    const float qy = input.quat[2];
-    const float cos_tilt = 1.0f - 2.0f * (qx * qx + qy * qy);
-    const float cos_limit = std::cos(config.recover_boost_tilt_deg * kDegToRad);
-    const float ratio = (cos_tilt >= cos_limit) ? config.thrust_boost_ratio
-                                                : config.thrust_spin_hi_ratio;
-    return ratio * config.max_thrust_n;
+    const float tilt = tiltRad(input.quat);
+    if (tilt <= config.recover_boost_tilt_deg * kDegToRad) {
+        return config.thrust_boost_ratio * config.max_thrust_n;
+    }
+    const float thrust_hi_n = config.thrust_spin_hi_ratio * config.max_thrust_n;
+    const float full_cos = std::cos(config.angle_a_deg * kDegToRad);
+    const float upward = fminf(fmaxf(std::cos(tilt) / full_cos, 0.0f), 1.0f);   // 1 up to angle_a, 0 once inverted / angle_a まで 1、反転で 0
+    return config.thrust_lo_n + (thrust_hi_n - config.thrust_lo_n) * upward;
+}
+
+// -----------------------------------------------------------------------------
+// tiltRad / levelError — attitude measures that are valid at ANY attitude, from
+// the gravity direction in the body frame: g_b = third row of R(q) =
+// (2(xz - wy), 2(yz + wx), 1 - 2(x^2 + y^2)). Level: g_b = (0, 0, 1).
+// The shortest rotation taking g_b to +z has axis a = g_b x z = (gy, -gx, 0)
+// and angle atan2(|a|, gz), giving roll_err = angle * ax/|a| (= Euler roll for
+// small tilts) and pitch_err = angle * ay/|a| (= Euler pitch).
+// tiltRad / levelError — 機体座標の重力方向から、「どの姿勢でも」有効な姿勢
+// 尺度: g_b = R(q) の第3行 = (2(xz − wy), 2(yz + wx), 1 − 2(x² + y²))。水平なら
+// g_b = (0, 0, 1)。g_b を +z へ運ぶ最短回転は軸 a = g_b × z = (gy, −gx, 0)、
+// 角 atan2(|a|, gz) で、roll_err = 角 × ax/|a|（小さな傾きでオイラー roll と
+// 一致）、pitch_err = 角 × ay/|a|（同 pitch）。
+// -----------------------------------------------------------------------------
+float FlipSequencer::tiltRad(const float quat[4])
+{
+    const float cos_tilt = 1.0f - 2.0f * (quat[1] * quat[1] + quat[2] * quat[2]);
+    return std::acos(fminf(fmaxf(cos_tilt, -1.0f), 1.0f));
+}
+
+void FlipSequencer::levelError(const float quat[4], float& roll_rad, float& pitch_rad)
+{
+    const float w = quat[0], x = quat[1], y = quat[2], z = quat[3];
+    const float gx = 2.0f * (x * z - w * y);
+    const float gy = 2.0f * (y * z + w * x);
+    const float gz = 1.0f - 2.0f * (x * x + y * y);
+    const float axis_norm = std::sqrt(gx * gx + gy * gy);   // = sin(tilt)
+    if (axis_norm < kAxisUndefinedEpsilon) {
+        // Level (no error) or exactly inverted (axis undefined: roll over).
+        // 水平（誤差なし）またはちょうど反転（軸不定: ロールで戻す）。
+        roll_rad  = (gz < 0.0f) ? kPi : 0.0f;
+        pitch_rad = 0.0f;
+        return;
+    }
+    const float angle = std::atan2(axis_norm, gz);
+    roll_rad  = angle * gy / axis_norm;
+    pitch_rad = -angle * gx / axis_norm;
 }
 
 // -----------------------------------------------------------------------------

@@ -432,6 +432,7 @@ void Notify::playEvent(NotifyEvent event)
         case NotifyEvent::Ready:       buzzer_.readyTone();         break;
         case NotifyEvent::PairingMode: buzzer_.pairingTone();       break;
         case NotifyEvent::ArmRejected: buzzer_.errorTone();         break;
+        case NotifyEvent::FlipRejected: buzzer_.errorTone();        break;
         // Buzzer + a parallel LED cue (LED is reliable over motor noise): white blink
         // while sweeping (safety timeout 30s), then green/red for ~4s. update() clears it.
         // ブザー＋並行 LED 合図（騒音に強い）: 掃引中は白点滅（安全 30s）、終了で緑/赤 約4s。

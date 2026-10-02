@@ -1,0 +1,37 @@
+# flip_abort_recover.scn — a flip that is ABORTED part-way must still end upright and FLYING
+#                      途中で打ち切られた宙返りも、水平に戻って FLYING で終わること
+#
+# Regression for the first hardware flip (2026-10-02, logs/flip_test1.sflog.zip): the gyro-abort
+# limit tripped at phi = 79 deg, Brake stopped the rotation at ~207 deg (inverted), and the old
+# Brake exit (phi >= 290 deg) never fired, so the craft stayed in Brake with thrust pointing DOWN
+# until it hit the ground. Brake must always terminate, and Recover must right the craft from any
+# attitude (quaternion tilt error, not Euler angles). flip.gyro_abort_dps=1000 (the parameter's
+# minimum) trips the abort early in the spin ramp, so the flip is cut short at about 90 deg
+# and must come back to level and FLYING, then land.
+# Not covered here: a flip aborted into a free-fall inversion below ~2 m cannot be saved by any
+# attitude loop (righting from 170 deg takes ~0.4 s, the fall from 1.3 m ~0.5 s) — see
+# docs/plans/flip-maneuver-plan.md §3.5.
+#
+# 初回の実機宙返り（2026-10-02, logs/flip_test1.sflog.zip）の回帰: ジャイロ打ち切りが
+# phi = 79° で作動し、Brake が回転を約 207°（反転）で止めたが、旧 Brake の出口
+# （phi >= 290°）が成立せず、推力が「下向き」のまま Brake に留まって地面に衝突した。
+# Brake は必ず終了し、Recover はどの姿勢からでも（オイラー角でなくクォータニオンの
+# 傾き誤差で）機体を立て直す必要がある。flip.gyro_abort_dps=1000（param の下限）で
+# スピン立上げの早い段階で打ち切り、宙返りは約 90° で途切れ、水平に戻って FLYING で
+# 終わり、着陸すること。
+# ここでは扱わない: 約 2 m 未満での、自由落下中の反転への打ち切りは、どんな姿勢ループでも
+# 救えない（170° からの立て直しに約 0.4 s、1.3 m からの落下は約 0.5 s）— plan §3.5 参照。
+#
+# Run: sf sils scenario simulator/sils/scenarios/flip_abort_recover.scn --target vehicle --duration 37000000 --param flip.enable=1 --param flip.gyro_abort_dps=1000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes
+   +    api  "command"                                                           # B: enter SDK mode (t=6)
+   +    api  "takeoff"                                                           # C: take off → POS_HOLD hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC while the API flies (t=6-18)
+   +    api  "up 60"                                                             # E: climb to ~1.1 m (t=18)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # F: settle at flip height (t=18-23)
+   +    api  "flip r"                                                            # G: roll right — aborted by the param overrides (t=23)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # H: abort + recovery + settle (t=23-28)
+   +    api  "land"                                                              # I: autonomous landing (t=28)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # J: neutral RC through touchdown (t=28-36)

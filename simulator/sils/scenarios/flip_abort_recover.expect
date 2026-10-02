@@ -1,0 +1,27 @@
+# flip_abort_recover.expect — a flip aborted part-way (gyro limit) ends level and FLYING
+# 途中で打ち切られた宙返り（ジャイロ上限）は水平で FLYING のまま終わる
+#
+# Param overrides (see the .scn Run line): flip.gyro_abort_dps=1000 cuts the flip short.
+# param 上書き（.scn の Run 行）: flip.gyro_abort_dps=1000 で宙返りを途中で打ち切る。
+exit 0
+log_contains any "cmd: flip r"
+log_contains any "Flip requested (direction=Right)"
+log_contains any "error flip: aborted gyro_limit"
+log_contains any "Flip complete → FLYING"
+log_contains any "cmd: land"
+log_absent  any "reply: error flip: aborted disarmed"
+log_contains any "Gyro anomaly ignored during FLIP"
+log_absent  any "GYRO_ANOMALY → IDLE_GROUND"
+# The abort really happened (the craft tilted well past 45 deg) and did NOT complete a full turn.
+# 打ち切りが実際に起きた（45° を大きく超えて傾いた）うえで、1回転は完了していない。
+metric tilt_max       > 0.9  in 23.0 24.5  # > 51.6 deg
+metric flip_roll_deg  < 150  in 22.9 25.5
+order "cmd: land" "Impact detected"
+order "cmd: flip r" "Flip requested (direction=Right)"
+order "Flip requested (direction=Right)" "Flip complete → FLYING"
+order "Flip complete → FLYING" "cmd: land"
+# Never near the ground; level again well before landing; landed at the end.
+# 地面に近づかない。着陸のかなり前に水平へ戻る。最後は接地。
+metric alt_min  > 0.60 in 23.0 27.9
+metric tilt_max < 0.2618 in 26.0 27.9  # 15.0 deg
+metric alt_max  < 0.10 in 35.0 36.5

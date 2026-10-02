@@ -1,0 +1,26 @@
+# flip_brake_timeout.expect — Brake that cannot settle hands off by timeout, then recovers
+# 収束しない Brake はタイムアウトで引き渡し、その後回復する
+#
+# Param overrides (see the .scn Run line) leave the timeout as the only Brake exit.
+# param 上書き（.scn の Run 行）で、Brake の出口はタイムアウトだけになる。
+exit 0
+log_contains any "cmd: flip r"
+log_contains any "Flip requested (direction=Right)"
+log_contains any "error flip: aborted brake_timeout"
+log_contains any "Flip complete → FLYING"
+log_contains any "cmd: land"
+log_absent  any "reply: error flip: aborted disarmed"
+log_contains any "Gyro anomaly ignored during FLIP"
+log_absent  any "GYRO_ANOMALY → IDLE_GROUND"
+# The rotation was a (nearly) full turn before the timeout hand-off.
+# タイムアウトの引き渡しまでにほぼ1回転している。
+metric flip_roll_deg  > 330 in 22.9 25.5
+order "cmd: land" "Impact detected"
+order "cmd: flip r" "Flip requested (direction=Right)"
+order "Flip requested (direction=Right)" "Flip complete → FLYING"
+order "Flip complete → FLYING" "cmd: land"
+# Never near the ground; level again well before landing; landed at the end.
+# 地面に近づかない。着陸のかなり前に水平へ戻る。最後は接地。
+metric alt_min  > 0.60 in 23.0 27.9
+metric tilt_max < 0.2618 in 26.0 27.9  # 15.0 deg
+metric alt_max  < 0.10 in 35.0 36.5

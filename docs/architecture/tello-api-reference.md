@@ -120,7 +120,7 @@ Tello 実機の映像ポート（UDP 11111）は StampFly には無い（カメ�
 | `error flip: cooldown` | 前回の flip から間隔不足 |
 | `error flip: rejected` | 発行後 0.5 秒以内に状態 FLIP へ入らなかった |
 | `error flip: timeout` | 状態 FLIP から 3 秒以内に復帰しなかった |
-| `error flip: aborted <理由>` | 回転が進まず打ち切り（`spin_timeout`）／角速度異常で打ち切り（`gyro_limit`）／回復整定タイムアウト（`recover_timeout`）／窓内に DISARM・emergency・衝撃で地上へ落ちた（`disarmed`） |
+| `error flip: aborted <理由>` | 回転が進まず打ち切り（`spin_timeout`）／ジャイロ飽和で打ち切り（`gyro_limit`）／減速が収束せずタイムアウト（`brake_timeout`）／回復整定タイムアウト（`recover_timeout`）。複数起きた場合は最初の原因／窓内に DISARM・emergency・衝撃で地上へ落ちた（`disarmed`） |
 
 ### 応答はするがハードとして非対応
 
@@ -309,7 +309,7 @@ the pilot's responsibility.**
 | `error flip: cooldown` | Not enough time since the previous flip |
 | `error flip: rejected` | State did not enter FLIP within 0.5 s of the request |
 | `error flip: timeout` | State did not return from FLIP within 3 s |
-| `error flip: aborted <reason>` | Rotation stalled (`spin_timeout`) / angular-rate anomaly (`gyro_limit`) / recovery settling timeout (`recover_timeout`) / DISARM, emergency, or an impact during the window dropped the vehicle to the ground (`disarmed`) |
+| `error flip: aborted <reason>` | Rotation stalled (`spin_timeout`) / gyro saturation (`gyro_limit`) / brake never settled (`brake_timeout`) / recovery settling timeout (`recover_timeout`); the first cause wins when several occur / DISARM, emergency, or an impact during the window dropped the vehicle to the ground (`disarmed`) |
 
 ### Acknowledged but Not Supported in Hardware
 

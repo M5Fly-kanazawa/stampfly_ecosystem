@@ -675,8 +675,9 @@ enum class FlipResult : uint8_t {
     None                  = 0,   // not engaged                          / 非係合
     Ok                    = 1,   // completed normally                   / 正常完了
     AbortedSpinTimeout    = 2,   // P2 spin_timeout_ms elapsed            / 回転進まず打ち切り
-    AbortedGyroLimit      = 3,   // |omega| > gyro_abort_dps              / 角速度異常で打ち切り
+    AbortedGyroLimit      = 3,   // |omega| > gyro_abort_dps (IMU saturation) / ジャイロ飽和で打ち切り
     AbortedRecoverTimeout = 4,   // P4 recover_timeout_ms elapsed         / 回復整定タイムアウト
+    AbortedBrakeTimeout   = 5,   // P3 brake_timeout_ms elapsed           / 減速が収束せずタイムアウト
 };
 
 /// Get human-readable flip-result name
@@ -689,6 +690,7 @@ inline const char* flipResultName(FlipResult result)
         case FlipResult::AbortedSpinTimeout:    return "AbortedSpinTimeout";
         case FlipResult::AbortedGyroLimit:      return "AbortedGyroLimit";
         case FlipResult::AbortedRecoverTimeout: return "AbortedRecoverTimeout";
+        case FlipResult::AbortedBrakeTimeout:   return "AbortedBrakeTimeout";
         default:                                return "UNKNOWN";
     }
 }
@@ -756,6 +758,7 @@ enum class NotifyEvent : uint8_t {
     AutotuneOk    = 8, // autotune succeeded             / autotune 成功
     AutotuneFail  = 9, // autotune failed (gains kept)   / autotune 失敗（ゲイン据え置き）
     ArmRejected   = 10, // ARM request refused by a pre-arm gate (error tone) / ARM 要求が事前判定で拒否（エラー音）
+    FlipRejected  = 11, // FLIP button press refused / timed out (error tone) / FLIP ボタン押下が拒否・時間切れ（エラー音）
 };
 
 /// Notify command — NotifyTask consumes and drives LED/buzzer (HAL direct)

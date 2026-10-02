@@ -1,0 +1,33 @@
+# rc_flip_latch.scn — FLIP button pressed while the craft is still moving: wait, then fly
+#                  FLIP ボタンを機体がまだ動いている間に押す: 待って、それから飛ぶ
+#
+# Hardware 2026-10-02 (logs/flip_test1.sflog.zip): the pilot's presses were refused SILENTLY
+# because the steady-hover bounds (flip.max_vvel_mps 0.2 m/s, flip.max_hvel_mps 0.3 m/s, ...)
+# held only ~17 % of the time and the longest window was 0.38 s. A press now (1) is held for up
+# to flip.button_wait_ms when the only blocker is the transient NotSteady, and starts the flip
+# when the craft settles; (2) beeps when it is finally refused (any reason, or the wait expires).
+# This scenario presses the button at the END of a throttle-pulse climb (vertical speed well
+# above 0.2 m/s -> NotSteady), within the default 1 s wait (flip.button_wait_ms), and checks that
+# the flip then runs once ("Flip button: waiting ..." -> "Flip requested").
+#
+# 実機 2026-10-02: 操縦者の押下が「黙って」拒否された。定常ホバーの条件（flip.max_vvel_mps
+# 0.2 m/s、flip.max_hvel_mps 0.3 m/s など）が成立するのは約 17 % の時間で、最長の窓は 0.38 s
+# だった。押下は (1) 阻害理由が一過性の NotSteady だけなら flip.button_wait_ms まで保持し、
+# 落ち着いたら宙返りを開始する、(2) 最終的に拒否されたら（どの理由でも、待ち時間切れでも）
+# エラー音を鳴らす。本シナリオはスロットルパルス上昇の「終わり」（垂直速度が 0.2 m/s を大きく
+# 超える → NotSteady）でボタンを押し、既定の待ち時間 1 s（flip.button_wait_ms）の中で、宙返りが
+# 1回だけ走る（"Flip button: waiting ..." → "Flip requested"）ことを確認する。
+#
+# Run: sf sils scenario simulator/sils/scenarios/rc_flip_latch.scn --target vehicle --duration 27000000 --param flip.enable=1
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos> <flip>
+   0    rc   2048  2048   2048    2048  0     4000      50        0                        # A: boot at rest — IDLE_GROUND before ARM edge
+   +    rc   2048  2048   2048    2048  0     1500      50        1                        # B: ALT switch ON while DISARMED (t=4-5.5)
+   +    rc   2048  2048   2048    2048  1     1000      50        1                        # C: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=5.5-6.5)
+   +    rc   2048  2048   2048    2048  1     5000      50        1                        # D: neutral -> climb to 0.5 m target, settle (t=6.5-11.5)
+   +    rc   3600  2048   2048    2048  1     1800      50        1                        # E: throttle pulse -> climbing (t=11.5-13.3)
+   +    rc   2048  2048   2048    2048  1     200       50        1     0    0    1        # F: FLIP pressed at the end of the climb: vz > 0.2 -> latched (t=13.3-13.5)
+   +    rc   2048  2048   2048    2048  1     5000      50        1                        # G: neutral — climb settles, the latched flip starts, maneuver (t=13.5-18.5)
+   +    rc   2048  2048   2048    2048  0     200       50                                 # H: release ARM button (t=18.5-18.7)
+   +    rc   2048  2048   2048    2048  1     200       50                                 # I: press again -> DISARM -> ALT_HOLD auto-land (t=18.7-18.9)
+   +    rc   2048  2048   2048    2048  0     8000      50                                 # J: neutral through touchdown (t=18.9-26.9)

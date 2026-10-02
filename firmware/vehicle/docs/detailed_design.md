@@ -190,7 +190,7 @@ v3 設計で 4 つの Topic を予約定義した。実装は後続マイルス�
 | FLYING → LANDING | （リザーブ） | 制御器が `VerticalPhase::Landing` に切替（注6, INV-1）。鉛直チャネルが `landing_descent_rate_` で降下、姿勢はパイロット（リンク途絶時のみ水平, INV-2）。**ALT/POS でのパイロット DISARM**（注5）or 通信途絶の猶予経過で起動 |
 | FLYING → ARMED_GROUND | 高度/位置コントローラリセット | ESKFホールド |
 | FLYING → IDLE_GROUND | 高度/位置コントローラリセット | モーター停止、ESKFリセット、ブザー(disarm音)。**ACRO/STABILIZE のパイロット DISARM・衝突検知・緊急停止**（注5） |
-| FLYING → FLIP | API `flip x` またはコントローラ FLIP ボタンの立ち上がり。制御器は FLYING 中に毎周期、実行条件 C2〜C8 の成立を `controller_status.flip_ready`（不成立理由は `flip_block_reason`）として publish する（検出、INV-3）。最初に判定するのはマスタースイッチ `flip.enable`（既定 0 = 無効、`FlipBlockReason::Disabled`、実機初回の宙返りが失敗した 2026-10-02 以降。FLIP ボタンも API も同じ `flip_ready` を読むため両方拒否される）。StateManager は FLYING かつ `flip_ready` のときだけ遷移し、それ以外は遷移しない（判断）。API は `flip_block_reason` を読んで `error flip: <理由>` を返す | `ControllerCmd::Flip{dir}`（開始高度・ヨー取り込み、レート PID 積分項リセット）、`EstimatorCmd::HoldAttitudeCorrection`、LED 橙 |
+| FLYING → FLIP | API `flip x` またはコントローラ FLIP ボタンの立ち上がり。制御器は FLYING 中に毎周期、実行条件 C2〜C8 の成立を `controller_status.flip_ready`（不成立理由は `flip_block_reason`）として publish する（検出、INV-3）。最初に判定するのはマスタースイッチ `flip.enable`（既定 0 = 無効、`FlipBlockReason::Disabled`、実機初回の宙返りが失敗した 2026-10-02 以降。FLIP ボタンも API も同じ `flip_ready` を読むため両方拒否される）。StateManager は FLYING かつ `flip_ready` のときだけ遷移し、それ以外は遷移しない（判断）。API は `flip_block_reason` を読んで `error flip: <理由>` を返す | `ControllerCmd::Flip{dir}`（開始高度・ヨー取り込み、レート PID 積分項リセット）、`EstimatorCmd::HoldAttitudeCorrection`、LED 橙。FLIP ボタンの拒否は必ずログ1行＋エラー音（`NotifyEvent::FlipRejected`）。一過性の理由 `NotSteady` だけは即拒否せず `flip.button_wait_ms`（既定 1000 ms、0 で即拒否）保持し、定常の窓が開けば開始する（下の「FLIP シーケンスの終了規則」）。CLI `status` の `flip` 行が現在の阻害理由を示す |
 | FLIP → FLYING | 制御器: `flip_done`（完了 or 打ち切り後の回復完了、結果は `flip_result`）を publish → state_task が実行（`TakeoffComplete` と同型） | `ControllerCmd::FlipComplete`（位置目標取り直し、高度目標＝取り込み値、高度・位置積分項リセット）、`EstimatorCmd::ResumeAttitudeCorrection`（観測復帰・ToF 再取り込み） |
 | FLIP → IDLE_GROUND | DISARM操作・`emergency`・IMPACT（既存の無条件停止と同じ） | モーター停止、ESKFリセット、ブザー(disarm音)。`EstimatorCmd::ResumeAttitudeCorrection` も発行（FlipComplete は発行しない） |
 | LANDING → IDLE_GROUND | 離着陸MGR: シーケンス終了 | モーター停止、ESKFリセット、~~バイアスフリーズ~~（注3で見送り）。接地検出＝本当の DISARM |
@@ -219,6 +219,26 @@ TAKEOFF / LANDING / FLIP はいずれも「有限時間の専用シーケンス�
 |-----------|--------------|-------------|-----------|
 | TAKEOFF / LANDING | 既定どおり DISARM | 既定どおり（ブザー警告） | 既定どおり（R16 タイムアウトで LANDING 等へ） |
 | FLIP | **無視**（記録のみ。状態 FLIP の間の異常角速度は墜落ではないと判断） | FLYING 復帰後に既存則 | FLYING 復帰後に既存則（R16 の単一判定） |
+
+### FLIP シーケンスの終了規則と打ち切り（2026-10-02、実機初回失敗を受けて制定）
+
+INV-2「シーケンスは有限時間で、終了は単一の判定で通常則に戻る」を FLIP の全経路に適用する。実機初回（`logs/flip_test1.sflog.zip`）は、ジャイロ打ち切りが φ = 79° で作動し Brake が回転を φ ≈ 207°（反転）で止めたが、Brake の出口が「φ ≥ 290° かつ |ω| ≤ 300 °/s」「φ ≥ 350°」の 2 つだけで時間切れが無く、Brake に留まったまま推力（0.5·max、反転中は下向き）で床へ衝突した。
+
+| フェーズ | 出口（先に成立したもの） | 次 |
+|---------|--------------------------|----|
+| Boost | `flip.boost_ms` 経過 | Spin |
+| Spin | φ ≥ φ_brake（通常） / ジャイロ飽和（計測 \|ω\| > `flip.gyro_abort_dps` が 3 周期連続）/ `flip.spin_timeout_ms`（直接 Recover） | Brake / Brake / Recover |
+| Brake | **\|ω\| ≤ `flip.handoff_rate_dps`（φ に関係なく）** / φ ≥ `flip.handoff_force_deg` / **`flip.brake_timeout_ms`** | Recover |
+| Recover | **傾き ≤ `flip.recover_boost_tilt_deg` かつ vz ≥ 0** / `flip.recover_timeout_ms` | Done → FLYING |
+
+- **Brake は必ず終了する。** 旧い「φ ≥ 290° 条件」（ピッチ回転でオイラー角が 270° 手前まで 180° 側の枝にいるための待ち）は廃止（`flip.handoff_min_deg` 削除）。Recover の姿勢誤差を、オイラー角でなくクォータニオン由来の傾き誤差（`FlipSequencer::levelError`）にしたため、どの角度でも姿勢ループへ渡せる。
+- **Recover は任意の姿勢（反転を含む）から水平に戻す。** 既存の姿勢 PID（INV-1）に、重力方向の最短回転ベクトル（小さな傾きでオイラー roll/pitch と一致、180° で折り返さない）を測定値として与える。出力上限は FLIP 中だけ `flip.recover_rate_limit_dps`（既定 600 °/s）に上げる（通常の 3 rad/s = 172 °/s では 155° の立て直しに約 0.9 s かかる）。ヨー保持は傾き ≤ `recover_boost_tilt_deg` のときだけ（傾いた機体のオイラーヨーは無意味）。
+- **Recover の集合推力**は傾きで決める: ほぼ水平は増強、`flip.angle_a_deg`（60°）までは `thrust_spin_hi`（差動トルク余裕）、それを超えたら上向き成分 cos(tilt) に比例して縮め、90° 以上（反転）は `flip.thrust_lo_n`。反転中の推力は下向きのため。姿勢の P 則は遅く（kp = 5 /s）トルクをほとんど要さないので、低推力でも立て直しは遅くならない（SILS `flip_abort_recover` の試行: 反転 168° から 0.2 N でも 0.03 N でも同じ傾き履歴、0.03 N の方が落下が遅い）。
+- **ジャイロ飽和の打ち切りは「指令に対する行き過ぎ」ではなく IMU 保護**: BMI270 は ±2000 °/s。上限は 1950 °/s（97.5 %）、3 周期（7.5 ms）連続で超えたときだけ作動する。実機の通常オーバーシュート（指令 1500 に対し 1909 °/s）では作動しない。作動時は Brake（指令→0）: 真のレートがセンサの範囲外で積算 φ と制動角の前提が崩れるため、検証できる動作（ゼロ指令）へ移る。継続（指令を下げてスピンを続ける）は採らない。
+- **打ち切り理由は最初の原因を保持**する（`FlipResult`: AbortedSpinTimeout / AbortedGyroLimit / AbortedRecoverTimeout / AbortedBrakeTimeout）。後続の Recover タイムアウトが先の原因を隠さない。
+- **救えない領域:** 約 2 m 未満で反転した状態へ打ち切られ自由落下に入ると、170° からの立て直し（約 0.4 s）より先に床に着く（1.3 m からの落下 約 0.5 s）。構造的な安全は「Brake を必ず終わらせる」ことで担保し、この領域は開始高度（`flip.min_height_m`）と、ジャイロ打ち切りを作動させない余裕（スピンのオーバーシュート低減、後続の数値裏付け付き調整）で避ける。
+
+検証: ホスト単体 `test/test_flip_sequencer.cpp`、SILS `flip_abort_recover`（打ち切り→復帰）、`flip_brake_timeout`（Brake タイムアウト経路）、`rc_flip_latch`（ボタン保持）、`flip_disabled`（拒否ログ）。
 
 ### 状態追加手順（チェックリスト）
 
