@@ -1,0 +1,19 @@
+# rc_flip_latch.expect — FLIP button pressed while still climbing: latched, then flown once
+# FLIP ボタンを上昇中に押す: 保持され、1回だけ飛ぶ
+#
+# The press arrives while |vz| > flip.max_vvel_mps (NotSteady), so it must be LATCHED (not rejected
+# at once), and the flip must start by itself when the climb settles, inside the default 1 s wait.
+# 押下は |vz| > flip.max_vvel_mps（NotSteady）のときに届くので、即拒否でなく「保持」され、
+# 既定の待ち時間 1 s の中で上昇が落ち着いたら宙返りが自動で始まること。
+exit 0
+log_contains any "Flip button: waiting up to 1000 ms for a steady hover"
+log_contains any "Flip requested (direction=Right)"
+log_contains any "Flip complete → FLYING"
+log_absent  any "Flip button: rejected"
+order "Flip button: waiting up to 1000 ms" "Flip requested (direction=Right)"
+# One full right roll in the maneuver window (press at t=13.3), level and still flying afterwards.
+# マニューバ窓（押下 t=13.3）で右ロール1回転、その後は水平で飛行継続。
+metric flip_roll_deg  >  330 in 13.3 15.5
+metric flip_roll_deg  <  400 in 13.3 15.5
+metric alt_min        >  0.60 in 13.3 18.5
+metric tilt_max       < 0.2618 in 17.0 18.5  # 15.0 deg

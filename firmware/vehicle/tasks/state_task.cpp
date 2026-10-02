@@ -399,37 +399,116 @@ static sf::FlipDirection determineFlipButtonDirection()
     return static_cast<sf::FlipDirection>(default_dir);
 }
 
+/// A FLIP button press that is waiting for the controller's flip_ready (see
+/// handleFlipButtonEdge). The direction is fixed at the press: it is the stick
+/// position the pilot meant, not wherever the stick is when the window opens.
+/// flip_ready（handleFlipButtonEdge 参照）を待っている FLIP ボタン押下。方向は
+/// 押下時に確定する — 窓が開いた時のスティック位置ではなく、操縦者が意図した位置。
+struct FlipButtonLatch {
+    bool              pending     = false;
+    uint32_t          deadline_us = 0;
+    sf::FlipDirection direction   = sf::FlipDirection::Right;
+};
+
+/// Give up on a FLIP button press: log one line and play the error tone (the
+/// pilot has no other feedback channel — the serial log is not at hand in flight).
+/// FLIP ボタン押下を諦める: ログ1行とエラー音（操縦者に他のフィードバック経路が
+/// 無い — 飛行中にシリアルログは手元に無い）。
+static void rejectFlipButton(const char* why)
+{
+    ESP_LOGI(TAG, "Flip button: rejected (%s)", why);
+    sf::notify_command.publish({static_cast<uint8_t>(sf::NotifyEvent::FlipRejected),
+                                static_cast<uint32_t>(esp_timer_get_time())});
+}
+
 /// handleFlipButtonEdge — called once per rising edge of the FLIP button
 /// (PilotRequest.flip_button). Gates on the SAME normative condition as the
 /// API (detailed_design.md §3.1 FLIP row: FLYING accepts, FLIP itself is
 /// "busy", every other state rejects) plus the controller's execution-
-/// condition fact (ControllerStatus.flip_ready, C2-C8) — unlike the API path
-/// there is no reply channel, so a rejection is logged (one line) and
-/// otherwise dropped.
+/// condition fact (ControllerStatus.flip_ready, C2-C8). Unlike the API path
+/// there is no reply channel, so every rejection is logged (one line) AND
+/// sounded (error tone). The one transient reason, NotSteady (hover jitter —
+/// hardware 2026-10-02: all bounds held only ~17 % of the time, longest window
+/// 0.38 s), is not rejected at once but latched for flip.button_wait_ms
+/// (serviceFlipButtonLatch starts the flip when a steady window opens).
+/// Every other reason (Disabled, TooLow, BatteryLow, ...) will not clear by
+/// itself within a second, so those reject immediately.
 /// handleFlipButtonEdge — FLIP ボタンの立ち上がりエッジで1回呼ばれる。API と同じ
 /// 規範条件（detailed_design.md §3.1 FLIP 行: FLYING で受理、FLIP 自身は
 /// busy、他は拒否）に加え制御器の実行条件の事実（ControllerStatus.flip_ready,
-/// C2-C8）で判定する — API と違い返答先が無いので、不成立はログ1行のみで
-/// 何もしない。
-static void handleFlipButtonEdge(sf::StateManager& manager)
+/// C2-C8）で判定する。API と違い返答先が無いので、不成立は必ずログ1行「と」
+/// エラー音で知らせる。一過性の理由 NotSteady（ホバーの揺れ — 実機 2026-10-02:
+/// 全条件が成立したのは約 17 % の時間、最長の窓 0.38 s）は即拒否せず
+/// flip.button_wait_ms の間ラッチする（定常の窓が開けば serviceFlipButtonLatch が
+/// 開始する）。他の理由（Disabled, TooLow, BatteryLow など）は 1 秒で自然に
+/// 解消しないため即拒否する。
+static void handleFlipButtonEdge(sf::StateManager& manager, FlipButtonLatch& latch)
 {
+    latch.pending = false;   // a new press supersedes an older waiting one / 新しい押下が古い待機を置き換える
     const sf::FlightState fs = manager.getState();
     if (fs == sf::FlightState::FLIP) {
-        ESP_LOGI(TAG, "Flip button: rejected (busy)");
+        rejectFlipButton("busy");
         return;
     }
     if (fs != sf::FlightState::FLYING) {
-        ESP_LOGI(TAG, "Flip button: rejected (not flying, state=%s)",
-                 sf::flightStateName(fs));
+        ESP_LOGI(TAG, "Flip button: not flying, state=%s", sf::flightStateName(fs));
+        rejectFlipButton("not flying");
+        return;
+    }
+    const sf::FlipDirection direction = determineFlipButtonDirection();
+    const sf::ControllerStatus cs = sf::controller_status.latest();
+    if (cs.flip_ready) {
+        requestFlipManeuver(manager, direction);
+        return;
+    }
+    const auto reason = static_cast<sf::FlipBlockReason>(cs.flip_block_reason);
+    float wait_ms = 0.0f;
+    sf::params::get_float("flip.button_wait_ms", wait_ms);
+    if (reason != sf::FlipBlockReason::NotSteady || wait_ms <= 0.0f) {
+        rejectFlipButton(sf::flipBlockReasonName(reason));
+        return;
+    }
+    ESP_LOGI(TAG, "Flip button: waiting up to %.0f ms for a steady hover", static_cast<double>(wait_ms));
+    latch.pending     = true;
+    latch.direction   = direction;
+    latch.deadline_us = static_cast<uint32_t>(esp_timer_get_time()) +
+                        static_cast<uint32_t>(wait_ms * 1000.0f);
+}
+
+/// serviceFlipButtonLatch — called every StateTask cycle. Resolves a waiting
+/// FLIP button press: start the flip as soon as flip_ready is true; give up
+/// (error tone) when the block reason is no longer the transient NotSteady,
+/// when the deadline passes, or silently when the craft is no longer FLYING
+/// (the pilot is already doing something else).
+/// serviceFlipButtonLatch — StateTask の毎周期に呼ぶ。待機中の FLIP ボタン押下を
+/// 決着させる: flip_ready が true になったらすぐ開始。阻害理由が一過性の
+/// NotSteady でなくなった、または期限が来たら諦める（エラー音）。機体が FLYING
+/// でなくなったときは黙って破棄する（操縦者は既に別の操作中）。
+static void serviceFlipButtonLatch(sf::StateManager& manager, FlipButtonLatch& latch)
+{
+    if (!latch.pending) {
+        return;
+    }
+    if (manager.getState() != sf::FlightState::FLYING) {
+        latch.pending = false;
         return;
     }
     const sf::ControllerStatus cs = sf::controller_status.latest();
-    if (!cs.flip_ready) {
-        ESP_LOGI(TAG, "Flip button: rejected (%s)",
-                 sf::flipBlockReasonName(static_cast<sf::FlipBlockReason>(cs.flip_block_reason)));
+    if (cs.flip_ready) {
+        latch.pending = false;
+        requestFlipManeuver(manager, latch.direction);
         return;
     }
-    requestFlipManeuver(manager, determineFlipButtonDirection());
+    const auto reason = static_cast<sf::FlipBlockReason>(cs.flip_block_reason);
+    const bool expired = static_cast<int32_t>(static_cast<uint32_t>(esp_timer_get_time()) -
+                                              latch.deadline_us) >= 0;
+    if (reason != sf::FlipBlockReason::NotSteady) {
+        latch.pending = false;
+        rejectFlipButton(sf::flipBlockReasonName(reason));
+    } else if (expired) {
+        latch.pending = false;
+        rejectFlipButton("NotSteady, wait expired");
+    }
 }
 
 /// Edge/once bookkeeping for handleAttitudeMismatch().
@@ -512,6 +591,7 @@ void StateTask(void* pvParameters)
     // 前回の FLIP ボタン状態（Phase 3）。ARM と同じ立ち上がりエッジのみの扱い:
     // 押しっぱなしで再要求しない（plan §4.1/§9-6）。
     bool prev_flip_button = false;
+    FlipButtonLatch flip_button_latch;   // press waiting for a steady window / 定常の窓を待つ押下
     bool init_done = false;   // INIT → IDLE_GROUND done once / 初期化完了遷移を1回
 
     // Previous comm bind flag (pairing_complete.bound), for false→true edge detection.
@@ -606,9 +686,10 @@ void StateTask(void* pvParameters)
             // FLIP ボタン（Phase 3, plan §4.1/§9-6）: 上の ARM と同じ立ち上がり
             // エッジのみ — 押しっぱなしで再要求せず、離して再度押すと次の要求。
             if (req.flip_button && !prev_flip_button) {
-                handleFlipButtonEdge(g_state_manager);
+                handleFlipButtonEdge(g_state_manager, flip_button_latch);
             }
             prev_flip_button = req.flip_button;
+            serviceFlipButtonLatch(g_state_manager, flip_button_latch);
 
             // Derive the requested FlightMode from the mode switches (priority:
             // POS_HOLD > ALT_HOLD > ACRO > STABILIZE default), and apply it on

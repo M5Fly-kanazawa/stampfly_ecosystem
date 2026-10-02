@@ -609,17 +609,18 @@ namespace param_vars {
     float flip_motor_lag_ms     = 24.0f;    // [ms] brake-angle lookahead model / 減速角先読みモデル
     float flip_brake_margin     = 1.0f;     // [-] achievable decel / commanded ramp / 達成減速度÷指令ランプ
     float flip_recover_boost_tilt_deg = 20.0f; // [deg] boost only below this tilt in Recover / Recover で増強する傾き上限
+    float flip_recover_rate_limit_dps = 600.0f; // [deg/s] attitude-loop output cap during FLIP / FLIP中の姿勢ループ出力上限
     float flip_spin_yaw_torque_limit_nm = 0.3e-3f; // [Nm] yaw torque cap while spinning / 回転中のヨートルク上限
     float flip_spin_torque_limit_nm = 7.0e-3f;   // [Nm] flip-axis torque limit while spinning / 回転中の回転軸トルク上限
     float flip_brake_ramp_rps2  = 500.0f;   // [rad/s^2] brake ramp-down of the rate command / 減速ランプ
     float flip_settle_ms        = 1500.0f;  // [ms] post-flip settle window / 宙返り後の整定窓
     float flip_settle_tilt_deg  = 5.0f;     // [deg] position-loop tilt cap in the settle window / 整定窓の傾き上限
-    float flip_handoff_min_deg  = 290.0f;   // [deg] Brake->Recover angle gate / Brake→Recover角度判定
     float flip_handoff_rate_dps = 300.0f;   // [deg/s] Brake->Recover rate gate / Brake→Recoverレート判定
     float flip_handoff_force_deg = 350.0f;  // [deg] unconditional Brake->Recover / 無条件Brake→Recover
+    float flip_brake_timeout_ms = 300.0f;   // [ms] Brake->Recover backstop in time / Brake→Recoverの時間側安全弁
     float flip_recover_timeout_ms = 800.0f; // [ms] C: abort if vz never recovers / vz回復せず打ち切り
     float flip_spin_timeout_ms  = 700.0f;   // [ms] abort if phi_brake never reached / phi_brake未到達で打ち切り
-    float flip_gyro_abort_dps   = 1800.0f;  // [deg/s] measured-rate abort limit (gyro range 2000) / 計測レート打ち切り上限（レンジ2000）
+    float flip_gyro_abort_dps   = 1950.0f;  // [deg/s] measured-rate abort limit (gyro range 2000) / 計測レート打ち切り上限（レンジ2000）
     float flip_min_height_m     = 1.0f;     // [m] C2 / 実行条件C2
     float flip_min_voltage_v    = 3.6f;     // [V] C5 / 実行条件C5
     float flip_max_tilt_deg     = 15.0f;    // [deg] C3 / 実行条件C3
@@ -648,6 +649,7 @@ namespace param_vars {
     // determineFlipButtonDirection() がボタン立ち上がりエッジで読む。制御器は
     // キャッシュしない（reload コールバック不要）。
     float flip_button_stick_threshold = 0.5f;  // [-] |roll|/|pitch| stick threshold / 方向決定のスティック閾値
+    float flip_button_wait_ms = 1000.0f;        // [ms] how long a press waits for flip_ready; 0 = reject at once / 押下が flip_ready を待つ時間。0=即拒否
     int32_t flip_button_default_direction = 1; // FlipDirection when both sticks are below
                                                 // threshold: 0=Left,1=Right,2=Forward,3=Back.
                                                 // Default Right — the factory firmware's flip
@@ -938,17 +940,18 @@ static const ParamEntry table[] = {
     {"flip.motor_lag_ms",      ParamType::FLOAT, &flip_motor_lag_ms,       24.0f,   1.0f,   50.0f, &notifyControllerReload},
     {"flip.brake_margin",      ParamType::FLOAT, &flip_brake_margin,        1.0f,   0.3f,    1.0f, &notifyControllerReload},
     {"flip.recover_boost_tilt_deg", ParamType::FLOAT, &flip_recover_boost_tilt_deg, 20.0f, 5.0f, 60.0f, &notifyControllerReload},
+    {"flip.recover_rate_limit_dps", ParamType::FLOAT, &flip_recover_rate_limit_dps, 600.0f, 100.0f, 1500.0f, &notifyControllerReload},
     {"flip.spin_yaw_torque_limit_nm", ParamType::FLOAT, &flip_spin_yaw_torque_limit_nm, 0.3e-3f, 0.0f, 2.0e-3f, &notifyControllerReload},
     {"flip.spin_torque_limit_nm", ParamType::FLOAT, &flip_spin_torque_limit_nm, 7.0e-3f, 2.0e-3f, 10.0e-3f, &notifyControllerReload},
     {"flip.brake_ramp_rps2",   ParamType::FLOAT, &flip_brake_ramp_rps2,   500.0f, 100.0f, 1500.0f, &notifyControllerReload},
     {"flip.settle_ms",         ParamType::FLOAT, &flip_settle_ms,        1500.0f,   0.0f, 5000.0f, &notifyControllerReload},
     {"flip.settle_tilt_deg",   ParamType::FLOAT, &flip_settle_tilt_deg,     5.0f,   1.0f,   30.0f, &notifyControllerReload},
-    {"flip.handoff_min_deg",   ParamType::FLOAT, &flip_handoff_min_deg,   290.0f, 200.0f,  350.0f, &notifyControllerReload},
     {"flip.handoff_rate_dps",  ParamType::FLOAT, &flip_handoff_rate_dps,  300.0f,  50.0f,  600.0f, &notifyControllerReload},
     {"flip.handoff_force_deg", ParamType::FLOAT, &flip_handoff_force_deg, 350.0f, 300.0f,  360.0f, &notifyControllerReload},
+    {"flip.brake_timeout_ms",  ParamType::FLOAT, &flip_brake_timeout_ms,  300.0f,  50.0f, 1000.0f, &notifyControllerReload},
     {"flip.recover_timeout_ms", ParamType::FLOAT, &flip_recover_timeout_ms, 800.0f, 100.0f, 3000.0f, &notifyControllerReload},
     {"flip.spin_timeout_ms",   ParamType::FLOAT, &flip_spin_timeout_ms,   700.0f, 100.0f, 3000.0f, &notifyControllerReload},
-    {"flip.gyro_abort_dps",    ParamType::FLOAT, &flip_gyro_abort_dps,   1800.0f, 1000.0f, 1950.0f, &notifyControllerReload},
+    {"flip.gyro_abort_dps",    ParamType::FLOAT, &flip_gyro_abort_dps,   1950.0f, 1000.0f, 1950.0f, &notifyControllerReload},
     {"flip.min_height_m",      ParamType::FLOAT, &flip_min_height_m,       1.0f,   0.3f,    3.0f, &notifyControllerReload},
     {"flip.min_voltage_v",     ParamType::FLOAT, &flip_min_voltage_v,      3.6f,   3.0f,    4.2f, &notifyControllerReload},
     {"flip.max_tilt_deg",      ParamType::FLOAT, &flip_max_tilt_deg,      15.0f,   1.0f,   45.0f, &notifyControllerReload},
@@ -958,6 +961,7 @@ static const ParamEntry table[] = {
     {"flip.cooldown_ms",       ParamType::FLOAT, &flip_cooldown_ms,     2000.0f,   0.0f, 10000.0f, &notifyControllerReload},
     {"flip.button_stick_threshold",   ParamType::FLOAT, &flip_button_stick_threshold,   0.5f, 0.1f, 1.0f, nullptr},
     {"flip.button_default_direction", ParamType::INT,   &flip_button_default_direction, 1.0f, 0.0f, 3.0f, nullptr},
+    {"flip.button_wait_ms",           ParamType::FLOAT, &flip_button_wait_ms,        1000.0f, 0.0f, 5000.0f, nullptr},
 
     // ESKF process noise
     {"eskf.process.gyro_noise",  ParamType::FLOAT, &eskf_gyro_noise,  0.009655f, 0.001f, 1.0f,  &notifyEstimatorReload},

@@ -233,6 +233,25 @@ const char* armBlockDescription(sf::ArmBlock block)
     }
 }
 
+/// Short operator-facing description of a FLIP block reason (for `status`).
+/// FLIP 阻害理由の操作者向け短い説明（`status` 用）。
+const char* flipBlockDescription(sf::FlipBlockReason reason)
+{
+    switch (reason) {
+        case sf::FlipBlockReason::NotFlying:          return "not flying";
+        case sf::FlipBlockReason::TooLow:             return "too low - climb above flip.min_height_m";
+        case sf::FlipBlockReason::NotSteady:          return "not steady - hold still (tilt/rate/velocity)";
+        case sf::FlipBlockReason::BatteryLow:         return "battery low";
+        case sf::FlipBlockReason::EstimatorUnhealthy: return "estimator / ToF not valid";
+        case sf::FlipBlockReason::Cooldown:           return "cooldown after the previous flip";
+        case sf::FlipBlockReason::Busy:               return "flip in progress";
+        case sf::FlipBlockReason::SourceConflict:     return "excitation active";
+        case sf::FlipBlockReason::Disabled:           return "disabled - param set flip.enable 1";
+        case sf::FlipBlockReason::None:
+        default:                                      return "none";
+    }
+}
+
 /// `status` — flight state / mode / arm, pairing, attitude, altitude, battery, sensors.
 /// `status` — フライト状態/モード/ARM、ペアリング、姿勢、高度、電池、センサ。
 int cmd_status(int argc, char** argv)
@@ -269,6 +288,20 @@ int cmd_status(int argc, char** argv)
         std::printf("prearm  : ready\n");
     } else {
         std::printf("prearm  : BLOCKED (%s)\n", armBlockDescription(block));
+    }
+
+    // Flip gate: the controller's published fact (ControllerStatus.flip_ready /
+    // flip_block_reason, C2-C8) — the same one the FLIP button and the API read, so
+    // this line says why a press is refused. Read-only fact display.
+    // 宙返りの判定: 制御器が発行した事実（ControllerStatus.flip_ready /
+    // flip_block_reason、C2-C8）— FLIP ボタンと API が読むものと同じで、押下が
+    // 拒否される理由をこの行が示す。読み取り専用の事実表示。
+    const sf::ControllerStatus controller = sf::controller_status.latest();
+    if (controller.flip_ready) {
+        std::printf("flip    : ready\n");
+    } else {
+        std::printf("flip    : BLOCKED (%s)\n", flipBlockDescription(
+                    static_cast<sf::FlipBlockReason>(controller.flip_block_reason)));
     }
     return 0;
 }

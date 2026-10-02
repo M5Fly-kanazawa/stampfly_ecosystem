@@ -1,0 +1,34 @@
+# flip_brake_timeout.scn — Brake that cannot settle must still hand off (timeout path)
+#                      収束しない Brake も、タイムアウトで必ず引き渡すこと
+#
+# INV-2: every phase of the flip sequence is finite. Brake normally ends when the measured rate
+# falls below flip.handoff_rate_dps (or the rotation reaches flip.handoff_force_deg); the third
+# exit is flip.brake_timeout_ms. This scenario disables the two normal exits (handoff_rate_dps
+# at its minimum 50, handoff_force_deg at its maximum 360), slows the brake ramp to 250 rad/s^2
+# and sets brake_timeout_ms to its minimum 50, so ONLY the timeout can end Brake: the craft then
+# enters Recover still rotating at ~1500 deg/s near 270 deg, and the attitude loop must stop and
+# level it. The result must name the cause (aborted brake_timeout) and the craft must be level
+# and FLYING afterwards.
+#
+# INV-2: フリップ列の全フェーズは有限時間。Brake は通常、計測レートが
+# flip.handoff_rate_dps 未満に落ちる（または回転角が flip.handoff_force_deg に到達）で
+# 終わり、3つ目の出口が flip.brake_timeout_ms。本シナリオは通常の2つの出口を無効化
+# （handoff_rate_dps を下限 50、handoff_force_deg を上限 360）、減速ランプを 250 rad/s²
+# に遅くし、brake_timeout_ms を下限 50 にして、Brake を終わらせられるのをタイムアウト
+# だけにする。機体は約 270° で約 1500 deg/s のまま Recover に入り、姿勢ループがそれを
+# 止めて水平にする必要がある。結果は原因（aborted brake_timeout）を示し、その後は
+# 水平で FLYING であること。
+#
+# Run: sf sils scenario simulator/sils/scenarios/flip_brake_timeout.scn --target vehicle --duration 37000000 --param flip.enable=1 --param flip.brake_timeout_ms=50 --param flip.brake_ramp_rps2=250 --param flip.handoff_rate_dps=50 --param flip.handoff_force_deg=360
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes
+   +    api  "command"                                                           # B: enter SDK mode (t=6)
+   +    api  "takeoff"                                                           # C: take off → POS_HOLD hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC while the API flies (t=6-18)
+   +    api  "up 60"                                                             # E: climb to ~1.1 m (t=18)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # F: settle at flip height (t=18-23)
+   +    api  "flip r"                                                            # G: roll right — aborted by the param overrides (t=23)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # H: abort + recovery + settle (t=23-28)
+   +    api  "land"                                                              # I: autonomous landing (t=28)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # J: neutral RC through touchdown (t=28-36)
