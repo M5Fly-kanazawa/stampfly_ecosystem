@@ -165,6 +165,31 @@ sils::Plant::Config plant_config_from_env()
 {
     sils::Plant::Config cfg;   // defaults: noise OFF (clean path unchanged)
 
+    // SILS_EMU_PLANT_PROFILE selects a named plant-fidelity profile BEFORE the per-knob
+    // overrides below (so --torque-authority etc. still win). Unset / "default" = the
+    // pre-fit plant (torque_authority 1.0, no extra delay, no slew limit).
+    // "flip_fit_2026_10" = SSOT calibration set plant_fit_flip_2026_10 (fitted to ONE real
+    // roll-flip log; opt-in because it moves many non-flip metrics, simulation-policy.md §5).
+    // SILS_EMU_PLANT_PROFILE は名前付きプラント忠実度プロファイルを選ぶ。以下の個別ノブの
+    // 上書きより「前」に適用するので --torque-authority 等は優先される。未設定/"default" =
+    // フィット前のプラント。"flip_fit_2026_10" = SSOT の plant_fit_flip_2026_10（ロール軸の
+    // 宙返りログ 1 本にフィット。宙返り以外の多くの指標を動かすのでオプトイン）。
+    if (const char* pp = std::getenv("SILS_EMU_PLANT_PROFILE")) {
+        const std::string profile(pp);
+        if (profile == "flip_fit_2026_10") {
+            cfg.torque_authority = sils_params::plant_fit::TORQUE_AUTHORITY;
+            cfg.motor_delay_ms   = sils_params::plant_fit::MOTOR_DELAY_MS;
+            cfg.motor_slew_per_s = sils_params::plant_fit::MOTOR_SLEW_PER_S;
+            std::printf("[emu] plant profile = flip_fit_2026_10 (torque_authority %.2f, "
+                        "motor_delay %.1f ms, motor_slew %.1f duty/s)\n",
+                        cfg.torque_authority, cfg.motor_delay_ms, cfg.motor_slew_per_s);
+        } else if (profile != "default" && !profile.empty()) {
+            std::fprintf(stderr, "[emu] unknown SILS_EMU_PLANT_PROFILE '%s' "
+                         "(known: default, flip_fit_2026_10)\n", pp);
+            std::exit(2);
+        }
+    }
+
     // Battery sag/discharge model ON for the closed-loop emulator: the full firmware
     // runs power_task and reads the live INA3221 voltage to compensate thrust→duty,
     // so the dynamic supply is consistent end-to-end (Model Identity). Override with
@@ -282,20 +307,21 @@ sils::Plant::Config plant_config_from_env()
     // L=14.7/8.4/11.0ms（roll/pitch/yaw）、現状 SILS に明示的なむだ時間は無い。既定 OFF。
     if (const char* md = std::getenv("SILS_EMU_MOTOR_DELAY")) {
         float delay_ms = (float)std::atof(md);
-        // >= 0 so 0 can switch the (now default-on) delay off for A/B against the pre-fit plant.
-        // 0 以上: 0 で（既定 ON になった）遅れを切り、フィット前のプラントと A/B 比較できる。
+        // >= 0 so 0 can switch the delay off even under SILS_EMU_PLANT_PROFILE=flip_fit_2026_10.
+        // 0 以上: SILS_EMU_PLANT_PROFILE=flip_fit_2026_10 の下でも 0 で遅れを切れる。
         if (delay_ms >= 0.0f) { cfg.motor_delay_ms = delay_ms;
-            std::printf("[emu] motor transport delay override = %.2f ms (default %.2f)\n",
+            std::printf("[emu] motor transport delay override = %.2f ms (fitted profile %.2f)\n",
                         cfg.motor_delay_ms, sils_params::plant_fit::MOTOR_DELAY_MS); }
     }
     // SILS_EMU_MOTOR_SLEW = duty slew-rate limit [duty/s] (Config::motor_slew_per_s; flip-log
-    // fit 2026-10-02, default sils_params::plant_fit::MOTOR_SLEW_PER_S; 0 = off).
-    // SILS_EMU_MOTOR_SLEW = duty スルーレート制限 [duty/s]（宙返りログのフィット、既定は
-    // plant_fit::MOTOR_SLEW_PER_S、0 で OFF）。
+    // fit 2026-10-02, fitted value sils_params::plant_fit::MOTOR_SLEW_PER_S via the
+    // flip_fit_2026_10 profile; default 0 = off).
+    // SILS_EMU_MOTOR_SLEW = duty スルーレート制限 [duty/s]（宙返りログのフィット、フィット値は
+    // プロファイル flip_fit_2026_10 経由の plant_fit::MOTOR_SLEW_PER_S、既定 0 = OFF）。
     if (const char* sl = std::getenv("SILS_EMU_MOTOR_SLEW")) {
         float v = (float)std::atof(sl);
         if (v >= 0.0f) { cfg.motor_slew_per_s = v;
-            std::printf("[emu] motor duty slew limit override = %.2f duty/s (default %.2f)\n",
+            std::printf("[emu] motor duty slew limit override = %.2f duty/s (fitted profile %.2f)\n",
                         cfg.motor_slew_per_s, sils_params::plant_fit::MOTOR_SLEW_PER_S); }
     }
     // SILS_EMU_IMU_GYRO_RANGE_DPS / SILS_EMU_IMU_ACCEL_RANGE_G override the plant's

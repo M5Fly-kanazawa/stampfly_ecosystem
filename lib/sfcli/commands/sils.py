@@ -113,6 +113,11 @@ def promote_legacy_environment() -> None:
 ESTIMATORS = {"eskf": 0, "complementary": 1}
 ESTIMATOR_LABELS = {"eskf": "ESKF", "complementary": "Complementary"}
 NOISE_LEVELS = ["off", "n0", "n1", "n2"]
+# Named plant-fidelity profiles (SILS_EMU_PLANT_PROFILE, emu_main.cpp). "default" = the pre-fit
+# plant; "flip_fit_2026_10" = SSOT calibration set plant_fit_flip_2026_10 (opt-in).
+# 名前付きプラント忠実度プロファイル。"default" = フィット前、"flip_fit_2026_10" = SSOT の
+# plant_fit_flip_2026_10（オプトイン）。
+PLANT_PROFILES = ["default", "flip_fit_2026_10"]
 
 # Friendly firmware target name -> its emulator exe / CMake target name
 # (CMakeLists.txt names every emulator "emu_<target>"). "workshop" runs the
@@ -490,12 +495,19 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    help="enable a deterministic 1-3 Hz lateral turbulence force [N] to excite "
                         "the attitude-wobble band (wobble-minimization study). Bare flag = 0.03 N. "
                         "Default OFF.")
+    p.add_argument("--plant-profile", choices=PLANT_PROFILES, default=None, metavar="NAME",
+                   help="named plant-fidelity profile (SILS_EMU_PLANT_PROFILE). 'default' (also "
+                        "when omitted) = the pre-fit plant; 'flip_fit_2026_10' = SSOT calibration "
+                        "set plant_fit_flip_2026_10 (torque_authority 0.60, motor_delay 6 ms, "
+                        "motor_slew 18 duty/s; fitted to ONE real roll-flip log, opt-in because it "
+                        "moves many non-flip metrics - simulation-policy.md section 5). "
+                        "--torque-authority/--motor-delay/--motor-slew still override single knobs.")
     p.add_argument("--motor-delay", type=float, default=None, metavar="MS",
                    help="motor transport delay in ms (model-match retrofit #1: real-hardware "
                         "system ID measured L=14.7/8.4/11.0 ms roll/pitch/yaw vs the current "
                         "SILS's ~0 ms explicit dead time, docs/architecture/simulation-policy.md "
                         "backlog #1). Inserted in the duty-path before the motor's first-order "
-                        "lag. Default = SSOT plant_fit_flip_2026_10 (6 ms, flip-log fit 2026-10-02); 0 = off.")
+                        "lag. Default OFF (0 ms); the flip-log fit (6 ms) comes with --plant-profile flip_fit_2026_10.")
     p.add_argument("--motor-slew", type=float, default=None, metavar="DUTY_PER_S",
                    help="duty-path slew-rate limit in duty/s (Plant::Config::motor_slew_per_s, "
                         "flip-log fit 2026-10-02, simulation-policy.md §5). Default = SSOT "
@@ -515,7 +527,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "gain-deficit injection study to model the in-flight-identified "
                         "~0.4-0.7x motor torque effectiveness without also cutting net thrust "
                         "(unlike --thrust-eff, which was found to stall takeoff at this "
-                        "magnitude). Default = SSOT plant_fit_flip_2026_10 (0.60, flip-log fit 2026-10-02); 1.0 = pre-fit plant.")
+                        "magnitude). Default 1.0 (off); the flip-log fit (0.60) comes with --plant-profile flip_fit_2026_10.")
     p.add_argument("--flow-scale", type=float, default=None, metavar="RATIO",
                    help="override the plant's optical-flow velocity under-read model "
                         "(Plant::Config::flow_vel_scale; multiplies synthesized flow dx/dy "
@@ -635,9 +647,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p = sub.add_parser("sysid-gate",
                        help="Model-match gate: fit SILS rate-loop (b,T,L) vs real-hardware "
                             "sysid (simulation-policy.md §4)")
+    p.add_argument("--plant-profile", choices=PLANT_PROFILES, default=None, metavar="NAME",
+                   help="named plant-fidelity profile, passed through to the scenario run "
+                        "(see `sf sils scenario --plant-profile`). Default = pre-fit plant.")
     p.add_argument("--motor-delay", type=float, default=None, metavar="MS",
                    help="motor transport delay in ms, passed through to the scenario run "
-                        "(see `sf sils scenario --motor-delay`). Default = plant default (6 ms); 0 = off.")
+                        "(see `sf sils scenario --motor-delay`). Default OFF (0 ms).")
     p.add_argument("--noise", choices=NOISE_LEVELS, default="off",
                    help="sensor noise level on the emulator Plant (default off — a clean "
                         "excitation run is what the real-hardware sysid pipeline assumes)")
@@ -1503,6 +1518,13 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
     msl = getattr(args, "motor_slew", None)
     if msl is not None:
         env["SILS_EMU_MOTOR_SLEW"] = str(msl)
+    # --plant-profile: named plant-fidelity profile (applied by the emulator BEFORE the
+    # per-knob overrides above); omitted = default (pre-fit) plant.
+    # --plant-profile: 名前付きプラント忠実度プロファイル（エミュレータが上の個別ノブの
+    # 上書きより前に適用）。省略 = 既定（フィット前）プラント。
+    profile = getattr(args, "plant_profile", None)
+    if profile is not None:
+        env["SILS_EMU_PLANT_PROFILE"] = profile
 
     # --thrust-eff / --flow-scale: hikoki64 §3.3 SILS gain-deficit injection study —
     # override the plant's torque-authority and flow-velocity-under-read knobs
@@ -2674,6 +2696,7 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
         noise=getattr(args, "noise", "off"), seed=getattr(args, "seed", 12345),
         video=False, ground_effect=None, turbulence=None,
         motor_delay=getattr(args, "motor_delay", None), unpaired=False,
+        plant_profile=getattr(args, "plant_profile", None),
         params=getattr(args, "params", None),
     )
     run_scenario(scenario_ns)   # its own PASS/FAIL print already happened; see below for gating
@@ -2730,7 +2753,8 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
             sys.path.remove(tools_dir)
 
     console.info("Model-match gate (simulation-policy.md §4): SILS plant vs real-hardware sysid "
-                 f"(motor_delay={getattr(args, 'motor_delay', None)} ms)")
+                 f"(plant_profile={getattr(args, 'plant_profile', None) or 'default'}, "
+                 f"motor_delay={getattr(args, 'motor_delay', None)} ms)")
     header = (f"  {'axis':6s} {'b_sils':>10s} {'b_ref':>10s} {'b_err%':>8s}  "
               f"{'Ltot_sils':>9s} {'Ltot_ref':>9s} {'Ltot_err%':>10s}  "
               f"{'T[ms]':>6s} {'L[ms]':>6s} {'coh':>5s}  verdict")
@@ -2771,6 +2795,7 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
             "pass": all_pass,
             "tolerances": {"b_rel": SYSID_GATE_B_TOL, "L_total_rel": SYSID_GATE_LTOTAL_TOL},
             "reference": str(reference_path),
+            "plant_profile": getattr(args, "plant_profile", None) or "default",
             "motor_delay_ms": getattr(args, "motor_delay", None),
             "noise": getattr(args, "noise", "off"),
             "bundle": str(zip_path),
