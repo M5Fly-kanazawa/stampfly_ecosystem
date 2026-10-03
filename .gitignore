@@ -85,10 +85,10 @@ tools/log_analyzer/*.bin
 tools/log_analyzer/*.png
 
 # ====================
-# Sample datasets (regenerable from real flights — keep README only)
+# Sample datasets: keep README only for CSV exports
+# (the five education .sflog.zip samples are tracked; see analysis/datasets/education/README.md)
 # ====================
 analysis/datasets/education/*.csv
-analysis/datasets/education/*.sflog.zip
 analysis/datasets/sysid/*.csv
 
 # ====================

@@ -1,61 +1,33 @@
 # datasets
 
-解析用サンプルログ。
+> **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-## 計画中のデータセット
+解析・演習用のログとデータ。フライトログ一式（`.sflog.zip`）の形式は
+`protocol/spec/flight_log.yaml`（基準ファイル）と `docs/reference/flight-log-format.md` を参照。
 
-### 基準データ
-- `static_calibration/` - 静止状態キャリブレーションデータ
-- `ground_truth/` - モーションキャプチャ等のGround Truth
+| ディレクトリ | 内容 |
+|-------------|------|
+| `education/` | 実機なしで解析を練習するための教育用サンプルログ5本（シミュレーションで生成）。詳細は `education/README.md` |
+| `flightlog/` | 実機由来の基準フライトログ一式。`sf log`・`sf sysid` と CI の読み込み確認に使う。詳細は `flightlog/README.md` |
+| `motor_sweep_20260714/` | モータの掃引計測（2026-07-14）。詳細は `motor_sweep_20260714/README.md` |
+| `sysid/` | システム同定用の CSV（手元で生成。git 管理外） |
 
-### 飛行データ
-- `hover/` - ホバリングデータ
-- `trajectory/` - 軌跡追従データ
-- `disturbance/` - 外乱応答データ
-
-### センサデータ
-- `imu_noise/` - IMUノイズ特性評価用
-- `mag_calibration/` - 地磁気キャリブレーション用
-
-## ファイル形式
-
-- `.bin` - バイナリログ（`sf log capture` / `sf log wifi` で取得）
-- `.csv` - 変換済みCSV
-- `.json` - メタデータ
-
-## 注意
-
-- 大容量ファイルはgit管理外（.gitignore）
-- 必要に応じてGit LFSまたは外部ストレージを使用
+CSV へ書き出したファイル（`education/*.csv`、`sysid/*.csv`）は作り直せるので git 管理外とする。
 
 ---
 
+<a id="english"></a>
+
 # datasets
 
-Sample logs for analysis.
+Logs and data for analysis and exercises. For the flight-log bundle format (`.sflog.zip`) see
+`protocol/spec/flight_log.yaml` (source of truth) and `docs/reference/flight-log-format.md`.
 
-## Planned Datasets
+| Directory | Contents |
+|-----------|----------|
+| `education/` | Five educational sample logs for practicing analysis without a vehicle (simulation-generated). See `education/README.md` |
+| `flightlog/` | Real-vehicle reference flight-log bundles, used by `sf log`, `sf sysid` and CI as read-compatibility fixtures. See `flightlog/README.md` |
+| `motor_sweep_20260714/` | Motor sweep measurements (2026-07-14). See `motor_sweep_20260714/README.md` |
+| `sysid/` | CSV files for system identification (generated locally, not tracked) |
 
-### Reference Data
-- `static_calibration/` - Static calibration data
-- `ground_truth/` - Motion capture Ground Truth
-
-### Flight Data
-- `hover/` - Hover data
-- `trajectory/` - Trajectory tracking data
-- `disturbance/` - Disturbance response data
-
-### Sensor Data
-- `imu_noise/` - IMU noise characterization
-- `mag_calibration/` - Magnetometer calibration
-
-## File Formats
-
-- `.bin` - Binary log (captured with `sf log capture` / `sf log wifi`)
-- `.csv` - Converted CSV
-- `.json` - Metadata
-
-## Note
-
-- Large files excluded from git (.gitignore)
-- Use Git LFS or external storage as needed
+CSV exports (`education/*.csv`, `sysid/*.csv`) are regenerable and are not tracked.
