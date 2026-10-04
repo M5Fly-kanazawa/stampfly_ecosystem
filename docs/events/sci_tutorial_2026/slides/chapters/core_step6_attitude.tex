@@ -1,0 +1,83 @@
+% ==============================================================================
+% core_step6_attitude.tex — SCI/SICE tutorial core deck, Step 6: attitude
+% estimation (exercise 9). Code values from lesson_09_estimation/solution.cpp.
+% SCI/SICE チュートリアル要点版 Step 6: 姿勢推定（実習 9）。
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{ジャイロだけでは姿勢角が求まらない}
+  \begin{columns}[c]
+    \begin{column}{0.48\textwidth}
+      \centering
+      \adjustbox{max width=\columnwidth, max height=0.66\textheight}{\input{../../_shared/tikz/gyro_drift}}
+    \end{column}
+    \begin{column}{0.50\textwidth}
+      \footnotesize
+      \begin{itemize}\setlength{\itemsep}{3pt}
+        \item ジャイロは角速度 $\omega$ を測る。角度は積分 $\theta=\int\omega\,dt$ で求める
+        \item 測定のバイアス（偏り）も積分されるので、時間とともに誤差が増える（ドリフト）
+        \item 姿勢角そのものを目標にする制御（STABILIZE 以上）には、角度の推定が要る
+      \end{itemize}
+      \begin{alertblock}{そこで}
+        \scriptsize 重力の向きを測る加速度計で角度を補う。加速度計は長期で安定だが、短期は振動や加減速でノイズが乗る
+      \end{alertblock}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{相補フィルタ: ジャイロと加速度計を混ぜる}
+  \begin{columns}[c]
+    \begin{column}{0.48\textwidth}
+      \centering
+      \adjustbox{max width=\columnwidth, max height=0.62\textheight}{\input{../../_shared/tikz/comp_filter}}
+    \end{column}
+    \begin{column}{0.50\textwidth}
+      \footnotesize
+      \setlength{\abovedisplayskip}{2pt}\setlength{\belowdisplayskip}{2pt}%
+      静止時の加速度計は重力の反力を測るので、傾きが求まる（$\phi$: ロール、$\theta$: ピッチ）:
+      \[
+        \begin{aligned}
+        \phi_a&=\operatorname{atan2}(-a_y,-a_z)\\
+        \theta_a&=\operatorname{atan2}\bigl(a_x,\sqrt{a_y^2+a_z^2}\bigr)
+        \end{aligned}
+      \]
+      相補フィルタ（$\alpha=0.98$）:
+      \[
+        \hat\theta_k=\alpha(\hat\theta_{k-1}+\omega\,\Delta t)+(1-\alpha)\theta_a
+      \]
+      短期はジャイロ、長期は加速度計を使う（互いの弱点を補う）。ヨー角は重力から求まらない
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 9: 相補フィルタを実装し、機体の推定と比べる}
+  \exgoal{自作の相補フィルタの角度を、機体既定の推定器 ESKF（誤差状態カルマンフィルタ）と比べる}
+  \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
+      {\footnotesize\textbf{\textcolor{sfblue}{手順（飛行しない）}}}\par\vspace{-2pt}
+        \footnotesize
+        \begin{enumerate}\setlength{\itemsep}{0pt}
+          \item \code{sf lesson switch sci2026:9}
+          \item \code{sf lesson edit} で右のコードにして保存
+          \item \code{sf lesson build}、\code{sf lesson flash}
+          \item \code{sf lesson monitor}、Teleplot で \code{cf\_roll} と \code{eskf\_roll} を重ねる
+        \end{enumerate}
+    \end{column}
+    \begin{column}{0.52\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize, moredelim={[is][\bfseries\color{sfred}]{<<}{>>}}]{user\_code.cpp（赤字を書く）}
+<<float a_roll = atan2f(-ay, -az);>>
+<<float a_pitch = atan2f(ax,>>
+<<    sqrtf(ay*ay + az*az));>>
+<<cf_roll = alpha*(cf_roll + gx*dt)>>
+<<         + (1-alpha)*a_roll;>>
+// pitch: same form (gy, a_pitch)
+<<ws::print(">cf_roll:%.2f", ...);>>
+<<ws::print(">eskf_roll:%.2f", ...);>>
+      \end{sflisting}
+    \end{column}
+  \end{columns}
+  \exresult{機体を手で傾けると 2 つの角度がほぼ一致して動く。$\alpha$ を変えて違いを見る}
+  \exhelptodo{9}
+\end{frame}

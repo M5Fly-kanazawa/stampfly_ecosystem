@@ -1,0 +1,228 @@
+% ==============================================================================
+% core_intro.tex — SCI/SICE tutorial core deck: introduction and preparation
+% SCI/SICE チュートリアル要点版: はじめに・準備（実習 1）
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{StampFly Ecosystem とは}
+  \begin{block}{制御なしでは飛べない機体で、一人 1 機、「設計 $\to$ 実装 $\to$ 実験 $\to$ 解析」を一周する}
+    \small マルチコプタは制御系が止まれば即座に墜落する。この性質を教材にして、フィードバック制御の役割を自分の手で確かめる
+  \end{block}
+
+  \vspace{0.4em}
+
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{36mm}>{\raggedright\arraybackslash}p{92mm}}
+      \hline
+      \textbf{今日使うもの} & \textbf{役割} \\
+      \hline
+      機体とコントローラ & 手のひらサイズの 4 モータ機（ESP32 搭載）と、ESP-NOW（Espressif 社の無線直接通信方式）で操縦する送信機 \\
+      sf CLI & ビルド・書き込み・ログ取得・解析をまとめた \code{sf} コマンド（CLI: 文字でコマンドを打って操作する方式） \\
+      SILS & Software In the Loop Simulation。実機に書き込むのと同じファームウェアのソースを PC で動かす、物理シミュレータとの閉ループ試験（Step 5 で使う） \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.2em}
+  {\footnotesize 上の道具で、センサを読むところから姿勢制御の設計まで、6 ステップで一周する\par}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{今日の流れ: 6 ステップ}
+  \begin{center}
+    \adjustbox{max width=0.88\textwidth, max height=0.62\textheight}{\coremap{0}}
+  \end{center}
+
+  \vspace{0.2em}
+  {\small 準備（実習 1: 環境導入・機体の初期設定・ペアリング）のあと、番号順に進む。Step ごとに「やること」と「知っておくこと」だけを示す\par}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{実習ごとの役割: 誰が何をするか}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{16mm}>{\raggedright\arraybackslash}p{37mm}>{\raggedright\arraybackslash}p{70mm}}
+      \hline
+      \textbf{実習} & \textbf{内容} & \textbf{役割} \\
+      \hline
+      1 & 初期設定・ペアリング & 各自が自分の機体に書き込み、設定する \\
+      2, 3, 4 & IMU、モータ、ミキサ & 各自がコードを書き、自分の機体に書き込む（3, 4 は机上でモータを回す） \\
+      5, 6 & P 制御、ゲイン設計 & 各自がコードを書いてビルドまで。\textbf{飛行は講師} \\
+      7 & システム同定 & \textbf{講師が飛ばして取ったログ}を配布し、各自が解析する \\
+      8 & PID & 各自がコードを書いてビルドし、\textbf{自分の PC で SILS 確認}。実機の飛行は講師 \\
+      9 & 姿勢推定 & 各自がコードを書き、自分の機体に書き込む（飛ばさない） \\
+      \hline
+    \end{tabular}
+  \end{table}
+  \vspace{0.2em}
+  {\footnotesize 飛行は安全のため講師だけが行う。自分のコードの飛行は、帰宅後に自分の機体で試す\par}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{機材と安全}
+  \begin{columns}[T]
+    \begin{column}{0.30\textwidth}
+      \begin{block}{持ち物}
+        \footnotesize
+        \begin{itemize}\setlength{\itemsep}{1pt}
+          \item ノート PC
+          \item StampFly 機体
+          \item コントローラ
+          \item USB ケーブル
+        \end{itemize}
+      \end{block}
+    \end{column}
+    \begin{column}{0.67\textwidth}
+      \begin{alertblock}{安全ルール}
+        \scriptsize
+        \begin{itemize}\setlength{\itemsep}{1pt}
+          \item 飛行は\warn{講師だけ}が指定エリアで行う。参加者は距離を保つ
+          \item モータを回す実習（実習 3, 4）は\warn{机上}で行い、プロペラとガードに手を近づけない
+          \item \warn{ARM}（モータを回せる状態にすること）は機体ボタンの単クリックかコントローラで行う。\warn{DISARM}（停止）は機体ボタンの再クリック。異常な音・振動・回転があれば即 DISARM
+          \item ARM は USB 給電中とペアリング中は拒否される。書き込み後は USB を外し、水平な机に置いて電池で動かす
+          \item 実習 3, 4 では、コントローラの左ボタンの高度モードを OFF（ALT/POS にしない）、右ボタンの制御モードを STABILIZE か ACRO にしておく（ACRO: 角速度だけを制御するモード、STABILIZE: 姿勢角を制御するモード）。ALT/POS では ARM 直後に自動離陸に入り、ボタンで DISARM できない
+          \item 機体の真上に顔や手を出さない
+        \end{itemize}
+      \end{alertblock}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{準備 ①: 前提ツールの導入（OS ごとに違う）}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{18mm}>{\raggedright\arraybackslash}p{36mm}>{\raggedright\arraybackslash}p{70mm}}
+      \hline
+      \textbf{OS} & \textbf{コマンドを打つ場所} & \textbf{① 前提ツールの導入} \\
+      \hline
+      Windows & コマンドプロンプト（WSL は不要） & \code{winget install Git.Git} \\
+      macOS   & ターミナル & Homebrew を入れ、\code{brew install cmake ninja dfu-util ccache} \\
+      Linux   & ターミナル & \code{sudo apt install -y git curl tar cmake ninja-build wget flex bison gperf ccache libffi-dev libssl-dev dfu-util libusb-1.0-0} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \begin{itemize}\footnotesize\setlength{\itemsep}{1pt}
+    \item エディタ VSCode と、その拡張 Teleplot（\code{alexnesnes.teleplot}。実習 2 のグラフ表示に使う）も入れておく
+    \item OS による違いは、導入・有効化コマンドの名前とシリアルポート名（\code{COM3}、\code{/dev/cu.usbmodem*} など）だけ。\code{sf} コマンド以降は共通
+    \item 詳しくは README「インストール」節。ダウンロードが大きいので前日までに済ませる
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{準備 ②③: 取得・導入と、有効化・診断}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \begin{exampleblock}{② 取得と導入}
+        \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
+cd stampfly_ecosystem
+./install.sh
+        \end{lstlisting}
+      \end{exampleblock}
+      \begin{exampleblock}{③ 有効化と診断}
+        \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+source setup_env.sh
+sf doctor
+        \end{lstlisting}
+      \end{exampleblock}
+      {\scriptsize Windows は \code{install.bat}、\code{setup\_env.bat}（\code{./} も \code{source} も付けない）。\code{install} は専用の Python と ESP-IDF（Espressif 社の ESP32 向け開発環境）を自動で入れる\par}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{alertblock}{\code{sf doctor} の出力（一部）}
+        \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\tiny, aboveskip=1pt, belowskip=1pt]
+[OK]   Python 3.12.6
+[OK]   Dedicated environment: ~/.stampfly
+[OK]   Vehicle firmware: .../firmware/vehicle
+[OK]   ESP-IDF: v5.5.2
+[OK]   numpy
+...
+[INFO] Checking serial ports...
+  /dev/cu.usbmodem14101
+        \end{lstlisting}
+      \end{alertblock}
+      {\footnotesize \textcolor{sfgreen}{\textbf{[OK]}} が並び、最後の Summary に \code{[WARN]} が出なければ準備完了（機体をつなぐとシリアルポートが表示される）\par}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 1 (1/2): 書き込みと機体の初期設定}
+  \exgoal{実習用ファームを機体に書き込み、機体ごとの初期設定を 1 回済ませる}
+  \begin{columns}[T]
+    \begin{column}{0.50\textwidth}
+      {\footnotesize\textbf{\textcolor{sfblue}{手順（機体を USB でつなぐ）}}}\par\vspace{-2pt}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{0pt}
+        \item \code{sf lesson switch sci2026:1}
+        \item \code{sf lesson build}（初回は数分）
+        \item \code{sf lesson flash}。書き込み後に\textbf{自動でモニタに入る}（機体のログの画面。\code{Ctrl+]} で抜ける）
+        \item モニタで右のコマンドを入力（機体への命令 = 機体の CLI）
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{モニタで機体に入力}
+param reset
+param set wifi.mode 1
+param set wifi.channel N
+param save
+reboot
+      \end{sflisting}
+      \vspace{-1mm}
+      {\scriptsize \code{reset}: 初期値に戻す。\code{wifi.mode 1}: 機体が WiFi を出す（Step 4 で使う）。\code{N}: 1 / 6 / 11（講師が指定）。\code{save}: 保存。\code{reboot}: 再起動\par}
+    \end{column}
+  \end{columns}
+  \exresult{起動音が鳴り、モニタに \code{Hello StampFly!} が出る。LED は未ペアのため青の速い点滅（ペアリングすると緑）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 1 (2/2): コントローラと機体をペアリングする}
+  \exgoal{自分のコントローラと機体を 1 対 1 で結ぶ（初回のみ。以降は電源投入で自動再接続）}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      {\footnotesize\textbf{\textcolor{sfblue}{手順}}}\par\vspace{-2pt}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{1pt}
+        \item \textbf{コントローラ}: M5 ボタン（画面の押し込みボタン）を押しながら電源を入れる。\code{=== PAIRING ===} が出る
+        \item \textbf{機体}: 青の速い点滅（ペアリング待ち）になっていることを確認する。未ペアの機体は自動でこの状態になる。ペア済みの機体は、本体ボタンを\warn{ 3 秒以上}押し続けてペアリング待ちにする
+        \item \textbf{コントローラ}: 候補一覧（例 \code{A1B2 CH06}）から、MAC 下 4 桁（機体の固有番号の末尾 4 桁）が機体のラベルと同じ行を右スティックで選び、M5 ボタンで確定する
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.41\textwidth}
+      \begin{alertblock}{取り違えに注意}
+        \scriptsize 複数組が同時に行うため、候補が 1 件でも確定操作は省けない。ラベルが無ければ、機体を USB でつなぎ、\code{sf monitor} に \code{mac} と入力すると下 4 桁が分かる
+      \end{alertblock}
+    \end{column}
+  \end{columns}
+  \exresult{機体の LED が\textbf{緑}に変わればペアリング成立（画面はフライト画面になる）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{書くのは 2 関数だけ。作業は同じコマンドの繰り返し}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \begin{block}{書く関数（実習コード = \code{user\_code.cpp}）}
+        \footnotesize
+        \begin{itemize}\setlength{\itemsep}{1pt}
+          \item \api{setup()} --- 起動時に 1 回
+          \item \api{loop\_400Hz(dt)} --- 400\,Hz（2.5\,ms）ごと。\code{dt} は周期 [s]
+        \end{itemize}
+        センサやモータの詳細は \api{ws::} で始まる実習用の関数（\code{ws} は workshop 用 API の名前空間）が隠す
+      \end{block}
+      \begin{exampleblock}{作業サイクル（実習番号 N）}
+        \footnotesize
+        \code{sf lesson switch sci2026:N} \\
+        \code{sf lesson edit / build / flash / monitor}
+      \end{exampleblock}
+    \end{column}
+    \begin{column}{0.40\textwidth}
+      \centering
+      \adjustbox{max width=\columnwidth, max height=0.66\textheight}{\input{../../_shared/tikz/sci_build_flash_flow}}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.6em}
+  {\scriptsize \code{sf lesson} は実習用ファーム（\code{firmware/workshop}）を扱い、実習 1〜9 はこれ 1 種類で通す。\code{switch} は雛形を \code{user\_code.cpp} に写す（編集済みの内容は \code{my\_code/} に退避）。解答は \code{--solution}\par}
+\end{frame}

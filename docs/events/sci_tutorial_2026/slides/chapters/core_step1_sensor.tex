@@ -1,0 +1,65 @@
+% ==============================================================================
+% core_step1_sensor.tex — SCI/SICE tutorial core deck, Step 1: sensors (exercise 2)
+% SCI/SICE チュートリアル要点版 Step 1: センサ（実習 2）
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{機体の軸と IMU の API}
+  \begin{columns}[c]
+    \begin{column}{0.50\textwidth}
+      \centering
+      \adjustbox{max width=\columnwidth, max height=0.75\textheight}{\input{../../_shared/tikz/imu_axes}}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \footnotesize
+      IMU（慣性計測装置）は BMI270（3 軸ジャイロ + 3 軸加速度計）で、400\,Hz で値が更新される。軸は機体座標系 FRD（前方 - 右 - 下）に合わせてある
+
+      \vspace{0.4em}
+      \begin{table}
+        \centering\scriptsize
+        \begin{tabular}{lll}
+          \hline
+          \textbf{関数} & \textbf{意味} & \textbf{単位} \\
+          \hline
+          \api{ws::gyro\_x/y/z()}  & 角速度 & rad/s \\
+          \api{ws::accel\_x/y/z()} & 加速度 & m/s\textsuperscript{2} \\
+          \hline
+        \end{tabular}
+      \end{table}
+
+      \vspace{0.2em}
+      静止時の目安: ジャイロ $\approx 0$、加速度 Z $\approx -9.81$\,m/s\textsuperscript{2}（Z 軸は下向きが正なので、重力に対する反力は負になる）
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 2: IMU の値を見る}
+  \exgoal{ジャイロと加速度の値を画面にグラフで出し、軸と符号を確かめる}
+  \begin{columns}[T]
+    \begin{column}{0.47\textwidth}
+      {\footnotesize\textbf{\textcolor{sfblue}{手順}}}\par\vspace{-2pt}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{0pt}
+        \item \code{sf lesson switch sci2026:2}
+        \item \code{sf lesson edit} で右のコードにして保存
+        \item \code{sf lesson build}、\code{sf lesson flash}
+        \item VSCode の Teleplot で、\code{>名前:値} の行をグラフにする
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.51\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
+static uint32_t tick = 0;
+void loop_400Hz(float dt) {
+  if (tick++ % 4 == 0) {  // 100Hz
+    ws::print(">gx:%.3f",ws::gyro_x());
+    ws::print(">gy:%.3f",ws::gyro_y());
+    ws::print(">az:%.2f",ws::accel_z());
+  }
+}
+      \end{sflisting}
+    \end{column}
+  \end{columns}
+  \exresult{機体を傾けると \code{gx}（ロール）、\code{gy}（ピッチ）が傾ける速さに応じて振れる。静止すると 0 付近、\code{az} は $-9.81$ 付近}
+  \exhelp{2}
+\end{frame}

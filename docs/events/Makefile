@@ -17,6 +17,7 @@
 #   make dxh            — DXH high-school-teacher workshop deck
 #   make dxh-docswell   — DXH deck, Docswell upload variant (no QR codes)
 #   make sci             — SCI/SICE tutorial course deck
+#   make sci-core        — SCI/SICE tutorial core (要点版) deck
 #   make sci-docswell    — SCI deck, Docswell upload variant (no QR codes)
 #   make sci-html         — Prototype HTML slide viewer for the SCI deck
 #                           (tools/slides/pdf_deck_html.py, into sci_tutorial_2026/slides/html/)
@@ -29,7 +30,7 @@
 #                           chapters/ directories: make chapter NAME=led_control
 #   make clean           — Remove build artifacts
 
-.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-docswell sci-html dxh-html workshop-html sci-web chapter clean
+.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-core sci-docswell sci-html dxh-html workshop-html sci-web chapter clean
 
 # ---------------------------------------------------------------------------
 # Shared TikZ diagrams
@@ -135,6 +136,11 @@ sci: $(SCI_DIR)/$(SCI_PDF)
 
 $(SCI_DIR)/$(SCI_PDF): $(SCI_DIR)/$(SCI_TEX) _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(SCI_CHAPTERS) $(SHARED_ASSETS)
 	cd $(SCI_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode $(SCI_TEX) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode $(SCI_TEX)
+
+sci-core: $(SCI_DIR)/sci_tutorial_core.pdf
+
+$(SCI_DIR)/sci_tutorial_core.pdf: $(SCI_DIR)/sci_tutorial_core.tex _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(wildcard $(SCI_DIR)/chapters/core_*.tex) $(SHARED_ASSETS)
+	cd $(SCI_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode sci_tutorial_core.tex && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode sci_tutorial_core.tex
 
 sci-docswell: $(SCI_DIR)/$(SCI_DOCSWELL_PDF)
 

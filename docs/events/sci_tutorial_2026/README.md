@@ -43,6 +43,7 @@
 | 資料 | 場所 |
 |------|------|
 | スライド本編（PDF） | `docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`（`make sci` でビルド） |
+| スライド要点版（PDF） | `docs/events/sci_tutorial_2026/slides/sci_tutorial_core.pdf`（`make sci-core` でビルド） |
 | スライド（Docswell版・QRなし） | `docs/events/sci_tutorial_2026/slides/sci_tutorial_docswell.pdf`（`make sci-docswell` でビルド） |
 | 告知チラシ | `docs/events/sci_tutorial_2026/チュートリアル講座2026広告最終案.pdf` |
 | 復習手順ガイド | [`handson_guide.md`](handson_guide.md) |
@@ -98,7 +99,7 @@ VSCode 拡張機能 `alexnesnes.teleplot` も入れておく（Teleplot でセ�
 | 手順 | 内容 |
 |------|------|
 | 1 | 開発環境で機体ファームをビルドして書き込む（当日の実習 1 と同じ手順）: `sf build vehicle` → `sf flash vehicle -m`。書き込み直後に起動音が鳴り、LED が白から緑の常灯になり、モニタに起動ログが流れれば成功 |
-| 2 | コントローラのペアリングを行う（初回のみ手動: コントローラは LCD パネルボタンを押しながら電源投入，StampFly は本体ボタンを 3 秒以上押し続けてビープで離す。5 秒以上押し続けるとシステムリセットになる。続けてコントローラ画面の一覧から自分の機体（MAC下4桁。機体の USB CLI `mac` コマンドで確認できる）を選んでボタンで確定するとペアリング完了。以降は電源投入だけで自動再接続する。手順は [送信機の使い方](../../guides/controller.md) を参照）。自分で購入したコントローラは先に `sf flash controller` で書き直す |
+| 2 | コントローラのペアリングを行う（初回のみ手動: コントローラは LCD パネルボタンを押しながら電源投入，StampFly は本体ボタンを 3 秒以上押し続けてビープで離す。続けてコントローラ画面の一覧から自分の機体（MAC下4桁。機体の USB CLI `mac` コマンドで確認できる）を選んでボタンで確定するとペアリング完了。以降は電源投入だけで自動再接続する。手順は [送信機の使い方](../../guides/controller.md) を参照）。自分で購入したコントローラは先に `sf flash controller` で書き直す |
 | 3 | 機体を机の上に置き、モータ回転中は手を近づけない状態でコントローラから ARM（右スティック押し込み）し、モータが応答することを確認する。異常時は即 DISARM |
 
 WiFi モードとチャンネルの設定は、当日の実習 1 (2/2) で講師の指定するチャンネルとあわせて行う。

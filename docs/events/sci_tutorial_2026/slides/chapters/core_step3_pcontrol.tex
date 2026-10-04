@@ -1,0 +1,174 @@
+% ==============================================================================
+% core_step3_pcontrol.tex — SCI/SICE tutorial core deck, Step 3: P control and
+% model-based design (exercises 5 and 6)
+% SCI/SICE チュートリアル要点版 Step 3: P 制御とモデルに基づく設計（実習 5, 6）
+%
+% Gains are those of the sci2026 lesson code
+% (firmware/workshop/lessons/lesson_05_p_control, lesson_06_modeling):
+% exercise 5 = Kp 0.5 (roll/pitch), 2.0 (yaw); exercise 6 = zeta design.
+% ここで使うゲインは sci2026 レッスンの実コードの値に合わせてある。
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{これだけでは飛べない: フィードバックと内側ループ}
+  \begin{center}
+    \adjustbox{max width=0.92\textwidth, max height=0.50\textheight}{\input{../../_shared/tikz/feedback_block}}
+  \end{center}
+
+  \vspace{-0.2em}
+  \begin{itemize}\footnotesize\setlength{\itemsep}{1pt}
+    \item 実習 4 の開ループ（スティック $\to$ ミキサ $\to$ モータ）では、モータの個体差、機体の非対称（推力軸・重心のずれ）、電池電圧の低下に何の補正もかからない
+    \item そこで角速度をジャイロで測り、目標との差（誤差 $e=r-\omega$）に比例ゲイン $K_p$ を掛けてミキサへ戻す。これを\textbf{内側ループ（レート制御）}と呼ぶ
+    \item 姿勢角の制御はこの外側に重なる（STABILIZE 以上のモード）。今日は内側ループだけを扱う
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 5: レート P 制御で飛ばす}
+  \exgoal{ジャイロでフィードバックをかけ、制御の効果を見る（$K_p$ は勘で決めた値）}
+  \begin{columns}[T]
+    \begin{column}{0.44\textwidth}
+      {\footnotesize\textbf{\textcolor{sfblue}{手順}}}\par\vspace{-2pt}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{0pt}
+        \item \code{sf lesson switch sci2026:5}
+        \item \code{sf lesson edit} で TODO を埋めて保存
+        \item \code{sf lesson build}（ここまで各自）
+        \item 飛行は講師が完成コードで行う
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize, moredelim={[is][\bfseries\color{sfred}]{<<}{>>}}]{user\_code.cpp（赤字を書く）}
+Kp_rp = 0.5f; Kp_yaw = 2.0f;
+<<float rt = ws::rc_roll() * rate_max_rp;>>
+<<float re = rt - ws::gyro_x();>>
+<<float ro = Kp_rp * re;>>
+// pitch, yaw: same form
+<<ws::set_rate_target(rt, pt, yt);>>
+ws::motor_mixer(ws::rc_throttle(),
+                ro, po, yo);
+      \end{sflisting}
+    \end{column}
+  \end{columns}
+  \exresult{スティックに機体が追従し、わずかな振動が見える}
+  \exhelptodo{5}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{プラントの伝達関数}
+  \begin{center}
+    \vspace{-2mm}
+    \adjustbox{max width=0.80\textwidth, max height=0.34\textheight}{\input{../../_shared/tikz/plant_model}}
+  \end{center}
+
+  \begin{exampleblock}{ホバー近傍で線形化すると 2 ブロックの直列になる}\footnotesize
+    \begin{itemize}\setlength{\itemsep}{1pt}
+      \item ミキサ + モータ: Duty $\to$ トルク、1 次遅れ $K_m/(\tau_m s+1)$
+      \item 機体: トルク $\to$ 角速度、積分器 $1/(Is)$（$I$: 慣性モーメント）
+      \item 直列にすると $G_p(s)=\dfrac{K}{s(\tau_m s+1)}$、 $K=K_m/I$
+    \end{itemize}
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{実測パラメータ}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{llccc}
+      \hline
+      \textbf{パラメータ} & \textbf{記号} & \textbf{Roll} & \textbf{Pitch} & \textbf{Yaw} \\
+      \hline
+      慣性モーメント & $I$ & 9.16e-6 & 13.3e-6 & 20.4e-6\,kg$\cdot$m$^2$ \\
+      トルクゲイン   & $K_m$ & 9.3e-4 & 9.3e-4 & 1.67e-4\,N$\cdot$m \\
+      \hline
+      \textbf{プラントゲイン} & $K=K_m/I$ & \textbf{102} & \textbf{70} & \textbf{$\approx$8}\,rad/s$^2$ \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.4em}
+
+  \begin{itemize}\footnotesize\setlength{\itemsep}{2pt}
+    \item モータ時定数 $\tau_m$ は 0.02\,s を使う（3 軸共通。実測諸元からの計算値は 0.0163\,s）
+    \item Yaw の $K$ は計算で 8.2、実習コードは 8.0 を使う。Roll/Pitch より 1 桁小さい（ヨートルクを出しにくい）ので、次ページの設計式では軸ごとに必要な $K_p$ が大きく違う
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{閉ループの 2 次系と、$\zeta$ から $K_p$ を決める式}
+  \begin{columns}[c]
+    \begin{column}{0.40\textwidth}
+      \centering
+      \adjustbox{max width=\columnwidth, max height=0.78\textheight}{\input{../../_shared/tikz/step_response_zeta}}
+    \end{column}
+    \begin{column}{0.58\textwidth}
+      \footnotesize
+      \setlength{\abovedisplayskip}{3pt}\setlength{\belowdisplayskip}{3pt}%
+      P 制御の閉ループは 2 次系になる（$\omega_n$: 固有角周波数 [rad/s]、$\zeta$: 減衰比）:
+      \[
+        G_{cl}(s)=\frac{K_pK}{\tau_m s^2+s+K_pK}
+      \]
+      \[
+        \omega_n=\sqrt{\frac{K_pK}{\tau_m}},\quad
+        \zeta=\frac{1}{2\sqrt{K_pK\tau_m}}
+      \]
+      狙う $\zeta$ から $K_p$ を逆算する設計式:
+      \[
+        \boxed{K_p=\frac{1}{4\zeta^2K\tau_m}}
+      \]
+      オーバーシュート量 $\approx e^{-\pi\zeta/\sqrt{1-\zeta^2}}$（$\zeta=0.5\to16\%$、$\zeta=0.7\to5\%$、$\zeta\ge1\to0\%$）
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 6: 設計式で $K_p$ を計算して飛ばす}
+  \exgoal{軸ごとに設計式から $K_p$ を求め、$\zeta$ を変えたときの違いを見る}
+  \begin{columns}[T]
+    \begin{column}{0.47\textwidth}
+      {\footnotesize\textbf{\textcolor{sfblue}{手順}}}\par\vspace{-2pt}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{0pt}
+        \item \code{sf lesson switch sci2026:6}
+        \item \code{sf lesson edit} で \code{Kp\_*} を設計式で計算して保存
+        \item \code{sf lesson build}（ここまで各自）
+        \item 飛行は講師が $\zeta=0.7\to0.5\to1.0$ の順に変えて行う
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.51\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize, moredelim={[is][\bfseries\color{sfred}]{<<}{>>}}]{user\_code.cpp（赤字を書く）}
+tau_m = 0.02f;  K_roll = 102.0f;
+K_pitch = 70.0f;  K_yaw = 8.0f;
+float zeta = 0.7f;
+<<float c = 1.0f / (4*zeta*zeta * tau_m);>>
+<<float Kp_roll  = c / K_roll;>>
+<<float Kp_pitch = c / K_pitch;>>
+<<float Kp_yaw   = c / K_yaw;>>
+      \end{sflisting}
+    \end{column}
+  \end{columns}
+  \exresult{$\zeta=0.5$ は行き過ぎが大きく、$\zeta=1.0$ は反応が鈍い}
+  \exhelptodo{6}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{実習 6 の結果: 軸ごとに $K_p$ は違う}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{lcccccc}
+      \hline
+      & $K$ & \textbf{実習 5 の $K_p$} & \textbf{その $\zeta$} & $\zeta=0.5$ の $K_p$ & $\zeta=0.7$ の $K_p$ & $\zeta=1.0$ の $K_p$ \\
+      \hline
+      Roll  & 102 & 0.5 & 0.50 & 0.49 & 0.25 & 0.12 \\
+      Pitch &  70 & 0.5 & 0.60 & 0.71 & 0.36 & 0.18 \\
+      Yaw   & 8.0 & 2.0 & 0.88 & 6.25 & 3.19 & 1.56 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.3em}
+
+  \begin{exampleblock}{読み取り}\footnotesize
+    実習 5 の勘の値は、Roll で $\zeta\approx0.5$、Pitch で $0.6$（やや振動的）、Yaw は $K_p=2.0$ で $\zeta\approx0.88$ だった。$K$ が軸ごとに 1 桁違うため、同じ $K_p$ を 3 軸に使い回せない。モデルがあれば、勘の値の良し悪しを数値で言える
+  \end{exampleblock}
+\end{frame}

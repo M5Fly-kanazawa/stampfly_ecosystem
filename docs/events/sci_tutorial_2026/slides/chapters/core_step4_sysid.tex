@@ -1,0 +1,106 @@
+% ==============================================================================
+% core_step4_sysid.tex — SCI/SICE tutorial core deck, Step 4: system
+% identification (exercise 7, `sf sysid fit` only)
+% SCI/SICE チュートリアル要点版 Step 4: システム同定（実習 7。sf sysid fit のみ）
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{システム同定: 飛行データから $K,\tau_m$ を推定する}
+  \begin{columns}[c]
+    \begin{column}{0.46\textwidth}
+      \centering
+      \adjustbox{max width=\columnwidth, max height=0.78\textheight}{\input{../../_shared/tikz/sysid_concept}}
+      {\tiny 図中の L6 = 実習 6 の理論値\par}
+    \end{column}
+    \begin{column}{0.52\textwidth}
+      \footnotesize
+      \setlength{\abovedisplayskip}{3pt}\setlength{\belowdisplayskip}{3pt}%
+      入力と出力の記録から、プラント $G_p(s)=K/(s(\tau_m s+1))$ の $K,\tau_m$ を求める。一般には、候補の $K,\tau_m$ でモデルの出力 $\hat y(t)$ を計算し、実測 $y(t)$ との二乗誤差が最小になる値を探す（最小二乗フィット）:
+      \[
+        J(K,\tau_m)=\sum_t\bigl(\hat y(t)-y(t)\bigr)^2
+      \]
+      \code{sf sysid fit} は既定で、閉ループ（P 制御で飛ばした記録）の「目標角速度 $\to$ ジャイロ」の応答にモデルを当てはめる。制御なしでは飛べない機体なので閉ループで同定する。$K_p$ は記録のモータ Duty から自動で推定する
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{データの取り方: 機体の WiFi につなぐ}
+  \begin{columns}[T]
+    \begin{column}{0.50\textwidth}
+      \begin{exampleblock}{PC を機体の WiFi につなぐ}
+        \footnotesize
+        \begin{itemize}\setlength{\itemsep}{1pt}
+          \item 実習 1 の \code{wifi.mode 1} で、機体が自分の WiFi を出している
+          \item SSID は \code{StampFly-XXYY}（XXYY = 機体の MAC アドレス末尾 4 桁。機体のラベルと同じ）、パスワードは \code{stampfly}
+          \item 機体の IP は \code{192.168.10.1}。接続中、PC は会場のネットから切り替わる
+        \end{itemize}
+      \end{exampleblock}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{table}
+        \centering\scriptsize
+        \begin{tabular}{>{\raggedright\arraybackslash}p{30mm}>{\raggedright\arraybackslash}p{32mm}}
+          \hline
+          \textbf{方法} & \textbf{使う場面} \\
+          \hline
+          Teleplot（USB） & その場で波形を見る（実習 2） \\
+          \code{sf telemetry}（WiFi） & コード変更なしで 50\,Hz の状態を見る \\
+          \code{sf log wifi}（WiFi） & 後で解析するため 400\,Hz で記録する \\
+          \hline
+        \end{tabular}
+      \end{table}
+      {\scriptsize WiFi は飛行中も使える（USB は飛行中に挿せない）。今日の実習 7 では \code{sf log wifi} を使う\par}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 7: ログを解析し、$K,\tau_m$ を求める}
+  \exgoal{実習 6 の理論値 $K,\tau_m$ が、実機の飛行データと一致するか確かめる}
+  \begin{columns}[T]
+    \begin{column}{0.55\textwidth}
+      {\footnotesize\textbf{\textcolor{sfblue}{手順}}}\par\vspace{-2pt}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{0pt}
+        \item \code{sf lesson switch sci2026:7}、\code{sf lesson build}（TODO は \api{ws::set\_rate\_target} の呼び出し。目標角速度をログに記録する。実習 5 の雛形にも同じ TODO がある）
+        \item \textbf{講師}が飛ばし、\code{sf log wifi -d 30} で記録する。ログは配布される
+        \item \textbf{各自}: 配布されたログ（自分で取ったログでもよい）に \code{sf sysid fit}
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.43\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
+sf log list
+sf sysid fit <ログ名> --plot
+      \end{sflisting}
+      \vspace{-1mm}
+      {\scriptsize \code{.sflog.zip} は信号ごとの CSV をまとめた zip（フライトログ一式）。\code{sf log wifi} は \code{logs/flight\_<日時>.sflog.zip} に保存し、\code{sf log list} で名前を確認できる\par}
+    \end{column}
+  \end{columns}
+  \exresult{軸ごとの $K,\tau_m$ と当てはまりの良さ $R^2$ が表示され、実習 6 の理論値と比べられる}
+  \exhelp{7}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{同定結果と理論値の比較（例）}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{lccccc}
+      \hline
+      \textbf{軸} & \textbf{$K$（同定）} & \textbf{$K$（理論）} & \textbf{$\tau_m$（同定）} & \textbf{$\tau_m$（理論）} & \textbf{$R^2$} \\
+      \hline
+      Roll  & 98.5 & 102.0 & 0.019\,s & 0.020\,s & 0.94 \\
+      Pitch & 72.1 &  70.0 & 0.021\,s & 0.020\,s & 0.91 \\
+      \hline
+    \end{tabular}
+  \end{table}
+  {\footnotesize \textbf{上の数値は読み方を示すための例（説明用の数値）で、実測ではない}。実際の値は飛行ごとに変わる\par}
+
+  \vspace{0.4em}
+
+  \begin{itemize}\footnotesize\setlength{\itemsep}{3pt}
+    \item $K$ が理論値の数 \% 以内で一致すれば、実習 6 のモデルは実機を説明できている
+    \item $R^2$ は 1 に近いほど、モデルがデータをよく説明している
+    \item 人がスティックで操縦した記録は励振（入力で系を十分に動かすこと）が小さいので、当てはまりが悪いときは別のログで試す
+  \end{itemize}
+\end{frame}

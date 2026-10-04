@@ -1,0 +1,174 @@
+% ==============================================================================
+% sci_tutorial_core.tex — SCI/SICE tutorial 2026, "core" (要点版) deck.
+% SCI/SICE チュートリアル講座 2026 スライド「要点版」。
+%
+% The full deck (sci_tutorial.tex) is kept as it is. This deck contains only
+% what a participant does and needs to know, in the order the participant
+% follows (6 steps), not in timetable order. No "read later" frames.
+% 現行版 (sci_tutorial.tex) はそのまま残す。本デッキは受講者が「やること」と
+% 「知る必要があること」だけを、時間割ではなく受講者がたどる順（6 ステップ）で
+% 並べる。「あとで読む」フレームは入れない。
+%
+% Build / ビルド:  cd docs/events && make sci-core
+% ==============================================================================
+\documentclass[aspectratio=169, 14pt, t]{beamer}
+\usepackage{stampfly_slides}
+\input{preamble}
+\usepackage{ccicons}   % Creative Commons icons for the title page / 表紙の CC アイコン
+
+% --- License notice on the title page (same as the full deck) ---------------
+% 表紙のライセンス表示（現行版と同じ）。
+\newcommand{\sciLicenseIcon}{\ccby}
+\newcommand{\sciLicenseText}{この資料は CC BY 4.0（クリエイティブ・コモンズ 表示 4.0 国際）で公開}
+\newcommand{\sciLicenseURL}{https://creativecommons.org/licenses/by/4.0/deed.ja}
+
+% --- Footer: current step | course title + lecturer | page ------------------
+% Same override as the full deck (shared style file untouched).
+% \sciFooterSession is updated by \scistep.
+% 現行版と同じ方針でフッターを置き換える（共有スタイルは触らない）。
+% \sciFooterSession は \scistep が更新する。
+\newcommand{\sciFooterSession}{}
+\newcommand{\sciFooterTitle}{制御教育教材 StampFly Ecosystem の紹介（要点版） ｜ 伊藤 恒平（金沢工業大学）}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.26\paperwidth,ht=2.5ex,dp=1ex,center]{palette primary}%
+      \usebeamerfont{author in head/foot}\sciFooterSession
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.59\paperwidth,ht=2.5ex,dp=1ex,center]{palette secondary}%
+      \usebeamerfont{title in head/foot}\sciFooterTitle
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.15\paperwidth,ht=2.5ex,dp=1ex,right]{palette tertiary}%
+      \usebeamerfont{date in head/foot}%
+      \insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
+    \end{beamercolorbox}%
+  }\vskip0pt%
+}
+
+% --- Compact block titles (this deck only; shared style untouched) -----------
+% Block titles are set small so that the objective / procedure / expected-result
+% blocks of each exercise frame fit on one slide.
+% 実習フレームの「目的／手順／期待結果」が 1 枚に収まるよう、ブロック題を小さくする
+% （本デッキだけ。共有スタイルは触らない）。
+\setbeamerfont{block title}{size=\footnotesize}
+\setbeamertemplate{blocks}[rounded][shadow=false]
+
+% \code follows the surrounding font size here (the shared style fixes it to
+% \small, which overflows the dense exercise frames).
+% \code を周囲の文字サイズに合わせる（共有スタイルは \small 固定で、情報の多い
+% 実習フレームが溢れるため。本デッキだけ上書き）。
+\renewcommand{\code}[1]{\texttt{#1}}
+
+% --- Exercise frame parts: objective line and expected-result block --------
+% \exgoal{...}: one-line objective at the top; \exresult{...}: expected result
+% block under the two columns (procedure | code). Same shape in every exercise.
+% 実習フレームの共通部品。\exgoal = 先頭 1 行の目的、\exresult = 2 列（手順｜コード）
+% の下に置く期待結果。全実習で同じ形にそろえる。
+\newcommand{\exgoal}[1]{\vspace{-8pt}{\footnotesize\textbf{\textcolor{sfblue}{目的}}\enspace #1}\par\vspace{-4pt}}
+\newcommand{\exresult}[1]{\par\vspace{1pt}\noindent\fcolorbox{sfgreen}{sfgreen!8}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\footnotesize\textbf{\textcolor{sfgreen}{期待結果}}\enspace #1}}\par}
+
+% \exhelp{N}: one-line pointer to the solution of exercise N.
+% \exhelp{N}: 実習 N の解答への一言。
+\newcommand{\exhelp}[1]{\par\vspace{1pt}{\scriptsize\textcolor{sfgray}{詰まったら \texttt{sf lesson switch sci2026:#1 --solution}（解答に切り替える）}}}
+\newcommand{\exhelptodo}[1]{\par\vspace{1pt}{\scriptsize\textcolor{sfgray}{詰まったら \texttt{sf lesson switch sci2026:#1 --solution}（解答に切り替える）。コード欄の\textcolor{sfred}{\textbf{赤字}}が自分で書く TODO の部分}}}
+
+% --- Map of the six steps ----------------------------------------------------
+% \coremap{N}: the six steps as a 3 x 2 grid of boxes. N = 1..6 highlights that
+% step, N = 0 highlights none. It is drawn once on the "today's flow" frame and
+% reused by every step divider (the only map in this deck).
+% \coremap{N}: 6 ステップを 3 x 2 の箱で示す。N = 1..6 で該当ステップを強調、
+% N = 0 は強調なし。「今日の流れ」で 1 回示し、各ステップの区切りで再利用する
+% （この資料の地図はこれだけ）。
+\newcommand{\coremapnode}[4]{%
+  % #1 position, #2 number, #3 title, #4 hands-on
+  \ifnum\coremapcur=#2 \def\coremapstyle{coreHl}\else\def\coremapstyle{coreBox}\fi
+  \node[\coremapstyle] at (#1) {{\large\bfseries Step #2}\\[1pt]{\bfseries #3}\\[1pt]{\footnotesize\normalfont #4}};%
+}
+\newcommand{\coremap}[1]{%
+  \def\coremapcur{#1}%
+  \begin{tikzpicture}[
+      coreBox/.style={rectangle, rounded corners=3pt, draw=sfgray, line width=0.8pt,
+        fill=sfgray!6, text=sfgray, minimum width=48mm, minimum height=21mm, align=center},
+      coreHl/.style={rectangle, rounded corners=3pt, draw=sfblue, line width=2pt,
+        fill=sfblue!15, text=sfdark, minimum width=48mm, minimum height=21mm, align=center},
+      corearr/.style={-{Stealth[length=2.6mm]}, line width=1.1pt, draw=sfgray!70},
+    ]
+    \coremapnode{0,0}{1}{センサ}{実習 2: IMU を読む}
+    \coremapnode{54mm,0}{2}{モータとミキサ}{実習 3, 4: モータを回す}
+    \coremapnode{108mm,0}{3}{P 制御とモデル設計}{実習 5, 6: P 制御で飛ばす}
+    \coremapnode{0,-27mm}{4}{システム同定}{実習 7: 飛行データから推定}
+    \coremapnode{54mm,-27mm}{5}{PID}{実習 8: I 項・D 項を足す}
+    \coremapnode{108mm,-27mm}{6}{姿勢推定}{実習 9: 相補フィルタ}
+    \draw[corearr] (24.5mm,0) -- (29.5mm,0);
+    \draw[corearr] (78.5mm,0) -- (83.5mm,0);
+    \draw[corearr] (24.5mm,-27mm) -- (29.5mm,-27mm);
+    \draw[corearr] (78.5mm,-27mm) -- (83.5mm,-27mm);
+  \end{tikzpicture}%
+}
+
+% --- Step divider ------------------------------------------------------------
+% \scistep{N}{title}{footer label}: divider frame (step number, title, map with
+% step N highlighted). Sets the footer label for the frames that follow. No
+% time slot is shown (this deck is not organised by timetable).
+% \scistep{N}{題}{フッター表示}: 区切り（ステップ番号・題・N を強調した地図）。
+% 後続フレームのフッター表示を更新する。時間帯は出さない（時間割で組まないため）。
+\newcommand{\scistep}[3]{%
+  \gdef\sciFooterSession{#3}%
+  \begin{frame}[plain]
+    \centering
+    \vspace*{\fill}
+    {\fontsize{26}{30}\selectfont\bfseries\textcolor{sfblue}{Step #1}}\\[4pt]
+    {\Large\bfseries\textcolor{sfdark}{#2}}\par
+    \vspace{6mm}
+    \adjustbox{max width=0.82\paperwidth, max height=0.52\paperheight}{\coremap{#1}}\par
+    \vspace*{\fill}
+    {\small\textcolor{sfgray}{SCI/SICE チュートリアル講座 2026（要点版）}}\par
+    \vspace{6mm}
+  \end{frame}
+}
+
+\title{制御教育教材 StampFly Ecosystem の紹介}
+\subtitle{コーディングから飛行試験、データ取得まで（要点版）}
+\author{伊藤 恒平（金沢工業大学）}
+\setbeamerfont{date}{size=\small}   % keep the two-line date from wrapping to three / 日付の 3 行折り返しを防ぐ
+\date{2026年9月10日（木）大阪大学中之島センター + Zoom\\ システム制御情報学会・計測自動制御学会 チュートリアル講座 2026}
+
+\begin{document}
+
+% === Title page ===
+\begin{frame}
+  \titlepage
+  \vspace{-1.5em}
+  \begin{center}
+    {\large\sciLicenseIcon}\enspace{\scriptsize\textcolor{sfgray}{\sciLicenseText}}\\[-1pt]
+    {\scriptsize\textcolor{sfgray}{\url{\sciLicenseURL}}}
+  \end{center}
+\end{frame}
+
+% === はじめに + 準備 ===
+\gdef\sciFooterSession{はじめに・準備}
+\input{chapters/core_intro}
+
+% === Step 1-6 ===
+\scistep{1}{センサ --- 機体の動きを数値で見る}{Step 1: センサ}
+\input{chapters/core_step1_sensor}
+
+\scistep{2}{モータとミキサ --- 機体を動かす側を作る}{Step 2: モータとミキサ}
+\input{chapters/core_step2_motor}
+
+\scistep{3}{P 制御とモデルに基づく設計}{Step 3: P 制御とモデル設計}
+\input{chapters/core_step3_pcontrol}
+
+\scistep{4}{システム同定 --- 飛行データから推定する}{Step 4: システム同定}
+\input{chapters/core_step4_sysid}
+
+\scistep{5}{PID --- I 項・D 項を足す}{Step 5: PID}
+\input{chapters/core_step5_pid}
+
+\scistep{6}{姿勢推定 --- ジャイロと加速度を混ぜる}{Step 6: 姿勢推定}
+\input{chapters/core_step6_attitude}
+
+% === まとめ ===
+\gdef\sciFooterSession{まとめ}
+\input{chapters/core_summary}
+
+\end{document}

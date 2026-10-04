@@ -1,0 +1,108 @@
+% ==============================================================================
+% core_step2_motor.tex — SCI/SICE tutorial core deck, Step 2: motors and mixer
+% (exercises 3 and 4)
+% SCI/SICE チュートリアル要点版 Step 2: モータとミキサ（実習 3, 4）
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{モータの配置と Duty}
+  \begin{columns}[c]
+    \begin{column}{0.44\textwidth}
+      \centering
+      \adjustbox{max width=\columnwidth, max height=0.75\textheight}{\input{../../_shared/tikz/motor_layout}}
+    \end{column}
+    \begin{column}{0.53\textwidth}
+      \footnotesize
+      \begin{itemize}\setlength{\itemsep}{3pt}
+        \item モータ ID: 1 = FR（右前）、2 = RR（右後）、3 = RL（左後）、4 = FL（左前）
+        \item 対角のモータが同じ向きに回り、反作用トルクを打ち消す（M1・M3 = CCW、M2・M4 = CW）
+        \item モータは PWM（パルス幅変調: 電圧を入り切りする時間の割合で平均電圧を変える方式）の Duty 比で駆動する。Duty 0 = 停止、1 = 最大
+        \item API: \api{ws::motor\_set\_duty(id, duty)}（id = 1--4、duty = 0.0--1.0）
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 3: Duty を決め打ちして 1 つのモータを回す}
+  \exgoal{Duty とモータ ID の対応を、回る場所で確かめる}
+  \begin{columns}[T]
+    \begin{column}{0.47\textwidth}
+      {\footnotesize\textbf{\textcolor{sfblue}{手順（机上）}}}\par\vspace{-2pt}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{0pt}
+        \item \code{sf lesson switch sci2026:3}
+        \item \code{sf lesson edit} で右のコードにして保存
+        \item \code{sf lesson build}、\code{sf lesson flash}
+        \item USB を外し、水平な机に置いて、機体ボタンを 1 回クリックして ARM
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.51\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
+void loop_400Hz(float dt) {
+    ws::motor_set_duty(1, 0.10f);
+    ws::motor_set_duty(2, 0.00f);
+    ws::motor_set_duty(3, 0.00f);
+    ws::motor_set_duty(4, 0.00f);
+}
+      \end{sflisting}
+      {\scriptsize \warn{Duty は 0.15 以下}（ファームは制限しない）。\api{ws::arm()} は書かず、ボタンで ARM。ALT/POS は OFF（前々ページの安全ルール）\par}
+    \end{column}
+  \end{columns}
+  \exresult{FR（右前）のモータだけが回る。止めるときはボタンを再クリック（DISARM）}
+  \exhelp{3}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{ミキサ: 推力とトルク指令を 4 つの Duty に配る}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \centering
+      \adjustbox{max width=\columnwidth, max height=0.64\textheight}{\input{../../_shared/tikz/mixer_matrix}}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \footnotesize
+      \begin{itemize}\setlength{\itemsep}{3pt}
+        \item 入力: 推力 $T\in[0,1]$、ロール・ピッチ・ヨーのトルク指令 $R,P,Y\in[-1,1]$
+        \item 出力: 4 モータの Duty。各式の符号はモータ配置に対応する（例: ピッチ$+$ = 機首上げのとき、前の M1・M4 を強め、後ろの M2・M3 を弱める）
+        \item API: \api{ws::motor\_mixer(T, R, P, Y)}
+      \end{itemize}
+      \vspace{0.1em}
+      \[
+        d_{\mathrm{FR}} = T + \frac{0.25}{3.7}(-R + P + Y)
+      \]
+      {\scriptsize 他のモータは符号の組だけが違う。係数 $0.25/3.7$ は、旧世代ファームのミキサから引き継いだ調整定数（物理量ではなく経験的なスケール）\par}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 4: スティックでモータを回す}
+  \exgoal{スティック指令がミキサを通って、モータの回転差になることを確かめる}
+  \begin{columns}[T]
+    \begin{column}{0.47\textwidth}
+      {\footnotesize\textbf{\textcolor{sfblue}{手順（机上）}}}\par\vspace{-2pt}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{0pt}
+        \item \code{sf lesson switch sci2026:4}
+        \item \code{sf lesson edit} で右のコードにして保存
+        \item \code{sf lesson build}、\code{sf lesson flash}
+        \item USB を外して机に置き、ARM。コントローラで操作する
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.51\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
+void loop_400Hz(float dt) {
+    float t = ws::rc_throttle();
+    float r = ws::rc_roll();
+    float p = ws::rc_pitch();
+    float y = ws::rc_yaw();
+    ws::motor_mixer(t, r, p, y);
+}
+      \end{sflisting}
+      {\scriptsize \warn{スロットルは Duty に直結}。15\% 以下に保つ。ALT/POS は OFF\par}
+    \end{column}
+  \end{columns}
+  \exresult{スティックを倒した向きに応じて、モータの回転に差が出る}
+  \exhelp{4}
+\end{frame}

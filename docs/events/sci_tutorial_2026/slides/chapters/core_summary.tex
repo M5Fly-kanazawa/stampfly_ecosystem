@@ -1,0 +1,81 @@
+% ==============================================================================
+% core_summary.tex — SCI/SICE tutorial core deck: summary
+% SCI/SICE チュートリアル要点版: まとめ
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{今日やったこと}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{llp{62mm}}
+      \hline
+      \textbf{Step} & \textbf{実習} & \textbf{得たもの} \\
+      \hline
+      1 センサ & 2 & 軸と符号、IMU の値の見方 \\
+      2 モータとミキサ & 3, 4 & Duty、ミキサ、開ループでは飛べない理由 \\
+      3 P 制御とモデル & 5, 6 & $G_p=K/(s(\tau_m s+1))$、$K_p=1/(4\zeta^2K\tau_m)$ \\
+      4 システム同定 & 7 & 飛行データから $K,\tau_m$ を推定し、理論値と照合 \\
+      5 PID & 8 & I 項・D 項の役割、SILS での確認 \\
+      6 姿勢推定 & 9 & 相補フィルタ（ジャイロ + 加速度計） \\
+      \hline
+    \end{tabular}
+  \end{table}
+  \vspace{0.2em}
+  {\footnotesize 設計 $\to$ 実装 $\to$ 実験 $\to$ 解析を、1 機で一周した\par}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{この先へ}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{40mm}>{\raggedright\arraybackslash}p{80mm}}
+      \hline
+      \textbf{したいこと} & \textbf{入口} \\
+      \hline
+      自分の制御器・推定器を載せる & \code{sf app new <名前>}。入門は \code{docs/guides/custom\_program.md} \\
+      シミュレータをブラウザで触る & \code{sf sils build}、\code{sf sils gui} \\
+      位相余裕・むだ時間、不完全微分、周波数同定、自動チューニングなど & 現行版スライド \code{slides/sci\_tutorial.pdf} の第 4・5 セッション \\
+      復習の手順・コマンド・API の早見表 & \code{handson\_guide.md}、\code{cheatsheet.md}（同じフォルダ） \\
+      \hline
+    \end{tabular}
+  \end{table}
+  {\scriptsize リポジトリ: \url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem} ／ 資料: \url{https://www.docswell.com/s/Kouhei_Ito/5L387D-2026-09-10-064635}\par}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{コマンド早見表}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{74mm}>{\raggedright\arraybackslash}p{54mm}}
+      \hline
+      \code{sf doctor} & 環境診断（困ったらまずこれ） \\
+      \code{sf lesson switch sci2026:N [--solution]} & 実習 N の雛形（解答）に切り替え \\
+      \code{sf lesson edit / build / flash / monitor} & 編集・ビルド・書き込み・モニタ \\
+      \code{sf lesson sils [--scenario step]} & 実習コードを SILS で確認 \\
+      \code{sf telemetry} & 50\,Hz の状態をライブ表示（WiFi） \\
+      \code{sf log wifi -d 30} & 400\,Hz で記録（WiFi） \\
+      \code{sf log list} / \code{sf log viz} & ログ一覧 / 最新ログの可視化 \\
+      \code{sf sysid fit <ログ> --plot} & プラント同定 \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{困ったとき}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{>{\raggedright\arraybackslash}p{38mm}>{\raggedright\arraybackslash}p{82mm}}
+      \hline
+      \textbf{症状} & \textbf{対処} \\
+      \hline
+      ビルドエラー & エラー 1 行目のファイル名・行番号を見て、コードの打ち間違い（カンマ、セミコロン）を直す \\
+      \code{sf lesson flash} が失敗 & 別のケーブル・ポートを試す。だめなら機体の BOOT ボタン（基板上の、書き込み専用モードに入るボタン）を押したまま USB を挿し直す \\
+      モータが回らない & ARM されていない。USB 給電中・ペアリング中は ARM が拒否されるので、USB を外し、水平な机に置く。ALT/POS モードでは自動離陸に入るので OFF にする \\
+      LED が緑にならない & 起動時の校正中に動かした。静かに置き直し、緑とビープ 3 回を待つ \\
+      機体の WiFi が見えない & 電源と \code{wifi.mode 1} を確認 \\
+      \code{sf doctor} が通らない & 表示された項目を確認し、\code{docs/guides/troubleshooting.md} を見る \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
