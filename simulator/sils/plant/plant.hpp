@@ -307,7 +307,7 @@ public:
         // 撤去済み）。Phase 1（2026-07-26）: 両方 generated_params.hpp
         // （sils_params::adopted::RM/KM）由来、`sf params generate` が
         // control/models/stampfly_physical.yaml から生成。
-        float motor_Rm           = sils_params::adopted::RM;   ///< winding resistance [Ω] (paper LCR measurement, 2026-07-15, teacher decision commit 9a656a9f; was 0.34 legacy/possibly-different-unit LCR)
+        float motor_Rm           = sils_params::adopted::RM;   ///< winding resistance [Ω] (paper's Foster-model fit Rs to NanoVNA data, not a DC measurement / 論文 NanoVNA 実測の Foster 同定値; 2026-07-15, teacher decision commit 9a656a9f; was 0.34 legacy/possibly-different-unit LCR)
         float motor_Km           = sils_params::adopted::KM; ///< back-EMF constant [V/(rad/s)] (direct measurement, 2026-07-16, tools/sysid/defaults.py; was 6.12e-4 = stale reference calc from legacy Cq(9.71e-11)·Rm(0.34)/Am)
         float avionics_current_a = 0.1f;     ///< MCU + sensors quiescent draw [A]
         // Phase 1 (2026-07-26): sourced from generated_params.hpp (sils_params::MASS),

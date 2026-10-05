@@ -12,7 +12,7 @@
 >
 > **【2026-07-24更新】** 本文§3の推力・トルク特性表と回転子慣性を実測値へ更新した（旧値は表内に履歴併記）。**【2026-07-26更新】** SILSプラント（`simulator/sils/plant/plant.hpp`）は静的曲線Am/Bm/Cmを廃止しモータをODE化した。**【2026-08-03更新】** 上記Ct撤回・再改定により、ファームウェア実装（`sf_actuator/actuator.cpp` の `MOTOR_CT`）とSILSプラント（`plant.hpp`）は再び $C_T$=1.00e-8・κ=4.10e-3 で一致している（`docs/architecture/simulation-policy.md` §6 バックログ#3「ファームCt切替」は本改定により解消——ファーム値がそのまま採用値になったため、以前のような「ファームウェアのみ旧値のまま保留」という状態はなくなった）。本文書とファームウェア/SILS実装の整合は `sf params check` コマンドで機械的に検査できる（暫定状態にある値は EXEMPT、未確定値があれば UNRESOLVED として報告される）。
 >
-> **【2026-07-24 巻線抵抗Rm・機体質量 決着】** 巻線抵抗 Rm は3値並立が解消し **0.593 Ω**（論文LCR実測）に統一した（先生決定、コミット `9a656a9f` 2026-07-15）。旧0.34Ω（旧LCRメータ実測、別個体の疑い）・旧0.63Ω（vpython側の更新漏れの旧初期値）はいずれも「競合する実測」ではなく更新漏れだったと判明。機体質量も **0.037 kg**（実測36.8g）に統一——ファームウェアは2026-03-31に反映済み（コミット `43841314`）だったが、シミュレータ側（genesis/vpython/URDF/`tools/sysid/defaults.py`）が0.035kgのまま更新漏れだった。genesis/vpython のモータモデルは Km・Dm・Qf を Rm から `Cq·Rm/Am` 等で導出する自己整合構造のため、Rm 変更のみで定常特性（ホバー電圧・ホバーω）は数値的に不変（代数的にRmがキャンセルする——数値検証済み、悪化なし）。詳細は本文§2「質量特性」・§3「モーター電気特性」参照。
+> **【2026-07-24 巻線抵抗Rm・機体質量 決着】** 巻線抵抗 Rm は3値並立が解消し **0.593 Ω**（論文 NanoVNA 実測の Foster 同定値（Rs）。秋田先生が NanoVNA-F V2 で測った 10 kHz–1 MHz のインピーダンスに、150 kHz 付近を重視して合わせた 2 段 Foster モデルの直列抵抗 Rs。直流抵抗の直接測定ではない。根拠: sf_sandbox `data/measured_motor_impedance.md`）に統一した（先生決定、コミット `9a656a9f` 2026-07-15）。旧0.34Ω（旧LCRメータ実測、別個体の疑い）・旧0.63Ω（vpython側の更新漏れの旧初期値）はいずれも「競合する実測」ではなく更新漏れだったと判明。機体質量も **0.037 kg**（実測36.8g）に統一——ファームウェアは2026-03-31に反映済み（コミット `43841314`）だったが、シミュレータ側（genesis/vpython/URDF/`tools/sysid/defaults.py`）が0.035kgのまま更新漏れだった。genesis/vpython のモータモデルは Km・Dm・Qf を Rm から `Cq·Rm/Am` 等で導出する自己整合構造のため、Rm 変更のみで定常特性（ホバー電圧・ホバーω）は数値的に不変（代数的にRmがキャンセルする——数値検証済み、悪化なし）。詳細は本文§2「質量特性」・§3「モーター電気特性」参照。
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
@@ -148,7 +148,7 @@ VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulat
 | Ct | 推力係数 | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | 暫定採用（同径プロペラの過去実測＋理論シミュレーション整合、ベンチ同時計測待ち） |
 | Cq | トルク係数 | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | コーストダウン法 |
 | Jmp | 回転子慣性モーメント | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | 写真法+諸元法（プロペラ写真デジタイズ+画素積分＋コーストダウン） |
-| Rm | 巻線抵抗 | 0.593 | Ω | 2026-07-15 | 論文LCRメータ実測 |
+| Rm | 巻線抵抗 | 0.593 | Ω | 2026-07-15 | 論文 Foster 同定値（NanoVNA 実測） |
 | Km | 逆起電力定数 | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | コーストダウン開回路EMF実測（SCPI公式換算） |
 | κ | トルク/推力比（採用値） | 4.1×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct（丸め不要、厳密値） |
 <!-- AUTO-GENERATED:params END -->
@@ -166,13 +166,13 @@ VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulat
 
 | パラメータ | 記号 | 値 | 単位 | 測定方法 |
 |-----------|------|-----|------|----------|
-| 巻線抵抗 | Rm | 0.593 | Ω | 論文LCRメータ実測（2026-07-15、下記注記参照） |
+| 巻線抵抗 | Rm | 0.593 | Ω | 論文 Foster 同定値（NanoVNA 実測）（2026-07-15、下記注記参照） |
 | 巻線インダクタンス | Lm | 1.0×10⁻⁶ | H | LCRメータ測定 |
 | 回転子慣性モーメント | Jmp | 1.375×10⁻⁸ | kg·m² | 実測（プロペラ写真デジタイズ+画素積分＋コーストダウン、2026-07-15確定）。旧値(参考): 2.01×10⁻⁸（形状・重量から推定、〜2026-07-14） |
 
-> **注記（2026-07-24決着）:** 巻線抵抗 Rm はかつて 0.34Ω（本表旧値、旧LCRメータ実測）・0.593Ω（`tools/sysid/defaults.py`、論文LCR実測）・0.63Ω（`simulator/vpython/core/motors.py`、visual simulator旧初期値）の3値が並立していたが、先生決定（コミット `9a656a9f` 2026-07-15）により **0.593Ω（論文LCR実測）に統一**した。旧2値は競合する実測ではなく、0.34は別個体の疑いがある旧LCR値、0.63はvpython側の反映漏れだった単純な更新漏れと判明している（`analysis/reports/param_correction_impact_20260715.md` §F1、撤回・削除済み 2026-08-03）。genesis/vpython のモータモデルは下記「派生パラメータ」の Km・Dm を Rm から `Cq·Rm/Am` 等の式で導出する自己整合構造のため、Rm の値によらず定常特性（ホバー電圧・ホバーω）は代数的に不変であることを数値検証済み（Rmがモデルの定常方程式から完全にキャンセルする）。
+> **注記（2026-07-24決着）:** 巻線抵抗 Rm はかつて 0.34Ω（本表旧値、旧LCRメータ実測）・0.593Ω（`tools/sysid/defaults.py`、論文 NanoVNA 実測の Foster 同定値（Rs））・0.63Ω（`simulator/vpython/core/motors.py`、visual simulator旧初期値）の3値が並立していたが、先生決定（コミット `9a656a9f` 2026-07-15）により **0.593Ω（論文 NanoVNA 実測の Foster 同定値（Rs））に統一**した。旧2値は競合する実測ではなく、0.34は別個体の疑いがある旧LCR値、0.63はvpython側の反映漏れだった単純な更新漏れと判明している（`analysis/reports/param_correction_impact_20260715.md` §F1、撤回・削除済み 2026-08-03）。genesis/vpython のモータモデルは下記「派生パラメータ」の Km・Dm を Rm から `Cq·Rm/Am` 等の式で導出する自己整合構造のため、Rm の値によらず定常特性（ホバー電圧・ホバーω）は代数的に不変であることを数値検証済み（Rmがモデルの定常方程式から完全にキャンセルする）。
 >
-> **追記（2026-07-29 飛行内ドリフトの発見、帰属は未確定）:** 飛行ログ解析（`analysis/scripts/thermal_ident_study_20260729/`、撤回・削除済み 2026-08-03）で、ホバー必要電圧が飛行中に約+0.16V 上昇し、休止ペア試験（同一電池・30〜37秒の地上休止で冷間値へリセット、n=2）により「休止で回復する状態量＝駆動経路のどこかの発熱」が有力と判別された（電池内部抵抗は負の温度係数のため消去）。**ただし発熱箇所の帰属は未確定**——巻線Rm・FETオン抵抗・配線・ブラシ接触抵抗はホバー1点の観測では区別できず、「全ドリフトがRm」と仮定した場合の逆算値（Rm_cold≈0.36Ω・Rm_hot≈0.52Ω）はモデル依存の参考値である。旧0.34Ω=冷間説は示唆的な符合にとどまり、無電流LCR測定（冷間）が0.593Ωを返した事実と未整合のまま。判別にはベンチでの冷間/温間再測定が必要。採用値0.593Ωの決定自体は維持。
+> **追記（2026-07-29 飛行内ドリフトの発見、帰属は未確定）:** 飛行ログ解析（`analysis/scripts/thermal_ident_study_20260729/`、撤回・削除済み 2026-08-03）で、ホバー必要電圧が飛行中に約+0.16V 上昇し、休止ペア試験（同一電池・30〜37秒の地上休止で冷間値へリセット、n=2）により「休止で回復する状態量＝駆動経路のどこかの発熱」が有力と判別された（電池内部抵抗は負の温度係数のため消去）。**ただし発熱箇所の帰属は未確定**——巻線Rm・FETオン抵抗・配線・ブラシ接触抵抗はホバー1点の観測では区別できず、「全ドリフトがRm」と仮定した場合の逆算値（Rm_cold≈0.36Ω・Rm_hot≈0.52Ω）はモデル依存の参考値である。旧0.34Ω=冷間説は示唆的な符合にとどまる。なお採用値0.593Ωは、NanoVNA 実測（10 kHz–1 MHz）に150 kHz 付近を重視して合わせた Foster モデルの直列抵抗 Rs という同定パラメータであり、冷間の直流測定値ではないため、冷間 Rm の値を確認も否定もできない（根拠: sf_sandbox `data/measured_motor_impedance.md`）。判別にはベンチでの直流（4端子法）による冷間/温間再測定が必要。採用値0.593Ωの決定自体は維持。
 
 ### 回転数-電圧特性
 
@@ -638,7 +638,7 @@ The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coex
 | Ct | Thrust coefficient | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency; pending bench co-measurement) |
 | Cq | Torque coefficient | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | Coast-down method |
 | Jmp | Rotor inertia | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | Photographic + spec-sheet method (propeller photo digitization + pixel integration + coast-down) |
-| Rm | Winding resistance | 0.593 | Ω | 2026-07-15 | Paper's LCR meter measurement |
+| Rm | Winding resistance | 0.593 | Ω | 2026-07-15 | Paper's Foster fit (NanoVNA data) |
 | Km | Back-EMF constant | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | Coast-down open-circuit EMF measurement (SCPI-formula conversion) |
 | κ | Torque/thrust ratio (adopted) | 4.1×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct (exact, no rounding needed) |
 <!-- AUTO-GENERATED:params END -->
@@ -656,13 +656,13 @@ The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coex
 
 | Parameter | Symbol | Value | Unit | Method |
 |-----------|--------|-------|------|--------|
-| Winding Resistance | Rm | 0.593 | Ω | Paper's LCR meter measurement (2026-07-15, see note below) |
+| Winding Resistance | Rm | 0.593 | Ω | Paper's Foster fit (NanoVNA data) (2026-07-15, see note below) |
 | Winding Inductance | Lm | 1.0×10⁻⁶ | H | LCR meter |
 | Rotor Inertia | Jmp | 1.375×10⁻⁸ | kg·m² | Measured (propeller photo digitization + pixel integration + coast-down, confirmed 2026-07-15). Legacy value (reference): 2.01×10⁻⁸ (estimated from geometry, until 2026-07-14) |
 
-> **Note (resolved 2026-07-24):** Winding resistance Rm previously had three values in parallel use: 0.34 Ω (this table's old value, an older LCR measurement), 0.593 Ω (`tools/sysid/defaults.py`, paper LCR measurement), and 0.63 Ω (`simulator/vpython/core/motors.py`, visual simulator's stale initial value). The teacher's decision (commit `9a656a9f`, 2026-07-15) adopted **0.593 Ω (paper LCR measurement)** as the single value. The other two were never competing measurements — 0.34 Ω was an older LCR reading possibly from a different unit, and 0.63 Ω was simply an un-synced stale value in vpython (`analysis/reports/param_correction_impact_20260715.md` §F1, retracted/deleted 2026-08-03). The genesis/vpython motor models derive Km and Dm below from Rm via `Cq·Rm/Am` etc. (a self-consistent formula package), so the steady-state behavior (hover voltage, hover ω) is algebraically invariant to the value of Rm — verified numerically, Rm cancels exactly out of the steady-state equations.
+> **Note (resolved 2026-07-24):** Winding resistance Rm previously had three values in parallel use: 0.34 Ω (this table's old value, an older LCR measurement), 0.593 Ω (`tools/sysid/defaults.py`, paper's Foster-model fit (Rs) to NanoVNA data), and 0.63 Ω (`simulator/vpython/core/motors.py`, visual simulator's stale initial value). The teacher's decision (commit `9a656a9f`, 2026-07-15) adopted **0.593 Ω (paper's Foster-model fit (Rs) to NanoVNA data)** as the single value. The other two were never competing measurements — 0.34 Ω was an older LCR reading possibly from a different unit, and 0.63 Ω was simply an un-synced stale value in vpython (`analysis/reports/param_correction_impact_20260715.md` §F1, retracted/deleted 2026-08-03). The genesis/vpython motor models derive Km and Dm below from Rm via `Cq·Rm/Am` etc. (a self-consistent formula package), so the steady-state behavior (hover voltage, hover ω) is algebraically invariant to the value of Rm — verified numerically, Rm cancels exactly out of the steady-state equations.
 >
-> **Addendum (2026-07-29, in-flight drift discovered; attribution unresolved):** Flight-log analysis (`analysis/scripts/thermal_ident_study_20260729/`, retracted/deleted 2026-08-03) found the required hover voltage rising ~+0.16 V within a flight; a pause-pair test (same battery, V resets toward the cold value after a 30-37 s motors-off ground gap, n=2) favors "a rest-recovering state = heating somewhere in the drive path" (battery internal resistance has the wrong temperature sign and is ruled out). **The heating location is NOT established** — winding Rm, FET on-resistance, board traces, and brush contact resistance are indistinguishable from a single hover operating point; the back-computed values under the all-drift-is-Rm assumption (Rm_cold~0.36, Rm_hot~0.52 ohm) are model-dependent reference numbers only. The old-0.34-as-cold reading is a suggestive coincidence that still conflicts with the zero-current (cold) LCR measurement returning 0.593 ohm. A cold/warm bench remeasurement is required to discriminate. The adopted 0.593 ohm decision itself stands.
+> **Addendum (2026-07-29, in-flight drift discovered; attribution unresolved):** Flight-log analysis (`analysis/scripts/thermal_ident_study_20260729/`, retracted/deleted 2026-08-03) found the required hover voltage rising ~+0.16 V within a flight; a pause-pair test (same battery, V resets toward the cold value after a 30-37 s motors-off ground gap, n=2) favors "a rest-recovering state = heating somewhere in the drive path" (battery internal resistance has the wrong temperature sign and is ruled out). **The heating location is NOT established** — winding Rm, FET on-resistance, board traces, and brush contact resistance are indistinguishable from a single hover operating point; the back-computed values under the all-drift-is-Rm assumption (Rm_cold~0.36, Rm_hot~0.52 ohm) are model-dependent reference numbers only. The old-0.34-as-cold reading is a suggestive coincidence only. Note that the adopted 0.593 ohm is a fitted parameter (series resistance Rs of a 2-stage Foster model fitted to the NanoVNA data, 10 kHz-1 MHz, weighted around 150 kHz), not a cold DC measurement, so it can neither confirm nor refute the cold Rm value (evidence: sf_sandbox `data/measured_motor_impedance.md`). A cold/warm DC (4-wire) bench remeasurement is required to discriminate. The adopted 0.593 ohm decision itself stands.
 
 ### Speed-Voltage Relationship
 

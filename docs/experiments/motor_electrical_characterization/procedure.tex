@@ -105,7 +105,7 @@ $C_q$・$Q_f$ はそれぞれ空力トルク係数・摩擦トルク項，$C_t$ 
 出典 & 値 & 条件・備考 \\
 \midrule
 旧 LCR 測定 & $0.34\,\Omega$ & 測定条件の記録が不十分（参考値） \\
-論文 LCR 測定（現行採用値） & $0.593\,\Omega$ & 学会論文の同定で現在採用中の値 \\
+論文 Foster 同定値（NanoVNA 実測；現行採用値） & $0.593\,\Omega$ & NanoVNA 実測（10 kHz--1 MHz）に 150 kHz 重視で合わせた Foster モデルの $R_s$。直流値ではない \\
 飛行データ逆算（冷間参考値） & $\approx 0.36\,\Omega$ & 「ドリフト全量 $=$ 巻線 $R$ 変化」と仮定した場合のモデル依存値 \\
 飛行データ逆算（温間参考値） & $\approx 0.52\,\Omega$ & 同上（飛行中ホバー電圧 $+0.16\,\mathrm{V}$ 相当） \\
 \bottomrule
@@ -274,7 +274,7 @@ CH1$-$CH2 の差動演算でモータ端子間電圧を，CH3 でシャント両
 \section{実験 E1：DC V/I カーブ（冷間）}
 % ==================================================================
 \expfield{目的}
-ブラシ接触抵抗の電流依存性を検出する。LCR 微小信号測定値（$0.593\,\Omega$）と
+ブラシ接触抵抗の電流依存性を検出する。論文 Foster 同定値（$0.593\,\Omega$、NanoVNA 微小信号測定に基づく）と
 飛行推定の冷間値（$\approx 0.36\,\Omega$）の食い違いを説明する候補として検証する。
 
 \expfield{機材}
@@ -530,7 +530,7 @@ PWM オフ時間が同程度の境界域であるため，導通モードの検�
 \section{実験 E5：LCR メータの周波数・信号レベル特性の記録}
 % ==================================================================
 \expfield{目的}
-「$0.593\,\Omega$」がどの測定条件（周波数・信号レベル）の値かを確定し，E1 の DC 値と接続する。
+$0.593\,\Omega$ は，秋田先生が NanoVNA-F V2 で測った 10 kHz--1 MHz のインピーダンスに，150 kHz 付近を重視して合わせた 2 段 Foster モデルの直列抵抗 $R_s$ であることが判明している（根拠：sf\_sandbox \texttt{data/measured\_motor\_impedance.md}）。直流抵抗の直接測定ではない。そこで本実験では，LCR メータの $R_s, L_s$ を周波数・信号レベルごとに取得し，E1 の DC 値および NanoVNA 実測データと接続する。
 
 \expfield{機材}
 \begin{itemize}
@@ -577,7 +577,7 @@ notes & 文字列 & 特記事項 \\
 \end{tabular}
 
 \expfield{判定基準}
-$0.593\,\Omega$ に対応する周波数・信号レベル条件を特定し，E1 の DC（低周波・大電流相当）側の値との
+LCR メータの $R_s, L_s$ の周波数・信号レベル依存性を取得し，$0.593\,\Omega$（150 kHz 重視の Foster 同定値）との関係と，E1 の DC（低周波・大電流相当）側の値との
 関係を明らかにする。
 
 \expfield{注意}
@@ -602,7 +602,7 @@ measurement current (brush contact resistance nonlinearity), (b) temperature dep
 (copper's temperature coefficient), and (c) the validity of the PWM average-voltage
 approximation $\bar V = \mathrm{duty}\cdot V_\mathrm{batt}$ in actual operation. Existing $R$
 values disagree substantially: an old LCR measurement of $0.34\,\Omega$, the value currently
-adopted in the paper ($0.593\,\Omega$), and flight-data-inferred values (cold
+adopted in the paper ($0.593\,\Omega$, the series resistance $R_s$ of a 2-stage Foster model fitted to NanoVNA data weighted around 150\,kHz, not a DC measurement), and flight-data-inferred values (cold
 $\approx 0.36\,\Omega$, hot $\approx 0.52\,\Omega$, both model-dependent under the assumption
 that the entire drift is due to winding $R$).
 
@@ -637,8 +637,9 @@ provisional $C_t$).
     battery levels, to test $\bar V = \mathrm{duty}\cdot V_\mathrm{batt}$ and check conduction
     continuity.
   \item[\textbf{E5}] \emph{LCR meter frequency/level sweep.} Measure $R_s, L_s$ at
-    100\,Hz/1/10/100\,kHz (and available signal levels) to determine which condition the
-    adopted $0.593\,\Omega$ corresponds to, and reconcile it with the E1 DC value.
+    100\,Hz/1/10/100\,kHz (and available signal levels) to obtain the LCR-meter $R_s$ versus
+    frequency/level and reconcile it with the E1 DC value and with the NanoVNA data (the adopted
+    $0.593\,\Omega$ is known to be the 150\,kHz-weighted Foster-fit $R_s$, not a DC value).
 \end{itemize}
 
 \textbf{Safety and logging.} Remove propellers for E1/E5; secure the frame and wear eye

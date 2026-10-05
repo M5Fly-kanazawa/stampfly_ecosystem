@@ -59,9 +59,11 @@ class motor_prop():
         self.Am = 5.39e-8
         self.Bm = 6.33e-4
         self.Cm = 1.53e-2
-        #LCRメータで測定したパラメータ
+        #Lm: LCRメータ測定（旧）/ Lm: LCR meter measurement (older)
         self.Lm = 7.5e-6 #1.0e-6
-        # Rm を論文LCR実測 0.593Ω に統一（先生決定、コミット 9a656a9f 2026-07-15）。
+        # Rm: Foster-model Rs fitted to NanoVNA data (IEEJ paper), not a DC measurement
+        # Rm: 論文 NanoVNA 実測の Foster 同定値（直流抵抗の直接測定ではない）
+        # Rm を論文 NanoVNA 実測の Foster 同定値 0.593Ω に統一（先生決定、コミット 9a656a9f 2026-07-15）。
         # 旧値 0.63 は vpython 側の旧初期値で更新漏れだった。
         self.Rm = 0.593 #0.63 #0.34
         #回転数と推力・トルク測定実験から求めたパラメータ

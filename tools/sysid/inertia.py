@@ -55,7 +55,7 @@ D = 0.023              # Moment arm [m]
 # （トルクはファームPIDゲインから再構成しており、モータ電気モデル経由ではない）—
 # 将来 duty→トルク再構成が必要になった場合のために残し、整合のため値のみ更新する。
 _defaults = get_flat_defaults()
-RM = _defaults['Rm']   # Winding resistance [Ω] (0.593, paper LCR measurement, 2026-07-15 decision)
+RM = _defaults['Rm']   # Winding resistance [Ω] (0.593, paper's Foster-model fit (Rs) to NanoVNA data, not a DC measurement; 2026-07-15 decision / 論文 NanoVNA 実測の Foster 同定値、直流抵抗の直接測定ではない)
 KM = _defaults['Km']   # Back-EMF constant [V/(rad/s)] (5.682e-4, direct measurement, 2026-07-16)
 DM = 3.69e-8           # Viscous friction [Nm*s/rad] (matches defaults.py DEFAULT_PARAMS['motor']['Dm'])
 QF = 2.76e-5           # Static friction [Nm] (matches defaults.py DEFAULT_PARAMS['motor']['Qf'])

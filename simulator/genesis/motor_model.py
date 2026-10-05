@@ -41,9 +41,11 @@ class MotorParams:
     Motor-propeller parameters measured from StampFly hardware.
     StampFly実機から測定したモータ・プロペラパラメータ
     """
-    # Electrical parameters (LCR meter measurement)
-    # 電気パラメータ（LCRメータ測定）
-    # NOTE(2026-07-24): Rm を論文LCR実測 0.593Ω に統一（先生決定、コミット 9a656a9f
+    # Electrical parameters (Lm: older LCR meter measurement; Rm: see below)
+    # 電気パラメータ（Lm: 旧LCRメータ測定、Rm: 下記参照）
+    # Rm: Foster-model Rs fitted to NanoVNA data (IEEJ paper), not a DC measurement
+    # Rm: 論文 NanoVNA 実測の Foster 同定値（直流抵抗の直接測定ではない）
+    # NOTE(2026-07-24): Rm を論文 NanoVNA 実測の Foster 同定値 0.593Ω に統一（先生決定、コミット 9a656a9f
     #  2026-07-15）。旧値 0.34 は別個体疑いのある旧LCR値。Km/Dm/Qf は Rm から
     #  Cq・Rm/Am 等で導出される計算プロパティのため、Rm 変更のみで自動的に追従する
     #  （Am/Bm/Cm は電圧-回転数の実測フィット値で Rm に依存しない）。数値検証の結果、
@@ -51,7 +53,7 @@ class MotorParams:
     #  Rm の値に依存せず不変（Rm がキャンセルする代数構造）— 悪化なし。
     #  Km 直接実測 5.682e-4 V/(rad/s)（2026-07-16確定, tools/sysid/defaults.py）との
     #  比較は docs/architecture/stampfly-parameters.md 参照。
-    Rm: float = 0.593     # Resistance (Ohm) / 巻線抵抗 (2026-07-15 論文LCR実測)
+    Rm: float = 0.593     # Resistance (Ohm) / 巻線抵抗 (2026-07-15 論文 NanoVNA 実測の Foster 同定値)
     Lm: float = 1.0e-6    # Inductance (H) / インダクタンス
 
     # RPM-voltage relationship coefficients

@@ -163,7 +163,7 @@ DEFAULT_PARAMS: Dict[str, Any] = {
             "description": (
                 "Winding resistance / 巻線抵抗 "
                 "(0.34=旧LCR実測 / 0.63=vpython実測 と並立中・実測確定待ち。"
-                "本ファイルでは論文LCR実測の0.593を採用)"
+                "本ファイルでは論文 NanoVNA 実測の Foster 同定値（Rs）0.593を採用。直流抵抗の直接測定ではない / Rs of Foster-model fit to NanoVNA data, not a DC measurement)"
             ),
         },
         "Km": {
