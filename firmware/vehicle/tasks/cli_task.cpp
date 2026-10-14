@@ -8,18 +8,18 @@
 
 /**
  * @file cli_task.cpp
- * @brief CLI + parameter access task (USB-CDC serial console)
- *        CLI + パラメータアクセスタスク（USB-CDC シリアルコンソール）
+ * @brief CLI + parameter access task (USB serial console)
+ *        CLI + パラメータアクセスタスク（USB シリアルコンソール）
  *
  * Owns the interactive serial console. Registers a small command set via the
  * ESP-IDF console registry — `param` (list/get/set/save), `status`, `reboot` — then
- * starts the USB-CDC REPL, which reads the serial line in its own task. Commands are
+ * starts the USB REPL, which reads the serial line in its own task. Commands are
  * held in a static {name, help, func} table and registered in a loop (R6: registry
  * pattern, no extern global console pointer). The CLI is a ground/bring-up tool and
  * is not on the flight-critical path.
  *
  * 対話式シリアルコンソールを所有する。ESP-IDF コンソールレジストリに小さなコマンド集
- * （param(list/get/set/save)・status・reboot）を登録し、USB-CDC REPL を起動する。REPL は
+ * （param(list/get/set/save)・status・reboot）を登録し、USB REPL を起動する。REPL は
  * 自前のタスクでシリアル行を読む。コマンドは静的な {name, help, func} テーブルに持ち、
  * ループで登録する（R6: レジストリパターン、extern グローバルのコンソールポインタを作らない）。
  * CLI は地上/ブリングアップ用ツールで、飛行クリティカル経路には載らない。
@@ -564,12 +564,12 @@ void publishMotorStop()
 }
 
 /// TCP client socket currently dispatching a CLI command, or -1 when the CLI is
-/// idle or the running command came from the USB-CDC REPL. Set by
+/// idle or the running command came from the USB REPL. Set by
 /// serveTcpClient() around its esp_console_run() calls (§ TCP CLI server,
 /// below); read by tcpAbortRequested() so a blocking `motor sweep` can be
 /// aborted from the SAME TCP session that started it.
 /// 現在 CLI コマンドを実行中の TCP クライアントソケット。CLI が idle か、実行中の
-/// コマンドが USB-CDC REPL から来た場合は -1。serveTcpClient() が
+/// コマンドが USB REPL から来た場合は -1。serveTcpClient() が
 /// esp_console_run() 呼び出しの前後で設定する（下記「TCP CLI サーバ」節）。
 /// tcpAbortRequested() が読み、ブロッキングする `motor sweep` を起動したのと
 /// 同じ TCP セッションから中断できるようにする。
@@ -584,7 +584,7 @@ int s_active_tcp_client_fd = -1;
 /// Always false for a USB-REPL-issued sweep (s_active_tcp_client_fd == -1): the
 /// REPL task IS the one blocked running this command, so nothing else is free
 /// to read stdin concurrently, and ESP-IDF exposes no PUBLIC non-blocking
-/// "bytes waiting" query for the USB-CDC console (only a private one explicitly
+/// "bytes waiting" query for the USB console (only a private one explicitly
 /// marked "not for applications" — esp_private/usb_console.h). A USB user
 /// currently has to wait out the (now bounded-by-abort-elsewhere) sweep or
 /// power-cycle; the WiFi/TCP path — the reported failure, `motor stop` sent
@@ -596,7 +596,7 @@ int s_active_tcp_client_fd = -1;
 ///
 /// USB REPL から起動したスイープでは常に false（s_active_tcp_client_fd == -1）—
 /// REPL タスク自身が本コマンドの実行でブロックしており並行して stdin を読める者が
-/// おらず、ESP-IDF は USB-CDC コンソールの「入力待ち」を問い合わせる公開の非ブロッキング
+/// おらず、ESP-IDF は USB コンソールの「入力待ち」を問い合わせる公開の非ブロッキング
 /// API を持たない（非公開・「アプリから呼ぶな」明記の esp_private/usb_console.h の
 /// みが存在）。USB ユーザーは現状スイープを待つか電源断で対応するしかないが、
 /// WiFi/TCP 経路（報告された不具合 — WiFi 越しの `motor stop` が読まれない）は
@@ -1304,10 +1304,14 @@ void CLITask(void* pvParameters)
     (void)pvParameters;
     ESP_LOGI(TAG, "CLITask started");
 
-    // Create the USB-CDC console REPL. esp_console_new_repl_usb_cdc() runs
-    // esp_console_init() internally, so commands must be registered AFTER it.
-    // USB-CDC コンソール REPL を生成する。esp_console_new_repl_usb_cdc() は内部で
-    // esp_console_init() を呼ぶため、コマンド登録はこの後で行う。
+    // Create the USB console REPL on the built-in USB Serial/JTAG controller
+    // (hardware CDC: works even if the cable is plugged in after a battery boot).
+    // esp_console_new_repl_usb_serial_jtag() runs esp_console_init() internally,
+    // so commands must be registered AFTER it.
+    // チップ内蔵 USB Serial/JTAG（ハードウェア CDC: 電池起動後にケーブルを挿しても
+    // 通信できる）で USB コンソール REPL を生成する。
+    // esp_console_new_repl_usb_serial_jtag() は内部で esp_console_init() を呼ぶため、
+    // コマンド登録はこの後で行う。
     esp_console_repl_t* repl = nullptr;
     esp_console_repl_config_t repl_config = {};
     repl_config.max_history_len    = 16;
@@ -1317,9 +1321,10 @@ void CLITask(void* pvParameters)
     repl_config.prompt             = "stampfly> ";
     repl_config.max_cmdline_length = 256;
 
-    esp_console_dev_usb_cdc_config_t cdc_config = {};
+    esp_console_dev_usb_serial_jtag_config_t usb_config =
+        ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
 
-    esp_err_t err = esp_console_new_repl_usb_cdc(&cdc_config, &repl_config, &repl);
+    esp_err_t err = esp_console_new_repl_usb_serial_jtag(&usb_config, &repl_config, &repl);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "console REPL init failed: %s — CLI disabled",
                  esp_err_to_name(err));
@@ -1330,10 +1335,10 @@ void CLITask(void* pvParameters)
     esp_console_register_help_command();  // built-in 'help' / 組み込みの 'help'
     registerCommands();                   // R6 registry / R6 レジストリ
 
-    // Start the interactive REPL — esp_console reads the USB-CDC serial line in its
+    // Start the interactive REPL — esp_console reads the USB serial line in its
     // own task. On the SILS host this is inert (commands stay registered and remain
     // dispatchable via a scenario console feeder).
-    // 対話 REPL を起動 — esp_console が自前タスクで USB-CDC シリアル行を読む。SILS ホスト
+    // 対話 REPL を起動 — esp_console が自前タスクで USB シリアル行を読む。SILS ホスト
     // では inert（コマンドは登録済みのままで、シナリオのコンソールフィーダから dispatch 可）。
     esp_console_start_repl(repl);
 

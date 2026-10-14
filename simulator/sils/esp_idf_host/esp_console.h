@@ -62,6 +62,11 @@ typedef struct {
     int cdc_dev;
 } esp_console_dev_usb_cdc_config_t;
 
+typedef struct {
+    int unused;
+} esp_console_dev_usb_serial_jtag_config_t;
+#define ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT() {0}
+
 // Shared dispatching registry (esp_console_shim.cpp). Registration stores the
 // command; run tokenizes the line and calls the matching firmware handler, so a
 // console line typed by the scenario feeder really executes. Declared here;
@@ -80,6 +85,10 @@ static inline esp_err_t esp_console_register_help_command(void) { return ESP_OK;
 static inline esp_err_t esp_console_new_repl_usb_cdc(const esp_console_dev_usb_cdc_config_t* dev,
                                                      const esp_console_repl_config_t* cfg,
                                                      esp_console_repl_t** out)
+{ (void)dev; (void)cfg; if (out) *out = (esp_console_repl_t*)0x1; return ESP_OK; }
+static inline esp_err_t esp_console_new_repl_usb_serial_jtag(const esp_console_dev_usb_serial_jtag_config_t* dev,
+                                                             const esp_console_repl_config_t* cfg,
+                                                             esp_console_repl_t** out)
 { (void)dev; (void)cfg; if (out) *out = (esp_console_repl_t*)0x1; return ESP_OK; }
 static inline esp_err_t esp_console_start_repl(esp_console_repl_t* repl) { (void)repl; return ESP_OK; }
 
