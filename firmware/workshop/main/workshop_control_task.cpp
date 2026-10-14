@@ -25,8 +25,8 @@
  * 他の vehicle タスク（ImuTask、TelemetryTask、…）はこのパイプライン形状を前提に
  * 動いているため。
  *
- * @subscriber controller_command, estimate_state, sensor_imu, actuator_motor
- * @publisher  log_stream, actuator_motor (via sf::Actuator::applyTestDuties/disarm)
+ * @subscriber controller_command, estimate_state, sensor_imu, actuator_motor, motor_test
+ * @publisher  log_stream, actuator_motor (via sf::Actuator::applyTestDuties/disarm), motor_test
  * @design W1_SPEC.md §2-5 — workshop_control_task.cpp                  [OK]
  * @design architecture.md §5 — Main pipeline: Control + Actuation      [OK]
  */
@@ -57,6 +57,42 @@ static const char* TAG = "WorkshopControlTask";
 /// 推定後に起こすため「同じ」accessor を読む — これが sf::workshop_tasks でなく
 /// sf::tasks 名前空間に置く理由（vehicle 原本は control_task.cpp:53-59）。
 static TaskHandle_t s_control_handle = nullptr;
+
+/// Disarmed motor output: run the CLI bench motor test (`motor test/all/sweep`)
+/// while its MotorTest FACT is live, otherwise keep the motors off. Mirrors the
+/// disarmed branch of vehicle's ControlTask (control_task.cpp), including the
+/// one-shot consume on expiry: StateTask blocks ARM while motor_test is active,
+/// so a FACT left latched here would block ARM until reboot.
+/// disarmed 中のモータ出力: CLI ベンチテスト（`motor test/all/sweep`）の MotorTest
+/// FACT が有効な間はそれを回し、それ以外はモータ停止。vehicle の ControlTask
+/// （control_task.cpp）の disarmed 分岐と同じで、失効時のワンショット消化も含む:
+/// StateTask は motor_test が active の間 ARM を拒否するため、ここでラッチが残ると
+/// 再起動まで ARM できなくなる。
+///
+/// @subscriber motor_test
+/// @publisher  motor_test (inactive FACT on expiry / 失効時に inactive を発行)
+static void applyBenchMotorTest(sf::Actuator& actuator)
+{
+    const sf::MotorTest test = sf::motor_test.latest();
+    const uint32_t now_us = static_cast<uint32_t>(esp_timer_get_time());
+    if (test.active && static_cast<int32_t>(test.expiry_us - now_us) > 0) {
+        float duties[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        if (test.motor_id == 0xFF) {
+            for (float& duty : duties) duty = test.duty;
+        } else if (test.motor_id < 4) {
+            duties[test.motor_id] = test.duty;
+        }
+        actuator.applyTestDuties(duties);
+        return;
+    }
+    if (test.active) {
+        sf::MotorTest off = {};
+        off.active    = false;
+        off.timestamp = now_us;
+        sf::motor_test.publish(off);
+    }
+    actuator.disarm();
+}
 
 namespace sf {
 namespace tasks {
@@ -217,12 +253,14 @@ void WorkshopControlTask(void* pvParameters)
         loop_400Hz(config::IMU_DT);
 
         // =====================================================================
-        // Motor apply — ARMED gate. applyTestDuties() arms the motor HAL, so it
-        // must ONLY be reached on this branch (never while disarmed), or a
-        // button-less spin-up becomes possible.
-        // モータ適用 — ARM 判定。applyTestDuties() はモータ HAL を arm するため、
-        // 必ずこの分岐内でのみ呼ぶこと（disarmed 中は絶対に呼ばない）— さもないと
-        // ボタン ARM なしでモータが回りうる。
+        // Motor apply — ARMED gate. The learner's ws::motor_* requests reach the
+        // motors ONLY on the armed branch, so learner code alone can never spin
+        // a disarmed craft. The single disarmed exception is the explicit CLI
+        // bench test (`motor test/all/sweep`), same as vehicle's ControlTask.
+        // モータ適用 — ARM 判定。学習者の ws::motor_* 要求がモータに届くのは armed
+        // 分岐のみで、学習者コードだけで disarmed の機体が回ることはない。disarmed 中の
+        // 唯一の例外は明示的な CLI ベンチテスト（`motor test/all/sweep`）で、vehicle の
+        // ControlTask と同じ。
         // =====================================================================
         const bool armed = sf::api::is_armed() && !s_failsafe_latch;
         if (armed) {
@@ -230,7 +268,7 @@ void WorkshopControlTask(void* pvParameters)
             ws_internal::resolve_motor_request(duties);
             actuator.applyTestDuties(duties);
         } else {
-            actuator.disarm();
+            applyBenchMotorTest(actuator);
         }
 
         // Data Stream keeps recording while disarmed too (ground data matters).

@@ -326,6 +326,16 @@ inline constexpr uint8_t POWER_BATTERY_CHANNEL = 1;
 // 新しい FACT を再発行し（MOTOR_SWEEP_KEEPALIVE_US 参照）2秒を超えて duty を保持する。
 inline constexpr uint32_t MOTOR_TEST_DURATION_US = 2000000;  // 2 s
 
+// Allowed range for the optional duration argument of `motor test`/`motor all`
+// (`motor test 1 30 5` = 5 s). The upper bound keeps expiry_us - now far inside
+// the int32 window ControlTask compares in, and bounds how long a forgotten
+// bench test can run; MIN keeps a typo like "0" from being a silent no-op.
+// `motor test`/`motor all` の任意の時間引数（`motor test 1 30 5` = 5秒）の許容範囲。
+// 上限は ControlTask が比較する int32 窓に十分収め、忘れたベンチテストの継続時間を
+// 抑える。下限は "0" 等の打ち間違いが無言の空振りになるのを防ぐ。
+inline constexpr float MOTOR_TEST_MIN_SEC = 0.1f;
+inline constexpr float MOTOR_TEST_MAX_SEC = 60.0f;
+
 // Default duty/duration for `motor sweep` (no args): 40% is high enough for a
 // CW/CCW current asymmetry to clear sensor/vibration noise while staying well
 // under MOTOR_SWEEP_MAX_DUTY_PCT; 3 s/motor leaves >1s of settled samples

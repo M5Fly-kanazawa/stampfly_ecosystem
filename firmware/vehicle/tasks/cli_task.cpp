@@ -856,9 +856,10 @@ int cmd_motor_sweep(int argc, char** argv)
     return 0;
 }
 
-/// `motor [test <1-4> <0-100> | all <0-100> | sweep [duty% sec] | stop]` — bench motor
-/// wiring/direction check + CW/CCW current-asymmetry sweep. `test`/`all` spin at a fixed
-/// duty for MOTOR_TEST_DURATION_US, DISARMED ONLY — refused with a message, same as
+/// `motor [test <1-4> <0-100> [sec] | all <0-100> [sec] | sweep [duty% sec] | stop]` — bench
+/// motor wiring/direction check + CW/CCW current-asymmetry sweep. `test`/`all` spin at a
+/// fixed duty for `sec` seconds (optional last argument, default MOTOR_TEST_DURATION_US,
+/// clamped to MOTOR_TEST_MIN_SEC..MOTOR_TEST_MAX_SEC), DISARMED ONLY — refused with a message, same as
 /// `sweep` (cmd_motor_sweep): ControlTask already ignores this FACT while armed, but a
 /// silent no-op that still prints a success-looking line is a UX trap, so we refuse
 /// up front instead. `sweep` is a longer, self-contained measurement — see
@@ -866,7 +867,8 @@ int cmd_motor_sweep(int argc, char** argv)
 /// PROPS OFF / hold the craft. `motor stop` ends it early (always allowed — it is the
 /// safety net, not a test).
 /// `motor [test <1-4> <0-100> | all <0-100> | sweep [duty% sec] | stop]` — ベンチのモータ
-/// 配線/回転方向確認＋CW/CCW 電流非対称スイープ。`test`/`all` は MOTOR_TEST_DURATION_US の
+/// 配線/回転方向確認＋CW/CCW 電流非対称スイープ。`test`/`all` は `sec` 秒（省略可能な最後の
+/// 引数、既定 MOTOR_TEST_DURATION_US、MOTOR_TEST_MIN_SEC〜MOTOR_TEST_MAX_SEC に制限）の
 /// 間固定 duty で回転、**disarmed 限定** — `sweep`（cmd_motor_sweep）と同様メッセージ付きで
 /// 拒否する: ControlTask は armed 中このFACTを元々無視するが、それでも成功風の行を印字する
 /// 無言の空振りは UX の罠なので、事前に拒否する。`sweep` はより長い自己完結型の計測
@@ -902,27 +904,36 @@ int cmd_motor(int argc, char** argv)
         int pct = std::atoi(all ? argv[2] : argv[3]);
         if (pct < 0)   pct = 0;
         if (pct > 100) pct = 100;
+
+        // Optional last argument: run time in seconds (default MOTOR_TEST_DURATION_US).
+        // 省略可能な最後の引数: 回転時間 [秒]（既定 MOTOR_TEST_DURATION_US）。
+        const int sec_index = all ? 3 : 4;
+        float sec = config::MOTOR_TEST_DURATION_US / 1.0e6f;
+        if (argc > sec_index) sec = std::strtof(argv[sec_index], nullptr);
+        if (sec < config::MOTOR_TEST_MIN_SEC) sec = config::MOTOR_TEST_MIN_SEC;
+        if (sec > config::MOTOR_TEST_MAX_SEC) sec = config::MOTOR_TEST_MAX_SEC;
+
         sf::MotorTest t{};
         t.active    = true;
         t.duty      = pct / 100.0f;
-        t.expiry_us = now + config::MOTOR_TEST_DURATION_US;
+        t.expiry_us = now + static_cast<uint32_t>(sec * 1.0e6f);
         t.timestamp = now;
         if (all) {
             t.motor_id = 0xFF;
-            std::printf("motor ALL test @ %d%% for 2s (DISARMED only — props off!)\n", pct);
+            std::printf("motor ALL test @ %d%% for %.1fs (DISARMED only — props off!)\n", pct, sec);
         } else {
             int id = std::atoi(argv[2]);   // M1..M4
             if (id < 1 || id > 4) {
-                std::printf("usage: motor test <1-4> <0-100>\n");
+                std::printf("usage: motor test <1-4> <0-100> [sec]\n");
                 return 0;
             }
             t.motor_id = static_cast<uint8_t>(id - 1);   // M1→FR(0) … M4→FL(3)
-            std::printf("motor M%d test @ %d%% for 2s (DISARMED only — props off!)\n", id, pct);
+            std::printf("motor M%d test @ %d%% for %.1fs (DISARMED only — props off!)\n", id, pct, sec);
         }
         sf::motor_test.publish(t);
         return 0;
     }
-    std::printf("usage: motor [test <1-4> <0-100> | all <0-100> | sweep [duty%% sec] | stop]\n");
+    std::printf("usage: motor [test <1-4> <0-100> [sec] | all <0-100> [sec] | sweep [duty%% sec] | stop]\n");
     return 0;
 }
 
@@ -1267,7 +1278,7 @@ const CliCommand kCommands[] = {
     {"unpair",  "Clear pairing and re-enter pairing mode",       &cmd_unpair},
     {"sound",   "sound [on|off|test [start|ok|fail]] — buzzer mute / play a cue", &cmd_sound},
     {"led",     "led <0-255> — body LED brightness",             &cmd_led},
-    {"motor",   "motor [test <1-4> <0-100>|all <0-100>|sweep [duty% sec]|stop] — bench test (disarmed)", &cmd_motor},
+    {"motor",   "motor [test <1-4> <0-100> [sec]|all <0-100> [sec]|sweep [duty% sec]|stop] — bench test (disarmed)", &cmd_motor},
     {"wifi",    "wifi [show|mode <sta|ap>|ssid <name>|pass <secret>] — telemetry WiFi", &cmd_wifi},
     {"magcal",  "magcal [start|stop|status|save|clear] — magnetometer calibration", &cmd_magcal},
     {"reboot",  "Reboot the flight controller",                  &cmd_reboot},
