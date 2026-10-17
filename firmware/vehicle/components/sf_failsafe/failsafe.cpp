@@ -60,7 +60,8 @@ FailsafeConfig loadFailsafeConfigFromParams()
     FailsafeConfig config;
     params::get_float("safety.impact.accel_g",  config.impact_accel_g);
     params::get_float("safety.impact.gyro_dps", config.gyro_anomaly_dps);
-    params::get_float("safety.battery.low_v",   config.low_battery_v);
+    params::get_float("safety.battery.low_v",      config.low_battery_v);
+    params::get_float("safety.battery.critical_v", config.critical_battery_v);
 
     float comm_timeout_ms = static_cast<float>(config.comm_timeout_ms);
     if (params::get_float("safety.comm.timeout_ms", comm_timeout_ms)) {
