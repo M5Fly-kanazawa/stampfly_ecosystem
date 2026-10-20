@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<title>StampFly パンフレット</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+@page{size:A4;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--sky:#29B6F6;--purple:#7C6CF2;--pink:#FF6F91;--yellow:#FFC93C;--mint:#2EC4A0;--orange:#FF9F43;--ink:#1F2A44}
+html,body{width:210mm;height:297mm;background:#FFF9EC}
+body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans",sans-serif;color:var(--ink);font-size:9pt;line-height:1.4;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{position:relative;width:210mm;height:297mm;overflow:hidden;background:#FFF9EC}
+.abs{position:absolute}
+.deco{position:absolute;border-radius:50%}
+.hero{position:absolute;left:0;top:0;width:210mm;height:80mm;background:linear-gradient(120deg,#29B6F6 0%,#7C6CF2 60%,#FF6F91 120%)}
+.band{position:absolute;left:12mm;top:11mm;background:var(--yellow);color:var(--ink);font-weight:800;font-size:10pt;padding:1.2mm 4mm;border-radius:5mm}
+.title{position:absolute;left:12mm;top:20mm;color:#fff;font-weight:800;font-size:46pt;line-height:1;letter-spacing:.5mm;text-shadow:0 1mm 0 rgba(31,42,68,.35)}
+.yomi{position:absolute;left:13mm;top:41mm;color:#fff;font-weight:700;font-size:10pt;letter-spacing:1mm}
+.catch{position:absolute;left:12mm;top:49mm;width:100mm;color:#fff;font-weight:800;font-size:14pt;line-height:1.35;text-shadow:0 .4mm 0 rgba(31,42,68,.35)}
+.photo{position:absolute;left:112mm;top:10mm;width:88mm;height:62mm;border-radius:6mm;border:1.6mm solid #fff;overflow:hidden;transform:rotate(2deg);box-shadow:0 1.5mm 3mm rgba(31,42,68,.3)}
+.photo img{width:100%;height:100%;object-fit:cover;object-position:50% 45%}
+.badge{position:absolute;font-weight:800;font-size:8pt;line-height:1.25;text-align:center;border-radius:50%;width:20mm;height:20mm;white-space:nowrap;display:flex;align-items:center;justify-content:center;color:var(--ink);border:.8mm dashed #fff;box-shadow:0 .8mm 1.5mm rgba(31,42,68,.3)}
+.h2{font-weight:800;font-size:12pt;display:flex;align-items:center;gap:2mm}
+.h2 i{display:inline-block;width:4mm;height:4mm;border-radius:50%}
+.features{position:absolute;left:10mm;top:84mm;width:190mm}
+.feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;margin-top:1.5mm}
+.card{border-radius:4mm;padding:2.5mm 3mm;height:36mm;position:relative;overflow:hidden}
+.card .n{display:inline-block;font-weight:800;font-size:10pt;line-height:1.2}
+.card p{font-size:8.4pt;line-height:1.32;margin-top:1mm}
+.steps{position:absolute;left:10mm;top:129mm;width:190mm;height:30mm}
+.step-row{position:absolute;left:0;top:10.5mm;width:190mm;display:grid;grid-template-columns:repeat(4,1fr);gap:3mm}
+.step{background:#fff;border-radius:3mm;padding:1.5mm 2.5mm 1.5mm 10mm;height:19mm;position:relative;border:.5mm solid var(--c)}
+.step .no{position:absolute;left:2mm;top:50%;margin-top:-3.2mm;width:6.4mm;height:6.4mm;border-radius:50%;background:var(--c);color:#fff;font-weight:800;font-size:10pt;display:flex;align-items:center;justify-content:center}
+.step b{font-size:10pt;display:block}
+.step span{font-size:8pt;line-height:1.3;display:block}
+.lec{position:absolute;left:10mm;top:160mm;width:95mm;height:77mm;border-radius:4mm;background:#fff;border:.8mm solid var(--purple);overflow:hidden}
+.lec .top{background:var(--purple);color:#fff;padding:1.5mm 4mm;display:flex;align-items:center;gap:2mm}
+.lec .top .tag{background:var(--yellow);color:var(--ink);font-weight:800;font-size:9pt;border-radius:3mm;padding:.3mm 2.5mm;white-space:nowrap}
+.lec .top b{font-size:9.6pt;font-weight:800;line-height:1.25}
+.lec .body{padding:2mm 4mm}
+.date{font-weight:800;color:var(--purple);font-size:19pt;line-height:1.15;white-space:nowrap}.yr{font-size:11pt;display:block;line-height:1.1}
+.date small{font-size:11pt}
+.dl{display:grid;grid-template-columns:11mm 1fr;row-gap:.8mm;font-size:8.8pt;margin-top:1.5mm;line-height:1.35}
+.dl dt{font-weight:800;color:var(--purple)}
+.note-b{margin-top:1.5mm;font-weight:800;font-size:9pt;background:#FFF1B8;border-radius:2mm;padding:.8mm 2.5mm}
+.contact{margin-top:1.5mm;font-size:8.8pt;border-top:.4mm dotted var(--purple);padding-top:1.2mm}
+.mail{font-weight:800;font-size:10.5pt;letter-spacing:.2mm;word-break:break-all}
+.exp{position:absolute;left:10mm;top:240mm;width:95mm;height:20mm;border-radius:4mm;background:#E3F7F1;border:.6mm dashed var(--mint);padding:2.5mm 4mm 2mm 17mm}
+.exp b{font-size:10pt;display:block}
+.exp span{font-size:8.8pt;display:block;line-height:1.35}
+.exp svg{position:absolute;left:3mm;top:4mm}
+.shop{position:absolute;left:108mm;top:160mm;width:92mm;height:104mm}
+.shop .h2{font-size:11pt}
+.prod{position:absolute;left:0;width:92mm;height:42mm;border-radius:4mm;background:#fff;border:.8mm solid var(--c);padding:1.5mm 2.5mm;display:flex;gap:2.5mm}
+.prod .ph{width:30mm;height:14mm;border-radius:2mm;overflow:hidden;position:relative;background:#E6E8E4;flex:none}
+.prod .info{flex:1;min-width:0}
+.prod h4{font-size:9.6pt;font-weight:800;line-height:1.2}
+.prod .price{font-size:14pt;font-weight:800;line-height:1.2}
+.prod .price small{font-size:8pt;font-weight:700}
+.prod .sub{font-size:8pt;line-height:1.3}
+.qr{width:21mm;height:21mm;image-rendering:pixelated;display:block;background:#fff}
+.url{font-size:7.5pt;font-weight:700;word-break:break-all;line-height:1.2}
+.tag2{display:inline-block;font-size:8pt;font-weight:800;background:var(--c);color:var(--ink);border-radius:2mm;padding:0 1.5mm}
+.shopnote{position:absolute;left:0;top:92mm;width:92mm;font-size:7.6pt;line-height:1.35}
+.more{position:absolute;left:10mm;top:263mm;width:190mm;height:24mm;border-radius:4mm;background:var(--ink);color:#fff;display:flex;align-items:center;gap:4mm;padding:0 4mm}
+.more .t{flex:1}
+.more .t b{font-size:11pt;display:block;line-height:1.3}
+.more .t span{font-size:8.8pt;display:block;margin-top:1mm}
+.more .q{background:#fff;color:var(--ink);border-radius:2mm;font-weight:800;font-size:8.5pt;line-height:1.2;display:flex;align-items:center;gap:1.5mm;padding:.8mm 2.5mm .8mm .8mm}
+.more .q .qr{width:21mm;height:21mm}
+.credit{position:absolute;left:10mm;top:288mm;width:190mm;font-size:7pt;text-align:right;color:#5a6580}
+</style></head><body>
+<div class="page">
+
+<div class="deco" style="left:-8mm;top:150mm;width:20mm;height:20mm;background:#FFE3EA"></div>
+<div class="deco" style="right:-8mm;top:128mm;width:18mm;height:18mm;background:#DDF3FD"></div>
+<div class="deco" style="left:2mm;top:236mm;width:5mm;height:5mm;background:#FFC93C"></div>
+<div class="deco" style="right:3mm;top:262mm;width:4mm;height:4mm;background:#FF6F91"></div>
+<div class="deco" style="right:2mm;top:290mm;width:5mm;height:5mm;background:#2EC4A0"></div>
+<div class="deco" style="left:1.5mm;top:290mm;width:4mm;height:4mm;background:#7C6CF2"></div>
+<div class="deco" style="left:4mm;top:121mm;width:3mm;height:3mm;background:#FF9F43"></div>
+<div class="deco" style="right:5mm;top:154mm;width:3mm;height:3mm;background:#29B6F6"></div>
+
+<div class="hero">
+  <div class="deco" style="left:96mm;top:-6mm;width:22mm;height:22mm;background:rgba(255,255,255,.16)"></div>
+  <div class="deco" style="left:-6mm;top:56mm;width:24mm;height:24mm;background:rgba(255,255,255,.14)"></div>
+  <div class="deco" style="left:100mm;top:62mm;width:6mm;height:6mm;background:#FFC93C"></div>
+  <div class="deco" style="left:94mm;top:30mm;width:3mm;height:3mm;background:#FFC93C"></div>
+  <div class="deco" style="left:101mm;top:44mm;width:2.5mm;height:2.5mm;background:#2EC4A0"></div>
+  <div class="deco" style="left:203mm;top:3mm;width:3mm;height:3mm;background:#FFC93C"></div>
+  <svg class="abs" style="left:86mm;top:3mm" width="20mm" height="9mm" viewBox="0 0 44 20"><path d="M8 18a7 7 0 010-14 9 9 0 0117-2 8 8 0 0113 7 5 5 0 01-2 9z" fill="#fff" opacity=".35"/></svg>
+</div>
+<svg class="abs" style="left:0;top:74mm" width="210mm" height="9mm" viewBox="0 0 210 9" preserveAspectRatio="none"><path d="M0 0H210V4C192 10 175 10 157 5S122 -1 105 4 70 10 52 5 18 0 0 5Z" fill="#FF6F91"/></svg>
+<div class="band">金沢工業大学で開発された 教育用ドローン</div>
+<div class="title">StampFly</div>
+<div class="yomi">スタンプフライ</div>
+<div class="catch">手のひらサイズのドローンで、<br>飛ばす・書き換える・しくみを知る！</div>
+<div class="photo"><img src="../_shared/images/Stampfly_onhand.jpg" alt="手のひらに乗った StampFly"></div>
+<div class="badge" style="left:104mm;top:56mm;background:var(--yellow);transform:rotate(-8deg)">手のひら<br>約7.4cm角</div>
+<div class="badge" style="left:181mm;top:58mm;background:var(--mint);transform:rotate(8deg)">センサ<br>6 種類</div>
+
+<div class="features">
+  <div class="h2"><i style="background:var(--pink)"></i>StampFly ってなに？</div>
+  <div class="feat-grid">
+    <div class="card" style="background:#D9F1FD"><span class="n" style="color:#0B5E8C">手のひら<br>サイズ</span><p>約 7.4cm 角。教室の中でも飛ばせる小ささです。</p></div>
+    <div class="card" style="background:#E6E2FD"><span class="n" style="color:#4A3CC0">センサが<br>たくさん</span><p>加速度・角速度（回転の速さ）、気圧、距離、地磁気、床の模様の動き（オプティカルフロー）を計測し、姿勢と位置を推定。</p></div>
+    <div class="card" style="background:#FFE3EA"><span class="n" style="color:#B8264F">高さ・位置を<br>自動でキープ</span><p>高さを保つ・<span style="white-space:nowrap">その場にとどまる</span>飛行モードつき。はじめてでも操縦しやすい。</p></div>
+    <div class="card" style="background:#FFF1B8"><span class="n" style="color:#8A5A00">プログラムを<br>全部公開</span><p>オープンソース（プログラムが公開されていて、誰でも読めて書き換えられる）。動きを自分で変えられます。</p></div>
+  </div>
+</div>
+
+<div class="steps">
+  <div class="h2"><i style="background:var(--mint)"></i>StampFly でできること</div>
+  <div class="step-row">
+    <div class="step" style="--c:#29B6F6"><div class="no">1</div><b>飛ばす</b><span>コントローラで操縦</span></div>
+    <div class="step" style="--c:#7C6CF2"><div class="no">2</div><b>書き換える</b><span>プログラムを変えて、パソコンから書き込む</span></div>
+    <div class="step" style="--c:#2EC4A0"><div class="no">3</div><b>しくみを知る</b><span>センサ・モータ・制御のつながりを学ぶ</span></div>
+    <div class="step" style="--c:#FF6F91"><div class="no">4</div><b>試す</b><span>パソコンの中のシミュレータで飛ばして確かめる</span></div>
+  </div>
+  <svg class="abs" style="left:62mm;top:1mm" width="128mm" height="8mm" viewBox="0 0 128 8"><path d="M0 6 Q 20 -2 44 5 T 88 5 T 126 3" fill="none" stroke="#FF9F43" stroke-width=".7" stroke-dasharray="1.4 1.4" stroke-linecap="round"/></svg>
+  <svg class="abs" style="left:76mm;top:.2mm" width="9mm" height="6mm" viewBox="0 0 30 20"><rect x="10" y="6" width="10" height="8" rx="2" fill="#1F2A44"/><path d="M10 8L4 4M20 8L26 4M10 12L4 16M20 12L26 16" stroke="#1F2A44" stroke-width="1.5"/><g fill="#7C6CF2"><circle cx="4" cy="4" r="3"/><circle cx="26" cy="4" r="3"/><circle cx="4" cy="16" r="3"/><circle cx="26" cy="16" r="3"/></g><circle cx="15" cy="10" r="1.6" fill="#FFC93C"/></svg>
+  <svg class="abs" style="left:112mm;top:.2mm" width="9mm" height="6mm" viewBox="0 0 30 20"><rect x="10" y="6" width="10" height="8" rx="2" fill="#1F2A44"/><path d="M10 8L4 4M20 8L26 4M10 12L4 16M20 12L26 16" stroke="#1F2A44" stroke-width="1.5"/><g fill="#29B6F6"><circle cx="4" cy="4" r="3"/><circle cx="26" cy="4" r="3"/><circle cx="4" cy="16" r="3"/><circle cx="26" cy="16" r="3"/></g><circle cx="15" cy="10" r="1.6" fill="#FFC93C"/></svg>
+  <svg class="abs" style="left:154mm;top:.2mm" width="9mm" height="6mm" viewBox="0 0 30 20"><rect x="10" y="6" width="10" height="8" rx="2" fill="#1F2A44"/><path d="M10 8L4 4M20 8L26 4M10 12L4 16M20 12L26 16" stroke="#1F2A44" stroke-width="1.5"/><g fill="#FF6F91"><circle cx="4" cy="4" r="3"/><circle cx="26" cy="4" r="3"/><circle cx="4" cy="16" r="3"/><circle cx="26" cy="16" r="3"/></g><circle cx="15" cy="10" r="1.6" fill="#FFC93C"/></svg>
+</div>
+
+<div class="lec">
+  <div class="top"><span class="tag">春の集中講義</span><b>StampFly で<br>ドローンの制御を学ぶ 5 日間</b></div>
+  <div class="body">
+    <div class="date"><span class="yr">2027 年 3 月</span>1 日<small>（月）</small>〜 5 日<small>（金）</small></div>
+    <dl class="dl">
+      <dt>時間</dt><dd>毎日 1 限〜4 限</dd>
+      <dt>会場</dt><dd>決まりしだい学生ポータルでお知らせします</dd>
+      <dt>内容</dt><dd>操縦するだけでなく、自分でプログラムを書いて StampFly を飛ばすところまで挑戦します<span style="white-space:nowrap">（内容は予定）</span></dd>
+    </dl>
+    <div class="note-b">詳細・申込方法は、後日 学生ポータルでお知らせします</div>
+    <div class="contact">お問い合わせ：伊藤 恒平（金沢工業大学）<br><span class="mail">kouhei_ito@neptune.kanazawa-it.ac.jp</span></div>
+  </div>
+</div>
+<div class="exp">
+  <svg width="11mm" height="11mm" viewBox="0 0 30 30"><circle cx="15" cy="15" r="14" fill="#2EC4A0"/><g fill="#fff"><rect x="10" y="12" width="10" height="7" rx="2"/><circle cx="8" cy="10" r="3"/><circle cx="22" cy="10" r="3"/><circle cx="8" cy="21" r="3"/><circle cx="22" cy="21" r="3"/></g></svg>
+  <b>操縦体験会は、今後も不定期に開催します</b>
+  <span>7 号館 301 教室。友だちにも教えてください。</span>
+</div>
+
+<div class="shop">
+  <div class="h2"><i style="background:var(--orange)"></i>StampFly を手に入れるには</div>
+  <div style="font-size:8.5pt;font-weight:700;margin-left:6mm;line-height:1.2">スイッチサイエンスで販売中</div>
+  <div class="prod" style="top:9mm;--c:#29B6F6">
+    <div style="display:flex;flex-direction:column;gap:1mm">
+      <div class="ph"><img src="../_shared/images/stampfly_upside.jpg" style="width:100%;height:100%;object-fit:contain" alt="M5Stamp Fly v1.1"></div>
+      <img class="qr" src="../_shared/images/qr_buy_stampfly.png" alt="QR">
+    </div>
+    <div class="info">
+      <span class="tag2">機体</span>
+      <h4>M5Stamp Fly v1.1</h4>
+      <div class="price">10,439 円<small>（税込）</small></div>
+      <div class="sub">バッテリー 1 本つき</div>
+      <div class="url" style="margin-top:2mm">switch-science.com/<wbr>products/11202</div>
+    </div>
+  </div>
+  <div class="prod" style="top:53mm;--c:#FF6F91">
+    <div style="display:flex;flex-direction:column;gap:1mm">
+      <div class="ph"><img src="../_shared/images/atom_joystick.jpg" style="width:100%;height:100%;object-fit:contain" alt="M5Atom Joystick"></div>
+      <img class="qr" src="../_shared/images/qr_buy_joystick.png" alt="QR">
+    </div>
+    <div class="info">
+      <span class="tag2">コントローラ</span>
+      <h4>M5Atom Joystick</h4>
+      <div class="price">6,083 円<small>（税込）</small></div>
+      <div class="sub">別売。マイコンを新しくした後継モデルが発売予定で、そちらも同じように使えます。</div>
+      <div class="url" style="margin-top:1mm">switch-science.com/<wbr>products/9819</div>
+    </div>
+  </div>
+  <div class="shopnote" style="top:96mm">価格は 2026 年 10 月時点。操縦にはコントローラ（別売）が必要です。</div>
+</div>
+
+<div class="more">
+  <div class="t"><b>StampFly エコシステム<br>教材・プログラム・シミュレータを<wbr>まとめて公開</b><span>もっと知りたい人は、QR コードから。</span><span style="font-size:7.5pt;color:#C8D0E4;margin-top:.8mm">StampFly は M5Stack 社の製品です</span></div>
+  <div class="q"><img class="qr" src="../_shared/images/qr_landing.png" alt="紹介ページ"><span>紹介<br>ページ</span></div>
+  <div class="q"><img class="qr" src="../_shared/images/QR_github.png" alt="GitHub"><span>GitHub</span></div>
+</div>
+</div>
+</body></html>
