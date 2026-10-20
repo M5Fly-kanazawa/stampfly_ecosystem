@@ -77,7 +77,7 @@ TEXINPUTS=../../_shared/beamer//: lualatex -interaction=nonstopmode sci_tutorial
 | StampFly 勉強会 | [`stampfly_workshop/`](stampfly_workshop/workshop_guide.md) | `stampfly_workshop/slides/stampfly_workshop.pdf`（157ページ） | 通年・随時開催 |
 | DXH 高校教員向け体験講座 | [`dxh2026/`](dxh2026/README.md) | `dxh2026/slides/dxh_workshop.pdf`（41ページ） | 2026-07-18/19 |
 | SCI/SICE チュートリアル講座 2026 | [`sci_tutorial_2026/`](sci_tutorial_2026/README.md) | `sci_tutorial_2026/slides/sci_tutorial.pdf`（122ページ） | 2026-09-10 |
-| StampFly 操縦体験会 | `flight_experience/` | なし（配布用パンフレット `flight_experience/flyer.pdf`、A4 片面 1 枚。元は `flyer.html`） | 2026-10-24〜・不定期 |
+| StampFly 操縦体験会 | `flight_experience/` | なし（配布用パンフレット `flight_experience/flyer.pdf`、A4 片面 1 枚。元は `flyer.html`。SNS 用 PNG は `flyer_sns.png`） | 2026-10-24〜・不定期 |
 
 ## 4. 新しいイベントを追加する場合
 
@@ -165,7 +165,7 @@ TEXINPUTS=../../_shared/beamer//: lualatex -interaction=nonstopmode sci_tutorial
 | StampFly Workshop | [`stampfly_workshop/`](stampfly_workshop/workshop_guide.md) | `stampfly_workshop/slides/stampfly_workshop.pdf` (157 pages) | Ongoing |
 | DXH high-school teacher workshop | [`dxh2026/`](dxh2026/README.md) | `dxh2026/slides/dxh_workshop.pdf` (41 pages) | 2026-07-18/19 |
 | SCI/SICE Tutorial Course 2026 | [`sci_tutorial_2026/`](sci_tutorial_2026/README.md) | `sci_tutorial_2026/slides/sci_tutorial.pdf` (122 pages) | 2026-09-10 |
-| StampFly flight experience | `flight_experience/` | None (handout flyer `flight_experience/flyer.pdf`, one-sided A4; source `flyer.html`) | From 2026-10-24, irregular |
+| StampFly flight experience | `flight_experience/` | None (handout flyer `flight_experience/flyer.pdf`, one-sided A4; source `flyer.html`; PNG for social media `flyer_sns.png`) | From 2026-10-24, irregular |
 
 ## 4. Adding a New Event
 
