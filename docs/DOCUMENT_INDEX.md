@@ -34,6 +34,7 @@
 | [commands/sf-build.md](commands/sf-build.md) | `sf build` - ファームウェアビルド |
 | [commands/sf-flash.md](commands/sf-flash.md) | `sf flash` - ファームウェア書き込み |
 | [commands/sf-monitor.md](commands/sf-monitor.md) | `sf monitor` - シリアルモニタ |
+| [commands/sf-hub.md](commands/sf-hub.md) | `sf hub` - USB ハブのポート電源制御 |
 | [commands/sf-log.md](commands/sf-log.md) | `sf log` - ログキャプチャ・解析 |
 | [commands/sf-sim.md](commands/sf-sim.md) | `sf sim` - シミュレータ |
 | [commands/sf-cal.md](commands/sf-cal.md) | `sf cal` - センサキャリブレーション |
@@ -247,6 +248,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [commands/sf-build.md](commands/sf-build.md) | `sf build` - Build firmware |
 | [commands/sf-flash.md](commands/sf-flash.md) | `sf flash` - Flash firmware |
 | [commands/sf-monitor.md](commands/sf-monitor.md) | `sf monitor` - Serial monitor |
+| [commands/sf-hub.md](commands/sf-hub.md) | `sf hub` - USB hub port power control |
 | [commands/sf-log.md](commands/sf-log.md) | `sf log` - Log capture and analysis |
 | [commands/sf-sim.md](commands/sf-sim.md) | `sf sim` - Simulator |
 | [commands/sf-cal.md](commands/sf-cal.md) | `sf cal` - Sensor calibration |

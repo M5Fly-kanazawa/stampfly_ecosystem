@@ -22,7 +22,7 @@ sf <command> [subcommand] [options]
 
 ## 2. コマンド一覧
 
-`source setup_env.sh && sf --help` の実測（44 コマンド、2026-09-13 時点）。専用ページが無いコマンドは
+`source setup_env.sh && sf --help` の実測（45 コマンド、2026-09-13 時点）。専用ページが無いコマンドは
 `sf <command> --help` で詳細を確認してください。
 
 | コマンド | 説明 | リファレンス |
@@ -34,6 +34,7 @@ sf <command> [subcommand] [options]
 | `sf flash` | ファームウェア書き込み | [sf-flash.md](sf-flash.md) |
 | `sf flasher` | ネイティブ GUI フラッシャアプリの管理 | [sf-flasher.md](sf-flasher.md) |
 | `sf monitor` | シリアルモニタを開く | [sf-monitor.md](sf-monitor.md) |
+| `sf hub` | USB ハブのポート電源制御（uhubctl） | [sf-hub.md](sf-hub.md) |
 | `sf telemetry` | 50Hz テレメトリのライブ表示（既定=ターミナル、`--web` でブラウザ） | `sf telemetry --help` |
 | `sf blocks` | Blockly ブロックプログラミング連携（ブラウザ UI ↔ 機体 UDP API） | `sf blocks --help` |
 | `sf log` | ログ取得・解析 | [sf-log.md](sf-log.md) |
@@ -162,7 +163,7 @@ sf <command> [subcommand] [options]
 
 ## 2. Command List
 
-Measured from `source setup_env.sh && sf --help` (44 commands, as of 2026-09-13). For a
+Measured from `source setup_env.sh && sf --help` (45 commands, as of 2026-09-13). For a
 command with no dedicated page, run `sf <command> --help` for details.
 
 | Command | Description | Reference |
@@ -174,6 +175,7 @@ command with no dedicated page, run `sf <command> --help` for details.
 | `sf flash` | Flash firmware to device | [sf-flash.md](sf-flash.md) |
 | `sf flasher` | Manage the native StampFly Flasher GUI app | [sf-flasher.md](sf-flasher.md) |
 | `sf monitor` | Open serial monitor | [sf-monitor.md](sf-monitor.md) |
+| `sf hub` | Control USB hub port power (uhubctl) | [sf-hub.md](sf-hub.md) |
 | `sf telemetry` | Live 50Hz telemetry — terminal dashboard, or browser with `--web` | `sf telemetry --help` |
 | `sf blocks` | Blockly block-programming bridge (browser UI <-> drone UDP API) | `sf blocks --help` |
 | `sf log` | Log capture and analysis | [sf-log.md](sf-log.md) |

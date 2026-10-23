@@ -36,6 +36,7 @@ _COMMAND_MODULE_NAMES: Tuple[str, ...] = (
     "flash",
     "flasher",
     "monitor",
+    "hub",
     "telemetry",
     "blocks",
     "log",
