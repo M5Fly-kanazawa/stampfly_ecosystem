@@ -27,8 +27,8 @@ function createFlightSurvey() {
   );
 
   form.setIsQuiz(false);
-  // Do not collect e-mail addresses automatically (Q13 is an optional normal question)
-  // メールアドレスを自動収集しない（Q13 は任意記入の通常設問）
+  // Do not collect e-mail addresses automatically (Q14 is an optional normal question)
+  // メールアドレスを自動収集しない（Q14 は任意記入の通常設問）
   form.setCollectEmail(false);
   form.setAllowResponseEdits(false);
   form.setLimitOneResponsePerUser(false);
@@ -171,17 +171,35 @@ function createFlightSurvey() {
     ])
     .setRequired(true);
 
+  // Q11 shows whether the session would spread by word of mouth.
+  // Q11 は体験会が口コミで広がりそうかを見る設問。
   form.addMultipleChoiceItem()
-    .setTitle('Q11. また操縦体験会があれば参加したいですか')
+    .setTitle('Q11. この体験会を友だちに勧めたいですか')
     .setChoiceValues([
-      'ぜひ参加したい',
-      '都合が合えば参加したい',
-      '参加しない'
+      'ぜひ勧めたい',
+      '勧めてもよい',
+      'どちらともいえない',
+      '勧めない'
     ])
     .setRequired(true);
 
+  // Q12 collects what content would bring people to a later session.
+  // Q12 は 2 回目以降の体験会の内容を決める材料を集める設問。
+  var nextItem = form.addCheckboxItem();
+  nextItem.setTitle('Q12. 次に体験会があるなら、どんな内容なら参加したいですか（複数選択可）');
+  nextItem.setChoiceValues([
+    '操縦の続き（POS HOLD・STABILIZE・ACRO を試す）',
+    '狙った場所への着陸など、操縦の課題に挑戦する',
+    'タイムを競う',
+    'プログラムでドローンを飛ばす',
+    'パソコンのシミュレータで練習する',
+    '今のところ参加の予定はない'
+  ]);
+  nextItem.showOtherOption(true);
+  nextItem.setRequired(false);
+
   form.addParagraphTextItem()
-    .setTitle('Q12. 感想・要望など自由にお書きください')
+    .setTitle('Q13. 感想・要望など自由にお書きください')
     .setRequired(false);
 
   // =====================================================================
@@ -191,7 +209,7 @@ function createFlightSurvey() {
   form.addPageBreakItem().setTitle('セクション 4: 連絡先（任意）');
 
   form.addTextItem()
-    .setTitle('Q13. メールアドレス（任意）')
+    .setTitle('Q14. メールアドレス（任意）')
     .setHelpText(
       '集中講義や次回の体験会の案内を希望する方のみご記入ください。' +
       'アンケート自体は無記名で集計します。'
