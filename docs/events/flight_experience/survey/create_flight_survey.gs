@@ -27,8 +27,8 @@ function createFlightSurvey() {
   );
 
   form.setIsQuiz(false);
-  // Do not collect e-mail addresses automatically (Q15 is an optional normal question)
-  // メールアドレスを自動収集しない（Q15 は任意記入の通常設問）
+  // Do not collect e-mail addresses automatically (Q16 is an optional normal question)
+  // メールアドレスを自動収集しない（Q16 は任意記入の通常設問）
   form.setCollectEmail(false);
   form.setAllowResponseEdits(false);
   form.setLimitOneResponsePerUser(false);
@@ -60,8 +60,29 @@ function createFlightSurvey() {
   gradeItem.showOtherOption(true);
   gradeItem.setRequired(true);
 
+  // Q2: departments of the two faculties the session was announced to
+  // (KIT reorganised in April 2025; first- and second-year students are all
+  // in the new departments). Other faculties use the free-text option.
+  // Q2: 告知を出した 2 学部の学科（2025年4月の再編後の学科。1・2 年生は全員こちら）。
+  // ほかの学部の学生は「その他」に記入する。
+  var deptItem = form.addMultipleChoiceItem();
+  deptItem.setTitle('Q2. 学科');
+  deptItem.setChoiceValues([
+    '工学部 機械工学科',
+    '工学部 先進機械システム工学科',
+    '工学部 航空宇宙工学科',
+    '工学部 電気エネルギーシステム工学科',
+    '工学部 電子情報システム工学科',
+    '工学部 環境土木工学科',
+    '情報理工学部 情報工学科',
+    '情報理工学部 知能情報システム学科',
+    '情報理工学部 ロボティクス学科'
+  ]);
+  deptItem.showOtherOption(true);
+  deptItem.setRequired(true);
+
   form.addMultipleChoiceItem()
-    .setTitle('Q2. ドローンを操縦したことはありますか')
+    .setTitle('Q3. ドローンを操縦したことはありますか')
     .setChoiceValues([
       '今日が初めて',
       '何回か飛ばしたことがある（トイドローン等）',
@@ -70,7 +91,7 @@ function createFlightSurvey() {
     .setRequired(true);
 
   form.addMultipleChoiceItem()
-    .setTitle('Q3. プログラミングの経験')
+    .setTitle('Q4. プログラミングの経験')
     .setChoiceValues([
       'ほとんどない',
       '授業で習った程度',
@@ -85,20 +106,20 @@ function createFlightSurvey() {
   form.addPageBreakItem().setTitle('セクション 2: 操縦体験について');
 
   form.addScaleItem()
-    .setTitle('Q4. 操縦は楽しかったですか')
+    .setTitle('Q5. 操縦は楽しかったですか')
     .setLabels('楽しくなかった', 'とても楽しかった')
     .setBounds(1, 5)
     .setRequired(true);
 
   form.addScaleItem()
-    .setTitle('Q5. 操縦の難しさはどうでしたか')
+    .setTitle('Q6. 操縦の難しさはどうでしたか')
     .setHelpText('3が「ちょうどよかった」です')
     .setLabels('簡単すぎた', '難しすぎた')
     .setBounds(1, 5)
     .setRequired(true);
 
   var difficultItem = form.addCheckboxItem();
-  difficultItem.setTitle('Q6. 難しかった操作はどれですか（複数選択可）');
+  difficultItem.setTitle('Q7. 難しかった操作はどれですか（複数選択可）');
   difficultItem.setChoiceValues([
     '前後左右に動かす（ピッチ・ロール）',
     '機首の向きを変える（ヨー）',
@@ -111,7 +132,7 @@ function createFlightSurvey() {
   difficultItem.setRequired(false);
 
   form.addCheckboxItem()
-    .setTitle('Q7. 試した飛行モード（複数選択可）')
+    .setTitle('Q8. 試した飛行モード（複数選択可）')
     .setChoiceValues([
       'ALT HOLD（高さを自動でキープ）',
       'POS HOLD（高さと位置を自動でキープ）',
@@ -129,7 +150,7 @@ function createFlightSurvey() {
   ];
 
   var guideGrid = form.addGridItem();
-  guideGrid.setTitle('Q8. 配布した操縦ガイドの分かりやすさ');
+  guideGrid.setTitle('Q9. 配布した操縦ガイドの分かりやすさ');
   guideGrid.setRows([
     'ピッチ・ロール・ヨーの意味',
     'コントローラのスティックとボタンの割り当て'
@@ -144,7 +165,7 @@ function createFlightSurvey() {
   form.addPageBreakItem().setTitle('セクション 3: これから');
 
   var interestItem = form.addCheckboxItem();
-  interestItem.setTitle('Q9. もっと知りたい・やってみたいこと（複数選択可）');
+  interestItem.setTitle('Q10. もっと知りたい・やってみたいこと（複数選択可）');
   interestItem.setChoiceValues([
     '操縦をもっと上手になりたい',
     'プログラムでドローンを飛ばしたい',
@@ -155,11 +176,11 @@ function createFlightSurvey() {
   interestItem.showOtherOption(true);
   interestItem.setRequired(false);
 
-  // Q10 measures interest in the intensive course (2027-03-01 to 03-05).
-  // Q10 は集中講義（2027年3月1日〜5日）への関心を把握する設問。
+  // Q11 measures interest in the intensive course (2027-03-01 to 03-05).
+  // Q11 は集中講義（2027年3月1日〜5日）への関心を把握する設問。
   form.addMultipleChoiceItem()
     .setTitle(
-      'Q10. 2027年3月1日（月）〜5日（金）の集中講義' +
+      'Q11. 2027年3月1日（月）〜5日（金）の集中講義' +
       '「StampFly でドローンの制御を学ぶ5日間」に興味はありますか'
     )
     .setHelpText('詳細・申込方法は、後日 学生ポータルでお知らせします')
@@ -171,11 +192,11 @@ function createFlightSurvey() {
     ])
     .setRequired(true);
 
-  // Q11 shows how many want to keep going on their own; the help text gives
+  // Q12 shows how many want to keep going on their own; the help text gives
   // the price so the answer is not a guess.
-  // Q11 は自分で続けたい人の数を見る設問。値段を説明文に書き、想像でなく答えられるようにする。
+  // Q12 は自分で続けたい人の数を見る設問。値段を説明文に書き、想像でなく答えられるようにする。
   form.addMultipleChoiceItem()
-    .setTitle('Q11. StampFly を自分で買って試してみたいですか')
+    .setTitle('Q12. StampFly を自分で買って試してみたいですか')
     .setHelpText(
       '機体 M5Stamp Fly v1.1 10,439円（バッテリー1本つき）＋' +
       'コントローラ M5Atom Joystick 6,083円＝合計 16,522円' +
@@ -188,10 +209,10 @@ function createFlightSurvey() {
     ])
     .setRequired(true);
 
-  // Q12 shows whether the session would spread by word of mouth.
-  // Q12 は体験会が口コミで広がりそうかを見る設問。
+  // Q13 shows whether the session would spread by word of mouth.
+  // Q13 は体験会が口コミで広がりそうかを見る設問。
   form.addMultipleChoiceItem()
-    .setTitle('Q12. この体験会を友だちに勧めたいですか')
+    .setTitle('Q13. この体験会を友だちに勧めたいですか')
     .setChoiceValues([
       'ぜひ勧めたい',
       '勧めてもよい',
@@ -200,10 +221,10 @@ function createFlightSurvey() {
     ])
     .setRequired(true);
 
-  // Q13 collects what content would bring people to a later session.
-  // Q13 は 2 回目以降の体験会の内容を決める材料を集める設問。
+  // Q14 collects what content would bring people to a later session.
+  // Q14 は 2 回目以降の体験会の内容を決める材料を集める設問。
   var nextItem = form.addCheckboxItem();
-  nextItem.setTitle('Q13. 次に体験会があるなら、どんな内容なら参加したいですか（複数選択可）');
+  nextItem.setTitle('Q14. 次に体験会があるなら、どんな内容なら参加したいですか（複数選択可）');
   nextItem.setChoiceValues([
     '操縦の続き（POS HOLD・STABILIZE・ACRO を試す）',
     '狙った場所への着陸など、操縦の課題に挑戦する',
@@ -216,7 +237,7 @@ function createFlightSurvey() {
   nextItem.setRequired(false);
 
   form.addParagraphTextItem()
-    .setTitle('Q14. 感想・要望など自由にお書きください')
+    .setTitle('Q15. 感想・要望など自由にお書きください')
     .setRequired(false);
 
   // =====================================================================
@@ -226,7 +247,7 @@ function createFlightSurvey() {
   form.addPageBreakItem().setTitle('セクション 4: 連絡先（任意）');
 
   form.addTextItem()
-    .setTitle('Q15. メールアドレス（任意）')
+    .setTitle('Q16. メールアドレス（任意）')
     .setHelpText(
       '集中講義や次回の体験会の案内を希望する方のみご記入ください。' +
       'アンケート自体は無記名で集計します。'
