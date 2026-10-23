@@ -166,12 +166,9 @@ body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","H
     <ellipse cx="898" cy="103" rx="33" ry="15" fill="#FFE07A"/>
   </g>
 
-  <!-- PCB behind the sticks -->
-  <rect class="ol" x="140" y="455" width="1125" height="290" rx="40" fill="#1A2036"/>
-
   <!-- main plate -->
-  <path class="ol" d="M300 124H1085L1160 220V434V472H190V240Z" fill="url(#ci-plate)"/>
-  <path d="M312 138H1078" stroke="#5A6590" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <path class="ol" d="M300 124H1062L1172 234V745H190V234Z" fill="url(#ci-plate)"/>
+  <path d="M312 138H1056" stroke="#5A6590" stroke-width="3" stroke-linecap="round" fill="none"/>
 
   <!-- battery cavity -->
   <rect class="ol" x="350" y="238" width="816" height="206" rx="14" fill="#10142A"/>
@@ -180,13 +177,13 @@ body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","H
   <rect class="ol" x="358" y="352" width="100" height="78" rx="8" fill="#0A0D1C"/>
   <path d="M370 258H446M370 364H446" stroke="#3A4262" stroke-width="4" stroke-linecap="round"/>
   <!-- batteries -->
-  <rect class="ol" x="452" y="249" width="726" height="78" rx="30" fill="url(#ci-bat)"/>
-  <rect class="ol" x="456" y="341" width="714" height="80" rx="30" fill="url(#ci-bat)"/>
+  <rect class="ol" x="452" y="249" width="713" height="78" rx="30" fill="url(#ci-bat)"/>
+  <rect class="ol" x="456" y="341" width="707" height="80" rx="30" fill="url(#ci-bat)"/>
   <g stroke="#fff" stroke-width="7" stroke-linecap="round" fill="none">
-    <path d="M490 270H1130"/><path d="M490 362H1125"/>
+    <path d="M490 270H1120"/><path d="M490 362H1118"/>
   </g>
   <g stroke="#9AA4B8" stroke-width="3" stroke-linecap="round" fill="none">
-    <path d="M490 296H1135"/><path d="M490 392H1130"/>
+    <path d="M490 296H1125"/><path d="M490 392H1122"/>
   </g>
   <!-- battery numbers -->
   <g fill="none" stroke="#fff" stroke-width="3.5"><circle cx="325" cy="283" r="15"/><circle cx="322" cy="383" r="15"/></g>
@@ -196,10 +193,10 @@ body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","H
   <!-- screws -->
   <g class="ol" style="stroke-width:4.5">
     <circle cx="330" cy="184" r="20" fill="#D5DAE6"/><circle cx="1010" cy="184" r="20" fill="#D5DAE6"/>
-    <circle cx="218" cy="467" r="20" fill="#D5DAE6"/><circle cx="1130" cy="467" r="20" fill="#D5DAE6"/>
+    <circle cx="226" cy="712" r="20" fill="#D5DAE6"/><circle cx="1124" cy="712" r="20" fill="#D5DAE6"/>
   </g>
   <g fill="#6E7794">
-    <circle cx="330" cy="184" r="8"/><circle cx="1010" cy="184" r="8"/><circle cx="218" cy="467" r="8"/><circle cx="1130" cy="467" r="8"/>
+    <circle cx="330" cy="184" r="8"/><circle cx="1010" cy="184" r="8"/><circle cx="226" cy="712" r="8"/><circle cx="1124" cy="712" r="8"/>
   </g>
 
   <!-- labels on plate -->
@@ -226,40 +223,45 @@ body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","H
   </g>
 
   <!-- LEFT stick: pink (left half) / sky (right half) ring -->
-  <g transform="translate(0,3)">
-    <path d="M292 470A180 180 0 0 0 292 830" fill="none" stroke="#FF6F91" stroke-width="14"/>
-    <path d="M292 470A180 180 0 0 1 292 830" fill="none" stroke="#29B6F6" stroke-width="14"/>
-    <circle class="ol" cx="292" cy="650" r="166" fill="#262D48"/>
-    <circle class="ol" cx="284" cy="660" r="134" fill="#343C5C"/>
-    <circle class="ol" cx="275" cy="668" r="104" fill="#46506F"/>
-    <path d="M205 625A90 90 0 0 1 270 590" fill="none" stroke="#8892B2" stroke-width="7" stroke-linecap="round"/>
+  <g transform="translate(350,592) scale(.75)">
+    <path d="M0 -180A180 180 0 0 0 0 180" fill="none" stroke="#FF6F91" stroke-width="16"/>
+    <path d="M0 -180A180 180 0 0 1 0 180" fill="none" stroke="#29B6F6" stroke-width="16"/>
+    <g style="stroke-width:8">
+    <circle class="ol" cx="0" cy="0" r="166" fill="#262D48" style="stroke-width:8"/>
+    <circle class="ol" cx="-8" cy="10" r="134" fill="#343C5C" style="stroke-width:8"/>
+    <circle class="ol" cx="-17" cy="18" r="104" fill="#46506F" style="stroke-width:8"/>
+    </g>
+    <path d="M-87 -25A90 90 0 0 1 -22 -60" fill="none" stroke="#8892B2" stroke-width="9" stroke-linecap="round"/>
   </g>
 
   <!-- RIGHT stick: mint (left half) / orange (right half) ring + red push ring -->
-  <g transform="translate(0,-3)">
-    <path d="M1085 483A185 185 0 0 0 1085 853" fill="none" stroke="#2EC4A0" stroke-width="14"/>
-    <path d="M1085 483A185 185 0 0 1 1085 853" fill="none" stroke="#FF9F43" stroke-width="14"/>
-    <circle class="ol" cx="1085" cy="668" r="171" fill="#262D48"/>
-    <circle class="ol" cx="1096" cy="688" r="136" fill="#343C5C"/>
-    <circle class="ol" cx="1108" cy="700" r="106" fill="#46506F"/>
-    <path d="M1038 658A90 90 0 0 1 1100 612" fill="none" stroke="#8892B2" stroke-width="7" stroke-linecap="round"/>
-    <circle cx="1108" cy="700" r="84" fill="none" stroke="#E53950" stroke-width="7"/>
+  <g transform="translate(1002,592) scale(.75)">
+    <path d="M0 -180A180 180 0 0 0 0 180" fill="none" stroke="#2EC4A0" stroke-width="16"/>
+    <path d="M0 -180A180 180 0 0 1 0 180" fill="none" stroke="#FF9F43" stroke-width="16"/>
+    <g style="stroke-width:8">
+    <circle class="ol" cx="0" cy="0" r="166" fill="#262D48" style="stroke-width:8"/>
+    <circle class="ol" cx="8" cy="10" r="134" fill="#343C5C" style="stroke-width:8"/>
+    <circle class="ol" cx="17" cy="18" r="104" fill="#46506F" style="stroke-width:8"/>
+    </g>
+    <path d="M-53 -25A90 90 0 0 1 12 -60" fill="none" stroke="#8892B2" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="17" cy="18" r="84" fill="none" stroke="#E53950" stroke-width="9"/>
   </g>
 </svg>
+
 
     <svg class="lines" width="190mm" height="101mm" viewBox="0 0 190 101">
       <g stroke="#1F2A44" stroke-width=".35" fill="none">
         <path d="M45 11.5L75.2 10.6"/>
         <path d="M145 9.5L109.3 10.6"/>
         <path d="M93.6 3V13"/>
-        <path d="M45 45L67.9 48.2"/>
-        <path d="M145 33L120.8 48.2"/>
-        <path d="M145 56L125.4 53.7"/>
+        <path d="M45 45L71.2 43.8"/>
+        <path d="M145 33L115.7 43.8"/>
+        <path d="M145 56L118.7 46.8"/>
         <path d="M95.5 64V53"/>
       </g>
       <g fill="#1F2A44" stroke="#fff" stroke-width=".4">
         <circle cx="75.2" cy="10.6" r="1.15"/><circle cx="109.3" cy="10.6" r="1.15"/><circle cx="93.6" cy="13" r="1.15"/>
-        <circle cx="67.9" cy="48.2" r="1.15"/><circle cx="120.8" cy="48.2" r="1.15"/><circle cx="125.4" cy="53.7" r="1.15"/><circle cx="95.5" cy="53" r="1.15"/>
+        <circle cx="71.2" cy="43.8" r="1.15"/><circle cx="115.7" cy="43.8" r="1.15"/><circle cx="118.7" cy="46.8" r="1.15"/><circle cx="95.5" cy="53" r="1.15"/>
       </g>
     </svg>
     <div class="co" style="left:0;top:1mm;width:45mm;height:21mm;--c:#FFC93C;background:#FFF6D6"><span><b>左の黄色ボタン：</b>高さのモードの切り替え。押すたびに画面が Auto&nbsp;ALT → Pos&nbsp;HOLD → Mnual&nbsp;ALT（地上で押す）</span></div>
