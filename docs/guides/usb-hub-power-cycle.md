@@ -115,7 +115,7 @@ uhubctl はハブへの制御要求（USB の制御用通信であるコント�
 - 電源を入れ直せばファームウェアは起動し直すので、その直後に esptool を実行すればボタンなしで書き込みモードに入れる（3章、検証済み）。
 - ファームウェアが起動直後に止まる場合は、この方法でも入れない。その場合は BOOT ボタンを押したまま電源を入れ直す。
 
-根本的な対策の候補として、コンソールを USB-Serial/JTAG（チップ内蔵の回路で動く USB。`303a:1001`）に切り替える方法がある（`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`）。こちらはファームウェアが止まっていても esptool がチップを直接リセットできる。ただし、`idf.py monitor`（`sf flash vehicle -m`）を開くと機体がリセットされるという欠点がある（6章）。これは 2026-10-15 に一度この切り替えを入れて取り消した理由（`905e39f5` → `f47c8a9b`）と一致する。
+根本的な対策の候補として、コンソールを USB-Serial/JTAG（チップ内蔵の回路で動く USB。`303a:1001`）に切り替える方法がある（`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`）。こちらはファームウェアが止まっていても esptool がチップを直接リセットできる。この切り替えは 2026-10-15 に一度入れて（`905e39f5`）、実機で確かめる時間がなかったため取り消した（`f47c8a9b`）。今回の実機試験の結果は 6章を参照。
 
 ## 5. スクリプト化するときの仕様（未実装）
 
@@ -158,20 +158,42 @@ uhubctl はハブへの制御要求（USB の制御用通信であるコント�
 | 上の状態から | `watchdog_reset` | 起動（起動音、LED、`303a:0009`、コマンド入力可） | 1 |
 | BOOT ボタン + 電源投入 | `watchdog_reset` | 起動（起動音 1 回、LED、`303a:0009`） | 1 |
 | 動作中の USB-CDC 版から esptool で入る | `hard_reset` | 起動（3章の最初の試験） | 1 |
+| 動作中の USB-CDC 版から esptool で入る | `watchdog_reset` | 起動（起動音 1 回、LED、`303a:0009`） | 1 |
 
-### USB-Serial/JTAG 版で分かったこと
+### コンソール方式の比較（USB-CDC と USB-Serial/JTAG）
 
-検証用に、コンソールを USB-Serial/JTAG にしたファームウェア（`905e39f5` の変更を戻したもの。ブランチ `test/usj-console-hotplug`）を使った。
+ESP32-S3 は USB の信号回路（PHY）を 1 組だけ持ち、次の 2 つの USB 回路のどちらかがそれを使う。
 
-- **`idf.py monitor` を開くと機体がリセットされる。** ログに `rst:0x15 (USB_UART_CHIP_RESET)` が出て、バッテリー駆動中でも再起動した（起動音で確認）。起動後に USB をつないで状況を見る用途には使えない。
-- 制御信号を動かさずにポートを開けば、バッテリーで起動した後に USB をつないでもコマンド入力（`stampfly>`）は使えた。起動ログは残らない。
-- USB-Serial/JTAG 版が動いている状態から USB-CDC 版を書き込み、`hard_reset` で起動すると、**ファームウェアは動く（起動音・LED）が USB が使えない**（esptool も `No serial data received`）。USB の通信の切断・再接続では直らず、電源を入れ直すと直る（2 回再現）。
+- **USB-OTG**: 汎用の USB 回路。どんな USB 機器にするかをファームウェア（ROM の CDC 処理や TinyUSB）が決める。現在の main の `CONFIG_ESP_CONSOLE_USB_CDC=y` はこちらを使う（PC からは `303a:0009`）。
+- **USB-Serial/JTAG**: シリアル通信と JTAG デバッグに機能を固定した回路。ファームウェアが止まっても動き続ける（PC からは `303a:1001`）。
+
+試験用に、コンソールを USB-Serial/JTAG にしたファームウェア（`905e39f5` の変更をもう一度入れたもの。ブランチ `test/usj-console-hotplug`）を作り、現在の main（USB-CDC）と比べた。バッテリーなし、判定は起動音・LED と esptool・CLI の応答による。
+
+| 確認したこと | USB-CDC 版（main） | USB-Serial/JTAG 版 |
+|---|---|---|
+| 通常の書き込み（`hard_reset`）の後に起動するか | 起動する | 起動する |
+| BOOT ボタンで書き込んだ後、`hard_reset` で起動するか | 書き込みモードに残る | 書き込みモードに残る（`watchdog_reset` なら起動） |
+| ファームウェアが止まったまま（再起動しない）でも、ボタンなしで書き込めるか | **書き込めない**（esptool は約 5 分試して `No serial data received`。BOOT ボタンが必要） | **書き込める**（すぐに接続） |
+| ファームウェアが 0.5 秒動いては止まり、再起動を繰り返す場合 | 書き込めた（接続に約 5 秒） | 書き込めた |
+| 方式の違うファームウェアに書き換えて `hard_reset` した後 | 起動するが USB が使えない（電源の入れ直しで直る） | 同じ |
+| バッテリーで起動した後に USB をつないで CLI を使えるか | 使える | 使える |
+| `idf.py monitor`（`sf flash vehicle -m`）を開いたとき | 機体がリセットされる | 機体がリセットされる（`rst:0x15`） |
+
+止まるファームウェアは試験専用のブランチ（`test/hang-cdc`、`test/hang-usj`）で作った。`app_main` の冒頭で割り込みを止めて無限ループに入り、割り込み用・タスク用のウォッチドッグを無効にしたもの。
+
+**「時々書き込めなくなり、BOOT ボタンが必要」という症状は、USB-CDC 版でファームウェアが止まったまま再起動しない場合の動作と一致する。** USB-Serial/JTAG 版ではこの症状は起きない。何がファームウェアを止めているのかは、まだ分かっていない。
+
+### 確認用プログラムの注意
+
+- ESP-IDF の USB-CDC コンソールは、**RTS 信号が 1→0 に変わると機体を再起動する**（`esp_system/port/usb_console.c`。DTR が 1 なら書き込みモードへ）。普通にポートを開くと RTS は 0→1 に上がるだけだが、閉じるときに 1→0 に下がるので、**ポートを閉じると USB-CDC 版は再起動する**。
+- 開く前に RTS を 0 に設定しても、macOS はポートを開くときにいったん RTS を 1 にするため、0 に戻した瞬間に再起動する。
+- モニタの道具（esp-idf-monitor）は、開くときにわざと機体をリセットする。`--no-reset` を付けるとリセットしない（終了時の動作は未確認）。
 
 ### 未確認の事項
 
-- 動作中のファームウェアから esptool で書き込みモードに入る通常の書き込みで、`watchdog_reset` に変えても問題がないか。
-- USB-CDC 版で、起動後に USB をつないで状況を見られるか。検証に使った確認用プログラムがポートを開くときに USB-CDC 版をリセットしていた可能性があり、結果は無効とした。
-- 「抜き差ししても書き込めない」症状は再現できていない。
+- 何がファームウェアを止めているのか（実際に起きたときに、USB が見えるか、再起動を繰り返しているかを観察する）。
+- Windows など Mac 以外の環境で、USB-Serial/JTAG 版がどう見えるか（ドライバ・ポート名）。
+- ファームウェアが動いているときのログ出力・CLI の速さの、方式による違い（測っていない）。
 
 ## 7. 関連
 
@@ -298,7 +320,7 @@ The vehicle firmware uses `CONFIG_ESP_CONSOLE_USB_CDC=y` (a setting that sends t
 - A power cycle restarts the firmware, so running esptool right after that enters download mode without the button (chapter 3, verified).
 - If the firmware stops right after startup, this method cannot enter download mode either. In that case, power cycle while holding the BOOT button.
 
-As a fundamental countermeasure, one candidate is to switch the console to USB-Serial/JTAG (USB driven by a circuit built into the chip; `303a:1001`) with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`. With this, esptool can reset the chip directly even when the firmware has stopped. However, it has a drawback: opening `idf.py monitor` (`sf flash vehicle -m`) resets the vehicle (chapter 6). This matches the reason the switch was introduced and then reverted on 2026-10-15 (`905e39f5` -> `f47c8a9b`).
+As a fundamental countermeasure, one candidate is to switch the console to USB-Serial/JTAG (USB driven by a circuit built into the chip; `303a:1001`) with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`. With this, esptool can reset the chip directly even when the firmware has stopped. This switch was introduced on 2026-10-15 (`905e39f5`) and reverted (`f47c8a9b`) because there was no time to verify it on hardware. See chapter 6 for the hardware test results.
 
 ## 5. Specification for Scripting (Not Implemented)
 
@@ -341,20 +363,42 @@ All without the battery. Judged by the startup sound and LED (visual) and by esp
 | From the state above | `watchdog_reset` | Boots (startup sound, LED, `303a:0009`, command input works) | 1 |
 | BOOT button + power on | `watchdog_reset` | Boots (one startup sound, LED, `303a:0009`) | 1 |
 | esptool from running USB-CDC firmware | `hard_reset` | Boots (first test in chapter 3) | 1 |
+| esptool from running USB-CDC firmware | `watchdog_reset` | Boots (one startup sound, LED, `303a:0009`) | 1 |
 
-### Findings with the USB-Serial/JTAG Firmware
+### Console Method Comparison (USB-CDC vs. USB-Serial/JTAG)
 
-For testing, a firmware with the console on USB-Serial/JTAG was used (the change of `905e39f5` re-applied; branch `test/usj-console-hotplug`).
+The ESP32-S3 has only one USB signal circuit (PHY), used by one of two USB controllers:
 
-- **Opening `idf.py monitor` resets the vehicle.** The log shows `rst:0x15 (USB_UART_CHIP_RESET)` and the vehicle rebooted even on battery (confirmed by the startup sound). It cannot be used to check the state by connecting USB after boot.
-- When the port is opened without toggling the control signals, command input (`stampfly>`) works after connecting USB to a vehicle booted on battery. Boot logs are not kept.
-- Flashing the USB-CDC firmware over a running USB-Serial/JTAG firmware and booting it with `hard_reset` leaves **the firmware running (startup sound, LED) but USB unusable** (esptool also reports `No serial data received`). Disconnecting and reconnecting the USB link does not fix it; a power cycle does (reproduced twice).
+- **USB-OTG**: a general-purpose USB controller; the firmware (the ROM CDC handling or TinyUSB) decides what kind of USB device it is. The current main setting `CONFIG_ESP_CONSOLE_USB_CDC=y` uses this one (seen as `303a:0009`).
+- **USB-Serial/JTAG**: a controller with fixed functions, serial communication and JTAG debugging. It keeps working even when the firmware stops (seen as `303a:1001`).
+
+For testing, a firmware with the console on USB-Serial/JTAG (the change of `905e39f5` re-applied; branch `test/usj-console-hotplug`) was compared with the current main (USB-CDC). No battery; judged by the startup sound and LED, and by esptool and CLI responses.
+
+| Item checked | USB-CDC (main) | USB-Serial/JTAG |
+|---|---|---|
+| Boots after normal flashing (`hard_reset`) | Yes | Yes |
+| Boots with `hard_reset` after flashing via the BOOT button | Stays in download mode | Stays in download mode (boots with `watchdog_reset`) |
+| Flashing without the button while the firmware is frozen (no reboot) | **Fails** (esptool tries for about 5 min, then `No serial data received`; the BOOT button is needed) | **Works** (connects immediately) |
+| Firmware runs for 0.5 s, freezes, and reboots repeatedly | Works (about 5 s to connect) | Works |
+| After flashing a firmware of the other console method and `hard_reset` | Boots but USB is unusable (fixed by a power cycle) | Same |
+| CLI usable after connecting USB to a vehicle booted on battery | Yes | Yes |
+| Opening `idf.py monitor` (`sf flash vehicle -m`) | Resets the vehicle | Resets the vehicle (`rst:0x15`) |
+
+The freezing firmwares were built on test-only branches (`test/hang-cdc`, `test/hang-usj`). They disable interrupts at the start of `app_main` and loop forever, with the interrupt and task watchdogs disabled.
+
+**The symptom "flashing sometimes fails and the BOOT button is needed" matches the behavior of the USB-CDC firmware when it freezes without rebooting.** It does not occur with USB-Serial/JTAG. What actually freezes the firmware is still unknown.
+
+### Notes on the Probe Program
+
+- The ESP-IDF USB-CDC console **reboots the vehicle when RTS changes from 1 to 0** (`esp_system/port/usb_console.c`; into download mode if DTR is 1). Opening a port normally only raises RTS from 0 to 1, but closing it lowers RTS from 1 to 0, so **closing the port reboots the USB-CDC firmware**.
+- Even if RTS is set to 0 before opening, macOS raises RTS to 1 when opening the port, so lowering it again triggers a reboot.
+- The monitor tool (esp-idf-monitor) deliberately resets the vehicle when it starts. With `--no-reset` it does not (behavior on exit unverified).
 
 ### Open Items
 
-- Whether switching to `watchdog_reset` causes problems for normal flashing, where esptool enters download mode from running firmware.
-- Whether the USB-CDC firmware allows checking the state by connecting USB after boot. The probe program used may have reset the USB-CDC firmware when opening the port, so that result was discarded.
-- The symptom "cannot flash even after replugging" has not been reproduced.
+- What freezes the firmware (when it happens, observe whether USB is visible and whether it keeps rebooting).
+- How the USB-Serial/JTAG firmware appears on Windows and other non-Mac environments (drivers, port names).
+- Differences in log output and CLI speed between the methods while the firmware runs (not measured).
 
 ## 7. Related
 
