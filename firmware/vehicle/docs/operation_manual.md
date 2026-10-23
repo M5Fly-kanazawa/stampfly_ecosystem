@@ -293,7 +293,7 @@ rejected: 3 (packets addressed to a different vehicle)
 
 ## 6. CLI コマンド一覧
 
-USB シリアル（USB CDC）で接続し、`stampfly>` プロンプトにコマンドを入力する。`help` で一覧、
+USB シリアル（USB Serial/JTAG）で接続し、`stampfly>` プロンプトにコマンドを入力する。`help` で一覧、
 TAB で補完。
 
 ### vehicle の現行コマンド
@@ -583,7 +583,7 @@ rejected: 3 (packets addressed to a different vehicle)
 
 ## 6. CLI Commands
 
-Connect over USB serial (USB CDC); type at the `stampfly>` prompt. `help` lists commands, TAB
+Connect over USB serial (USB Serial/JTAG); type at the `stampfly>` prompt. `help` lists commands, TAB
 completes.
 
 | Command | Args | Description |

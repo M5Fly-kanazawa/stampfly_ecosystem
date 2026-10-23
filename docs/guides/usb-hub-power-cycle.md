@@ -4,11 +4,13 @@
 
 ## 1. 概要
 
+> **現在の状態（2026-10-23 のコミット以降）:** main のコンソールは USB-Serial/JTAG 方式（`303a:1001`）に切り替わった。`sf flash` は esptool の `--after watchdog_reset` で書き込む。本書のハブ操作の手順は `sf hub` コマンドとして使える（[sf-hub](../commands/sf-hub.md)）。以降の本文は 2026-10-23 の検証記録であり、「USB-CDC 版（main）」とあるのは当時の main を指す。
+
 ### このドキュメントについて
 
 PC から USB ポートの電源（VBUS: USB の 5 V 電源線）を切り入れできるハブを使い、StampFly（ESP32-S3 / StampS3）の書き込みと起動を**ケーブルの抜き差しなし**で行う方法をまとめる。2026-10-23 に macOS で検証した結果の記録であり、将来この手順をスクリプト化するときの設計資料を兼ねる。
 
-**本書の手順は、下記の特定のハブを持っている場合にだけ使える。** 汎用の手順ではないため、現時点では `sf` コマンド等へのスクリプト組み込みは行っていない（5章）。
+**本書の手順は、下記の特定のハブを持っている場合にだけ使える。** `sf hub` コマンドも、このハブが見つからない環境では何もしない（5章）。
 
 ### 対象読者
 
@@ -117,7 +119,9 @@ uhubctl はハブへの制御要求（USB の制御用通信であるコント�
 
 根本的な対策の候補として、コンソールを USB-Serial/JTAG（チップ内蔵の回路で動く USB。`303a:1001`）に切り替える方法がある（`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`）。こちらはファームウェアが止まっていても esptool がチップを直接リセットできる。この切り替えは 2026-10-15 に一度入れて（`905e39f5`）、実機で確かめる時間がなかったため取り消した（`f47c8a9b`）。今回の実機試験の結果は 6章を参照。
 
-## 5. スクリプト化するときの仕様（未実装）
+## 5. スクリプト化するときの仕様（`sf hub` として実装済み）
+
+実装済みのコマンドは [docs/commands/sf-hub.md](../commands/sf-hub.md) を参照。以下は設計時の仕様の記録として残す。
 
 スクリプト化とは、ここまでの手順を 1 つのコマンドで自動実行できるようにすること。
 
@@ -169,7 +173,7 @@ ESP32-S3 は USB の信号回路（PHY）を 1 組だけ持ち、次の 2 つの
 
 試験用に、コンソールを USB-Serial/JTAG にしたファームウェア（`905e39f5` の変更をもう一度入れたもの。ブランチ `test/usj-console-hotplug`）を作り、現在の main（USB-CDC）と比べた。バッテリーなし、判定は起動音・LED と esptool・CLI の応答による。
 
-| 確認したこと | USB-CDC 版（main） | USB-Serial/JTAG 版 |
+| 確認したこと | USB-CDC 版（当時の main） | USB-Serial/JTAG 版 |
 |---|---|---|
 | 通常の書き込み（`hard_reset`）の後に起動するか | 起動する | 起動する |
 | BOOT ボタンで書き込んだ後、`hard_reset` で起動するか | 書き込みモードに残る | 書き込みモードに残る（`watchdog_reset` なら起動） |
@@ -182,6 +186,12 @@ ESP32-S3 は USB の信号回路（PHY）を 1 組だけ持ち、次の 2 つの
 止まるファームウェアは試験専用のブランチ（`test/hang-cdc`、`test/hang-usj`）で作った。`app_main` の冒頭で割り込みを止めて無限ループに入り、割り込み用・タスク用のウォッチドッグを無効にしたもの。
 
 **「時々書き込めなくなり、BOOT ボタンが必要」という症状は、USB-CDC 版でファームウェアが止まったまま再起動しない場合の動作と一致する。** USB-Serial/JTAG 版ではこの症状は起きない。何がファームウェアを止めているのかは、まだ分かっていない。
+
+### 結論として採用したこと
+
+- main のコンソールを USB-CDC から USB-Serial/JTAG（`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`、`esp_console_new_repl_usb_serial_jtag`）へ切り替えた。方式を切り替えて最初に書き込んだ後は、USB が使えなくなるので電源の入れ直し（抜き差し）を 1 回行う。
+- `sf flash` の書き込み後の動作を `--after watchdog_reset` にした（BOOT ボタンでの書き込み後に `hard_reset` では書き込みモードに残るため）。
+- ハブの電源操作を `sf hub status|on|off|cycle` として実装した。
 
 ### 確認用プログラムの注意
 
@@ -209,11 +219,13 @@ ESP32-S3 は USB の信号回路（PHY）を 1 組だけ持ち、次の 2 つの
 
 ## 1. Overview
 
+> **Current status (from the 2026-10-23 commit):** The console on main now uses the USB-Serial/JTAG method (`303a:1001`). `sf flash` writes with esptool `--after watchdog_reset`. The hub procedures in this document are available as the `sf hub` command ([sf-hub](../commands/sf-hub.md)). The rest of this document is the investigation record of 2026-10-23; "USB-CDC (main)" means main at that time.
+
 ### About This Document
 
 This document describes how to flash and boot a StampFly (ESP32-S3 / StampS3) **without unplugging the cable**, using a USB hub that lets the PC switch the power of each port (VBUS, the 5 V supply line of USB) on and off. It records the results verified on macOS on 2026-10-23 and also serves as design material for scripting the procedure later.
 
-**The procedure applies only if you own the specific hub described below.** Because it is not a general-purpose procedure, it has not been integrated into the `sf` command or other scripts yet (chapter 5).
+**The procedure applies only if you own the specific hub described below.** The `sf hub` command also does nothing in an environment without this hub (chapter 5).
 
 ### Intended Audience
 
@@ -322,7 +334,9 @@ The vehicle firmware uses `CONFIG_ESP_CONSOLE_USB_CDC=y` (a setting that sends t
 
 As a fundamental countermeasure, one candidate is to switch the console to USB-Serial/JTAG (USB driven by a circuit built into the chip; `303a:1001`) with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`. With this, esptool can reset the chip directly even when the firmware has stopped. This switch was introduced on 2026-10-15 (`905e39f5`) and reverted (`f47c8a9b`) because there was no time to verify it on hardware. See chapter 6 for the hardware test results.
 
-## 5. Specification for Scripting (Not Implemented)
+## 5. Specification for Scripting (Implemented as `sf hub`)
+
+The implemented command is described in [docs/commands/sf-hub.md](../commands/sf-hub.md). The text below is kept as the design record.
 
 Scripting means making the procedure above runnable as a single command.
 
@@ -374,7 +388,7 @@ The ESP32-S3 has only one USB signal circuit (PHY), used by one of two USB contr
 
 For testing, a firmware with the console on USB-Serial/JTAG (the change of `905e39f5` re-applied; branch `test/usj-console-hotplug`) was compared with the current main (USB-CDC). No battery; judged by the startup sound and LED, and by esptool and CLI responses.
 
-| Item checked | USB-CDC (main) | USB-Serial/JTAG |
+| Item checked | USB-CDC (main at the time) | USB-Serial/JTAG |
 |---|---|---|
 | Boots after normal flashing (`hard_reset`) | Yes | Yes |
 | Boots with `hard_reset` after flashing via the BOOT button | Stays in download mode | Stays in download mode (boots with `watchdog_reset`) |
@@ -387,6 +401,12 @@ For testing, a firmware with the console on USB-Serial/JTAG (the change of `905e
 The freezing firmwares were built on test-only branches (`test/hang-cdc`, `test/hang-usj`). They disable interrupts at the start of `app_main` and loop forever, with the interrupt and task watchdogs disabled.
 
 **The symptom "flashing sometimes fails and the BOOT button is needed" matches the behavior of the USB-CDC firmware when it freezes without rebooting.** It does not occur with USB-Serial/JTAG. What actually freezes the firmware is still unknown.
+
+### Adopted
+
+- The main console was switched from USB-CDC to USB-Serial/JTAG (`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`, `esp_console_new_repl_usb_serial_jtag`). After the first flash following the switch, one power cycle (unplug and replug) is needed because USB becomes unusable otherwise.
+- `sf flash` now uses `--after watchdog_reset` (after a BOOT-button flash, `hard_reset` stays in download mode).
+- The hub power control was implemented as `sf hub status|on|off|cycle`.
 
 ### Notes on the Probe Program
 

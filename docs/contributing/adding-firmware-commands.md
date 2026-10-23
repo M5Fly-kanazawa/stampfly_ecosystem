@@ -4,7 +4,7 @@
 
 ## 1. 概要
 
-StampFly の CLI システムは ESP-IDF Console (`esp_console`) を基盤としており、USB-CDC の対話コンソール（シリアル REPL）と WiFi 経由の TCP CLI（`nc <機体IP> 23`）の両方から同じコマンド集合が使えます。
+StampFly の CLI システムは ESP-IDF Console (`esp_console`) を基盤としており、USB Serial/JTAG の対話コンソール（シリアル REPL）と WiFi 経由の TCP CLI（`nc <機体IP> 23`）の両方から同じコマンド集合が使えます。
 
 実装は `firmware/vehicle/tasks/cli_task.cpp` の**単一ファイル**に集約されています。`cli_task.cpp` はコンポーネント（`components/sf_*`）ではなく `firmware/vehicle/tasks/` 配下のタスクソースで、`main/CMakeLists.txt` の `idf_component_register` に直接 SRCS として列挙され、`main` の一部としてビルドされます。
 
@@ -30,7 +30,8 @@ StampFly の CLI システムは ESP-IDF Console (`esp_console`) を基盤とし
 └───────────────────────────────────────────────────────────────┘
                     ↑                        ↑
         ┌───────────┴───────┐    ┌───────────┴───────────┐
-        │  USB-CDC 対話REPL   │    │  TCP CLI (port 23)     │
+        │ USB Serial/JTAG   │    │  TCP CLI (port 23)     │
+        │      REPL         │    │                        │
         └───────────────────┘    └───────────────────────┘
 ```
 
@@ -132,7 +133,7 @@ if (all || std::strcmp(which, "power") == 0) {
 
 ## 4. ベストプラクティス
 
-- **改行は `\n`。** USB-CDC REPL・TCP CLI とも通常の行末で十分です（旧ファームの Telnet 互換 `\r\n` は不要）
+- **改行は `\n`。** USB Serial/JTAG REPL・TCP CLI とも通常の行末で十分です（旧ファームの Telnet 互換 `\r\n` は不要）
 - **引数を検証してから処理する。** 不正な引数はエラーメッセージを表示し、`0` 以外の終了コードを返す
 - **他タスクの内部に直接アクセスしない。** architecture.md の横断ルール **R5**（コンポーネント間は Pub-Sub Topic 経由で通信し、直接依存しない）に従い、状態の読み取りは Topic の `.latest()`、状態の変更は Topic への `.publish()` のみで行う。パラメータの読み書きは `sf::params::get_*`/`set_*` を使う（`cmd_param` を参照）
 - **長時間処理は `vTaskDelay()` で他タスクを飢餓させない。** ブロッキング処理を書く場合も CLITask 以外のタスク（飛行制御系）を止めない
@@ -144,7 +145,7 @@ if (all || std::strcmp(which, "power") == 0) {
 
 ## 1. Overview
 
-StampFly's CLI system is built on ESP-IDF Console (`esp_console`). The same command set is reachable from both the USB-CDC interactive console (serial REPL) and a WiFi-based TCP CLI (`nc <vehicle-ip> 23`).
+StampFly's CLI system is built on ESP-IDF Console (`esp_console`). The same command set is reachable from both the USB Serial/JTAG interactive console (serial REPL) and a WiFi-based TCP CLI (`nc <vehicle-ip> 23`).
 
 The implementation lives in a **single file**, `firmware/vehicle/tasks/cli_task.cpp`. It is not a component (`components/sf_*`) but a task source under `firmware/vehicle/tasks/`, listed directly as a SRCS entry in `main/CMakeLists.txt`'s `idf_component_register` and built as part of `main`.
 
@@ -171,8 +172,8 @@ The implementation lives in a **single file**, `firmware/vehicle/tasks/cli_task.
 └───────────────────────────────────────────────────────────────┘
                     ↑                        ↑
         ┌───────────┴───────┐    ┌───────────┴───────────┐
-        │ USB-CDC interactive│    │  TCP CLI (port 23)     │
-        │       REPL          │    │                        │
+        │ USB Serial/JTAG   │    │  TCP CLI (port 23)     │
+        │      REPL         │    │                        │
         └───────────────────┘    └───────────────────────┘
 ```
 
@@ -274,7 +275,7 @@ if (all || std::strcmp(which, "power") == 0) {
 
 ## 4. Best Practices
 
-- **Use `\n` for line endings.** Plain newlines are fine for both the USB-CDC REPL and the TCP CLI (the legacy firmware's Telnet-compatible `\r\n` is not needed)
+- **Use `\n` for line endings.** Plain newlines are fine for both the USB Serial/JTAG REPL and the TCP CLI (the legacy firmware's Telnet-compatible `\r\n` is not needed)
 - **Validate arguments before processing.** Print an error message and return non-zero on invalid input
 - **Never reach into another task's internals.** Follow architecture.md's cross-cutting rule **R5** (components communicate only via Pub-Sub Topics, no direct dependencies): read state via a Topic's `.latest()`, change state via `.publish()`. Read/write parameters via `sf::params::get_*`/`set_*` (see `cmd_param`)
 - **Don't starve other tasks with long blocking operations.** Use `vTaskDelay()` if a command must wait, so the flight-control tasks are not starved
