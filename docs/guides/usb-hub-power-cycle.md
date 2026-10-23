@@ -115,7 +115,7 @@ uhubctl はハブへの制御要求（USB の制御用通信であるコント�
 - 電源を入れ直せばファームウェアは起動し直すので、その直後に esptool を実行すればボタンなしで書き込みモードに入れる（3章、検証済み）。
 - ファームウェアが起動直後に止まる場合は、この方法でも入れない。その場合は BOOT ボタンを押したまま電源を入れ直す。
 
-根本的な対策の候補として、コンソールを USB-Serial/JTAG（チップ内蔵の回路で動く USB。`303a:1001`）に切り替える方法がある（`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`）。こちらはファームウェアが止まっていても esptool がチップを直接リセットできる。ただし USB-OTG を使っている設計上の理由を確認していないため、未検討とする。
+根本的な対策の候補として、コンソールを USB-Serial/JTAG（チップ内蔵の回路で動く USB。`303a:1001`）に切り替える方法がある（`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`）。こちらはファームウェアが止まっていても esptool がチップを直接リセットできる。ただし、`idf.py monitor`（`sf flash vehicle -m`）を開くと機体がリセットされるという欠点がある（6章）。これは 2026-10-15 に一度この切り替えを入れて取り消した理由（`905e39f5` → `f47c8a9b`）と一致する。
 
 ## 5. スクリプト化するときの仕様（未実装）
 
@@ -138,7 +138,42 @@ uhubctl はハブへの制御要求（USB の制御用通信であるコント�
 - このハブを持っていない環境では何もしないこと。ハブが見つからなければ従来手順（手動の抜き差し）を案内する。
 - 別のハブで使う場合は、ポートと電源の対応を 4章と同じ方法（LED の目視）で調べ直す必要がある。uhubctl の対応表（README）にある機種でも、OS によって動作が異なる。
 
-## 6. 関連
+## 6. 書き込み後に起動しない問題の原因（追加検証）
+
+### 結論
+
+**BOOT ボタンで書き込みモードに入れて書き込んだ後、esptool の標準の `--after hard_reset` でリセットすると、チップは書き込みモードに残る。`--after watchdog_reset` にすると正常に起動する。** 「書き込み後に抜き差ししないと起動しない」症状の原因はこれである。
+
+- `hard_reset` は USB-Serial/JTAG の制御信号（RTS）でチップをリセットする。BOOT ボタンで入った書き込みモードからは、この方法では抜けられなかった。
+- `watchdog_reset` はチップ内のウォッチドッグ（固まったときに自動でリセットする回路）で全体をリセットする。
+- `sf flash vehicle` は内部で `idf.py flash` を実行し（`lib/sfcli/commands/flash.py`）、書き込み後のリセット方式は `sdkconfig` の `CONFIG_ESPTOOLPY_AFTER="hard_reset"` で決まる。このため BOOT ボタンで書き込むたびにこの症状が出ていたと考えられる。
+
+### 検証結果
+
+いずれもバッテリーなし。判定は起動音・LED（目視）と、esptool の応答で行った。
+
+| 書き込みモードへの入り方 | 書き込み後のリセット | 結果 | 回数 |
+|---|---|---|---|
+| BOOT ボタン + 電源投入 | `hard_reset` | 書き込みモードに残る（起動音なし、LED 停止。`--before no_reset` の esptool に ROM が応答） | 1 |
+| 上の状態から | `watchdog_reset` | 起動（起動音、LED、`303a:0009`、コマンド入力可） | 1 |
+| BOOT ボタン + 電源投入 | `watchdog_reset` | 起動（起動音 1 回、LED、`303a:0009`） | 1 |
+| 動作中の USB-CDC 版から esptool で入る | `hard_reset` | 起動（3章の最初の試験） | 1 |
+
+### USB-Serial/JTAG 版で分かったこと
+
+検証用に、コンソールを USB-Serial/JTAG にしたファームウェア（`905e39f5` の変更を戻したもの。ブランチ `test/usj-console-hotplug`）を使った。
+
+- **`idf.py monitor` を開くと機体がリセットされる。** ログに `rst:0x15 (USB_UART_CHIP_RESET)` が出て、バッテリー駆動中でも再起動した（起動音で確認）。起動後に USB をつないで状況を見る用途には使えない。
+- 制御信号を動かさずにポートを開けば、バッテリーで起動した後に USB をつないでもコマンド入力（`stampfly>`）は使えた。起動ログは残らない。
+- USB-Serial/JTAG 版が動いている状態から USB-CDC 版を書き込み、`hard_reset` で起動すると、**ファームウェアは動く（起動音・LED）が USB が使えない**（esptool も `No serial data received`）。USB の通信の切断・再接続では直らず、電源を入れ直すと直る（2 回再現）。
+
+### 未確認の事項
+
+- 動作中のファームウェアから esptool で書き込みモードに入る通常の書き込みで、`watchdog_reset` に変えても問題がないか。
+- USB-CDC 版で、起動後に USB をつないで状況を見られるか。検証に使った確認用プログラムがポートを開くときに USB-CDC 版をリセットしていた可能性があり、結果は無効とした。
+- 「抜き差ししても書き込めない」症状は再現できていない。
+
+## 7. 関連
 
 - uhubctl: <https://github.com/mvp/uhubctl>
 - [開発ツール使用ガイド](tools.md)
@@ -263,7 +298,7 @@ The vehicle firmware uses `CONFIG_ESP_CONSOLE_USB_CDC=y` (a setting that sends t
 - A power cycle restarts the firmware, so running esptool right after that enters download mode without the button (chapter 3, verified).
 - If the firmware stops right after startup, this method cannot enter download mode either. In that case, power cycle while holding the BOOT button.
 
-As a fundamental countermeasure, one candidate is to switch the console to USB-Serial/JTAG (USB driven by a circuit built into the chip; `303a:1001`) with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`. With this, esptool can reset the chip directly even when the firmware has stopped. However, the design reason for using USB-OTG has not been checked, so this remains unexamined.
+As a fundamental countermeasure, one candidate is to switch the console to USB-Serial/JTAG (USB driven by a circuit built into the chip; `303a:1001`) with `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`. With this, esptool can reset the chip directly even when the firmware has stopped. However, it has a drawback: opening `idf.py monitor` (`sf flash vehicle -m`) resets the vehicle (chapter 6). This matches the reason the switch was introduced and then reverted on 2026-10-15 (`905e39f5` -> `f47c8a9b`).
 
 ## 5. Specification for Scripting (Not Implemented)
 
@@ -286,7 +321,42 @@ Scripting means making the procedure above runnable as a single command.
 - Do nothing in an environment without this hub. If the hub is not found, show the conventional procedure (manual unplugging and replugging).
 - To use another hub, the port-to-power mapping must be investigated again by the same method as in chapter 4 (visual LED check). Even for models listed in uhubctl's compatibility table (README), behavior differs by OS.
 
-## 6. Related
+## 6. Cause of the Firmware Not Starting After Flashing (Additional Tests)
+
+### Conclusion
+
+**After entering download mode with the BOOT button and flashing, resetting with esptool's standard `--after hard_reset` leaves the chip in download mode. With `--after watchdog_reset` it boots normally.** This is the cause of the symptom "the firmware does not start after flashing until the cable is replugged".
+
+- `hard_reset` resets the chip with a USB-Serial/JTAG control signal (RTS). It did not get the chip out of download mode entered with the BOOT button.
+- `watchdog_reset` resets the whole chip with its internal watchdog (a circuit that resets the chip automatically when it hangs).
+- `sf flash vehicle` runs `idf.py flash` internally (`lib/sfcli/commands/flash.py`), and the reset after flashing is set by `CONFIG_ESPTOOLPY_AFTER="hard_reset"` in `sdkconfig`. This is presumably why the symptom appeared every time the vehicle was flashed via the BOOT button.
+
+### Results
+
+All without the battery. Judged by the startup sound and LED (visual) and by esptool responses.
+
+| How download mode was entered | Reset after flashing | Result | Runs |
+|---|---|---|---|
+| BOOT button + power on | `hard_reset` | Stays in download mode (no startup sound, LED stopped; the ROM answers esptool with `--before no_reset`) | 1 |
+| From the state above | `watchdog_reset` | Boots (startup sound, LED, `303a:0009`, command input works) | 1 |
+| BOOT button + power on | `watchdog_reset` | Boots (one startup sound, LED, `303a:0009`) | 1 |
+| esptool from running USB-CDC firmware | `hard_reset` | Boots (first test in chapter 3) | 1 |
+
+### Findings with the USB-Serial/JTAG Firmware
+
+For testing, a firmware with the console on USB-Serial/JTAG was used (the change of `905e39f5` re-applied; branch `test/usj-console-hotplug`).
+
+- **Opening `idf.py monitor` resets the vehicle.** The log shows `rst:0x15 (USB_UART_CHIP_RESET)` and the vehicle rebooted even on battery (confirmed by the startup sound). It cannot be used to check the state by connecting USB after boot.
+- When the port is opened without toggling the control signals, command input (`stampfly>`) works after connecting USB to a vehicle booted on battery. Boot logs are not kept.
+- Flashing the USB-CDC firmware over a running USB-Serial/JTAG firmware and booting it with `hard_reset` leaves **the firmware running (startup sound, LED) but USB unusable** (esptool also reports `No serial data received`). Disconnecting and reconnecting the USB link does not fix it; a power cycle does (reproduced twice).
+
+### Open Items
+
+- Whether switching to `watchdog_reset` causes problems for normal flashing, where esptool enters download mode from running firmware.
+- Whether the USB-CDC firmware allows checking the state by connecting USB after boot. The probe program used may have reset the USB-CDC firmware when opening the port, so that result was discarded.
+- The symptom "cannot flash even after replugging" has not been reproduced.
+
+## 7. Related
 
 - uhubctl: <https://github.com/mvp/uhubctl>
 - [Development Tools Guide](tools.md)
