@@ -110,7 +110,7 @@ docs/
 - `plans/`: 機能ごとの計画・見直し文書。状態（計画中／実装中／実装済み／見直し中）を冒頭に書く
 - `events/`: `stampfly_workshop/`（Workshop。§4 の `firmware/workshop/` と対）、`dxh2026/`、`sci_tutorial_2026/`
   （いずれも L0 `ws::` API 上の実習。L0 の API・レッスン更新後に再検証が要る）。
-  ほかに `flight_experience/`（操縦体験会で配る A4 パンフレット。実習は含まない）
+  ほかに `flight_experience/`（操縦体験会で配る A4 パンフレットと操縦ガイド。実習は含まない）
 - プロトコルの文章仕様は `protocol/README.md`（メッセージ一覧・オフセット表）と
   `docs/reference/flight-log-format.md` にある。`docs/protocol/` は置かない
 

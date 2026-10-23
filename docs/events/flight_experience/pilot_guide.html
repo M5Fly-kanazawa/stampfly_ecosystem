@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<title>StampFly 操縦ガイド</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+@page{size:A4;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--sky:#29B6F6;--purple:#7C6CF2;--pink:#FF6F91;--yellow:#FFC93C;--mint:#2EC4A0;--orange:#FF9F43;--ink:#1F2A44}
+html,body{width:210mm;height:297mm;background:#FFF9EC}
+body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans",sans-serif;color:var(--ink);font-size:8pt;line-height:1.35;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{position:relative;width:210mm;height:297mm;overflow:hidden;background:#FFF9EC}
+.abs{position:absolute}
+.deco{position:absolute;border-radius:50%}
+.hero{position:absolute;left:0;top:0;width:210mm;height:40mm;background:linear-gradient(120deg,#29B6F6 0%,#7C6CF2 60%,#FF6F91 120%)}
+.band{position:absolute;left:12mm;top:5.5mm;background:var(--yellow);color:var(--ink);font-weight:800;font-size:10.5pt;padding:1mm 4mm;border-radius:5mm}
+.title{position:absolute;left:12mm;top:14mm;color:#fff;font-weight:800;font-size:27pt;line-height:1.1;letter-spacing:.3mm;text-shadow:0 .9mm 0 rgba(31,42,68,.35);white-space:nowrap}
+.lead{position:absolute;left:12mm;top:27mm;width:104mm;color:#fff;font-weight:800;font-size:9.5pt;line-height:1.3;text-shadow:0 .3mm 0 rgba(31,42,68,.35)}
+.hero-img{position:absolute;left:128mm;top:-5mm;width:78mm}
+.h2{font-weight:800;font-size:13pt;display:flex;align-items:center;gap:2mm;line-height:1.2}
+.h2 i{display:inline-block;width:4mm;height:4mm;border-radius:50%}
+.h2 small{font-size:8.5pt;font-weight:700;margin-left:2mm}
+
+/* motions */
+.motion{position:absolute;left:10mm;top:41mm;width:190mm;height:83mm}
+.sub{font-size:9pt;font-weight:700;margin:.5mm 0 0 6mm}
+.mgrid{position:absolute;left:0;top:12.5mm;width:190mm;display:grid;grid-template-columns:repeat(4,1fr);gap:3mm}
+.mc{position:relative;height:69mm;border-radius:4mm;background:var(--bg);border:.7mm solid var(--c);padding:0 2.2mm}
+.mc svg.fig{display:block;width:100%;height:34mm;margin-top:.5mm}
+.mc .n{font-weight:800;font-size:14pt;line-height:1.15;color:var(--ink)}
+.mc .n small{font-size:8pt;font-weight:700;margin-left:1mm}
+.mc p{font-size:8.6pt;line-height:1.3;margin-top:.8mm}
+.mc .st{position:absolute;left:2.2mm;right:2.2mm;bottom:1.8mm;display:flex;align-items:center;gap:1.2mm;background:#fff;border-radius:3mm;padding:.5mm 2mm;font-weight:800;font-size:8pt;border:.4mm solid var(--c);white-space:nowrap}
+.mc .st svg{width:5mm;height:5mm;flex:none}
+.tg{font-weight:800;fill:var(--ink)}
+
+/* controller */
+.ctl{position:absolute;left:10mm;top:125mm;width:190mm;height:110mm}
+.fig3{position:absolute;left:0;top:8.5mm;width:190mm;height:101mm}
+.fig3 img{position:absolute;left:49mm;top:4mm;width:92mm;height:57.96mm;border-radius:3mm;border:.5mm solid #fff;box-shadow:0 .8mm 2mm rgba(31,42,68,.25)}
+.fig3 svg.lines{position:absolute;left:0;top:0}
+.co{position:absolute;border-radius:3mm;background:#fff;border:.5mm solid var(--c);padding:.8mm 2mm;font-size:8pt;line-height:1.3;font-weight:700;display:flex;align-items:center}
+.co b{font-weight:800}
+.sp{position:absolute;left:0;top:73mm;width:190mm;height:28mm;border-radius:4mm;background:#fff;border:.6mm solid var(--purple)}
+.foot{position:absolute;left:0;top:289.5mm;width:210mm;height:7.5mm;background:var(--ink);color:#fff;font-size:7.5pt;font-weight:700;display:flex;align-items:center;justify-content:center;gap:2mm}
+
+/* bottom */
+.bx{position:absolute;top:240mm;height:46mm;border-radius:4mm;padding:1.8mm 3mm;font-size:8.6pt;line-height:1.34}
+.bx .tt{font-weight:800;font-size:10.5pt;line-height:1.25}
+.bx ol,.bx ul{list-style:none;margin-top:1mm}
+.bx li{margin-top:1mm;position:relative;padding-left:5mm}
+.bx li i{position:absolute;left:0;top:.2mm;width:3.8mm;height:3.8mm;border-radius:50%;color:#fff;font-style:normal;font-weight:800;font-size:7.5pt;display:flex;align-items:center;justify-content:center}
+.bx dt{display:inline-block;font-weight:800;color:#fff;border-radius:2mm;padding:0 1.8mm;margin-top:1mm}
+.bx .note{position:absolute;left:3mm;bottom:1.2mm;font-size:7.5pt;font-weight:800}
+</style></head><body>
+<div class="page">
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="ud" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="#fff" stroke="#1F2A44" stroke-width="1"/><path d="M10 2.5L6.6 6.6H13.4Z M10 17.5L6.6 13.4H13.4Z" fill="currentColor"/><path d="M10 6.5V13.5" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="10" r="2.6" fill="#1F2A44"/></symbol>
+    <symbol id="lr" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="#fff" stroke="#1F2A44" stroke-width="1"/><path d="M2.5 10L6.6 6.6V13.4Z M17.5 10L13.4 6.6V13.4Z" fill="currentColor"/><path d="M6.5 10H13.5" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="10" r="2.6" fill="#1F2A44"/></symbol>
+    <marker id="ap" viewBox="0 0 5 4" refX="3.2" refY="2" markerWidth="5" markerHeight="4" orient="auto-start-reverse"><path d="M0 0L5 2L0 4Z" fill="context-stroke"/></marker>
+    <marker id="ap-pink" viewBox="0 0 5 4" refX="3.2" refY="2" markerWidth="5" markerHeight="4" orient="auto-start-reverse"><path d="M0 0L5 2L0 4Z" fill="#FF6F91"/></marker>
+    <marker id="ap-sky" viewBox="0 0 5 4" refX="3.2" refY="2" markerWidth="5" markerHeight="4" orient="auto-start-reverse"><path d="M0 0L5 2L0 4Z" fill="#1E9BDB"/></marker>
+    <marker id="ap-mint" viewBox="0 0 5 4" refX="3.2" refY="2" markerWidth="5" markerHeight="4" orient="auto-start-reverse"><path d="M0 0L5 2L0 4Z" fill="#1FA787"/></marker>
+    <marker id="ap-orange" viewBox="0 0 5 4" refX="3.2" refY="2" markerWidth="5" markerHeight="4" orient="auto-start-reverse"><path d="M0 0L5 2L0 4Z" fill="#F28A1F"/></marker>
+  </defs>
+</svg>
+
+<!-- page decorations -->
+<div class="deco" style="left:-8mm;top:120mm;width:18mm;height:18mm;background:#FFE3EA"></div>
+<div class="deco" style="right:-7mm;top:196mm;width:16mm;height:16mm;background:#DDF3FD"></div>
+<div class="deco" style="right:3mm;top:112mm;width:3mm;height:3mm;background:#FF9F43"></div>
+<div class="deco" style="left:2mm;top:250mm;width:3.5mm;height:3.5mm;background:#FFC93C"></div>
+
+<div class="hero">
+  <div class="deco" style="left:96mm;top:-6mm;width:22mm;height:22mm;background:rgba(255,255,255,.16)"></div>
+  <div class="deco" style="left:-6mm;top:30mm;width:22mm;height:22mm;background:rgba(255,255,255,.14)"></div>
+  <div class="deco" style="left:108mm;top:35mm;width:5mm;height:5mm;background:#FFC93C"></div>
+  <div class="deco" style="left:112mm;top:8mm;width:3mm;height:3mm;background:#FFC93C"></div>
+  <div class="deco" style="left:103mm;top:24mm;width:2.5mm;height:2.5mm;background:#2EC4A0"></div>
+  <div class="deco" style="left:204mm;top:36mm;width:3mm;height:3mm;background:#FFC93C"></div>
+  <svg class="abs" style="left:78mm;top:5mm" width="18mm" height="8mm" viewBox="0 0 44 20"><path d="M8 18a7 7 0 010-14 9 9 0 0117-2 8 8 0 0113 7 5 5 0 01-2 9z" fill="#fff" opacity=".35"/></svg>
+</div>
+<svg class="abs" style="left:0;top:34mm" width="210mm" height="9mm" viewBox="0 0 210 9" preserveAspectRatio="none"><path d="M0 0H210V4C192 10 175 10 157 5S122 -1 105 4 70 10 52 5 18 0 0 5Z" fill="#FF6F91"/></svg>
+<div class="band">操縦体験会ガイド</div>
+<div class="title">StampFly を飛ばそう！</div>
+<div class="lead">ドローンの傾きの名前と、<br>コントローラの使い方</div>
+<img class="hero-img" src="images/drone_hero.png" alt="StampFly">
+
+<!-- 1. motions -->
+<div class="motion">
+  <div class="h2"><i style="background:var(--pink)"></i>ドローンの動き ― 3 つの傾きと上下</div>
+  <div class="sub">機体を傾けると、プロペラの力が傾いた向きに機体を押して、その方向へ進みます。</div>
+  <div class="mgrid">
+
+    <div class="mc" style="--c:#FF6F91;--bg:#FFEBF0">
+      <svg class="fig" viewBox="0 0 100 76">
+        <image href="images/drone_pitch.png" x="24" y="18" width="66" height="33.5"/>
+        <path d="M26 10A30 30 0 0 0 26 60" fill="none" stroke="#FF6F91" stroke-width="3" stroke-linecap="round" marker-end="url(#ap-pink)"/>
+        <rect x="1" y="64" width="22" height="11" rx="5.5" fill="#FFC93C"/><text class="tg" x="12" y="72" text-anchor="middle" style="font-size:8px">← 前</text>
+      </svg>
+      <div class="n">ピッチ<small>前後の傾き</small></div>
+      <p>機首を下げると前へ、上げると後ろへ進む</p>
+      <div class="st"><svg style="color:#FF6F91"><use href="#ud"/></svg>左スティック 上下</div>
+    </div>
+
+    <div class="mc" style="--c:#29B6F6;--bg:#E4F5FE">
+      <svg class="fig" viewBox="0 0 100 76">
+        <image href="images/drone_roll.png" x="18" y="27" width="64" height="34.6"/>
+        <path d="M14 34A40 40 0 0 1 86 34" fill="none" stroke="#1E9BDB" stroke-width="3" stroke-linecap="round" marker-start="url(#ap-sky)" marker-end="url(#ap-sky)"/>
+        <text class="tg" x="50" y="71" text-anchor="middle" style="font-size:7px">後ろから見た図</text>
+      </svg>
+      <div class="n">ロール<small>左右の傾き</small></div>
+      <p>右に傾くと右へ、左に傾くと左へ進む</p>
+      <div class="st"><svg style="color:#1E9BDB"><use href="#lr"/></svg>左スティック 左右</div>
+    </div>
+
+    <div class="mc" style="--c:#2EC4A0;--bg:#E3F7F1">
+      <svg class="fig" viewBox="0 0 100 76">
+        <image href="images/drone_yaw.png" x="26" y="14" width="48" height="43.7"/>
+        <path d="M72 11A34 34 0 0 1 72 63" fill="none" stroke="#1FA787" stroke-width="3" stroke-linecap="round" marker-end="url(#ap-mint)"/>
+        <path d="M28 11A34 34 0 0 0 28 63" fill="none" stroke="#1FA787" stroke-width="3" stroke-linecap="round" marker-end="url(#ap-mint)"/>
+        <rect x="42" y="1" width="16" height="10" rx="5" fill="#FFC93C"/><text class="tg" x="50" y="8.4" text-anchor="middle" style="font-size:7.5px">前</text>
+      </svg>
+      <div class="n">ヨー<small>機首の向き</small></div>
+      <p>その場で機首の向きを水平に回す。右に倒すと右回り（上から見て時計回り）</p>
+      <div class="st"><svg style="color:#1FA787"><use href="#lr"/></svg>右スティック 左右</div>
+    </div>
+
+    <div class="mc" style="--c:#FF9F43;--bg:#FFF0DE">
+      <svg class="fig" viewBox="0 0 100 76">
+        <image href="images/drone_roll.png" x="24" y="24" width="52" height="28.1"/>
+        <path d="M15 62V12" fill="none" stroke="#F28A1F" stroke-width="3.4" stroke-linecap="round" marker-end="url(#ap-orange)"/>
+        <path d="M85 12V62" fill="none" stroke="#F28A1F" stroke-width="3.4" stroke-linecap="round" marker-end="url(#ap-orange)"/>
+        <text class="tg" x="15" y="73" text-anchor="middle" style="font-size:7.5px">上昇</text>
+        <text class="tg" x="85" y="73" text-anchor="middle" style="font-size:7.5px">下降</text>
+      </svg>
+      <div class="n">上昇・下降</div>
+      <p>上に倒すと上昇、下に倒すと下降。手を離すとその高さで止まる（ALT HOLD のとき）</p>
+      <div class="st"><svg style="color:#F28A1F"><use href="#ud"/></svg>右スティック 上下</div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. controller -->
+<div class="ctl">
+  <div class="h2"><i style="background:var(--purple)"></i>コントローラの使い方（Mode 3）</div>
+  <div class="fig3">
+    <img src="images/controller_photo.jpg" alt="送信機">
+    <svg class="lines" width="190mm" height="101mm" viewBox="0 0 190 101">
+      <g stroke="#1F2A44" stroke-width=".35" fill="none">
+        <path d="M45 11.5L76.6 10.6"/>
+        <path d="M145 9.5L107.9 10.6"/>
+        <path d="M93.6 3V13"/>
+        <path d="M45 45L67.9 48.2"/>
+        <path d="M145 33L120.8 48.2"/>
+        <path d="M145 56L125.4 53.7"/>
+        <path d="M95.5 64V44.3"/>
+      </g>
+      <g fill="#1F2A44" stroke="#fff" stroke-width=".4">
+        <circle cx="76.6" cy="10.6" r="1.15"/><circle cx="107.9" cy="10.6" r="1.15"/><circle cx="93.6" cy="13" r="1.15"/>
+        <circle cx="67.9" cy="48.2" r="1.15"/><circle cx="120.8" cy="48.2" r="1.15"/><circle cx="125.4" cy="53.7" r="1.15"/><circle cx="95.5" cy="44.3" r="1.15"/>
+      </g>
+    </svg>
+    <div class="co" style="left:0;top:1mm;width:45mm;height:21mm;--c:#FFC93C;background:#FFF6D6"><span><b>左の黄色ボタン：</b>飛行モードの切り替え。押すたびに ALT&nbsp;HOLD → POS&nbsp;HOLD → 手動（地上で押す）</span></div>
+    <div class="co" style="left:145mm;top:2mm;width:45mm;height:15mm;--c:#FFC93C;background:#FFF6D6">右の黄色ボタン：手動 ⇔ アクロの切り替え（上級者向け）</div>
+    <div class="co" style="left:81mm;top:-3.5mm;width:25mm;height:5.5mm;--c:#7C6CF2;justify-content:center;padding:0">電源スイッチ</div>
+    <div class="co" style="left:0;top:36mm;width:45mm;height:18mm;border-left:2.4mm solid #FF6F91;border-right:2.4mm solid #29B6F6;border-top-color:#ddd;border-bottom-color:#ddd"><span><b>左スティック：</b>上下＝前進・後退／左右＝左へ・右へ</span></div>
+    <div class="co" style="left:145mm;top:24mm;width:45mm;height:18mm;border-left:2.4mm solid #2EC4A0;border-right:2.4mm solid #FF9F43;border-top-color:#ddd;border-bottom-color:#ddd"><span><b>右スティック：</b>上下＝上昇・下降／左右＝機首の向き</span></div>
+    <div class="co" style="left:145mm;top:46mm;width:45mm;height:20mm;background:#E53950;color:#fff;font-weight:800;border-color:#E53950"><span>右スティックを押し込む（カチッ）＝ スタート（離陸）／ストップ（着陸）</span></div>
+    <div class="co" style="left:46mm;top:64mm;width:98mm;height:6.5mm;--c:#7C6CF2;justify-content:center;text-align:center"><span><b>画面：</b>今のモードを表示（<b style="color:#E53950">飛行中は押さない</b>）</span></div>
+
+    <div class="sp"></div>
+    <svg class="lines" style="top:73mm" width="190mm" height="28mm" viewBox="0 0 190 28">
+      <style>.t{font-weight:800;font-size:3.2px;fill:#1F2A44;font-family:"M PLUS Rounded 1c",sans-serif}.k{font-weight:800;font-size:3px;font-family:"M PLUS Rounded 1c",sans-serif}</style>
+      <!-- left stick: center 58,15 -->
+      <text class="t" x="4" y="16" style="font-size:3.8px">左スティック</text>
+      <circle cx="58" cy="15" r="5.2" fill="#F1F3F8" stroke="#1F2A44" stroke-width=".5"/><circle cx="58" cy="15" r="2.4" fill="#1F2A44"/>
+      <path d="M58 9.4V4.6" stroke="#FF6F91" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ap-pink)"/>
+      <path d="M58 20.6V25.4" stroke="#FF6F91" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ap-pink)"/>
+      <path d="M52.4 15H41.4" stroke="#1E9BDB" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ap-sky)"/>
+      <path d="M63.6 15H74.6" stroke="#1E9BDB" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ap-sky)"/>
+      <text class="k" x="60.5" y="6" fill="#D6285A">前進</text><text class="k" x="60.5" y="25" fill="#D6285A">後退</text>
+      <text class="k" x="39.5" y="16.2" text-anchor="end" fill="#1578A8">左へ</text><text class="k" x="76.5" y="16.2" fill="#1578A8">右へ</text>
+      <!-- right stick: center 150,15 -->
+      <text class="t" x="94" y="12" style="font-size:3.8px">右スティック</text>
+      <rect x="93.5" y="15" width="31" height="10" rx="3" fill="#E53950"/><text x="109" y="19.2" text-anchor="middle" fill="#fff" class="k" style="font-size:2.7px">押し込み＝</text><text x="109" y="23" text-anchor="middle" fill="#fff" class="k" style="font-size:2.7px">スタート／ストップ</text>
+      <circle cx="150" cy="15" r="5.2" fill="#F1F3F8" stroke="#1F2A44" stroke-width=".5"/><circle cx="150" cy="15" r="2.4" fill="#1F2A44"/><circle cx="150" cy="15" r="3.6" fill="none" stroke="#E53950" stroke-width=".7"/>
+      <path d="M150 9.4V4.6" stroke="#F28A1F" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ap-orange)"/>
+      <path d="M150 20.6V25.4" stroke="#F28A1F" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ap-orange)"/>
+      <path d="M144.4 15H133.4" stroke="#1FA787" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ap-mint)"/>
+      <path d="M155.6 15H166.6" stroke="#1FA787" stroke-width="1.2" stroke-linecap="round" marker-end="url(#ap-mint)"/>
+      <text class="k" x="152.5" y="6" fill="#C46A0A">上昇</text><text class="k" x="152.5" y="25" fill="#C46A0A">下降</text>
+      <text class="k" x="131.5" y="16.2" text-anchor="end" fill="#0F7A62">左回り</text><text class="k" x="168.5" y="16.2" fill="#0F7A62">右回り</text>
+    </svg>
+  </div>
+</div>
+
+<!-- 3. bottom -->
+<div class="bx" style="left:10mm;width:60mm;background:#fff;border:.7mm solid var(--mint)">
+  <div class="tt" style="color:#0F7A62">飛ばす流れ（ALT HOLD）</div>
+  <ol>
+    <li><i style="background:#2EC4A0">1</i>左の黄色ボタンで ALT HOLD に → 機体の基板の LED がオレンジ</li>
+    <li><i style="background:#2EC4A0">2</i>右スティックを押し込む → 約&nbsp;50&nbsp;cm まで自動で上がって止まる</li>
+    <li><i style="background:#2EC4A0">3</i>もう一度押し込む → ゆっくり着陸して、モーターが自動で止まる</li>
+  </ol>
+</div>
+<div class="bx" style="left:73mm;width:60mm;background:#FFE1E1;border:.8mm solid #E53950">
+  <div class="tt" style="color:#C21F38">あぶない！と思ったら</div>
+  <ul style="color:#8A1428;font-weight:800">
+    <li><i style="background:#E53950">!</i>右スティックを押し込む → ゆっくり着陸</li>
+    <li><i style="background:#E53950">!</i>着陸中にもう一度押し込む → その場でモーター停止</li>
+    <li><i style="background:#E53950">!</i>飛行中は黄色ボタンと画面を押さない</li>
+  </ul>
+</div>
+<div class="bx" style="left:136mm;width:64mm;background:#F1EEFF;border:.7mm solid var(--purple)">
+  <div class="tt" style="color:#4A3CC0">ほかの飛行モード</div>
+  <dl style="margin-top:.4mm">
+    <dt style="background:#C93AA3">POS HOLD</dt> 高さと位置を自動でキープ（LED マゼンタ）<br>
+    <dt style="background:#7BA515">手動</dt> 高さも自分で操る（LED 黄緑）<br>
+    <dt style="background:#1E88E5">アクロ</dt> 傾きが自動で水平に戻らない上級者向け（手動の状態で右の黄色ボタン、LED 青）
+  </dl>
+  <div class="note" style="color:#4A3CC0">モードの切り替えは着陸してモーターが止まっているときに</div>
+</div>
+
+<div class="foot">StampFly は M5Stack と伊藤研究室で開発された教育用ドローンです<span style="opacity:.6">｜</span>操縦体験会　7 号館 301 教室</div>
+</div>
+</body></html>
