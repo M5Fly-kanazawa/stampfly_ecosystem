@@ -4,7 +4,7 @@
 
 ## 1. 概要
 
-ファームウェアをデバイスに書き込みます。ESP-IDF の `idf.py flash` をラップします。
+ファームウェアをデバイスに書き込みます。ESP-IDF のビルド成果物（`build/flash_args`）を esptool で書き込みます。
 
 ## 2. 構文
 
@@ -51,13 +51,17 @@ sf flash controller
 sf build vehicle && sf flash vehicle -m
 ```
 
+### リセット方式
+
+書き込み後は `esptool --after watchdog_reset` でリセットします（`idf.py flash` は使いません）。BOOT ボタンで ROM ダウンロードモードに入れた場合、esptool 既定の `hard_reset` ではダウンロードモードに留まりますが、`watchdog_reset` ならファームウェアが起動します。ESP-IDF の Kconfig は `hard_reset`/`no_reset` しか選べないためです。書き込み前に差分ビルドを自動実行します（`--build` 指定時は二重に行いません）。`-m` 指定時は書き込み成功後に `idf.py monitor` を別途起動します。
+
 ---
 
 <a id="english"></a>
 
 ## 1. Overview
 
-Flash firmware to device. Wraps ESP-IDF's `idf.py flash`.
+Flash firmware to device. Writes the ESP-IDF build output (`build/flash_args`) with esptool.
 
 ## 2. Syntax
 
@@ -91,3 +95,7 @@ sf flash vehicle -m
 # Build and flash workflow
 sf build vehicle && sf flash vehicle -m
 ```
+
+### Reset method
+
+After writing, the chip is reset with `esptool --after watchdog_reset` (not `idf.py flash`). When ROM download mode was entered with the BOOT button, esptool's default `hard_reset` leaves the chip in download mode, whereas `watchdog_reset` boots the firmware; ESP-IDF's Kconfig only offers `hard_reset`/`no_reset`. An incremental build runs automatically before flashing (not duplicated when `--build` is given). With `-m`, `idf.py monitor` runs separately after a successful flash.
