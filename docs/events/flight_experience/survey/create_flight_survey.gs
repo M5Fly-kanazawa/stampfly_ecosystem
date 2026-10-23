@@ -27,8 +27,8 @@ function createFlightSurvey() {
   );
 
   form.setIsQuiz(false);
-  // Do not collect e-mail addresses automatically (Q14 is an optional normal question)
-  // メールアドレスを自動収集しない（Q14 は任意記入の通常設問）
+  // Do not collect e-mail addresses automatically (Q15 is an optional normal question)
+  // メールアドレスを自動収集しない（Q15 は任意記入の通常設問）
   form.setCollectEmail(false);
   form.setAllowResponseEdits(false);
   form.setLimitOneResponsePerUser(false);
@@ -171,10 +171,27 @@ function createFlightSurvey() {
     ])
     .setRequired(true);
 
-  // Q11 shows whether the session would spread by word of mouth.
-  // Q11 は体験会が口コミで広がりそうかを見る設問。
+  // Q11 shows how many want to keep going on their own; the help text gives
+  // the price so the answer is not a guess.
+  // Q11 は自分で続けたい人の数を見る設問。値段を説明文に書き、想像でなく答えられるようにする。
   form.addMultipleChoiceItem()
-    .setTitle('Q11. この体験会を友だちに勧めたいですか')
+    .setTitle('Q11. StampFly を自分で買って試してみたいですか')
+    .setHelpText(
+      '機体 M5Stamp Fly v1.1 10,439円（バッテリー1本つき）＋' +
+      'コントローラ M5Atom Joystick 6,083円＝合計 16,522円' +
+      '（税込、2026年10月21日時点、スイッチサイエンス）'
+    )
+    .setChoiceValues([
+      '買って試してみたい',
+      '値段しだいで考えたい',
+      '今は考えていない'
+    ])
+    .setRequired(true);
+
+  // Q12 shows whether the session would spread by word of mouth.
+  // Q12 は体験会が口コミで広がりそうかを見る設問。
+  form.addMultipleChoiceItem()
+    .setTitle('Q12. この体験会を友だちに勧めたいですか')
     .setChoiceValues([
       'ぜひ勧めたい',
       '勧めてもよい',
@@ -183,10 +200,10 @@ function createFlightSurvey() {
     ])
     .setRequired(true);
 
-  // Q12 collects what content would bring people to a later session.
-  // Q12 は 2 回目以降の体験会の内容を決める材料を集める設問。
+  // Q13 collects what content would bring people to a later session.
+  // Q13 は 2 回目以降の体験会の内容を決める材料を集める設問。
   var nextItem = form.addCheckboxItem();
-  nextItem.setTitle('Q12. 次に体験会があるなら、どんな内容なら参加したいですか（複数選択可）');
+  nextItem.setTitle('Q13. 次に体験会があるなら、どんな内容なら参加したいですか（複数選択可）');
   nextItem.setChoiceValues([
     '操縦の続き（POS HOLD・STABILIZE・ACRO を試す）',
     '狙った場所への着陸など、操縦の課題に挑戦する',
@@ -199,7 +216,7 @@ function createFlightSurvey() {
   nextItem.setRequired(false);
 
   form.addParagraphTextItem()
-    .setTitle('Q13. 感想・要望など自由にお書きください')
+    .setTitle('Q14. 感想・要望など自由にお書きください')
     .setRequired(false);
 
   // =====================================================================
@@ -209,7 +226,7 @@ function createFlightSurvey() {
   form.addPageBreakItem().setTitle('セクション 4: 連絡先（任意）');
 
   form.addTextItem()
-    .setTitle('Q14. メールアドレス（任意）')
+    .setTitle('Q15. メールアドレス（任意）')
     .setHelpText(
       '集中講義や次回の体験会の案内を希望する方のみご記入ください。' +
       'アンケート自体は無記名で集計します。'
