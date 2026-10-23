@@ -28,9 +28,14 @@ CONFIG_FREERTOS_UNICORE=n
 # CPU周波数: 240MHz
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 
-# USB CDC Console
-# USBシリアルコンソール
-CONFIG_ESP_CONSOLE_USB_CDC=y
+# USB console on the built-in USB Serial/JTAG controller (hardware CDC).
+# Chosen so the cable can be plugged in after the craft has booted on
+# battery (hardware enumeration). The USB-OTG CDC console used before could
+# not be reached in that order (2026-10-15).
+# USB コンソールはチップ内蔵の USB Serial/JTAG（ハードウェア CDC）を使う。
+# 電池で起動した後にケーブルを挿しても通信できるようにするため（列挙をハードウェアが行う）。以前の
+# USB-OTG CDC コンソールは、電池起動後に挿すと通信できなかった（2026-10-15）。
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
 # Log level
