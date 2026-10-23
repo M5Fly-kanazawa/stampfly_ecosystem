@@ -54,15 +54,28 @@
 
   <!-- LCD unit: frame 310px, screen 227px / 画面ユニット -->
   <rect class="ol" x="530" y="458" width="310" height="311" rx="36" fill="#FFFDF5"/>
-  <rect x="571.5" y="499.5" width="227" height="227" rx="6" fill="#05070C" stroke="#1F2A44" stroke-width="5"/>
-  <g class="lcd" style="font-size:20.5px">
-    <text x="582" y="528">MAC ADR A7:1C</text>
-    <text x="582" y="556">BAT 1: 4.0 2: 4.0</text>
-    <text x="582" y="584">MODE: 3</text>
-    <text x="582" y="611">CH: 04 ID: 0</text>
-    <text x="582" y="639">-Auto ALT-</text>
-    <text x="582" y="667">-STABILIZE-</text>
-    <text x="582" y="695">Freq:&#160; 49 M</text>
+  <rect x="571.5" y="499.5" width="227" height="227" rx="6" fill="#2E3B36" stroke="#1F2A44" stroke-width="5"/>
+  <!-- LCD text for inkjet printing: a lighter screen colour uses less black ink, and a white
+       halo (no ink) under each line keeps black ink bleed off the yellow strokes -->
+  <!-- インクジェット印刷向けの液晶文字: 画面の地を少し明るくして黒インクを減らし、各行の下に
+       白い縁（インクなし）を敷いて、黒インクの滲みが黄色の文字に届かないようにする -->
+  <g class="lcd" style="font-size:21px;letter-spacing:1px;fill:#FFFFFF;stroke:#FFFFFF;stroke-width:3.6;stroke-linejoin:round">
+    <text x="580" y="528">MAC ADR A7:1C</text>
+    <text x="580" y="556">BAT 1: 4.0 2: 4.0</text>
+    <text x="580" y="584">MODE: 3</text>
+    <text x="580" y="611">CH: 04 ID: 0</text>
+    <text x="580" y="639">-Auto ALT-</text>
+    <text x="580" y="667">-STABILIZE-</text>
+    <text x="580" y="695">Freq:&#160; 49 M</text>
+  </g>
+  <g class="lcd" style="font-size:21px;letter-spacing:1px;fill:#ECFA78;stroke:#ECFA78;stroke-width:1;stroke-linejoin:round">
+    <text x="580" y="528">MAC ADR A7:1C</text>
+    <text x="580" y="556">BAT 1: 4.0 2: 4.0</text>
+    <text x="580" y="584">MODE: 3</text>
+    <text x="580" y="611">CH: 04 ID: 0</text>
+    <text x="580" y="639">-Auto ALT-</text>
+    <text x="580" y="667">-STABILIZE-</text>
+    <text x="580" y="695">Freq:&#160; 49 M</text>
   </g>
 
   <!-- sticks / スティック -->
