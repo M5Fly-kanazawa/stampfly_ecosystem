@@ -2,7 +2,7 @@
 <html lang="ja"><head><meta charset="utf-8">
 <title>StampFly 操縦ガイド</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 @page{size:A4;margin:0}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -37,7 +37,7 @@ body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","H
 /* controller */
 .ctl{position:absolute;left:10mm;top:125mm;width:190mm;height:110mm}
 .fig3{position:absolute;left:0;top:8.5mm;width:190mm;height:101mm}
-.fig3 img{position:absolute;left:49mm;top:4mm;width:92mm;height:57.96mm;border-radius:3mm;border:.5mm solid #fff;box-shadow:0 .8mm 2mm rgba(31,42,68,.25)}
+.fig3 svg.illust{position:absolute;left:49mm;top:4mm;width:92mm;height:57.96mm;overflow:visible}
 .fig3 svg.lines{position:absolute;left:0;top:0}
 .co{position:absolute;border-radius:3mm;background:#fff;border:.5mm solid var(--c);padding:.8mm 2mm;font-size:8pt;line-height:1.3;font-weight:700;display:flex;align-items:center}
 .co b{font-weight:800}
@@ -147,20 +147,109 @@ body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","H
 <div class="ctl">
   <div class="h2"><i style="background:var(--purple)"></i>コントローラの使い方（Mode 3）</div>
   <div class="fig3">
-    <img src="images/controller_photo.jpg" alt="送信機">
+    <svg class="illust" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 882" role="img" aria-label="送信機（Atom JoyStick）のイラスト">
+  <style>
+    .ol{stroke:#1F2A44;stroke-width:6;stroke-linejoin:round;stroke-linecap:round}
+    .wt{fill:#fff;font-family:"M PLUS Rounded 1c","Hiragino Maru Gothic ProN",sans-serif;font-weight:800}
+    .lcd{font-family:"Share Tech Mono","Courier New",monospace;font-size:19.6px;fill:#D9F25C;letter-spacing:0}
+  </style>
+  <defs>
+    <linearGradient id="ci-plate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3A4262"/><stop offset="1" stop-color="#2A3150"/></linearGradient>
+    <linearGradient id="ci-bat" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F1F4F9"/><stop offset="1" stop-color="#C8D0DE"/></linearGradient>
+  </defs>
+
+  <!-- yellow buttons (behind the body) / 黄色ボタン（本体の背面側） -->
+  <g class="ol">
+    <rect x="388" y="73" width="79" height="62" rx="9" fill="#FFC93C"/>
+    <rect x="395" y="80" width="65" height="10" rx="5" fill="#FFE07A" stroke="none"/>
+    <rect x="895" y="73" width="79" height="62" rx="9" fill="#FFC93C"/>
+    <rect x="902" y="80" width="65" height="10" rx="5" fill="#FFE07A" stroke="none"/>
+  </g>
+
+  <!-- body: chamfered rectangle + two round lobes / 本体 -->
+  <path class="ol" d="M306 124H1056L1172 240V543.6A166 166 0 0 1 928.3 769H433.7A166 166 0 0 1 190 543.6V240Z" fill="url(#ci-plate)"/>
+  <path d="M320 138H1042" stroke="#5A6590" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+  <!-- battery cavity / 電池室 -->
+  <rect class="ol" x="346" y="238" width="826" height="204" rx="12" fill="#10142A"/>
+  <rect class="ol" x="352" y="246" width="99" height="87" rx="8" fill="#0A0D1C"/>
+  <rect class="ol" x="352" y="347" width="99" height="87" rx="8" fill="#0A0D1C"/>
+  <path d="M366 260H437M366 361H437" stroke="#3A4262" stroke-width="4" stroke-linecap="round"/>
+  <rect class="ol" x="451" y="246" width="717" height="87" rx="30" fill="url(#ci-bat)"/>
+  <rect class="ol" x="451" y="347" width="717" height="87" rx="30" fill="url(#ci-bat)"/>
+  <g stroke="#fff" stroke-width="7" stroke-linecap="round" fill="none"><path d="M490 267H1125"/><path d="M490 368H1125"/></g>
+  <g stroke="#9AA4B8" stroke-width="3" stroke-linecap="round" fill="none"><path d="M490 298H1130"/><path d="M490 399H1130"/></g>
+  <g fill="none" stroke="#fff" stroke-width="3.5"><circle cx="292" cy="290" r="15"/><circle cx="292" cy="390" r="15"/></g>
+  <text class="wt" x="292" y="297" text-anchor="middle" style="font-size:20px">1</text>
+  <text class="wt" x="292" y="397" text-anchor="middle" style="font-size:20px">2</text>
+
+  <!-- screws / ねじ -->
+  <g class="ol" style="stroke-width:4.5">
+    <circle cx="342" cy="195" r="18" fill="#D5DAE6"/><circle cx="1020" cy="195" r="18" fill="#D5DAE6"/>
+    <circle cx="240" cy="472" r="18" fill="#D5DAE6"/><circle cx="1122" cy="472" r="18" fill="#D5DAE6"/>
+  </g>
+  <g fill="#6E7794">
+    <circle cx="342" cy="195" r="7"/><circle cx="1020" cy="195" r="7"/><circle cx="240" cy="472" r="7"/><circle cx="1122" cy="472" r="7"/>
+  </g>
+
+  <!-- labels -->
+  <text class="wt" x="427" y="164" text-anchor="middle" style="font-size:28px">L</text>
+  <text class="wt" x="934" y="164" text-anchor="middle" style="font-size:28px">R</text>
+  <text class="wt" x="563" y="207" textLength="232" lengthAdjust="spacingAndGlyphs" style="font-size:36px">Atom JoyStick</text>
+  <text class="wt" x="632" y="145" text-anchor="middle" style="font-size:15px">OFF</text>
+  <rect x="661" y="130" width="36" height="19" rx="9.5" fill="#fff" stroke="#1F2A44" stroke-width="3"/>
+  <circle cx="687" cy="139.5" r="6" fill="#1F2A44"/>
+  <text class="wt" x="722" y="145" text-anchor="middle" style="font-size:15px">ON</text>
+
+  <!-- LCD unit: frame 310px, screen 227px / 画面ユニット -->
+  <rect class="ol" x="530" y="458" width="310" height="311" rx="36" fill="#FFFDF5"/>
+  <rect x="571.5" y="499.5" width="227" height="227" rx="6" fill="#05070C" stroke="#1F2A44" stroke-width="5"/>
+  <g class="lcd" style="font-size:20.5px">
+    <text x="582" y="528">MAC ADR A7:1C</text>
+    <text x="582" y="556">BAT 1: 4.0 2: 4.0</text>
+    <text x="582" y="584">MODE: 3</text>
+    <text x="582" y="611">CH: 04 ID: 0</text>
+    <text x="582" y="639">-Auto ALT-</text>
+    <text x="582" y="667">-STABILIZE-</text>
+    <text x="582" y="695">Freq:&#160; 49 M</text>
+  </g>
+
+  <!-- sticks / スティック -->
+  <g transform="translate(314,654)">
+    <path d="M0 -159.5A159.5 159.5 0 0 0 0 159.5" fill="none" stroke="#FF6F91" stroke-width="9"/>
+    <path d="M0 -159.5A159.5 159.5 0 0 1 0 159.5" fill="none" stroke="#29B6F6" stroke-width="9"/>
+    <circle class="ol" r="153" fill="#262D48"/>
+    <circle class="ol" r="116" fill="#343C5C"/>
+    <circle class="ol" r="84" fill="#46506F" style="stroke-width:10"/>
+    <path d="M-62 -34A70 70 0 0 1 -14 -66" fill="none" stroke="#8892B2" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(1048,654)">
+    <path d="M0 -159.5A159.5 159.5 0 0 0 0 159.5" fill="none" stroke="#2EC4A0" stroke-width="9"/>
+    <path d="M0 -159.5A159.5 159.5 0 0 1 0 159.5" fill="none" stroke="#FF9F43" stroke-width="9"/>
+    <circle class="ol" r="153" fill="#262D48"/>
+    <circle class="ol" r="116" fill="#343C5C"/>
+    <circle class="ol" r="84" fill="#46506F" style="stroke-width:10"/>
+    <path d="M-62 -34A70 70 0 0 1 -14 -66" fill="none" stroke="#8892B2" stroke-width="8" stroke-linecap="round"/>
+    <circle r="87" fill="none" stroke="#E53950" stroke-width="7"/>
+  </g>
+</svg>
+
+
+
+
     <svg class="lines" width="190mm" height="101mm" viewBox="0 0 190 101">
       <g stroke="#1F2A44" stroke-width=".35" fill="none">
-        <path d="M45 11.5L76.6 10.6"/>
-        <path d="M145 9.5L107.9 10.6"/>
+        <path d="M45 11.5L75.1 10.2"/>
+        <path d="M145 9.5L112.3 10.2"/>
         <path d="M93.6 3V13"/>
-        <path d="M45 45L67.9 48.2"/>
-        <path d="M145 33L120.8 48.2"/>
-        <path d="M145 56L125.4 53.7"/>
-        <path d="M95.5 64V44.3"/>
+        <path d="M45 45L69.6 47"/>
+        <path d="M145 33L117.9 47"/>
+        <path d="M145 56L121.9 51"/>
+        <path d="M95.5 64V54.1"/>
       </g>
       <g fill="#1F2A44" stroke="#fff" stroke-width=".4">
-        <circle cx="76.6" cy="10.6" r="1.15"/><circle cx="107.9" cy="10.6" r="1.15"/><circle cx="93.6" cy="13" r="1.15"/>
-        <circle cx="67.9" cy="48.2" r="1.15"/><circle cx="120.8" cy="48.2" r="1.15"/><circle cx="125.4" cy="53.7" r="1.15"/><circle cx="95.5" cy="44.3" r="1.15"/>
+        <circle cx="75.1" cy="10.2" r="1.15"/><circle cx="112.3" cy="10.2" r="1.15"/><circle cx="93.6" cy="13" r="1.15"/>
+        <circle cx="69.6" cy="47" r="1.15"/><circle cx="117.9" cy="47" r="1.15"/><circle cx="121.9" cy="51" r="1.15"/><circle cx="95.5" cy="54.1" r="1.15"/>
       </g>
     </svg>
     <div class="co" style="left:0;top:1mm;width:45mm;height:21mm;--c:#FFC93C;background:#FFF6D6"><span><b>左の黄色ボタン：</b>高さのモードの切り替え。押すたびに画面が Auto&nbsp;ALT → Pos&nbsp;HOLD → Mnual&nbsp;ALT（地上で押す）</span></div>
