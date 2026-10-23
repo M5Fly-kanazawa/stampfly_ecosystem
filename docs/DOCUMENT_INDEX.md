@@ -62,6 +62,7 @@
 | [guides/flight-log-viz.md](guides/flight-log-viz.md) | フライトログ可視化チュートリアル |
 | [guides/block_programming.md](guides/block_programming.md) | ブロックプログラミングガイド（`sf blocks`）|
 | [guides/custom_program.md](guides/custom_program.md) | 独自プログラム開発入門（`sf app`、L1 Topic API） |
+| [guides/usb-hub-power-cycle.md](guides/usb-hub-power-cycle.md) | USB ハブの電源切り入れで StampS3 を抜き差しなしで書き込み・起動（StarTech HB31C3A1CPD3 + uhubctl、macOS で検証） |
 | [setup/wifi-sta.md](setup/wifi-sta.md) | WiFi STA モードセットアップ |
 | [architecture/tello-api-reference.md](architecture/tello-api-reference.md) | Tello 互換 API リファレンス |
 
@@ -274,6 +275,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [guides/flight-log-viz.md](guides/flight-log-viz.md) | Flight log visualization tutorial |
 | [guides/block_programming.md](guides/block_programming.md) | Block programming guide (`sf blocks`) |
 | [guides/custom_program.md](guides/custom_program.md) | Custom program development guide (`sf app`, L1 Topic API) |
+| [guides/usb-hub-power-cycle.md](guides/usb-hub-power-cycle.md) | Flashing and booting a StampS3 without unplugging, by power-cycling a USB hub port (StarTech HB31C3A1CPD3 + uhubctl, verified on macOS) |
 | [setup/wifi-sta.md](setup/wifi-sta.md) | WiFi STA mode setup |
 | [architecture/tello-api-reference.md](architecture/tello-api-reference.md) | Tello-compatible API reference |
 
