@@ -14,7 +14,21 @@
 |------------|------|
 | `beamer/` | 共通 Beamer プリアンブル・スタイル（`preamble.tex`, `stampfly_slides.sty`）。各イベントの `.tex` からは `TEXINPUTS` 経由で参照する（後述） |
 | `tikz/` | 全イベント共通の TikZ ダイアグラムソース（.tex、全30ファイル） |
-| `images/` | `tikz/` から生成した PNG、および写真・QRコード等の静止画像 |
+| `images/` | `tikz/` から生成した PNG、写真・QRコード等の静止画像、送信機のイラスト（下記） |
+
+### 送信機のイラスト
+
+送信機（M5Stack Atom JoyStick）を上から見たイラスト。資料で送信機の写真を置き換えたいときに使う（置き換えは資料ごとに判断する）。
+
+| ファイル | 用途 |
+|---------|------|
+| `images/controller_illust.svg` | 元データ。1400×882、背景透明。HTML に直接埋め込むときはこれを使う（Web フォント M PLUS Rounded 1c と Share Tech Mono を読み込むこと） |
+| `images/controller_illust.pdf` | Beamer 等の LaTeX 用。ベクター、フォント埋め込み済み |
+| `images/controller_illust.png` | Marp・Web・文書用。2800×1764、背景透明 |
+
+- 形と部品の配置は、公式製品ページの寸法図（上面図）を 1 mm = 12.75 px で写したもの。表側の写真は透視投影で、背の高いスティックと画面が大きく外側に写るため、写真ではなく寸法図を基準にした
+- 画面の表示は `MODE: 3`・`-Auto ALT-`・`-STABILIZE-`（Mode 3・ALT HOLD の状態）。スティックの根元の色のリング（左＝ピンク・水色、右＝緑・オレンジ）と右スティックの赤いリングは、操縦ガイド（`flight_experience/pilot_guide.html`）の色分けに合わせたもの
+- SVG を直したら、PDF と PNG も作り直す。SVG を Web フォント付きの HTML（`@page{size:1400px 882px;margin:0}`）に埋め込み、Chrome のヘッドレスモードで `--print-to-pdf`（PDF）と `--screenshot --force-device-scale-factor=2 --default-background-color=00000000 --window-size=1400,882`（PNG）を実行する
 
 ### 各イベントからの参照方法
 
@@ -76,7 +90,21 @@ python3 tools/extract_snippets.py expand
 |-----------|----------|
 | `beamer/` | Shared Beamer preamble/style (`preamble.tex`, `stampfly_slides.sty`), resolved from each event's `.tex` via `TEXINPUTS` (see below) |
 | `tikz/` | TikZ diagram sources shared by every event (.tex, 30 files) |
-| `images/` | PNGs generated from `tikz/`, plus photos, QR codes, and other static images |
+| `images/` | PNGs generated from `tikz/`, photos, QR codes and other static images, and the controller illustration (below) |
+
+### Controller Illustration
+
+A top-view illustration of the controller (M5Stack Atom JoyStick), for use where a material should show a drawing instead of the controller photo (decide per material).
+
+| File | Use |
+|------|-----|
+| `images/controller_illust.svg` | Source. 1400x882, transparent. Inline it in HTML (load the web fonts M PLUS Rounded 1c and Share Tech Mono) |
+| `images/controller_illust.pdf` | For Beamer and other LaTeX. Vector, fonts embedded |
+| `images/controller_illust.png` | For Marp, web and documents. 2800x1764, transparent |
+
+- Outline and part placement follow the official top-view drawing from the product page at 1 mm = 12.75 px. The front photo is a perspective view in which the tall sticks and screen look larger and pushed outward, so the drawing, not the photo, is the reference
+- The screen shows `MODE: 3`, `-Auto ALT-` and `-STABILIZE-` (Mode 3, ALT HOLD). The coloured rings at the stick bases (left pink/sky, right mint/orange) and the red ring on the right stick match the colour coding of the pilot guide (`flight_experience/pilot_guide.html`)
+- After editing the SVG, regenerate the PDF and PNG: inline the SVG in an HTML page with the web fonts (`@page{size:1400px 882px;margin:0}`) and run headless Chrome with `--print-to-pdf` (PDF) and `--screenshot --force-device-scale-factor=2 --default-background-color=00000000 --window-size=1400,882` (PNG)
 
 ### How Each Event References These Assets
 
