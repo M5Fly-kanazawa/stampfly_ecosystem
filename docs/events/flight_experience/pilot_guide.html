@@ -163,8 +163,8 @@ body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","H
         <circle cx="67.9" cy="48.2" r="1.15"/><circle cx="120.8" cy="48.2" r="1.15"/><circle cx="125.4" cy="53.7" r="1.15"/><circle cx="95.5" cy="44.3" r="1.15"/>
       </g>
     </svg>
-    <div class="co" style="left:0;top:1mm;width:45mm;height:21mm;--c:#FFC93C;background:#FFF6D6"><span><b>左の黄色ボタン：</b>飛行モードの切り替え。押すたびに ALT&nbsp;HOLD → POS&nbsp;HOLD → 手動（地上で押す）</span></div>
-    <div class="co" style="left:145mm;top:2mm;width:45mm;height:15mm;--c:#FFC93C;background:#FFF6D6">右の黄色ボタン：手動 ⇔ アクロの切り替え（上級者向け）</div>
+    <div class="co" style="left:0;top:1mm;width:45mm;height:21mm;--c:#FFC93C;background:#FFF6D6"><span><b>左の黄色ボタン：</b>高さのモードの切り替え。押すたびに画面が Auto&nbsp;ALT → Pos&nbsp;HOLD → Mnual&nbsp;ALT（地上で押す）</span></div>
+    <div class="co" style="left:145mm;top:2mm;width:45mm;height:15mm;--c:#FFC93C;background:#FFF6D6"><span><b>右の黄色ボタン：</b>STABILIZE ⇔ ACRO の切り替え（上級者向け）</span></div>
     <div class="co" style="left:81mm;top:-3.5mm;width:25mm;height:5.5mm;--c:#7C6CF2;justify-content:center;padding:0">電源スイッチ</div>
     <div class="co" style="left:0;top:36mm;width:45mm;height:18mm;border-left:2.4mm solid #FF6F91;border-right:2.4mm solid #29B6F6;border-top-color:#ddd;border-bottom-color:#ddd"><span><b>左スティック：</b>上下＝前進・後退／左右＝左へ・右へ</span></div>
     <div class="co" style="left:145mm;top:24mm;width:45mm;height:18mm;border-left:2.4mm solid #2EC4A0;border-right:2.4mm solid #FF9F43;border-top-color:#ddd;border-bottom-color:#ddd"><span><b>右スティック：</b>上下＝上昇・下降／左右＝機首の向き</span></div>
@@ -201,9 +201,10 @@ body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","H
 <div class="bx" style="left:10mm;width:60mm;background:#fff;border:.7mm solid var(--mint)">
   <div class="tt" style="color:#0F7A62">飛ばす流れ（ALT HOLD）</div>
   <ol>
-    <li><i style="background:#2EC4A0">1</i>左の黄色ボタンで ALT HOLD に → 機体の基板の LED がオレンジ</li>
-    <li><i style="background:#2EC4A0">2</i>右スティックを押し込む → 約&nbsp;50&nbsp;cm まで自動で上がって止まる</li>
-    <li><i style="background:#2EC4A0">3</i>もう一度押し込む → ゆっくり着陸して、モーターが自動で止まる</li>
+    <li><i style="background:#2EC4A0">1</i>左の黄色ボタンで画面を Auto&nbsp;ALT に（基板の LED がオレンジ）</li>
+    <li><i style="background:#2EC4A0">2</i>右スティックを押し込む → 約&nbsp;50&nbsp;cm まで自動で上がる</li>
+    <li><i style="background:#2EC4A0">3</i>もう一度押し込む → ゆっくり着陸して自動で停止</li>
+    <li><i style="background:#00B4D8">電</i><b style="color:#0A7EA4">LED が水色に点滅 → 電池が少ない合図。着陸して電池交換</b></li>
   </ol>
 </div>
 <div class="bx" style="left:73mm;width:60mm;background:#FFE1E1;border:.8mm solid #E53950">
@@ -218,12 +219,12 @@ body{word-break:auto-phrase;line-break:strict;font-family:"M PLUS Rounded 1c","H
   <div class="tt" style="color:#4A3CC0">ほかの飛行モード</div>
   <dl style="margin-top:.2mm;font-size:8.2pt;line-height:1.3">
     <dt style="background:#C93AA3">POS HOLD</dt> 高さと位置を自動でキープ（LED マゼンタ）<br>
-    <dt style="background:#7BA515">手動</dt> 高さも自分で操る（LED 黄緑）。<b style="color:#C21F38">空中で押し込むとすぐ止まる</b>（アクロも同じ）<br>
-    <dt style="background:#1E88E5">アクロ</dt> 自動で水平に戻らない上級者向け（手動で右の黄色ボタン、LED 青）
+    <dt style="background:#7BA515">STABILIZE</dt> 画面が Mnual&nbsp;ALT のとき。高さも自分で操る（LED 黄緑）。<b style="color:#C21F38">空中で押し込むとすぐ止まる</b>（ACRO も同じ）<br>
+    <dt style="background:#1E88E5">ACRO</dt> 自動で水平に戻らない上級者向け（STABILIZE で右の黄色ボタン、LED 青）
   </dl>
   <div class="note" style="color:#4A3CC0">切り替えは着陸してモーターが止まっているときに</div>
 </div>
 
-<div class="foot">StampFly は M5Stack と伊藤研究室で開発された教育用ドローンです<span style="opacity:.6">｜</span>操縦体験会　7 号館 301 教室</div>
+<div class="foot">StampFly は M5Stack と伊藤研究室で開発された教育用ドローンです</div>
 </div>
 </body></html>
