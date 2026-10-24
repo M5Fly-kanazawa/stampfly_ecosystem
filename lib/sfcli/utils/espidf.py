@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, List
 from .platform import platform
+from .console import console
 
 
 def find_idf_path() -> Optional[Path]:
@@ -170,3 +171,116 @@ def run_idf_command(
         cmd = idf_command(cmd[1:])
 
     return subprocess.run(cmd, cwd=cwd, env=env)
+
+
+# Maximum number of mismatched keys listed in the warning.
+# 警告に列挙する食い違いキーの最大数。
+MAX_SDKCONFIG_MISMATCHES_SHOWN = 10
+
+# Value used for "not set" after normalization.
+# 正規化後の「未設定」を表す値。
+_SDKCONFIG_NOT_SET = "n"
+
+
+def _parse_sdkconfig_file(path: Path) -> dict:
+    """Parse a sdkconfig / sdkconfig.defaults file into {key: value}.
+
+    `CONFIG_X=value` -> value (strings keep their quotes);
+    `# CONFIG_X is not set` and `CONFIG_X=n` -> "n". Other lines are ignored.
+    sdkconfig 系ファイルを {キー: 値} に変換する。`CONFIG_X=値` は値そのまま
+    （文字列は引用符付き）、`# CONFIG_X is not set` と `CONFIG_X=n` は "n"。
+    他の行は無視する。
+    """
+    result = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith("# CONFIG_") and line.endswith(" is not set"):
+            key = line[len("# "):-len(" is not set")].strip()
+            result[key] = _SDKCONFIG_NOT_SET
+        elif line.startswith("CONFIG_") and "=" in line:
+            key, value = line.split("=", 1)
+            result[key.strip()] = value.strip()
+    return result
+
+
+def find_sdkconfig_mismatches(project_dir: Path) -> list:
+    """Return [(key, defaults_value, sdkconfig_value)] for every key set in
+    sdkconfig.defaults (and sdkconfig.defaults.<target>, which overrides it)
+    whose value differs in project_dir/sdkconfig. Returns [] when either file
+    is missing or unreadable: this check must never break a build.
+    sdkconfig.defaults（と、それを上書きする sdkconfig.defaults.<target>）で
+    設定されたキーのうち、project_dir/sdkconfig で値が異なるものを
+    [(キー, defaults の値, sdkconfig の値)] で返す。どちらかのファイルが無い・
+    読めない場合は [] を返す（この検査でビルドを壊さないため）。
+    """
+    sdkconfig_path = project_dir / "sdkconfig"
+    defaults_path = project_dir / "sdkconfig.defaults"
+    if not sdkconfig_path.is_file() or not defaults_path.is_file():
+        return []
+    try:
+        current = _parse_sdkconfig_file(sdkconfig_path)
+        defaults = _parse_sdkconfig_file(defaults_path)
+        # ESP-IDF also loads sdkconfig.defaults.<target>; it overrides the base.
+        # ESP-IDF は sdkconfig.defaults.<target> も読み、基本ファイルを上書きする。
+        target = current.get("CONFIG_IDF_TARGET", "").strip('"')
+        target_path = project_dir / f"sdkconfig.defaults.{target}"
+        if target and target_path.is_file():
+            defaults.update(_parse_sdkconfig_file(target_path))
+    except (OSError, UnicodeDecodeError):
+        return []
+
+    mismatches = []
+    for key, default_value in defaults.items():
+        # A key absent from sdkconfig is skipped: it stays absent even in a
+        # freshly generated sdkconfig (unmet Kconfig dependency, or a symbol
+        # this IDF version does not know), so the warning would have no remedy.
+        # sdkconfig に無いキーは報告しない。新規生成した sdkconfig でも無いまま
+        # （Kconfig の依存条件が不成立、またはこの IDF が知らないシンボル）で、
+        # 警告しても対処のしようがないため。
+        if key not in current:
+            continue
+        if current[key] != default_value:
+            mismatches.append((key, default_value, current[key]))
+    return mismatches
+
+
+def _describe_sdkconfig_value(value: str) -> str:
+    """Format a normalized value for the warning ("n" -> "n (not set)").
+    警告用に値を整形する（"n" は "n (not set)" と表示）。
+    """
+    return f"{value} (not set)" if value == _SDKCONFIG_NOT_SET else value
+
+
+def warn_sdkconfig_mismatches(project_dir: Path, mismatches: list) -> None:
+    """Print the stale-sdkconfig warning. Does nothing if mismatches is empty.
+    古い sdkconfig の警告を表示する。mismatches が空なら何もしない。
+    """
+    if not mismatches:
+        return
+    sdkconfig_path = Path(project_dir) / "sdkconfig"
+    # The heading goes to stderr and the body to stdout. Flush stdout on both
+    # sides so the lines stay in order and ahead of idf.py's output even when
+    # piped (stdout is block-buffered there).
+    # 見出しは stderr、本文は stdout に出る。パイプ時は stdout がまとめて
+    # 書き出されるため、前後で stdout を書き出して行の順序を保ち、idf.py の
+    # 出力より前に表示されるようにする。
+    sys.stdout.flush()
+    console.warning(
+        f"{sdkconfig_path} does not match sdkconfig.defaults:", prefix="WARNING"
+    )
+    for key, default_value, current_value in mismatches[:MAX_SDKCONFIG_MISMATCHES_SHOWN]:
+        console.print(
+            f"    {key}: defaults={_describe_sdkconfig_value(default_value)}, "
+            f"sdkconfig={_describe_sdkconfig_value(current_value)}"
+        )
+    hidden = len(mismatches) - MAX_SDKCONFIG_MISMATCHES_SHOWN
+    if hidden > 0:
+        console.print(f"    ... and {hidden} more")
+    console.print("  ESP-IDF reads sdkconfig.defaults only when sdkconfig does not exist, so an")
+    console.print("  sdkconfig created before the defaults changed keeps the old settings.")
+    console.print("  `sf build --clean` does not regenerate it.")
+    console.print("  To regenerate it, rename or delete this file and build again")
+    console.print("  (keep the renamed copy if you edited it by hand):")
+    console.print(f"    {sdkconfig_path}")
+    console.print("  If you changed these settings on purpose (menuconfig), you can ignore this.")
+    sys.stdout.flush()

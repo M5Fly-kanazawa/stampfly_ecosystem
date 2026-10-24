@@ -139,6 +139,11 @@ def run(args: argparse.Namespace) -> int:
     console.info(f"Running: {' '.join(cmd)}")
     console.print()
 
+    # Warn (never block) if a stale sdkconfig disagrees with sdkconfig.defaults
+    # 古い sdkconfig が sdkconfig.defaults と食い違う場合に警告する（ビルドは止めない）
+    mismatches = espidf.find_sdkconfig_mismatches(target_dir)
+    espidf.warn_sdkconfig_mismatches(target_dir, mismatches)
+
     # Execute build
     result = subprocess.run(cmd, cwd=target_dir, env=env)
 
@@ -157,6 +162,9 @@ def run(args: argparse.Namespace) -> int:
     else:
         console.print()
         console.error(f"Build failed: {args.target}")
+        # Repeat the warning: it has scrolled away under the compiler output
+        # 警告をもう一度出す（コンパイラ出力の下に流れて見えなくなるため）
+        espidf.warn_sdkconfig_mismatches(target_dir, mismatches)
         return result.returncode
 
 

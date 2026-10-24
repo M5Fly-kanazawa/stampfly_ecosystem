@@ -203,6 +203,7 @@ jobs:
           python -m pytest -q \
             lib/sflog/tests tools/log_analyzer tools/sysid tools/calibration \
             lib/sfcli/commands/test_trim.py \
+            lib/sfcli/commands/test_build_sdkconfig.py \
             lib/sfcli/commands/test_sils_flightlog.py \
             simulator/tools/compare_simulators/test_sim_io.py simulator/sils/tests
 
