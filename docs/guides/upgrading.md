@@ -47,7 +47,7 @@ sf upgrade
 | 2 | 取得＋差分確認 | 最新情報を取得し、何コミット遅れているか判定。0件（最新）なら、ステップ6（専用環境への移行提案）→ステップ7（依存関係の再同期）→ステップ8（書き込みアプリ未導入時の一回限り提案）だけ実行して終了 | `git fetch origin main`<br>`git rev-list --count HEAD..origin/main` |
 | 3 | 更新内容のプレビュー | 取り込まれるコミットの一覧（最大15件）を表示し、`Y/n` で確認（`--yes` で省略可） | `git log --oneline HEAD..origin/main` |
 | 4 | ローカル変更の取り込み | 下記4.1参照 | 下記参照 |
-| 5 | sdkconfig陳腐化検出 | ファームウェアの既定設定（`sdkconfig.defaults` や `partitions.csv`）が変わっていたら、既存の `sdkconfig` を退避（詳細は下記） | （手動での再現は複雑なため `sf upgrade` 推奨） |
+| 5 | sdkconfig陳腐化検出 | ファームウェアの既定設定（`sdkconfig.defaults` や `partitions.csv`）が変わっていたら、既存の `sdkconfig` を退避（詳細は下記） | `sf doctor --fix`（`sdkconfig.defaults` と食い違う `sdkconfig` を退避） |
 | 6 | 専用環境への移行提案 | まだ専用環境（自己完結した Python 3.12 + ESP-IDF v5.5.2 を SF_HOME 配下にまとめた環境）でなければ、移行するか尋ねる（対話時の既定は `Y`）。承諾した、または `--migrate` を指定した場合はここで移行を実行し、成功すればステップ7・8を飛ばして終了する。詳細は下記「5. インストール／アンインストールのライフサイクル」内の「専用環境への移行」を参照 | `python scripts/installer.py --dedicated --non-interactive --no-flasher` |
 | 7 | 依存関係の再同期 | Python依存パッケージを常に再インストール（`--skip-deps` で省略可）。差分がなければ数秒で終わる。併せて、matplotlib（グラフ描画ライブラリ）のGUIバックエンド（ウィンドウ表示の仕組み）が使えるかも確認し、必要ならPyQt6（Qtバインディング）を自動導入する | `pip install -e .` |
 | 8 | GUIフラッシャの更新／インストール提案 | ネイティブGUIフラッシャ（デスクトップアプリ）が導入済みなら更新するか確認（`--no-flasher` でスキップ、`--yes` で自動承諾）。**未導入なら、チェックアウトにつき一回だけ**インストールするか確認（既定は入れない＝`n`）。`--yes` / `--no-flasher` 指定時はこの一回限りの機会を消費せずスキップし、一度尋ねたら結果を `.sf/flasher_install_offered` に記録して二度と尋ねない | `sf flasher install --yes` |
@@ -261,6 +261,18 @@ sf build <対象>
 
 ファームウェアの既定設定ファイル（`sdkconfig.defaults` や `partitions.csv`）が更新された場合、ESP-IDFは既存の `sdkconfig`（あなたのビルド設定の実体）へ自動で反映してくれません。そこで `sf upgrade` が、古い `sdkconfig` を `sdkconfig.pre-upgrade-backup` という名前に変えて退避します。次回ビルド時に新しい既定値から `sdkconfig` が再生成されます。もし独自にカスタマイズしていた設定があれば、退避された `*.pre-upgrade-backup` ファイルを見比べて手動で反映してください。
 
+### `sf build` が「sdkconfig does not match sdkconfig.defaults」と警告した
+
+`sf upgrade` を使わずに `git pull` で更新すると、上の退避が行われず、古い `sdkconfig` が残ります。`sf build` はビルドの前に `sdkconfig` と `sdkconfig.defaults` を比べ、食い違う設定項目を表示します（ビルドが失敗したときは、失敗の表示の後にもう一度表示します）。`sf build --clean` では `sdkconfig` は作り直されません。
+
+次のコマンドで古い `sdkconfig` を `sdkconfig.stale-backup-<日時>` という名前に変えて退避できます。次回のビルドで新しい既定値から作り直されます。
+
+```bash
+sf doctor --fix
+```
+
+`sf doctor`（`--fix` なし）は確認だけを行い、ファイルは変えません。menuconfig で意図して設定を変えている場合は、この警告は無視してかまいません。
+
 ### 「Your local changes would be overwritten」と表示された
 
 これは Git が「あなたが編集したファイルと、これから取り込む公式の変更が衝突しそうです」と警告しているものです。`sf upgrade` は通常この状況を自動でstash（一時退避）してから処理するため目にすることは少ないはずですが、`git pull` を手動で行った場合などに表示されることがあります。対処は [4. 衝突の解決](#conflicts) と同じ考え方です。まず `git stash` で自分の変更を退避し、`git pull` してから `git stash pop` してください。
@@ -304,7 +316,7 @@ This guide targets **teachers and students who are not software-development spec
 | 2 | Fetch + diff check | Fetches the latest state and counts how many commits behind you are. If 0 (already up to date), only step 6 (dedicated-environment migration offer), step 7 (dependency resync), and step 8 (one-time Flasher offer) still run | `git fetch origin main`<br>`git rev-list --count HEAD..origin/main` |
 | 3 | Update preview | Shows up to 15 incoming commits and asks `Y/n` to proceed (skipped with `--yes`) | `git log --oneline HEAD..origin/main` |
 | 4 | Local change handling | See 3.1 below | See below |
-| 5 | sdkconfig staleness check | If firmware defaults (`sdkconfig.defaults` / `partitions.csv`) changed, backs up any existing `sdkconfig` (details below) | (complex to reproduce manually; use `sf upgrade`) |
+| 5 | sdkconfig staleness check | If firmware defaults (`sdkconfig.defaults` / `partitions.csv`) changed, backs up any existing `sdkconfig` (details below) | `sf doctor --fix` (backs up an `sdkconfig` that disagrees with `sdkconfig.defaults`) |
 | 6 | Dedicated-environment migration offer | If this checkout is not already the dedicated environment (a self-contained Python 3.12 + ESP-IDF v5.5.2 under SF_HOME), asks whether to migrate (default `Y` when interactive). If accepted, or `--migrate` was passed, migration runs here and, on success, steps 7-8 are skipped. See "Migrating to the dedicated environment" under "5. Install / Uninstall Lifecycle" below | `python scripts/installer.py --dedicated --non-interactive --no-flasher` |
 | 7 | Dependency resync | Always reinstalls Python dependencies (skip with `--skip-deps`); a no-op pull still finishes in a couple of seconds. Also checks whether matplotlib (the plotting library) has a working GUI backend (window-display mechanism) and installs PyQt6 (a Qt binding) automatically if needed | `pip install -e .` |
 | 8 | Native GUI Flasher update / install offer | If the desktop Flasher app is installed, offers to update it (skip with `--no-flasher`, auto-accept with `--yes`). If **not** installed, offers to install it **once per checkout** (default No). `--yes`/`--no-flasher` skip this without consuming the one-time chance; once asked, the answer is recorded in `.sf/flasher_install_offered` and never asked again | `sf flasher install --yes` |
@@ -515,6 +527,18 @@ sf build <target>
 ### It says "backed up sdkconfig" — what happened?
 
 When firmware default-configuration files (`sdkconfig.defaults` / `partitions.csv`) change upstream, ESP-IDF does not automatically re-apply them onto your existing `sdkconfig` (your actual build configuration). So `sf upgrade` renames the old `sdkconfig` to `sdkconfig.pre-upgrade-backup` and lets it regenerate from the new defaults on the next build. If you had made your own customizations, compare against the `*.pre-upgrade-backup` file and reapply them by hand.
+
+### `sf build` warns "sdkconfig does not match sdkconfig.defaults"
+
+If you update with `git pull` instead of `sf upgrade`, the backup above does not happen and the old `sdkconfig` stays. Before building, `sf build` compares `sdkconfig` with `sdkconfig.defaults` and lists the settings that disagree (and lists them again after the failure message if the build fails). `sf build --clean` does not regenerate `sdkconfig`.
+
+The following command renames the old `sdkconfig` to `sdkconfig.stale-backup-<timestamp>`; the next build regenerates it from the new defaults.
+
+```bash
+sf doctor --fix
+```
+
+`sf doctor` (without `--fix`) only checks and does not change any file. If you changed these settings on purpose with menuconfig, you can ignore the warning.
 
 ### I see "Your local changes would be overwritten"
 

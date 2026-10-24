@@ -5,6 +5,7 @@ Handles ESP-IDF environment setup and command execution.
 ESP-IDF環境のセットアップとコマンド実行を処理
 """
 
+import datetime
 import os
 import shutil
 import sys
@@ -251,6 +252,60 @@ def _describe_sdkconfig_value(value: str) -> str:
     return f"{value} (not set)" if value == _SDKCONFIG_NOT_SET else value
 
 
+def format_sdkconfig_mismatch_lines(mismatches: list) -> List[str]:
+    """Format mismatched keys as indented lines, capped at
+    MAX_SDKCONFIG_MISMATCHES_SHOWN (the rest is summarized in one line).
+    食い違いキーをインデント付きの行に整形する。MAX_SDKCONFIG_MISMATCHES_SHOWN
+    件で打ち切り、残りは1行に要約する。
+    """
+    lines = [
+        f"    {key}: defaults={_describe_sdkconfig_value(default_value)}, "
+        f"sdkconfig={_describe_sdkconfig_value(current_value)}"
+        for key, default_value, current_value in mismatches[:MAX_SDKCONFIG_MISMATCHES_SHOWN]
+    ]
+    hidden = len(mismatches) - MAX_SDKCONFIG_MISMATCHES_SHOWN
+    if hidden > 0:
+        lines.append(f"    ... and {hidden} more")
+    return lines
+
+
+# File-name prefix of a backed-up stale sdkconfig (followed by a timestamp).
+# 退避した古い sdkconfig のファイル名接頭辞（後ろにタイムスタンプが付く）。
+STALE_SDKCONFIG_BACKUP_PREFIX = "sdkconfig.stale-backup-"
+
+# Timestamp format of the backup file name.
+# 退避ファイル名のタイムスタンプ書式。
+_BACKUP_TIMESTAMP_FORMAT = "%Y%m%d-%H%M%S"
+
+
+def backup_stale_sdkconfig(project_dir: Path) -> Optional[Path]:
+    """Rename project_dir/sdkconfig to sdkconfig.stale-backup-<timestamp> so
+    the next build regenerates it from sdkconfig.defaults. Never overwrites an
+    existing file (appends -1, -2, ... instead). Returns the new path, or None
+    if there is no sdkconfig or the rename failed. Never raises.
+    project_dir/sdkconfig を sdkconfig.stale-backup-<タイムスタンプ> に改名し、
+    次のビルドで sdkconfig.defaults から再生成させる。既存ファイルは上書きせず
+    （-1, -2, ... を付ける）、新しいパスを返す。sdkconfig が無い・改名に失敗した
+    場合は None。例外は投げない。
+    """
+    project_dir = Path(project_dir)
+    sdkconfig_path = project_dir / "sdkconfig"
+    try:
+        if not sdkconfig_path.is_file():
+            return None
+        stamp = datetime.datetime.now().strftime(_BACKUP_TIMESTAMP_FORMAT)
+        base_name = f"{STALE_SDKCONFIG_BACKUP_PREFIX}{stamp}"
+        backup_path = project_dir / base_name
+        suffix = 0
+        while backup_path.exists():
+            suffix += 1
+            backup_path = project_dir / f"{base_name}-{suffix}"
+        sdkconfig_path.rename(backup_path)
+        return backup_path
+    except OSError:
+        return None
+
+
 def warn_sdkconfig_mismatches(project_dir: Path, mismatches: list) -> None:
     """Print the stale-sdkconfig warning. Does nothing if mismatches is empty.
     古い sdkconfig の警告を表示する。mismatches が空なら何もしない。
@@ -268,19 +323,15 @@ def warn_sdkconfig_mismatches(project_dir: Path, mismatches: list) -> None:
     console.warning(
         f"{sdkconfig_path} does not match sdkconfig.defaults:", prefix="WARNING"
     )
-    for key, default_value, current_value in mismatches[:MAX_SDKCONFIG_MISMATCHES_SHOWN]:
-        console.print(
-            f"    {key}: defaults={_describe_sdkconfig_value(default_value)}, "
-            f"sdkconfig={_describe_sdkconfig_value(current_value)}"
-        )
-    hidden = len(mismatches) - MAX_SDKCONFIG_MISMATCHES_SHOWN
-    if hidden > 0:
-        console.print(f"    ... and {hidden} more")
+    for line in format_sdkconfig_mismatch_lines(mismatches):
+        console.print(line)
     console.print("  ESP-IDF reads sdkconfig.defaults only when sdkconfig does not exist, so an")
     console.print("  sdkconfig created before the defaults changed keeps the old settings.")
     console.print("  `sf build --clean` does not regenerate it.")
     console.print("  To regenerate it, rename or delete this file and build again")
     console.print("  (keep the renamed copy if you edited it by hand):")
     console.print(f"    {sdkconfig_path}")
+    console.print("  Or run `sf doctor --fix`: it backs the file up and the next build")
+    console.print("  regenerates it from sdkconfig.defaults.")
     console.print("  If you changed these settings on purpose (menuconfig), you can ignore this.")
     sys.stdout.flush()

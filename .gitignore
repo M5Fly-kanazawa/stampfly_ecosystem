@@ -21,6 +21,9 @@ Thumbs.db
 **/build/
 sdkconfig
 sdkconfig.old
+# Backups made by `sf upgrade` / `sf doctor --fix` (not sdkconfig.defaults*)
+# `sf upgrade` / `sf doctor --fix` が作る退避ファイル（sdkconfig.defaults* は対象外）
+sdkconfig.*backup*
 dependencies.lock
 managed_components/
 

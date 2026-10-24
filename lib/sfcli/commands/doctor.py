@@ -14,7 +14,7 @@ import sys
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Optional, Tuple
-from ..utils import console, paths, platform, plotting
+from ..utils import console, espidf, paths, platform, plotting
 from . import sils as sils_cmd
 
 COMMAND_NAME = "doctor"
@@ -803,6 +803,64 @@ def _check_environment(warnings: list) -> None:
     _check_dedicated_manifest(root)
 
 
+def _sdkconfig_project_dirs(firmware_dir: Path) -> list:
+    """List firmware projects that have sdkconfig.defaults: firmware/*/ and
+    firmware/apps/*/, sorted by path.
+    sdkconfig.defaults を持つファームウェアプロジェクト（firmware/*/ と
+    firmware/apps/*/）をパス順で返す。
+    """
+    candidates = []
+    for parent in (firmware_dir, firmware_dir / "apps"):
+        if parent.is_dir():
+            candidates.extend(d for d in parent.iterdir() if d.is_dir())
+    return sorted(d for d in candidates if (d / "sdkconfig.defaults").is_file())
+
+
+def _check_sdkconfig(firmware_dir: Path, warnings: list, fix: bool) -> None:
+    """Check that each firmware project's local sdkconfig matches its
+    sdkconfig.defaults. ESP-IDF reads the defaults only when sdkconfig does not
+    exist, so a stale sdkconfig after `git pull` keeps old settings. When `fix`
+    is True (`sf doctor --fix`) the stale file is renamed to
+    sdkconfig.stale-backup-<timestamp>; the next build regenerates it.
+    各ファームウェアプロジェクトのローカル sdkconfig が sdkconfig.defaults と
+    一致するか確認する。ESP-IDF は sdkconfig が無いときだけ defaults を読むため、
+    `git pull` 後に古い sdkconfig が残ると古い設定のままになる。`fix` が True
+    （`sf doctor --fix`）なら古いファイルを sdkconfig.stale-backup-<時刻> に
+    改名し、次のビルドで再生成させる。
+    """
+    projects = _sdkconfig_project_dirs(firmware_dir)
+    if not projects:
+        console.print("  No firmware project with sdkconfig.defaults found")
+        return
+
+    for project_dir in projects:
+        label = project_dir.relative_to(firmware_dir).as_posix()
+        if not (project_dir / "sdkconfig").is_file():
+            console.print(f"  {label}: no sdkconfig yet (generated on first build)")
+            continue
+        mismatches = espidf.find_sdkconfig_mismatches(project_dir)
+        if not mismatches:
+            console.success(f"  {label}: sdkconfig matches sdkconfig.defaults")
+            continue
+
+        console.warning(f"  {label}: sdkconfig does not match sdkconfig.defaults")
+        for line in espidf.format_sdkconfig_mismatch_lines(mismatches):
+            console.print(line)
+
+        if fix:
+            backup_path = espidf.backup_stale_sdkconfig(project_dir)
+            if backup_path is not None:
+                console.success(
+                    f"  {label}: backed up to {backup_path.name}; "
+                    "regenerated from sdkconfig.defaults on the next build"
+                )
+                continue
+            console.warning(f"  {label}: could not back up sdkconfig")
+        else:
+            console.print("    Fix: sf doctor --fix")
+        warnings.append(f"firmware/{label}/sdkconfig does not match sdkconfig.defaults")
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute doctor command"""
     console.header("StampFly Environment Diagnostics")
@@ -869,6 +927,12 @@ def run(args: argparse.Namespace) -> int:
         warnings.append("ESP-IDF not found")
         console.warning("  ESP-IDF: NOT FOUND")
         console.print("    Install from: https://docs.espressif.com/projects/esp-idf/")
+
+    # Check firmware sdkconfig vs sdkconfig.defaults
+    # ファームウェアの sdkconfig と sdkconfig.defaults の一致を確認
+    console.print()
+    console.info("Checking firmware sdkconfig...")
+    _check_sdkconfig(paths.firmware(), warnings, args.fix)
 
     # Check Python packages
     console.print()
