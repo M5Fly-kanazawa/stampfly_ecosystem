@@ -45,7 +45,11 @@ order "cmd: cw 90" "cmd: land"
 order "cmd: land" "Autonomous landing engaged"
 # Hover at the unified 0.5 m takeoff height before the first move (slight steady-state
 # offset above target). / 最初の移動前に 0.5 m ホバー（目標よりわずかに上の定常偏差）。
-metric alt_mean > 0.42 in 14.0 17.5
+# 2026-10-31 R_out plant: alt_mean lower bound 0.42 -> 0.30 (basis (b): 14 real auto-takeoffs, window takeoff+7.7..+11.2 s,
+# ESKF altitude: min 0.326, p10 0.348, p50 0.473 -> real min rounded down; 4 of 14 real takeoffs were below the old 0.42,
+# which was tuned to the old plant (0.518) / 実機14回の離陸（最小 0.326・p10 0.348・p50 0.473）の最小を切り下げ。
+# 旧 0.42 は旧プラントの値 0.518 に合わせたもので、実機の 4/14 が下回る
+metric alt_mean > 0.30 in 14.0 17.5
 metric alt_mean < 0.70 in 14.0 17.5
 # "forward 50" displaces the craft forward and stays BOUNDED. The true-physics
 # peak overshoots the 0.5 m target (~0.8 m) before settling — the estimate (which

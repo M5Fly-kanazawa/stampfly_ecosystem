@@ -104,12 +104,16 @@ order "Auto-takeoff complete — normal mode law engaged" "Flip requested (direc
 order "Flip requested (direction=Right)" "Flip requested (direction=Left)"
 order "Flip requested (direction=Left)" "DISARM accepted (FLYING → IDLE_GROUND)"
 order "DISARM accepted (FLYING → IDLE_GROUND)" "Flip requested (direction=Forward)"
-# Hover near 1.1-1.2 m before each cycle's flip(s) (flip.min_height_m=1.0,
-# ToF model limit 1.4). / 各サイクルの宙返り前に約1.1-1.2mでホバー。
+# Hover near 1.2-1.6 m before each cycle's flip(s) (flip.min_height_m=1.0, SILS ToF model
+# limit 1.63 m). / 各サイクルの宙返り前に約1.2-1.6mでホバー。
+# 2026-10-31 R_out plant: upper bound 1.35 -> 1.75 (reason (a): the pre-flip climb input was extended
+# so the press happens at >=1.2 m; basis (b): real flips started at 1.41 m and 1.70 m, logs/flip_test1/2,
+# so the bound is the real maximum 1.70 rounded up). / 上限 1.35->1.75（押下が1.2 m以上になるよう上昇入力を延長したため。
+# 実機の宙返り開始高度 1.41 m・1.70 m が根拠）。
 metric alt_mean > 1.00 in 13.5 16.5
-metric alt_mean < 1.35 in 13.5 16.5
+metric alt_mean < 1.75 in 13.5 16.5
 metric alt_mean > 1.00 in 45.3 48.3
-metric alt_mean < 1.35 in 45.3 48.3
+metric alt_mean < 1.75 in 45.3 48.3
 metric duty_max < 0.92 in 13.5 16.5
 metric duty_max < 0.92 in 45.3 48.3
 # flip 1 (t=16.5): roll RIGHT, one full turn. / 宙返り1: ロール右、1回転。

@@ -36,8 +36,8 @@
    +    rc   2048  2048   2048    2048  1     1000      50       # B: ARM rising edge → ARMED_GROUND, idle throttle 1 s
    +    bias 0.0   0.07   0.0     0.0   0.0   0.0                # C: residual accel bias AFTER calibration (tilt-estimate error on the floor)
    +    rc   2314  2048   2048    2048  1     25000     50       # D: low throttle 0.13 on the floor 25 s (no takeoff)
-   +    rc   3243  2048   2048    2048  1     2000      50       # E: throttle up (>0.5) → TAKEOFF → FLYING, liftoff
-   +    rc   3176  2048   2048    2048  1     1500      50       # F: near-hover, sticks centred
+   +    rc   3171  2048   2048    2048  1     2000      50       # E: throttle up (>0.5) → TAKEOFF → FLYING, liftoff | 2026-10-31 R_out plant: STABILIZE/ACRO throttle 3243->3171 (deviation from 2048 x0.94: open-loop hover raw 3154->3088, SILS sweep at 3.87 V) / R_outプラントでホバーraw 3154->3088、偏差x0.94
+   +    rc   3108  2048   2048    2048  1     1500      50       # F: near-hover, sticks centred | 2026-10-31 R_out plant: STABILIZE/ACRO throttle 3176->3108 (deviation from 2048 x0.94: open-loop hover raw 3154->3088, SILS sweep at 3.87 V) / R_outプラントでホバーraw 3154->3088、偏差x0.94
    +    rc   2048  2048   2048    2048  0     200       50       # release ARM button / ボタン離し
    +    rc   2048  2048   2048    2048  1     200       50       # press again → DISARM (toggle) / 再押下=DISARM
    +    rc   2048  2048   2048    2048  0     600       50       # settle disarmed / disarm 後整定

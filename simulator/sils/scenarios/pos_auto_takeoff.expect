@@ -20,7 +20,11 @@ metric duty_max < 0.05 in 7.55 7.78
 metric alt_mean > 0.42 in 12.0 16.0
 metric alt_mean < 0.62 in 12.0 16.0
 metric alt_rmse < 0.08 in 12.0 16.0
-metric alt_band < 0.20 in 12.0 16.0
+# 2026-10-31 R_out plant: alt_band 0.20 -> 0.55 (basis (b): 14 real auto-takeoffs in ALT_HOLD/POS_HOLD, window
+# takeoff+4.2..+8.2 s, ESKF altitude: alt_band p50 0.164, p90 0.443, max 0.521 -> real max rounded up; the old
+# 0.20 was tuned to the old plant (value 0.008, below every real takeoff) / 実機14回の離陸（p50 0.164・p90 0.443・最大 0.521）の
+# 最大を切り上げ。旧 0.20 は旧プラントの値 0.008（実機の全離陸より小さい）に合わせたもの
+metric alt_band < 0.55 in 12.0 16.0
 metric horizontal_drift_max < 0.5 in 9.0 16.0
 metric duty_max < 0.92 in 12.0 16.0
 metric tilt_max < 0.1745 in 9.0 16.0  # 10.0 deg

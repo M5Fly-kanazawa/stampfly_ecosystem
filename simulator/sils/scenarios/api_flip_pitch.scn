@@ -6,7 +6,7 @@
 #   1. "command" / "takeoff": SDK mode, ARM-triggered auto-takeoff to 0.5 m (POS_HOLD).
 #   2. "up 60": climb to ~1.1 m so the flip execution condition h >= flip.min_height_m
 #      (1.0 m) holds while the ToF stays valid — the SILS VL53 device model reports
-#      no target above 1.4 m (simulator/sils/devices/vl53_device.cpp MAX_MM), unlike
+#      no target above 1.63 m (1.4 m until 2026-10-31) (simulator/sils/devices/vl53_device.cpp MAX_MM), unlike
 #      the real sensor (~3 m), so the pre-flip hover must sit below that limit.
 #   3. "flip f" / "flip b" (pitch axis only; roll is api_flip_roll.scn): each one is
 #      FLYING → FLIP → FLYING
@@ -17,7 +17,7 @@
 # centered transmitter), as in api_flight.scn.
 #
 # 実 ApiTask パーサを駆動。検証する鎖: SDK モード → 自動離陸（0.5 m）→ up 60 で約 1.1 m へ
-# （実行条件 h ≥ 1.0 m を満たしつつ、SILS の ToF 模擬の上限 1.4 m より下に留める。実センサは
+# （実行条件 h ≥ 1.0 m を満たしつつ、SILS の ToF 模擬の上限 1.63 m（2026-10-31 まで 1.4 m）より下に留める。実センサは
 # 約 3 m）→ 4 方向の宙返り（各 FLYING → FLIP → FLYING、
 # 間隔 3 s = マニューバ約 0.6 s + クールダウン 2 s）→ 自動着陸。全行程 RC は中立のまま。
 #
