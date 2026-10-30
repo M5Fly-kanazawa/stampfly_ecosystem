@@ -75,19 +75,22 @@ constants:
     unit: "kg·m²"
     date: "unknown"
     source: >
-      Roll慣性モーメント。出所文書は未特定（tools/sysid/defaults.py 由来、
-      全実装で既に一致済み — params_manifest.py の「既に一致済みの正常
-      参照ケース」コメント参照）。
+      Roll慣性モーメント。開発者による2点吊り法（捻り振子の周期から
+      I = m·g·b²·T²/(4π²·L)）の実測値。周期などの生データは残っていない。
+      公開教材 multicopter_introduction 付録 D に方法と結果、垂直軸の定理に
+      よる検算（Ixx+Iyy=22.5e-6 対 Izz=20.4e-6、比 0.91）がある。
+      Measured by the developer with the bifilar (two-string) torsion-pendulum
+      method; raw period data not retained (multicopter_introduction, appendix D).
   Iyy:
     value: 13.3e-6
     unit: "kg·m²"
     date: "unknown"
-    source: "Pitch慣性モーメント。出所文書は未特定（全実装で既に一致済み）。"
+    source: "Pitch慣性モーメント。2点吊り法の実測値（Ixx の source 参照）。Bifilar measurement, see Ixx."
   Izz:
     value: 20.4e-6
     unit: "kg·m²"
     date: "unknown"
-    source: "Yaw慣性モーメント。出所文書は未特定（全実装で既に一致済み）。"
+    source: "Yaw慣性モーメント。2点吊り法の実測値（Ixx の source 参照）。Bifilar measurement, see Ixx."
   arm_offset:
     value: 0.023
     unit: "m"
