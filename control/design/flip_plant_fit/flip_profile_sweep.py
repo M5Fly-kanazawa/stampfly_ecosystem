@@ -69,10 +69,19 @@ def run_case(case):
                "--param", "flip.enable=1"]
         for key, value in case.get("params", {}).items():
             cmd += ["--param", f"{key}={value}"]
-        cmd += ["--plant-profile", case.get("profile", "default")]
+        # The opt-in plant profile flip_fit_2026_10 was removed from the SILS on 2026-10-31 (superseded
+        # by the R_out drive); its three SSOT values (plant_fit_flip_2026_10) are now passed as the
+        # single-knob options, so the historical cases still run. "default" = no extra knobs.
+        # オプトインのプラントプロファイル flip_fit_2026_10 は 2026-10-31 に SILS から削除した
+        # （R_out 駆動で置き換え済み）。その 3 値（SSOT plant_fit_flip_2026_10）は個別ノブの
+        # オプションとして渡すので、過去のケースもそのまま走る。"default" は追加ノブなし。
+        plant = {}
+        if case.get("profile", "default") == "flip_fit_2026_10":
+            plant = {"torque_authority": 0.60, "motor_delay": 6.0, "motor_slew": 18.0}
+        plant.update(case.get("plant", {}))
         flags = {"torque_authority": "--torque-authority", "motor_delay": "--motor-delay",
                  "motor_slew": "--motor-slew"}
-        for key, value in case.get("plant", {}).items():
+        for key, value in plant.items():
             cmd += [flags[key], str(value)]
         env = dict(os.environ)
         if "soc" in case:

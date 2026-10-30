@@ -58,7 +58,7 @@ EXPECTED_PLANT_I0A = 0.0443   # A
 EXPECTED_PLANT_I0B = 2.915e-09   # A/(rad/s)^2
 EXPECTED_PLANT_C_C = 1e-07   # F (informational)
 EXPECTED_PLANT_F_PWM = 150000.0   # Hz (informational)
-EXPECTED_PLANT_THRUST_EFFICIENCY = 1.0
+EXPECTED_PLANT_THRUST_EFFICIENCY = 0.976
 
 # R_out(D) [ohm], 101 entries for D = 0.00 .. 1.00 (index = round(D*100)).
 # Entry 0 is a placeholder (D < 0.01 means no drive); see generate.py.

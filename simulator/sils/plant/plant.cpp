@@ -86,6 +86,15 @@ bool Plant::init(const char* model_path, const Config& cfg)
     pos_sid_   = mj_name2id(m_, mjOBJ_SENSOR, "body_pos");
     vel_sid_   = mj_name2id(m_, mjOBJ_SENSOR, "body_vel");
 
+    // Ground standoff: the collision box half-height is the height at which the body origin
+    // rests on the floor (and so what the emulated bottom ToF reads there).
+    // 地上の底上げ: 衝突箱の半高さが、機体原点が床に静止する高さ（下向き ToF 模擬がそこで
+    // 返す値）。
+    const int collision_gid = mj_name2id(m_, mjOBJ_GEOM, "collision");
+    if (collision_gid >= 0 && m_->geom_type[collision_gid] == mjGEOM_BOX) {
+        rest_height_m_ = (float)m_->geom_size[3 * collision_gid + 2];
+    }
+
     // Seed the sensor-noise model (default OFF). Deterministic per cfg.noise.seed.
     // センサノイズモデルをシード（既定 OFF）。cfg.noise.seed で決定論的。
     noise_.init(cfg_.noise);
@@ -883,12 +892,13 @@ sf::TofData Plant::tof() const
     out.valid = (dist > 0.0f && dist < 4.0f);   // VL53L3CX range gate (true distance)
 
     // N2 observation noise, applied ONLY above the VL53 reliable close-range minimum
-    // (kTofMinRange). The body rests at ~13 mm, which is BELOW the sensor's reliable
-    // range; adding σ-class noise there drives the reading negative/invalid and makes
+    // (kTofMinRange). The body origin rests at ~21 mm (ground standoff; the emulated
+    // ToF reads 35 mm there), which is BELOW the sensor's reliable range;
+    // adding σ-class noise there drives the reading negative/invalid and makes
     // the boot ToF gate (and the takeoff/landing state machine) chatter. Above ~5 cm the
     // craft is airborne where the noise actually matters for altitude hold. No-op unless
     // N2 obs noise is enabled; then it propagates through the VL53 model to the firmware.
-    // N2 観測ノイズは VL53 の信頼近接下限（kTofMinRange）より上でのみ付与。静止高 ~13mm は
+    // N2 観測ノイズは VL53 の信頼近接下限（kTofMinRange）より上でのみ付与。静止高 ~21mm（ToF 模擬は 35mm を返す）は
     // 信頼範囲より近く、そこへ σ 級ノイズを載せると負/無効になり起動 ToF 判定と離着陸状態機械が
     // チャタリングする。~5cm 超は空中で高度保持にノイズが効く領域。N2 ON 時のみ、VL53 経由で伝播。
     constexpr float kTofMinRange = 0.05f;       // VL53 reliable close-range minimum [m]

@@ -263,23 +263,36 @@ calibration_sets:
         note: >
           Informational only; the averaged model does not use it directly. / 情報用。平均化モデルは直接使わない。
       thrust_efficiency:
-        value: 1.0
+        value: 0.976
         unit: "-"
-        method: "ベンチの Ct をそのまま使う（補正なし）"
-        method_en: "Bench Ct used as-is (no correction)"
-        date: "2026-10-30"
-        source: "SILS decision 2026-10-30; analysis/notes/ct_cq_bench_20261015.md"
+        method: "飛行ログのホバー釣り合いから決定（η = m·g / Σ_i T(D_i, V)、9 本・299 サンプル）"
+        method_en: "Determined from the flight hover balance (eta = m*g / sum_i T(D_i, V), 9 logs, 299 samples)"
+        date: "2026-10-31"
+        source: "flight logs 2026-07-17 x5, 07-18 x2, 09-08, 10-02 flip_test1; analysis/notes/ct_cq_bench_20261015.md"
         note: >
-          1.0 とする理由: 実測した R_out 表（下記）を使うと、飛行ログの
-          ホバリングの釣り合いは η≈0.98、電流の比は≈1.00 になり、補正が
-          ほぼ不要になる（analysis/notes/ct_cq_bench_20261015.md）。旧既定
-          0.7133 は「ファームの曲線」と「旧プラントのモータ」が別物だった
-          ことへの帳尻合わせだった（2026-08-22）。
-          Why 1.0: with the measured R_out table the flight hover balance needs
-          eta ~ 0.98 and the current ratio is ~ 1.00, so essentially no
-          correction is needed (see analysis/notes/ct_cq_bench_20261015.md).
-          The former default 0.7133 was bookkeeping for the firmware curve and
-          the old plant motor being two different motors (2026-08-22).
+          飛行ログのホバー釣り合いから決めた: η = m·g / Σ_i T(D_i, V)。
+          各モータの指令 duty D_i と基板電圧 V（1 秒ごとのホバー区間サンプル）を
+          採用した R_out 表（下記）に通して推力 T を計算する。9 本の飛行ログ
+          （2026-07-17 ×5、07-18 ×2、09-08、10-02 flip_test1）の 299 サンプル、
+          m = 0.037 kg。中央値 0.976、p16〜p84 は 0.963〜0.996、電圧に対する
+          傾きは 3.64〜4.10 V で +0.005/V（電圧依存なし）。解釈: ベンチの単独
+          モータと機体搭載時の間にある設置・干渉損失。m = 0.0364 kg（二本吊り
+          測定の質量）を使うと 0.960 になる。
+          Determined from the flight hover balance, eta = m*g / sum_i T(D_i, V),
+          with the per-motor commanded duties D_i and the board voltage V of every
+          1-s hover sample, evaluated through the adopted R_out table (below), in
+          9 flight logs (2026-07-17 x5, 07-18 x2, 09-08, 10-02 flip_test1; 299
+          samples), m = 0.037 kg: median 0.976, p16-p84 0.963-0.996, slope versus
+          voltage +0.005 per V over 3.64-4.10 V (no voltage dependence).
+          Interpretation: installation/interference loss between the single motor
+          on the bench and the airframe in flight. With m = 0.0364 kg (the
+          bifilar measurement mass) it would be 0.960.
+          (Previously 1.0 = bench Ct as-is, 2026-10-30; the former default 0.7133
+          was bookkeeping for the firmware curve and the old plant motor being two
+          different motors, 2026-08-22.)
+          （旧: 2026-10-30 は 1.0＝ベンチの Ct そのまま。さらに前の既定 0.7133 は
+          ファームの曲線と旧プラントのモータが別物だったことへの帳尻合わせ、
+          2026-08-22。）
     # --- R_out(D) table: three layers, all stored here --------------------------
     # --- R_out(D) 表: 3 層、すべてここに保存 -------------------------------------
     # (a) measured_points : bench measurement. R_out = (V_DD - Ke*w) / I_bat from the
@@ -857,31 +870,28 @@ calibration_sets:
   # are effective plant-level correction factors identified so that the SILS
   # plant reproduces the hardware duty -> roll-rate dynamics of the failed flip
   # (logs/flip_test1.sflog.zip). They are consumed ONLY by the SILS plant
-  # (simulator/sils/plant/plant.hpp Config defaults via
-  # generated_params.hpp sils_params::plant_fit::*); the firmware does not use
-  # them. Evidence and residuals: docs/architecture/simulation-policy.md §5
+  # (formerly via the opt-in profile flip_fit_2026_10; retired 2026-10-31); the
+  # firmware does not use them. Evidence and residuals: docs/architecture/simulation-policy.md §5
   # ("2026-10-02 追記") and docs/plans/flip-maneuver-plan.md §5.6.
   # 最初の実機宙返りログ（2026-10-02）からの SILS プラント忠実度フィット。
   # 単一の物理量のベンチ実測ではなく、SILS プラントが失敗した宙返りの実機の
   # duty→ロールレート動特性を再現するよう同定した、プラント全体の実効補正係数
-  # （3 値）。SILS プラント専用（plant.hpp Config 既定値、generated_params.hpp
-  # sils_params::plant_fit::* 経由）。ファームは使わない。
+  # （3 値）。SILS プラント専用（旧オプトインのプロファイル flip_fit_2026_10 経由、
+  # 2026-10-31 に退役）。ファームは使わない。
   # ----------------------------------------------------------------------------
-  # UPDATE (2026-10-30): SUPERSEDED (values untouched). These factors were
-  # identified against the OLD V0 motor model (D*V electrical ODE); they
+  # UPDATE (2026-10-31): SUPERSEDED and RETIRED (values untouched). These factors
+  # were identified against the OLD V0 motor model (D*V electrical ODE); they
   # double-count with the R_out drive of bench_2026_10_15 (which already
-  # reproduces the lower duty->roll-acceleration gain). Retired 2026-10-30. The
-  # *_fit scenarios that use them (opt-in plant profile flip_fit_2026_10) will be
-  # replaced by an as-flown failure reproduction in Phase C. The values are still
-  # emitted as sils_params::plant_fit::* only so the opt-in profile keeps building
-  # until Phase C removes it.
-  # 2026-10-30 更新: 置き換え済み（値は変更しない）。これらの係数は旧 V0 モータ
-  # モデル（D×V 電気 ODE）に対して同定したもので、bench_2026_10_15 の R_out
+  # reproduces the lower duty->roll-acceleration gain). The opt-in plant profile
+  # flip_fit_2026_10, the sils_params::plant_fit::* generator output and the
+  # *_fit scenarios were removed on 2026-10-31; this set is kept as a record only.
+  # The as-flown failure is reproduced instead by the scenario flip_test2_repro.
+  # 2026-10-31 更新: 置き換え済み、かつ退役（値は変更しない）。これらの係数は旧 V0
+  # モータモデル（D×V 電気 ODE）に対して同定したもので、bench_2026_10_15 の R_out
   # 駆動（duty→ロール角加速度ゲインの低さを既に再現する）と二重に効く。
-  # 2026-10-30 に退役。これを使う *_fit シナリオ（オプトインのプラント
-  # プロファイル flip_fit_2026_10）は Phase C で「飛んだとおりの失敗の再現」に
-  # 置き換える。値は、Phase C で当該プロファイルを外すまでビルドが通るよう
-  # sils_params::plant_fit::* として生成し続ける。
+  # オプトインのプラントプロファイル flip_fit_2026_10・生成物 sils_params::plant_fit::*・
+  # *_fit シナリオは 2026-10-31 に削除した。本セットは記録としてのみ残す。
+  # 飛んだとおりの失敗は、代わりにシナリオ flip_test2_repro で再現する。
   plant_fit_flip_2026_10:
     status: superseded
     superseded_by: bench_2026_10_15

@@ -39,7 +39,7 @@ constexpr float I0A = 0.0443f;  ///< no-load current, constant part [A]
 constexpr float I0B = 2.915e-09f;  ///< no-load current, w^2 part [A/(rad/s)^2]
 constexpr float C_C = 1e-07f;  ///< recirculation capacitor [F] (informational)
 constexpr float F_PWM = 150000.0f;  ///< PWM frequency [Hz] (informational)
-constexpr float THRUST_EFFICIENCY = 1.0f;  ///< Config::thrust_efficiency default (eta)
+constexpr float THRUST_EFFICIENCY = 0.976f;  ///< Config::thrust_efficiency default (eta)
 
 // R_out(D) [ohm], D = 0.00 .. 1.00 in 0.01 steps (ROUT_N entries, index = round(D*100)).
 // ROUT_OHM is the ADOPTED table = calculated table x r(D), computed by the generator
@@ -124,18 +124,5 @@ constexpr float KM = 0.0006125f;
 constexpr float DM = 3.69e-08f;
 constexpr float QF = 2.76e-05f;
 }  // namespace legacy
-
-// --- calibration_sets.plant_fit_flip_2026_10 (status: SUPERSEDED 2026-10-30) ---
-// Identified against the old V0 motor model; double-counts with the R_out drive.
-// Emitted only so the opt-in profile SILS_EMU_PLANT_PROFILE=flip_fit_2026_10
-// (emu_main.cpp) keeps building until Phase C replaces the *_fit scenarios.
-// 旧 V0 モータモデルに対して同定した値で、R_out 駆動と二重に効く。オプトインの
-// プロファイル flip_fit_2026_10 がビルドできるよう、Phase C で *_fit シナリオを
-// 置き換えるまで生成する。
-namespace plant_fit {
-constexpr float TORQUE_AUTHORITY = 0.6f;  ///< Config::torque_authority (roll/pitch differential-thrust ratio)
-constexpr float MOTOR_DELAY_MS = 6.0f;  ///< Config::motor_delay_ms (duty-path transport delay [ms])
-constexpr float MOTOR_SLEW_PER_S = 18.0f;  ///< Config::motor_slew_per_s (duty slew limit [duty/s])
-}  // namespace plant_fit
 
 }  // namespace sils_params

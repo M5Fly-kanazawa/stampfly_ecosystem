@@ -154,7 +154,7 @@ VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulat
 | I0b | 無負荷電流・ω² 部（SILS プラント） | 2.915×10⁻⁹ | A/(rad/s)² | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（無負荷電流の ω² 部） |
 | C_C | 還流コンデンサ（SILS プラント） | 1×10⁻⁷ | F | 2026-10-15 | 基板の部品定数（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（R_out 表の前提） |
 | f_pwm | PWM 周波数（SILS プラント） | 150000 | Hz | 2026-10-15 | 基板の PWM 周波数（情報用） |
-| η | 推力効率（SILS プラント） | 1 | - | 2026-10-30 | ベンチの Ct をそのまま使う（補正なし） |
+| η | 推力効率（SILS プラント） | 0.976 | - | 2026-10-31 | 飛行ログのホバー釣り合いから決定（η = m·g / Σ_i T(D_i, V)、9 本・299 サンプル） |
 | Ct_gauge | 推力ゲージ係数（ファーム） | 1×10⁻⁸ | N/(rad/s)² | 2026-10-30 | ファームの換算が使う推力ゲージ係数（actuator.cpp の MOTOR_CT）。2026-08-03 の暫定採用値 |
 | κ | トルク/推力比（ファーム） | 4.1×10⁻³ | m | 2026-08-03 | ファームのミキサー B^-1 が使うトルク/推力比（actuator.cpp の KAPPA）= Cq/Ct の丸め不要の値 |
 | Am | 2次係数（ファーム） | 6.037×10⁻⁸ | V/(rad/s)² | 2026-08-22 | - |
@@ -653,7 +653,7 @@ The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coex
 | I0b | No-load current, w^2 part (SILS plant) | 2.915×10⁻⁹ | A/(rad/s)² | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (w^2 part of the no-load current) |
 | C_C | Recirculation capacitor (SILS plant) | 1×10⁻⁷ | F | 2026-10-15 | Board component value (premise of the R_out table) |
 | f_pwm | PWM frequency (SILS plant) | 150000 | Hz | 2026-10-15 | Board PWM frequency (informational) |
-| η | Thrust efficiency (SILS plant) | 1 | - | 2026-10-30 | Bench Ct used as-is (no correction) |
+| η | Thrust efficiency (SILS plant) | 0.976 | - | 2026-10-31 | Determined from the flight hover balance (eta = m*g / sum_i T(D_i, V), 9 logs, 299 samples) |
 | Ct_gauge | Thrust gauge coefficient (firmware) | 1×10⁻⁸ | N/(rad/s)² | 2026-10-30 | Thrust gauge coefficient the firmware conversion uses (MOTOR_CT in actuator.cpp). Provisional adoption of 2026-08-03 |
 | κ | Torque/thrust ratio (firmware) | 4.1×10⁻³ | m | 2026-08-03 | Torque/thrust ratio the firmware mixer B^-1 uses (KAPPA in actuator.cpp) = Cq/Ct, exact |
 | Am | Quadratic coefficient (firmware) | 6.037×10⁻⁸ | V/(rad/s)² | 2026-08-22 | - |

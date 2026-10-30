@@ -1,0 +1,28 @@
+# flip_test2_repro.expect — the SILS must ABORT this flip on the gyro limit, as the hardware did
+# SILS はこの宙返りを、実機と同じくジャイロ上限で打ち切らなければならない
+#
+# See the .scn header for the real-log facts and the parameter provenance. This file REQUIRES the abort:
+# no abort (the SILS completing the flip) is a FAIL. Do not loosen it.
+# 実機ログの事実とパラメータの出自は .scn 冒頭を参照。本ファイルは打ち切りを「必須」とする:
+# 打ち切りなし（SILS が宙返りを完走）は FAIL。緩めないこと。
+exit 0
+log_contains any "cmd: flip r"
+log_contains any "Flip requested (direction=Right)"
+log_absent  any "Flip complete → FLYING"
+# The console reply for this flip reads "error flip: aborted disarmed" in the SILS, not "aborted gyro_limit":
+# the craft is not recovered (as on the hardware) and the impact disarm preempts the reply, so the
+# abort cause is read from the flight-log flip_result (3 = AbortedGyroLimit) by the metrics below.
+# このシナリオの console の応答は SILS では "aborted gyro_limit" でなく "error flip: aborted disarmed":
+# 機体は（実機と同じく）立て直せず、衝撃検知の DISARM が応答より先に起きる。打ち切りの原因は
+# 下の metric がフライトログの flip_result（3 = AbortedGyroLimit）から読む。
+#
+# The abort is by the GYRO limit (flip_result 3 = AbortedGyroLimit), early in the spin: the firmware
+# rotation angle at the abort is 80-130 deg (log: 90.0 deg; SILS 91 deg) and the abort comes 0.08-0.20 s
+# after the Spin start (log: 0.1225 s; SILS 0.120 s). Each metric FAILS when no gyro-limit abort exists.
+# 打ち切りは「ジャイロ上限」（flip_result 3 = AbortedGyroLimit）で、スピンの序盤に起きる: 打ち切り時の
+# ファーム積算回転角は 80〜130°（ログ 90.0°、SILS 91°）、打ち切りは Spin 開始の 0.08〜0.20 s 後
+# （ログ 0.1225 s、SILS 0.120 s）。ジャイロ上限による打ち切りが無いと各 metric は FAIL。
+metric flip_gyro_abort_phi_deg       > 80
+metric flip_gyro_abort_phi_deg       < 130
+metric flip_gyro_abort_after_spin_s  > 0.08
+metric flip_gyro_abort_after_spin_s  < 0.20

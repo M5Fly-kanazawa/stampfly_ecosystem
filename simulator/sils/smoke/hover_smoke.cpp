@@ -58,7 +58,7 @@ using sf::math::Vec3;
 
 namespace {
 constexpr int64_t kSimDurationUs = 8600000;   // 8.6 s (T_LAND=8.1 + 0.5 s settle, same margin as before)
-constexpr float kGroundZ = 0.013f;            // body rest height on the ground (ENU up)
+constexpr float kStartClearanceM = 0.0027f;   // release height above the resting height [m] / 静止高さの上の開始クリアランス
 constexpr float kG2AttRmseMaxDeg = 6.0f;      // G2: estimate-vs-truth attitude RMSE bound
 
 // Closed-loop ALT_HOLD schedule. The throttle stick commands a vertical RATE:
@@ -501,7 +501,7 @@ int main(int argc, char** argv)
         fprintf(stderr, "[flight] plant init failed (model: %s)\n", model_path);
         return 1;
     }
-    g_plant.setStartHeight(kGroundZ);  // start on the ground for a real takeoff
+    g_plant.setStartHeight(g_plant.restHeightM() + kStartClearanceM);  // start on the ground for a real takeoff
     sils::bridge::current_imu = g_plant.imu();
     sils::bridge::has_plant = true;
 

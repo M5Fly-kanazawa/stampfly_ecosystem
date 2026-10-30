@@ -168,7 +168,18 @@ public:
         /// その表では飛行ホバリングの釣り合いが η≈0.98、電流の比が≈1.00 で、補正はほぼ
         /// 不要（analysis/notes/ct_cq_bench_20261015.md）。実行毎の上書きは
         /// SILS_EMU_THRUST_EFF（emu_main.cpp）。
-        float thrust_efficiency = sils_params::plant::THRUST_EFFICIENCY;  ///< 1.0 = bench Ct used as-is (see above)
+        ///
+        /// UPDATE (2026-10-31): default is now 0.976, determined from the flight hover
+        /// balance eta = m*g / sum_i T(D_i, V) (per-motor commanded duties and board voltage
+        /// through the adopted R_out table; 299 one-second hover samples in 9 flight logs,
+        /// m = 0.037 kg): median 0.976, p16-p84 0.963-0.996, no voltage dependence. It is the
+        /// installation/interference loss between the single bench motor and the airframe.
+        /// 追記（2026-10-31）: 既定値は 0.976。飛行ログのホバー釣り合い
+        /// eta = m*g / sum_i T(D_i, V)（各モータの指令 duty と基板電圧を採用 R_out 表に通す。
+        /// 9 本の飛行ログの 1 秒ごとのホバー 299 サンプル、m = 0.037 kg）から決定: 中央値
+        /// 0.976、p16〜p84 は 0.963〜0.996、電圧依存なし。ベンチ単独モータと機体搭載時の間の
+        /// 設置・干渉損失である。
+        float thrust_efficiency = sils_params::plant::THRUST_EFFICIENCY;  ///< 0.976 = flight hover balance (see above)
 
         // Roll/pitch DIFFERENTIAL torque authority — Model fidelity (hikoki64 §3.3 SILS
         // injection study, 2026-08-02). Deliberately SEPARATE from thrust_efficiency
@@ -181,21 +192,13 @@ public:
         // which does not match the real symptom (the craft flew and hovered fine; only
         // attitude TRACKING was deficient, ~0.58 achievement ratio at the divergence
         // frequency). See substep()'s longer comment for the redistribution formula.
-        // DEFAULT 1.0 (OFF, the pre-fit plant). The fitted value
-        // sils_params::plant_fit::TORQUE_AUTHORITY (0.60, from the first real flip log
-        // logs/flip_test1: the hardware's duty->roll-acceleration gain is ~0.5-0.64x this
-        // plant's ODE gain; SSOT control/models/stampfly_physical.yaml plant_fit_flip_2026_10)
-        // is applied only by the opt-in profile SILS_EMU_PLANT_PROFILE=flip_fit_2026_10
-        // (sf sils scenario --plant-profile flip_fit_2026_10): it comes from ONE roll-axis flip
-        // log and moves many non-flip metrics (docs/architecture/simulation-policy.md §5).
-        // Per-run override: SILS_EMU_TORQUE_AUTHORITY (--torque-authority).
-        // 既定 1.0（OFF、フィット前のプラント）。フィット値 sils_params::plant_fit::
-        // TORQUE_AUTHORITY（0.60: 最初の実機宙返りログ logs/flip_test1 で、実機の duty→ロール角
-        // 加速度ゲインが本プラントの ODE ゲインの約 0.5〜0.64 倍と判明。SSOT
-        // plant_fit_flip_2026_10）は、オプトインのプロファイル SILS_EMU_PLANT_PROFILE=
-        // flip_fit_2026_10（--plant-profile flip_fit_2026_10）でのみ適用する: ロール軸の宙返り
-        // ログ 1 本からの値で、宙返り以外の多くの指標を動かすため（simulation-policy.md §5）。
-        // 実行毎の上書き: SILS_EMU_TORQUE_AUTHORITY（--torque-authority）。
+        // DEFAULT 1.0 (OFF). The 2026-10-02 flip-log fit (0.60, SSOT set
+        // plant_fit_flip_2026_10) was identified against the old V0 motor model, double-counts
+        // with the R_out drive and was retired on 2026-10-31 (docs/architecture/
+        // simulation-policy.md §5). Per-run override: SILS_EMU_TORQUE_AUTHORITY (--torque-authority).
+        // 既定 1.0（OFF）。2026-10-02 の宙返りログのフィット値（0.60、SSOT plant_fit_flip_2026_10）は
+        // 旧 V0 モータモデルに対して同定したもので R_out 駆動と二重に効くため、2026-10-31 に退役
+        // （simulation-policy.md §5）。実行毎の上書き: SILS_EMU_TORQUE_AUTHORITY（--torque-authority）。
         // ロール/ピッチ差動トルク効き — Model fidelity（hikoki64 §3.3 SILS注入実験、
         // 2026-08-02）。上の thrust_efficiency とは意図的に別ノブ: substep() が4モータ推力を
         // その平均のまわりに再配分し、平均からの偏差だけを本係数で縮小 — 正味鉛直推力
@@ -205,7 +208,7 @@ public:
         // 飛行・ホバーし、姿勢「追従」のみ発散周波数で達成度~0.58に劣化）と整合しない。
         // 再配分式は substep() の長いコメント参照。既定 1.0（OFF）でクリーン経路はバイト
         // 一致 —— SILS_EMU_TORQUE_AUTHORITY（sf sils scenario --torque-authority）で有効化。
-        float torque_authority = 1.0f;  ///< 1.0 = unscaled differential thrust (default plant; fitted value via the flip_fit_2026_10 profile)
+        float torque_authority = 1.0f;  ///< 1.0 = unscaled differential thrust (default)
 
         // --- Motor path transport delay (dead time) — Model fidelity ---
         // The identified plant model G(s) = b·e^(−Ls)/(s(Ts+1)) (docs/architecture/
@@ -222,12 +225,10 @@ public:
         // yaw reaction torque all consume the SAME substep's thrust, so delaying
         // thrust itself (rather than the duty command feeding the ODE) would break
         // that same-substep consistency.
-        // DEFAULT 0 (OFF, the pre-fit plant). The fitted value
-        // sils_params::plant_fit::MOTOR_DELAY_MS (6 ms) is applied only by the opt-in profile
-        // flip_fit_2026_10 (see torque_authority above; simulation-policy.md §5): the real flip
-        // log showed the duty->gyro delay exceeds the ODE lag alone by ~9-10 ms in the
-        // large-signal saturated regime, while the 2026-07-26 small-signal hover sysid found no
-        // extra delay needed. Per-scenario override: SILS_EMU_MOTOR_DELAY (--motor-delay).
+        // DEFAULT 0 (OFF). The retired 2026-10-02 flip-log fit (6 ms) showed the duty->gyro delay
+        // exceeds the ODE lag alone by ~9-10 ms in the large-signal saturated regime, while the
+        // 2026-07-26 small-signal hover sysid found no extra delay needed. Per-scenario override:
+        // SILS_EMU_MOTOR_DELAY (--motor-delay).
         //
         // モータ経路の輸送遅れ（むだ時間）。同定モデル G(s)=b·e^(−Ls)/(s(Ts+1))
         // （simulation-policy.md §2 層1）は duty→レート応答を「純遅延 L」と「一次遅れ T」の
@@ -239,9 +240,10 @@ public:
         // ままなので、本ノブは引き続き意味を持つ。duty→推力経路（substep()）で ODE 積分の
         // **手前**に純遅延として挿入する（**後段の推力は不可** — 電池電流・地面効果・
         // ヨー反トルクは同じ substep の推力を使うため、推力自体を遅らせると整合が崩れる）。
-        // 既定 0（OFF、フィット前のプラント）でクリーン経路はバイト一致、既存シナリオ（遅延無しで
-        // 調整済み）へ影響しない。フィット値（6 ms）はオプトインのプロファイル flip_fit_2026_10 でのみ
-        // 適用（上の torque_authority 参照）。SILS_EMU_MOTOR_DELAY（--motor-delay）でシナリオ毎に上書き。
+        // 既定 0（OFF）でクリーン経路はバイト一致、既存シナリオ（遅延無しで調整済み）へ影響しない。
+        // 退役した 2026-10-02 の宙返りログのフィット（6 ms）: トルク飽和の大信号域で duty→ジャイロ
+        // の遅れが ODE の遅れだけより 9〜10 ms 大きい。2026-07-26 のホバー小信号同定では追加遅れ
+        // 不要。SILS_EMU_MOTOR_DELAY（--motor-delay）でシナリオ毎に上書き。
         // NOTE (2026-10-30): the default STAYS 0 with the R_out drive. An extra ~4 ms
         // actuator delay is indicated by flight data (flip forward model δ 3–4 ms, hover
         // δ 4–8 ms, as-flown flip reproduction best at 4 ms) but not adopted; to be settled
@@ -251,7 +253,7 @@ public:
         // アクチュエータ遅れを示す（宙返りの順モデルで δ 3〜4 ms、ホバーで δ 4〜8 ms、飛んだ
         // とおりの宙返りの再現は 4 ms が最良）が採用しない。Duty ステップのベンチ計測
         // （stampfly-motor-autotest の docs/procedure_long_discharge.md、計測 D）で決める。
-        float motor_delay_ms = 0.0f;  ///< duty-path transport delay [ms] (0 = OFF/bypass; fitted value via the flip_fit_2026_10 profile)
+        float motor_delay_ms = 0.0f;  ///< duty-path transport delay [ms] (0 = OFF/bypass)
 
         // --- Motor duty slew-rate limit — Model fidelity (flip-log fit, 2026-10-02) ---
         // The real flip log shows a duty->gyro lag of ~33-37 ms in the large-signal
@@ -260,19 +262,17 @@ public:
         // limit cycle (backlog #15), so only part of the lag is a transport delay
         // (motor_delay_ms, capped at the stability limit) and the rest is this slew limit,
         // which acts only when duty swings by ~1 within tens of ms. Applied after the
-        // transport delay, before the motor ODE. DEFAULT 0 = OFF; the fitted value
-        // sils_params::plant_fit::MOTOR_SLEW_PER_S (18 duty/s) is applied only by the opt-in
-        // profile flip_fit_2026_10. Override via SILS_EMU_MOTOR_SLEW (--motor-slew). The physical cause (ESC /
-        // driver / battery current limit) is not identified; this is an effective value.
+        // transport delay, before the motor ODE. DEFAULT 0 = OFF (the 2026-10-02 fit, 18 duty/s,
+        // was retired 2026-10-31). Override via SILS_EMU_MOTOR_SLEW (--motor-slew). The physical
+        // cause (ESC / driver / battery current limit) is not identified; this is an effective value.
         // 実機宙返りログでは duty→ジャイロの遅れが、トルク飽和の大信号域で約 33〜37 ms、
         // ホバーの小信号で約 14〜18 ms。宙返りに足りる量を純遅れで入れると SILS のホバー姿勢
         // ループが 6 Hz のリミットサイクルに入る（バックログ #15）ため、遅れ（motor_delay_ms、
         // 安定限界で頭打ち）と、duty が数十 ms で ~1 振れるときだけ効く本スルーレート制限に
-        // 分担させる。輸送遅れの後段、モータ ODE の手前に適用。既定 0 = OFF、フィット値
-        // sils_params::plant_fit::MOTOR_SLEW_PER_S（18 duty/s）はオプトインのプロファイル
-        // flip_fit_2026_10 でのみ適用。SILS_EMU_MOTOR_SLEW（--motor-slew）で上書き。物理的原因（ESC・ドライバ・電池の電流制限）は未同定で、
-        // 実効値である。
-        float motor_slew_per_s = 0.0f;  ///< duty slew limit [duty/s] (0 = OFF; fitted value via the flip_fit_2026_10 profile)
+        // 分担させる。輸送遅れの後段、モータ ODE の手前に適用。既定 0 = OFF（2026-10-02 の
+        // フィット値 18 duty/s は 2026-10-31 に退役）。SILS_EMU_MOTOR_SLEW（--motor-slew）で上書き。
+        // 物理的原因（ESC・ドライバ・電池の電流制限）は未同定で、実効値である。
+        float motor_slew_per_s = 0.0f;  ///< duty slew limit [duty/s] (0 = OFF)
 
         // --- Ground effect — Model fidelity ---
         // Extra rotor lift near the floor: each motor's thrust is scaled by
@@ -459,6 +459,15 @@ public:
     /// デモのため、地上スタート（z ≈ 箱の半分の高さ）に使う。
     void setStartHeight(float z);
 
+    /// Body-origin height [m] at which the craft rests on the floor: the half-height of the
+    /// model's "collision" box (the ground standoff). The emulated bottom ToF reads this at
+    /// rest (it measures the origin height), so it equals the real vehicle's ground reading.
+    /// 0.0103 if the model has no such box. Valid after init().
+    /// 機体が床に静止するときの機体原点の高さ [m] ＝ モデルの "collision" 箱の半高さ
+    /// （地上の底上げ）。下向き ToF 模擬は原点高さを測るので、静止時にこの値を返し、実機の
+    /// 地上読みと一致する。箱が無いモデルでは 0.0103。init() 後に有効。
+    float restHeightM() const { return rest_height_m_; }
+
     /// Begin a PHYSICAL HANDLING maneuver: a hand lifts the (crashed) craft, rights it
     /// to level, carries it to a placement spot and sets it back down on the ground —
     /// the SILS stand-in for "pick the drone up and put it back" of the re-fly workflow.
@@ -644,7 +653,8 @@ private:
     // --- Physical handling maneuver (kinematic override) state ---
     // 物理ハンドリング動作（キネマティック上書き）の状態。
     bool  handling_active_ = false;     ///< kinematic override in progress
-    float ground_rest_z_enu_ = 0.013f;  ///< body rest height [m] ENU (set by setStartHeight)
+    float ground_rest_z_enu_ = 0.0237f; ///< body rest height [m] ENU (set by setStartHeight)
+    float rest_height_m_ = 0.0103f;     ///< collision-box half-height = ground standoff [m] (set by init)
     float handle_t_ = 0.0f;             ///< elapsed handling time [s]
     float handle_lift_s_  = 0.0f;       ///< lift  phase duration [s]
     float handle_carry_s_ = 0.0f;       ///< carry phase duration [s]

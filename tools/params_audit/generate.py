@@ -189,15 +189,16 @@ def build_view(spec: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize the raw YAML dict into the flat values every renderer needs.
     生の YAML 辞書を、各レンダラーが必要とするフラットな値へ正規化する。
 
-    Five calibration sets are consumed: bench_2026_10_15 (SILS plant),
+    Four calibration sets are consumed: bench_2026_10_15 (SILS plant),
     flight_anchored_motor_curve (firmware thrust->duty constants), the
-    superseded measured_2026_07 (for the not-yet-migrated D*V drive models),
-    legacy_motor_curve (docs history table) and plant_fit_flip_2026_10 (the
-    opt-in plant profile).
-    5つの較正セットを使う: bench_2026_10_15（SILS プラント）、
+    superseded measured_2026_07 (for the not-yet-migrated D*V drive models) and
+    legacy_motor_curve (docs history table). The superseded
+    plant_fit_flip_2026_10 set is kept in the YAML but no longer emitted.
+    4つの較正セットを使う: bench_2026_10_15（SILS プラント）、
     flight_anchored_motor_curve（ファームの推力→duty 換算定数）、置き換え済みの
     measured_2026_07（移行前の D×V 駆動モデル向け）、legacy_motor_curve（docs の
-    履歴表向け）、plant_fit_flip_2026_10（オプトインのプラントプロファイル向け）。
+    履歴表向け）。置き換え済みの plant_fit_flip_2026_10 は YAML に残すが、もう
+    生成しない。
     """
     constants = {name: entry["value"] for name, entry in spec["constants"].items()}
     sets = spec["calibration_sets"]
@@ -212,9 +213,6 @@ def build_view(spec: Dict[str, Any]) -> Dict[str, Any]:
     legacy = sets["legacy_motor_curve"]
     legacy_params = {name: entry["value"] for name, entry in legacy["params"].items()}
 
-    plant_fit = sets["plant_fit_flip_2026_10"]
-    plant_fit_params = {name: entry["value"] for name, entry in plant_fit["params"].items()}
-
     bench = sets["bench_2026_10_15"]
     plant_params = {name: entry["value"] for name, entry in bench["params"].items()}
     rout = compute_rout_tables(bench["rout_table"])
@@ -224,7 +222,6 @@ def build_view(spec: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "constants": constants,
-        "plant_fit_params": plant_fit_params,
         "measured_params": measured_params,
         "measured_derived": derived,
         "measured_entries": measured["params"],
@@ -430,7 +427,6 @@ def _cpp_array(values: List[float], per_line: int = 5) -> List[str]:
 def render_cpp(view: Dict[str, Any]) -> str:
     c = view["constants"]
     lg = view["legacy_params"]
-    pf = view["plant_fit_params"]
     pl = view["plant_params"]
     fw = view["firmware_params"]
     rout = view["rout"]
@@ -520,28 +516,6 @@ def render_cpp(view: Dict[str, Any]) -> str:
     out.append(f"constexpr float DM = {_cpp_float(lg['Dm'])};")
     out.append(f"constexpr float QF = {_cpp_float(lg['Qf'])};")
     out.append("}  // namespace legacy")
-    out.append("")
-    out.append("// --- calibration_sets.plant_fit_flip_2026_10 (status: SUPERSEDED 2026-10-30) ---")
-    out.append("// Identified against the old V0 motor model; double-counts with the R_out drive.")
-    out.append("// Emitted only so the opt-in profile SILS_EMU_PLANT_PROFILE=flip_fit_2026_10")
-    out.append("// (emu_main.cpp) keeps building until Phase C replaces the *_fit scenarios.")
-    out.append("// 旧 V0 モータモデルに対して同定した値で、R_out 駆動と二重に効く。オプトインの")
-    out.append("// プロファイル flip_fit_2026_10 がビルドできるよう、Phase C で *_fit シナリオを")
-    out.append("// 置き換えるまで生成する。")
-    out.append("namespace plant_fit {")
-    out.append(
-        f"constexpr float TORQUE_AUTHORITY = {_cpp_float(pf['torque_authority'])};  "
-        "///< Config::torque_authority (roll/pitch differential-thrust ratio)"
-    )
-    out.append(
-        f"constexpr float MOTOR_DELAY_MS = {_cpp_float(pf['motor_delay_ms'])};  "
-        "///< Config::motor_delay_ms (duty-path transport delay [ms])"
-    )
-    out.append(
-        f"constexpr float MOTOR_SLEW_PER_S = {_cpp_float(pf['motor_slew_per_s'])};  "
-        "///< Config::motor_slew_per_s (duty slew limit [duty/s])"
-    )
-    out.append("}  // namespace plant_fit")
     out.append("")
     out.append("}  // namespace sils_params")
     out.append("")
