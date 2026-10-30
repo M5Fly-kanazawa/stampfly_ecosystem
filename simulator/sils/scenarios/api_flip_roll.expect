@@ -1,7 +1,7 @@
 # api_flip_roll.expect — Tello-style flip gates (roll axis: r, l)
 # Tello 風宙返りの判定（4 方向）
 #
-# Chain: SDK mode → API takeoff → "up 60" to ~1.1 m (below the SILS ToF model's 1.4 m
+# Chain: SDK mode → API takeoff → "up 60" to ~1.1 m (below the SILS ToF model's 1.63 m (1.4 m until 2026-10-31)
 # limit; the real sensor ranges ~3 m) → flip r / l / f / b, each a
 # FLYING → FLIP → FLYING sequence replied with "ok" → autonomous landing.
 # Metrics pin the physics per flip window (window starts 0.1 s before the command,
@@ -10,7 +10,7 @@
 # (FRD: right roll = +p, nose-down pitch = -q), the craft never goes far below the
 # hover, the rise stays within the ceiling margin (plan §5.3: 20-30 cm expected),
 # and the true tilt settles below 10 deg within 2.0 s of the window start (F3: within 1 s of completion; the window starts 0.1 s before the command and the maneuver takes ~0.7 s).
-# 連鎖: SDK モード → API 離陸 → up 60 で約 1.1 m（SILS の ToF 模擬上限 1.4 m より下。実センサは
+# 連鎖: SDK モード → API 離陸 → up 60 で約 1.1 m（SILS の ToF 模擬上限 1.63 m（2026-10-31 まで 1.4 m）より下。実センサは
 # 約 3 m）→ flip r/l/f/b（各 FLYING → FLIP → FLYING、
 # 応答 "ok"）→ 自動着陸。宙返りごとの窓（指令の 0.1 s 前から）で物理を固定: 真値の機体角速度の
 # 積分が符号どおり 1 回転（FRD: 右ロール = +p、機首下げ = −q）、ホバーから大きく落ちない、
@@ -47,7 +47,7 @@ order "cmd: flip r" "Flip requested (direction=Right)"
 order "Flip requested (direction=Right)" "cmd: flip l"
 order "cmd: land" "Autonomous landing engaged"
 # Hover near 1.1 m before the first flip (flip.min_height_m = 1.0, ToF model limit 1.4).
-# 最初の宙返り前に約 1.1 m でホバー（実行条件 1.0 m、ToF 模擬上限 1.4 m）。
+# 最初の宙返り前に約 1.1 m でホバー（実行条件 1.0 m、ToF 模擬上限 1.63 m）。
 metric alt_mean > 1.00 in 21.5 22.9
 metric alt_mean < 1.35 in 21.5 22.9
 metric duty_max < 0.92 in 8.0 22.9

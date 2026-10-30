@@ -60,93 +60,80 @@ if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 
 from sysid._generated_params import (  # noqa: E402
-    EXPECTED_CT,
-    EXPECTED_CQ,
-    EXPECTED_KAPPA,
-    EXPECTED_JMP,
-    EXPECTED_DM,
-    EXPECTED_QF,
+    # firmware thrust->duty set (flight_anchored_motor_curve, adopted)
+    # ファーム推力→duty 換算セット
+    EXPECTED_FW_CT,
+    EXPECTED_FW_KAPPA,
+    EXPECTED_FW_AM,
+    EXPECTED_FW_BM,
+    EXPECTED_FW_CM,
+    # SILS plant propulsion (bench_2026_10_15, adopted)
+    # SILS プラントの推進系
+    EXPECTED_PLANT_KE,
+    EXPECTED_PLANT_KT,
+    EXPECTED_PLANT_CQ,
+    EXPECTED_PLANT_CT,
+    EXPECTED_PLANT_J,
+    EXPECTED_PLANT_I0A,
+    EXPECTED_PLANT_I0B,
+    EXPECTED_PLANT_C_C,
+    EXPECTED_PLANT_F_PWM,
+    EXPECTED_PLANT_THRUST_EFFICIENCY,
+    # superseded measured_2026_07 (own D*V drive model, migration pending)
+    # 置き換え済み measured_2026_07（独自の D×V 駆動モデル、移行待ち）
+    EXPECTED_MEASURED_CT,
+    EXPECTED_MEASURED_CQ,
+    EXPECTED_MEASURED_KAPPA,
+    EXPECTED_MEASURED_JMP,
+    EXPECTED_MEASURED_DM,
+    EXPECTED_MEASURED_QF,
+    EXPECTED_MEASURED_RM,
+    EXPECTED_MEASURED_KM,
+    # legacy_motor_curve (docs history table)
+    EXPECTED_LEGACY_AM,
+    EXPECTED_LEGACY_BM,
+    EXPECTED_LEGACY_CM,
+    # calibration-independent constants
     EXPECTED_IXX,
     EXPECTED_IYY,
     EXPECTED_IZZ,
     EXPECTED_ARM,
-    EXPECTED_RM,
-    EXPECTED_KM,
     EXPECTED_MASS,
     EXPECTED_URDF_BASE_MASS,
 )
 
-# HTML display-scale variants of EXPECTED_* used by control/design/
+# Which calibration set does a row check against? (2026-10-30, R_out plant change)
+#   - FIRMWARE rows  (actuator.cpp MOTOR_CT/KAPPA/MOTOR_AM/BM/CM, plant_fit.py,
+#     genesis control_allocation.py thrust_to_duty/kappa) -> EXPECTED_FW_*
+#     (flight_anchored_motor_curve: what the firmware holds).
+#   - PLANT rows (simulator/sils/plant/generated_params.hpp namespace plant)
+#     -> EXPECTED_PLANT_* (bench_2026_10_15).
+#   - Genesis motor_model.py, VPython motors.py, loop_shaping_tool calc-ct,
+#     sysid defaults and the docs hand tables keep their OWN D*V drive model
+#     (V = D*Vbat with Rm/Km/Dm/Qf): "own D*V drive model, migration pending" ->
+#     EXPECTED_MEASURED_* (the superseded measured_2026_07 set).
+# Every EXPECTED_* is imported from the generated module; nothing is hand-typed
+# here any more (the former hand-typed EXPECTED_AM/BM/CM and EXPECTED_AM_FA/BM_FA
+# are gone: the firmware set and the legacy history rows are generated).
+# 各行がどの較正セットと照合されるか（2026-10-30、R_out プラント変更）:
+#   - ファーム側の行 -> EXPECTED_FW_*（ファームが持つ換算定数）
+#   - プラント側の行（generated_params.hpp の plant 名前空間）-> EXPECTED_PLANT_*
+#   - Genesis motor_model.py・VPython motors.py・loop_shaping_tool の calc-ct・
+#     sysid defaults・docs の手書き表は独自の D×V 駆動モデルのまま
+#     （「独自 D×V 駆動モデル、移行待ち」）-> EXPECTED_MEASURED_*
+# EXPECTED_* は全て生成モジュールから import し、ここへ手書きしない
+# （従来手書きだった EXPECTED_AM/BM/CM と EXPECTED_AM_FA/BM_FA は撤去した）。
+
+# HTML display-scale variant of EXPECTED_MEASURED_CT used by control/design/
 # loop_shaping_tool/index.html's Calculation tab, whose <input> fields show
-# Ct/Cq pre-divided by a fixed power-of-ten (labelled "×10⁻⁸" etc. next to
-# the field) rather than the raw SI value. Never hand-adjust these except to
-# match a scale-label change in index.html itself.
+# Ct pre-divided by a fixed power-of-ten (labelled "x10^-8" next to the field)
+# rather than the raw SI value. Never hand-adjust except to match a
+# scale-label change in index.html itself.
 # control/design/loop_shaping_tool/index.html の Calculation タブが使う
-# EXPECTED_* の表示スケール版。Ct/Cq の <input> はSI値そのものではなく、
-# 固定の10のべき乗（フィールド脇に「×10⁻⁸」等と表示）で割った値を表示する。
+# EXPECTED_MEASURED_CT の表示スケール版。Ct の <input> は SI 値そのものではなく、
+# 固定の10のべき乗（フィールド脇に「×10⁻⁸」と表示）で割った値を表示する。
 # index.html 自体の表示スケール表記が変わらない限り手で調整しないこと。
-EXPECTED_CT_SCALED_1EM8 = EXPECTED_CT / 1e-8  # calc-ct field ("×10⁻⁸ N/(rad/s)²")
-
-
-# EXPECTED_AM / EXPECTED_BM / EXPECTED_CM — control/models/stampfly_physical.yaml
-# calibration_sets.legacy_motor_curve.params.{Am,Bm,Cm}.value. Deliberately
-# hand-typed here (not imported from tools/sysid/_generated_params.py like the
-# EXPECTED_* above): generate.py's render_python() only emits the
-# measured_2026_07 family (CT/CQ/JMP/DM/QF/RM/KM/KAPPA) into that file. The
-# legacy_motor_curve family IS machine-generated, but only on the C++ side
-# (simulator/sils/plant/generated_params.hpp's sils_params::legacy::AM/BM/CM,
-# via render_cpp()) -- a header nothing currently consumes
-# (status: frozen_for_implementation, see the YAML family header comment).
-# 旧ファミリ定数。バックログ#3で新チェーンへ切替予定。If backlog #3 adds a
-# Python-side generated symbol for this family, replace these three literals
-# with imports the same way EXPECTED_CT etc. are imported above.
-#
-# NOTE (2026-08-22): firmware/vehicle/components/sf_actuator/actuator.cpp's
-# MOTOR_AM/MOTOR_BM/MOTOR_CM no longer hold these legacy literals -- they were
-# switched to the flight_anchored_motor_curve values (EXPECTED_AM_FA/
-# EXPECTED_BM_FA below). These EXPECTED_AM/BM/CM therefore now check ONLY the
-# docs table (the legacy_motor_curve historical record), not actuator.cpp --
-# see the "Am"/"Bm" ParamCheck lists below, which were split accordingly.
-# 注記（2026-08-22）: firmware/vehicle/components/sf_actuator/actuator.cpp の
-# MOTOR_AM/MOTOR_BM/MOTOR_CM はもうこの旧リテラルを保持していない——
-# flight_anchored_motor_curve の値（下記 EXPECTED_AM_FA/EXPECTED_BM_FA）へ
-# 切替済み。よってこの EXPECTED_AM/BM/CM は docs の表（legacy_motor_curve の
-# 歴史的記録）のみを照合する——actuator.cpp は照合しない。下記 "Am"/"Bm" の
-# ParamCheck 一覧をそれに合わせて分割済み。
-EXPECTED_AM = 5.39e-8   # V/(rad/s)^2 -- legacy_motor_curve.Am
-EXPECTED_BM = 6.33e-4   # V/(rad/s)   -- legacy_motor_curve.Bm
-EXPECTED_CM = 1.53e-2   # V           -- legacy_motor_curve.Cm (unchanged by the fold, shared with flight_anchored_motor_curve.Cm)
-
-# EXPECTED_AM_FA / EXPECTED_BM_FA — control/models/stampfly_physical.yaml
-# calibration_sets.flight_anchored_motor_curve.params.{Am,Bm}.value (added
-# 2026-08-22). This family is a mechanical fold of legacy_motor_curve's Am/Bm
-# with the flight-verified hover.thrust_corr=1.12 correction (that correction
-# reverted to its intended per-unit-trim meaning, nominal 1.0, once folded in
-# here) -- NOT an independent measurement, so it is derived from EXPECTED_AM/
-# EXPECTED_BM above rather than re-typed as an unrelated literal:
-#   Am_FA = Am_legacy * 1.12         (5.39e-8 * 1.12       = 6.0368e-8)
-#   Bm_FA = Bm_legacy * sqrt(1.12)   (6.33e-4 * sqrt(1.12) ~= 6.699042e-4)
-# (Cm is unchanged by the fold -- see EXPECTED_CM above, shared by both
-# families.) Hand-typed here for the same reason EXPECTED_AM/BM/CM above are
-# (not machine-generated on the Python side; see that comment). Sole
-# consumer: firmware/vehicle/components/sf_actuator/actuator.cpp's
-# MOTOR_AM/MOTOR_BM (as of 2026-08-22). See
-# control/models/stampfly_physical.yaml's flight_anchored_motor_curve family
-# header comment for the full derivation and the caveat that this curve
-# family and the measured_2026_07/plant.hpp ODE family describe two different
-# motors (~1.252x thrust divergence at hover, unresolved -- backlog #3).
-# 追加ファミリ定数（2026-08-22追加）。legacy_motor_curve の Am/Bm と、飛行
-# 実証済みの hover.thrust_corr=1.12 を機械的に畳み込んだ値——独立した実測
-# ではないため、無関係なリテラルとして打ち直すのではなく上の EXPECTED_AM/
-# EXPECTED_BM から導出して示す（Am_FA=Am_legacy×1.12、
-# Bm_FA=Bm_legacy×√1.12。Cm は畳み込みで不変のため EXPECTED_CM をそのまま
-# 共有）。唯一の消費者は firmware actuator.cpp の MOTOR_AM/MOTOR_BM
-# （2026-08-22〜）。導出の詳細と、本ファミリが measured_2026_07/plant.hpp の
-# ODEファミリとは別のモータを記述している（ホバー点で約1.252倍の推力差、
-# バックログ#3で未決着）という注意点は、SSOT YAML の
-# flight_anchored_motor_curve ファミリ冒頭コメント参照。
-EXPECTED_AM_FA = EXPECTED_AM * 1.12          # V/(rad/s)^2 -- flight_anchored_motor_curve.Am (= 6.0368e-8)
-EXPECTED_BM_FA = EXPECTED_BM * (1.12 ** 0.5)  # V/(rad/s)   -- flight_anchored_motor_curve.Bm (= 6.699042e-4)
+EXPECTED_MEASURED_CT_SCALED_1EM8 = EXPECTED_MEASURED_CT / 1e-8  # calc-ct field
 
 
 # =============================================================================
@@ -238,7 +225,7 @@ class ParamCheck:
 # was retracted -- see control/models/stampfly_physical.yaml Ct.note) --
 # numerically identical to the legacy literal MOTOR_CT already held, so the
 # C_T check below promotes that row from EXEMPT to a normal EXPECTED_CT (OK)
-# comparison.
+# comparison (2026-10-30: now EXPECTED_FW_CT).
 # （2026-08-03）: backlog #3 のファーム側 Ct 切替待ちとして firmware/vehicle/
 # components/sf_actuator/actuator.cpp の MOTOR_CT をカバーしていた
 # EXEMPT_FIRMWARE_MOTOR_CT は撤廃。measured_2026_07 ファミリの Ct は暫定値
@@ -290,226 +277,194 @@ EXEMPT_MAX_THRUST_PER_MOTOR = Exempt(
 # =============================================================================
 MANIFEST: Dict[str, List[ParamCheck]] = {
     # -------------------------------------------------------------------
-    # C_T — thrust coefficient / 推力係数
+    # C_T — thrust coefficient, superseded measured_2026_07 copies
+    # (own D*V drive model, migration pending) / 推力係数: 置き換え済み
+    # measured_2026_07 のコピー（独自 D×V 駆動モデル、移行待ち）。
+    # The SILS plant's Ct is group "plant_Ct"; the firmware's gauge is
+    # "C_T_firmware". / SILS プラントの Ct は "plant_Ct"、ファームのゲージは
+    # "C_T_firmware"。
     # -------------------------------------------------------------------
     "C_T": [
         ParamCheck(
-            # Phase 1: _CT_VALUE moved from tools/sysid/defaults.py (hand-typed
-            # literal) into the generated tools/sysid/_generated_params.py.
-            # Phase 1: _CT_VALUE は手書きリテラルだった tools/sysid/defaults.py
-            # から、生成物 tools/sysid/_generated_params.py へ移動した。
             file="tools/sysid/_generated_params.py",
             regex=r'_CT_VALUE\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_CT,
-            note="module constant _CT_VALUE (generated)",
+            expected=EXPECTED_MEASURED_CT,
+            note="module constant _CT_VALUE (generated, measured_2026_07 superseded; sysid defaults)",
         ),
         ParamCheck(
             file="simulator/genesis/motor_model.py",
             regex=r'Ct:\s*float\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_CT,
-            note="MotorParams.Ct",
+            expected=EXPECTED_MEASURED_CT,
+            note="MotorParams.Ct (own D*V drive model, migration pending)",
         ),
         ParamCheck(
             file="simulator/vpython/core/motors.py",
             regex=r'self\.Ct\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_CT,
-            note="motor_prop.Ct",
+            expected=EXPECTED_MEASURED_CT,
+            note="motor_prop.Ct (own D*V drive model, migration pending)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'推力係数\s*\|\s*Ct\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_CT,
-            note="body table (JP)",
+            expected=EXPECTED_MEASURED_CT,
+            note="body hand table (JP, measured_2026_07 record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Thrust coefficient\s*\|\s*Ct\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_CT,
-            note="body table (EN)",
-        ),
-        ParamCheck(
-            # Phase 1 (2026-07-26, backlog #2): plant.hpp's Config::Ct now reads
-            # sils_params::adopted::CT (generated_params.hpp) -- a symbolic
-            # reference, not a numeric literal, so there is nothing left to
-            # regex-match in plant.hpp itself (same pattern as kappa/RM/mass
-            # below). The literal moved to generated_params.hpp.
-            # Phase 1（2026-07-26、バックログ#2）: plant.hpp の Config::Ct は
-            # sils_params::adopted::CT（generated_params.hpp）を参照する記号参照に
-            # なり、plant.hpp 自体には正規表現で捕捉すべき数値リテラルが無くなった
-            # （下の kappa/RM/mass と同じパターン）。リテラルは generated_params.hpp
-            # へ移動した。
-            file="simulator/sils/plant/generated_params.hpp",
-            regex=r'constexpr float CT = ([0-9eE.+-]+)f;',
-            expected=EXPECTED_CT,
-            note="sils_params::adopted::CT (Config::Ct source, backlog #2 ODE)",
-        ),
-        ParamCheck(
-            # Promoted from EXEMPT to a normal OK comparison 2026-08-03: the
-            # measured_2026_07 family's Ct is now the same provisional 1.00e-8
-            # this literal already held (see the EXEMPT markers header comment
-            # above and control/models/stampfly_physical.yaml Ct.note).
-            # 2026-08-03にEXEMPTから通常のOK比較へ昇格: measured_2026_07
-            # ファミリのCtは、このリテラルが既に保持していた暫定値1.00e-8と
-            # 同じになった（上のEXEMPTマーカー冒頭コメントと
-            # control/models/stampfly_physical.yaml のCt.note参照）。
-            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
-            regex=r'MOTOR_CT\s*=\s*([0-9eE.+-]+)f;',
-            expected=EXPECTED_CT,
-            note="mixerCompute() thrust curve MOTOR_CT (adopted, provisional as of 2026-08-03)",
-        ),
-        ParamCheck(
-            file="simulator/genesis/control_allocation.py",
-            regex=r'def thrust_to_duty\(thrust: float, Ct: float = ([0-9eE.+-]+)',
-            expected=EXPECTED_CT,
-            note="thrust_to_duty() default Ct",
+            expected=EXPECTED_MEASURED_CT,
+            note="body hand table (EN, measured_2026_07 record)",
         ),
         ParamCheck(
             file="control/design/loop_shaping_tool/index.html",
             regex=r'id="calc-ct" value="([0-9eE.+-]+)"',
-            expected=EXPECTED_CT_SCALED_1EM8,
-            note="Calculation tab calc-ct input (×10⁻⁸ display scale)",
+            expected=EXPECTED_MEASURED_CT_SCALED_1EM8,
+            note="Calculation tab calc-ct input (x10^-8 display scale; own D*V drive model, migration pending)",
         ),
     ],
 
     # -------------------------------------------------------------------
-    # C_Q — torque coefficient / トルク係数
+    # C_T_firmware — the firmware's thrust gauge (flight_anchored_motor_curve
+    # Ct_gauge): actuator.cpp MOTOR_CT and the Genesis thrust_to_duty default.
+    # plant_fit.py's _MOTOR_CT is now symbolic (= EXPECTED_FW_CT) so there is no
+    # literal to match there.
+    # ファームの推力ゲージ係数。plant_fit.py の _MOTOR_CT は記号参照
+    # （= EXPECTED_FW_CT）になり、照合すべきリテラルは無い。
+    # -------------------------------------------------------------------
+    "C_T_firmware": [
+        ParamCheck(
+            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
+            regex=r'MOTOR_CT\s*=\s*([0-9eE.+-]+)f;',
+            expected=EXPECTED_FW_CT,
+            note="mixerCompute() thrust curve MOTOR_CT (firmware set Ct_gauge)",
+        ),
+        ParamCheck(
+            file="simulator/genesis/control_allocation.py",
+            regex=r'def thrust_to_duty\(thrust: float, Ct: float = ([0-9eE.+-]+)',
+            expected=EXPECTED_FW_CT,
+            note="thrust_to_duty() default Ct (firmware thrust gauge)",
+        ),
+        ParamCheck(
+            file="tools/sysid/_generated_params.py",
+            regex=r'EXPECTED_FW_CT\s*=\s*([0-9eE.+-]+)',
+            expected=EXPECTED_FW_CT,
+            note="generated EXPECTED_FW_CT (plant_fit.py _MOTOR_CT source)",
+        ),
+        ParamCheck(
+            file="simulator/sils/plant/generated_params.hpp",
+            regex=r'namespace firmware_curve \{[^}]*?constexpr float CT_GAUGE = ([0-9eE.+-]+)f;',
+            expected=EXPECTED_FW_CT,
+            note="sils_params::firmware_curve::CT_GAUGE",
+        ),
+    ],
+
+    # -------------------------------------------------------------------
+    # C_Q — torque coefficient, superseded measured_2026_07 copies
+    # トルク係数: 置き換え済み measured_2026_07 のコピー。Plant: "plant_Cq"。
     # -------------------------------------------------------------------
     "C_Q": [
         ParamCheck(
-            # Phase 1: moved to the generated tools/sysid/_generated_params.py
-            # (Phase 1: 生成物 tools/sysid/_generated_params.py へ移動)
             file="tools/sysid/_generated_params.py",
             regex=r'_CQ_VALUE\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_CQ,
-            note="module constant _CQ_VALUE (generated)",
+            expected=EXPECTED_MEASURED_CQ,
+            note="module constant _CQ_VALUE (generated, measured_2026_07 superseded; sysid defaults)",
         ),
         ParamCheck(
             file="simulator/genesis/motor_model.py",
             regex=r'Cq:\s*float\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_CQ,
-            note="MotorParams.Cq",
+            expected=EXPECTED_MEASURED_CQ,
+            note="MotorParams.Cq (own D*V drive model, migration pending)",
         ),
         ParamCheck(
             file="simulator/vpython/core/motors.py",
             regex=r'self\.Cq\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_CQ,
-            note="motor_prop.Cq",
+            expected=EXPECTED_MEASURED_CQ,
+            note="motor_prop.Cq (own D*V drive model, migration pending)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'トルク係数\s*\|\s*Cq\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_CQ,
-            note="body table (JP)",
+            expected=EXPECTED_MEASURED_CQ,
+            note="body hand table (JP, measured_2026_07 record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Torque coefficient\s*\|\s*Cq\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_CQ,
-            note="body table (EN)",
-        ),
-        ParamCheck(
-            # Phase 1 (2026-07-26, backlog #2): plant.hpp now HAS a standalone Cq
-            # (Config::Cq, sourced from sils_params::adopted::CQ) -- the reaction
-            # torque model switched from kappa*T to a direct per-motor
-            # Cq*omega^2 + Jmp*omega_dot in substep() (supersedes the note that
-            # used to live here).
-            # Phase 1（2026-07-26、バックログ#2）: plant.hpp は独立した Cq
-            # （Config::Cq、sils_params::adopted::CQ 由来）を持つようになった——
-            # 反トルクモデルが kappa*T からモータ毎の直接 Cq*omega^2+Jmp*omega_dot
-            # （substep()）へ切替（旧注記を置換）。
-            file="simulator/sils/plant/generated_params.hpp",
-            regex=r'constexpr float CQ = ([0-9eE.+-]+)f;',
-            expected=EXPECTED_CQ,
-            note="sils_params::adopted::CQ (Config::Cq source, backlog #2 ODE)",
+            expected=EXPECTED_MEASURED_CQ,
+            note="body hand table (EN, measured_2026_07 record)",
         ),
     ],
 
     # -------------------------------------------------------------------
-    # kappa — torque/thrust ratio Cq/Ct / トルク推力比
+    # kappa — torque/thrust ratio the firmware mixer B^-1 uses (firmware set).
+    # The docs hand table keeps the measured_2026_07 kappa_adopted record (same
+    # number, 4.10e-3). The SILS plant no longer has a kappa: its reaction
+    # torque is Cq*w^2 + J*dw/dt per motor.
+    # ファームのミキサー B^-1 が使う κ（ファームセット）。docs の手書き表は
+    # measured_2026_07 の kappa_adopted の記録（同じ 4.10e-3）。SILS プラントは
+    # もう κ を持たない（反トルクはモータ毎の Cq·ω²+J·dω/dt）。
     # -------------------------------------------------------------------
     "kappa": [
         ParamCheck(
             file="firmware/vehicle/components/sf_actuator/actuator.cpp",
             regex=r'KAPPA\s*=\s*([0-9eE.+-]+)f;',
-            expected=EXPECTED_KAPPA,
-            note="mixerCompute() B^-1 KAPPA",
+            expected=EXPECTED_FW_KAPPA,
+            note="mixerCompute() B^-1 KAPPA (firmware set)",
         ),
         ParamCheck(
-            # Phase 1: plant.hpp's Config::kappa now reads
-            # sils_params::adopted::KAPPA (simulator/sils/plant/generated_params.hpp)
-            # instead of a hand-written literal -- the literal itself moved there.
-            # Phase 1: plant.hpp の Config::kappa は手書きリテラルではなく
-            # sils_params::adopted::KAPPA
-            # （simulator/sils/plant/generated_params.hpp）を参照するようになった
-            # -- リテラル自体がそちらへ移動した。
             file="simulator/sils/plant/generated_params.hpp",
-            regex=r'constexpr float KAPPA = ([0-9eE.+-]+)f;',
-            expected=EXPECTED_KAPPA,
-            note="sils_params::adopted::KAPPA (independent of the deferred Ct set)",
+            regex=r'namespace firmware_curve \{[^}]*?constexpr float KAPPA = ([0-9eE.+-]+)f;',
+            expected=EXPECTED_FW_KAPPA,
+            note="sils_params::firmware_curve::KAPPA",
         ),
         ParamCheck(
             file="simulator/genesis/control_allocation.py",
             regex=r'kappa:\s*float\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_KAPPA,
-            note="QuadConfig.kappa",
+            expected=EXPECTED_FW_KAPPA,
+            note="QuadConfig.kappa (mirrors the firmware mixer)",
+        ),
+        ParamCheck(
+            file="tools/sysid/_generated_params.py",
+            regex=r'EXPECTED_FW_KAPPA\s*=\s*([0-9eE.+-]+)',
+            expected=EXPECTED_FW_KAPPA,
+            note="generated EXPECTED_FW_KAPPA (plant_fit.py _KAPPA source, KAPPA_ADOPTED alias)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'トルク/推力比\s*\|\s*κ\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_KAPPA,
-            note="body table (JP)",
+            expected=EXPECTED_MEASURED_KAPPA,
+            note="body hand table (JP, measured_2026_07 record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Torque/Thrust ratio\s*\|\s*κ\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_KAPPA,
-            note="body table (EN)",
+            expected=EXPECTED_MEASURED_KAPPA,
+            note="body hand table (EN, measured_2026_07 record)",
         ),
-        # NOTE: tools/sysid/defaults.py's _KAPPA_VALUE is now a DERIVED
-        # expression (_KAPPA_VALUE = _CQ_VALUE / _CT_VALUE), not a numeric
-        # literal, so there is nothing to regex-match — it is structurally
-        # guaranteed correct once the C_T/C_Q entries above are OK. Checking
-        # C_T and C_Q there already covers this location transitively.
-        # defaults.py の _KAPPA_VALUE は数値リテラルではなく導出式
-        # (_KAPPA_VALUE = _CQ_VALUE / _CT_VALUE) になったため、正規表現で
-        # 値を捕捉する対象が無い — 上の C_T/C_Q エントリが OK であれば
-        # 構造的に正しいことが保証される（この箇所は間接的にカバー済み）。
+        # NOTE: tools/sysid/defaults.py's _KAPPA_VALUE is a DERIVED expression
+        # (_CQ_VALUE / _CT_VALUE), not a numeric literal, so it is covered
+        # transitively by the C_T/C_Q groups above.
+        # defaults.py の _KAPPA_VALUE は導出式（_CQ_VALUE/_CT_VALUE）で数値
+        # リテラルではないため、上の C_T/C_Q グループで間接的にカバーされる。
     ],
 
     # -------------------------------------------------------------------
-    # Am / Bm / Cm — legacy motor-curve family: V = Am·ω² + Bm·ω + Cm
-    # 旧モータ曲線ファミリ。
-    #
-    # SPLIT (2026-08-22): firmware/vehicle/components/sf_actuator/actuator.cpp's
-    # MOTOR_AM/MOTOR_BM no longer hold these legacy literals -- they were
-    # switched to the flight_anchored_motor_curve values (legacy Am/Bm folded
-    # with the flight-verified hover.thrust_corr=1.12; see the SSOT YAML's
-    # flight_anchored_motor_curve family header comment for the derivation).
-    # So "Am"/"Bm" below now check ONLY the docs table (the legacy_motor_curve
-    # historical record); the firmware check moved to the new
-    # "Am_flight_anchored"/"Bm_flight_anchored" groups below. Cm is UNCHANGED
-    # by the fold (Cm_new = Cm_legacy), so its firmware+docs check stays as one
-    # group -- no split needed.
-    # 分割（2026-08-22）: firmware actuator.cpp の MOTOR_AM/MOTOR_BM はもう
-    # この旧リテラルを保持していない——flight_anchored_motor_curve の値
-    # （legacy Am/Bm と、飛行実証済み hover.thrust_corr=1.12 の畳み込み。
-    # 導出は SSOT YAML の flight_anchored_motor_curve ファミリ冒頭コメント
-    # 参照）へ切替済み。よって下記 "Am"/"Bm" は docs の表（legacy_motor_curve
-    # の歴史的記録）のみを照合し、firmware側の照合は新設の
-    # "Am_flight_anchored"/"Bm_flight_anchored" へ移した。Cm は畳み込みで
-    # 不変（Cm_new=Cm_legacy）のため firmware+docs の1グループのまま分割不要。
+    # Am / Bm / Cm — legacy motor-curve family (history): docs hand table only.
+    # Firmware copies of the curve are the "*_firmware" groups below.
+    # 旧モータ曲線ファミリ（履歴）: docs の手書き表のみ。ファーム側のコピーは
+    # 下の "*_firmware" グループ。
     # -------------------------------------------------------------------
     "Am": [
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'2次係数\s*\|\s*Am\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_AM,
+            expected=EXPECTED_LEGACY_AM,
             note="body table (JP, legacy_motor_curve historical record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Quadratic coefficient\s*\|\s*Am\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_AM,
+            expected=EXPECTED_LEGACY_AM,
             note="body table (EN, legacy_motor_curve historical record)",
         ),
     ],
@@ -517,191 +472,157 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'1次係数\s*\|\s*Bm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_BM,
+            expected=EXPECTED_LEGACY_BM,
             note="body table (JP, legacy_motor_curve historical record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Linear coefficient\s*\|\s*Bm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_BM,
+            expected=EXPECTED_LEGACY_BM,
             note="body table (EN, legacy_motor_curve historical record)",
         ),
     ],
     "Cm": [
         ParamCheck(
-            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
-            regex=r'MOTOR_CM\s*=\s*([0-9.eE+-]+)f;',
-            expected=EXPECTED_CM,
-            note="V=Am*w^2+Bm*w+Cm curve MOTOR_CM (unchanged by the 2026-08-22 fold, shared by legacy_motor_curve and flight_anchored_motor_curve)",
-        ),
-        ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'定数項\s*\|\s*Cm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_CM,
-            note="body table (JP)",
+            expected=EXPECTED_LEGACY_CM,
+            note="body table (JP, legacy_motor_curve historical record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Constant term\s*\|\s*Cm\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_CM,
-            note="body table (EN)",
-        ),
-        ParamCheck(
-            # tools/sysid/plant_fit.py's `sf sysid fit --mixer vehicle`
-            # inverts firmware/vehicle's actual duty=f(sqrt(T/Ct))/Vbat motor
-            # curve to recover the differential torque command from logged
-            # motor duty -- it needs the SAME Cm actuator.cpp uses, hand-
-            # copied there (see that file's _MOTOR_CM comment) since this
-            # family is not machine-generated on the Python side (see this
-            # group's own header comment above).
-            # tools/sysid/plant_fit.py の `sf sysid fit --mixer vehicle` は
-            # firmware/vehicle の実際の duty=f(√(T/Ct))/Vbat モータ曲線を
-            # 逆算し、記録された motor duty から差動トルク指令を復元する --
-            # actuator.cpp と同じ Cm が必要で、そちらへ手動転記してある
-            # （同ファイルの _MOTOR_CM コメント参照。このファミリは Python
-            # 側で機械生成されていない -- 上のグループ冒頭コメント参照）。
-            file="tools/sysid/plant_fit.py",
-            regex=r'_MOTOR_CM:\s*float\s*=\s*([0-9.eE+-]+)',
-            expected=EXPECTED_CM,
-            note="_duty_differential_vehicle()'s motor-curve inversion _MOTOR_CM",
+            expected=EXPECTED_LEGACY_CM,
+            note="body table (EN, legacy_motor_curve historical record)",
         ),
     ],
 
     # -------------------------------------------------------------------
-    # Am_flight_anchored / Bm_flight_anchored — flight-anchored motor curve
-    # (added 2026-08-22): legacy_motor_curve's Am/Bm folded with the
-    # flight-verified hover.thrust_corr=1.12. Consumers: firmware
-    # actuator.cpp's MOTOR_AM/MOTOR_BM, and (since 2026-09-09)
-    # tools/sysid/plant_fit.py's `sf sysid fit --mixer vehicle` inversion of
-    # that same curve (see the "Cm" group's plant_fit.py row above for why).
-    # See control/models/stampfly_physical.yaml's flight_anchored_motor_curve
-    # family header comment for the derivation and the caveat that this
-    # curve family and measured_2026_07/plant.hpp's ODE family describe two
-    # different motors (~1.252x thrust divergence at hover, unresolved --
-    # backlog #3).
-    # フライト実証済みモータ曲線（2026-08-22追加）: legacy_motor_curve の
-    # Am/Bm と、飛行実証済みの hover.thrust_corr=1.12 を畳み込んだもの。
-    # 消費者: firmware actuator.cpp の MOTOR_AM/MOTOR_BM、および
-    # （2026-09-09〜）tools/sysid/plant_fit.py の `sf sysid fit --mixer
-    # vehicle` が同じ曲線を逆算する箇所（理由は上の "Cm" グループの
-    # plant_fit.py 行参照）。導出と、本ファミリが measured_2026_07/plant.hpp
-    # の ODEファミリとは別のモータを記述している（ホバー点で約1.252倍の
-    # 推力差、バックログ#3で未決着）という注意点は control/models/
-    # stampfly_physical.yaml の flight_anchored_motor_curve ファミリ冒頭
-    # コメント参照。
+    # Am / Bm / Cm _firmware — the firmware's thrust->duty curve
+    # (flight_anchored_motor_curve). Consumers: actuator.cpp MOTOR_AM/BM/CM and
+    # tools/sysid/plant_fit.py (symbolic since 2026-10-30: _MOTOR_AM/BM/CM =
+    # EXPECTED_FW_*, so no literal to match there).
+    # ファームの推力→duty 曲線の Am/Bm/Cm。消費者: actuator.cpp と
+    # plant_fit.py（2026-10-30 から記号参照のため照合すべきリテラルは無い）。
     # -------------------------------------------------------------------
-    "Am_flight_anchored": [
+    "Am_firmware": [
         ParamCheck(
             file="firmware/vehicle/components/sf_actuator/actuator.cpp",
             regex=r'MOTOR_AM\s*=\s*([0-9.eE+-]+)f;',
-            expected=EXPECTED_AM_FA,
-            note="V=Am*w^2+Bm*w+Cm curve MOTOR_AM (flight_anchored_motor_curve, adopted 2026-08-22)",
+            expected=EXPECTED_FW_AM,
+            note="V=Am*w^2+Bm*w+Cm curve MOTOR_AM (firmware set)",
         ),
         ParamCheck(
-            file="tools/sysid/plant_fit.py",
-            regex=r'_MOTOR_AM:\s*float\s*=\s*([0-9.eE+-]+)',
-            expected=EXPECTED_AM_FA,
-            note="_duty_differential_vehicle()'s motor-curve inversion _MOTOR_AM",
+            file="simulator/sils/plant/generated_params.hpp",
+            regex=r'namespace firmware_curve \{[^}]*?constexpr float AM = ([0-9.eE+-]+)f;',
+            expected=EXPECTED_FW_AM,
+            note="sils_params::firmware_curve::AM",
+        ),
+        ParamCheck(
+            file="tools/sysid/_generated_params.py",
+            regex=r'EXPECTED_FW_AM\s*=\s*([0-9.eE+-]+)',
+            expected=EXPECTED_FW_AM,
+            note="generated EXPECTED_FW_AM (plant_fit.py _MOTOR_AM source)",
         ),
     ],
-    "Bm_flight_anchored": [
+    "Bm_firmware": [
         ParamCheck(
             file="firmware/vehicle/components/sf_actuator/actuator.cpp",
             regex=r'MOTOR_BM\s*=\s*([0-9.eE+-]+)f;',
-            expected=EXPECTED_BM_FA,
-            note="V=Am*w^2+Bm*w+Cm curve MOTOR_BM (flight_anchored_motor_curve, adopted 2026-08-22)",
+            expected=EXPECTED_FW_BM,
+            note="V=Am*w^2+Bm*w+Cm curve MOTOR_BM (firmware set)",
         ),
         ParamCheck(
-            file="tools/sysid/plant_fit.py",
-            regex=r'_MOTOR_BM:\s*float\s*=\s*([0-9.eE+-]+)',
-            expected=EXPECTED_BM_FA,
-            note="_duty_differential_vehicle()'s motor-curve inversion _MOTOR_BM",
+            file="simulator/sils/plant/generated_params.hpp",
+            regex=r'namespace firmware_curve \{[^}]*?constexpr float BM = ([0-9.eE+-]+)f;',
+            expected=EXPECTED_FW_BM,
+            note="sils_params::firmware_curve::BM",
+        ),
+        ParamCheck(
+            file="tools/sysid/_generated_params.py",
+            regex=r'EXPECTED_FW_BM\s*=\s*([0-9.eE+-]+)',
+            expected=EXPECTED_FW_BM,
+            note="generated EXPECTED_FW_BM (plant_fit.py _MOTOR_BM source)",
+        ),
+    ],
+    "Cm_firmware": [
+        ParamCheck(
+            file="firmware/vehicle/components/sf_actuator/actuator.cpp",
+            regex=r'MOTOR_CM\s*=\s*([0-9.eE+-]+)f;',
+            expected=EXPECTED_FW_CM,
+            note="V=Am*w^2+Bm*w+Cm curve MOTOR_CM (firmware set)",
+        ),
+        ParamCheck(
+            file="simulator/sils/plant/generated_params.hpp",
+            regex=r'namespace firmware_curve \{[^}]*?constexpr float CM = ([0-9.eE+-]+)f;',
+            expected=EXPECTED_FW_CM,
+            note="sils_params::firmware_curve::CM",
+        ),
+        ParamCheck(
+            file="tools/sysid/_generated_params.py",
+            regex=r'EXPECTED_FW_CM\s*=\s*([0-9.eE+-]+)',
+            expected=EXPECTED_FW_CM,
+            note="generated EXPECTED_FW_CM (plant_fit.py _MOTOR_CM source)",
         ),
     ],
 
     # -------------------------------------------------------------------
-    # J_mp — rotor inertia / ローター慣性モーメント
+    # J_mp — rotor inertia, superseded measured_2026_07 copies (own D*V drive
+    # model, migration pending). Plant: "plant_J".
+    # ローター慣性: 置き換え済み measured_2026_07 のコピー。Plant: "plant_J"。
     # -------------------------------------------------------------------
     "J_mp": [
         ParamCheck(
-            # Phase 1: moved to the generated tools/sysid/_generated_params.py
-            # (Phase 1: 生成物 tools/sysid/_generated_params.py へ移動)
             file="tools/sysid/_generated_params.py",
             regex=r'_JMP_VALUE\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_JMP,
-            note="module constant _JMP_VALUE (generated)",
+            expected=EXPECTED_MEASURED_JMP,
+            note="module constant _JMP_VALUE (generated, measured_2026_07 superseded)",
         ),
         ParamCheck(
             file="simulator/genesis/motor_model.py",
             regex=r'Jmp:\s*float\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_JMP,
-            note="MotorParams.Jmp",
+            expected=EXPECTED_MEASURED_JMP,
+            note="MotorParams.Jmp (own D*V drive model, migration pending)",
         ),
         ParamCheck(
             file="simulator/vpython/core/motors.py",
             regex=r'self\.Jmp\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_JMP,
-            note="motor_prop.Jmp",
+            expected=EXPECTED_MEASURED_JMP,
+            note="motor_prop.Jmp (own D*V drive model, migration pending)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'回転子慣性モーメント\s*\|\s*Jmp\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_JMP,
-            note="body table (JP)",
+            expected=EXPECTED_MEASURED_JMP,
+            note="body hand table (JP, measured_2026_07 record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Rotor Inertia\s*\|\s*Jmp\s*\|\s*([0-9.]+×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+)\s*\|',
-            expected=EXPECTED_JMP,
-            note="body table (EN)",
-        ),
-        ParamCheck(
-            # Phase 1 (2026-07-26, backlog #2): plant.hpp's Config::Jmp (ODE rotor
-            # inertia) now sources this directly.
-            # Phase 1（2026-07-26、バックログ#2）: plant.hpp の Config::Jmp
-            # （ODEローター慣性）は本値を直接参照する。
-            file="simulator/sils/plant/generated_params.hpp",
-            regex=r'constexpr float JMP = ([0-9eE.+-]+)f;',
-            expected=EXPECTED_JMP,
-            note="sils_params::adopted::JMP (Config::Jmp source, backlog #2 ODE)",
+            expected=EXPECTED_MEASURED_JMP,
+            note="body hand table (EN, measured_2026_07 record)",
         ),
     ],
 
     # -------------------------------------------------------------------
-    # D_m — viscous damping (2026-07-26 coast-down 3-term refit, backlog #2)
-    # 粘性摩擦係数（2026-07-26 コーストダウン3項再フィット、バックログ#2）
+    # D_m / Q_f — viscous damping / Coulomb friction (measured_2026_07, superseded).
+    # The SILS plant no longer has them: friction is Kt*(I0a + I0b*w^2) from the
+    # bench set. / SILS プラントはもう持たない（摩擦は bench セットの Kt·(I0a+I0b·ω²)）。
     # -------------------------------------------------------------------
     "D_m": [
         ParamCheck(
             file="tools/sysid/_generated_params.py",
             regex=r'_DM_VALUE\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_DM,
-            note="module constant _DM_VALUE (generated)",
-        ),
-        ParamCheck(
-            file="simulator/sils/plant/generated_params.hpp",
-            regex=r'constexpr float DM = ([0-9eE.+-]+)f;',
-            expected=EXPECTED_DM,
-            note="sils_params::adopted::DM (Config::Dm source, backlog #2 ODE)",
+            expected=EXPECTED_MEASURED_DM,
+            note="module constant _DM_VALUE (generated, measured_2026_07 superseded)",
         ),
     ],
-
-    # -------------------------------------------------------------------
-    # Q_f — Coulomb friction torque (2026-07-26 coast-down 3-term refit, backlog #2)
-    # 静止摩擦トルク（2026-07-26 コーストダウン3項再フィット、バックログ#2）
-    # -------------------------------------------------------------------
     "Q_f": [
         ParamCheck(
             file="tools/sysid/_generated_params.py",
             regex=r'_QF_VALUE\s*=\s*([0-9eE.+-]+)',
-            expected=EXPECTED_QF,
-            note="module constant _QF_VALUE (generated)",
-        ),
-        ParamCheck(
-            file="simulator/sils/plant/generated_params.hpp",
-            regex=r'constexpr float QF = ([0-9eE.+-]+)f;',
-            expected=EXPECTED_QF,
-            note="sils_params::adopted::QF (Config::Qf source, backlog #2 ODE)",
+            expected=EXPECTED_MEASURED_QF,
+            note="module constant _QF_VALUE (generated, measured_2026_07 superseded)",
         ),
     ],
 
@@ -820,75 +741,73 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
     ],
 
     # -------------------------------------------------------------------
-    # Rm — winding resistance (RESOLVED 2026-07-24: 0.593, see EXPECTED_RM)
-    # 巻線抵抗（2026-07-24決着: 0.593、EXPECTED_RM 参照）
+    # Rm — winding resistance (measured_2026_07, superseded; own D*V drive
+    # model, migration pending). The SILS plant no longer has Rm: its drive
+    # resistance is R_out(D).
+    # 巻線抵抗（置き換え済み measured_2026_07、独自 D×V 駆動モデル、移行待ち）。
+    # SILS プラントはもう Rm を持たない（駆動の抵抗は R_out(D)）。
     # -------------------------------------------------------------------
     "Rm": [
         ParamCheck(
-            # Phase 1: moved to the generated tools/sysid/_generated_params.py
-            # (Phase 1: 生成物 tools/sysid/_generated_params.py へ移動)
             file="tools/sysid/_generated_params.py",
             regex=r'_RM_VALUE\s*=\s*([0-9.eE+-]+)',
-            expected=EXPECTED_RM,
-            note="module constant _RM_VALUE (generated)",
+            expected=EXPECTED_MEASURED_RM,
+            note="module constant _RM_VALUE (generated, measured_2026_07 superseded)",
         ),
         ParamCheck(
             file="simulator/genesis/motor_model.py",
             regex=r'Rm:\s*float\s*=\s*([0-9.eE+-]+)',
-            expected=EXPECTED_RM,
-            note="MotorParams.Rm",
+            expected=EXPECTED_MEASURED_RM,
+            note="MotorParams.Rm (own D*V drive model, migration pending)",
         ),
         ParamCheck(
             file="simulator/vpython/core/motors.py",
             regex=r'self\.Rm\s*=\s*([0-9.eE+-]+)',
-            expected=EXPECTED_RM,
-            note="motor_prop.Rm",
-        ),
-        ParamCheck(
-            # Phase 1: plant.hpp's Config::motor_Rm now reads
-            # sils_params::adopted::RM (generated_params.hpp) -- literal moved there.
-            # Phase 1: plant.hpp の Config::motor_Rm は sils_params::adopted::RM
-            # （generated_params.hpp）を参照する -- リテラルはそちらへ移動した。
-            file="simulator/sils/plant/generated_params.hpp",
-            regex=r'constexpr float RM = ([0-9.eE+-]+)f;',
-            expected=EXPECTED_RM,
-            note="sils_params::adopted::RM (battery model source, Config::motor_Rm)",
+            expected=EXPECTED_MEASURED_RM,
+            note="motor_prop.Rm (own D*V drive model, migration pending)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'巻線抵抗\s*\|\s*Rm\s*\|\s*([0-9.eE+-]+)\s*\|',
-            expected=EXPECTED_RM,
-            note="body table (JP)",
+            expected=EXPECTED_MEASURED_RM,
+            note="body hand table (JP, measured_2026_07 record)",
         ),
         ParamCheck(
             file="docs/architecture/stampfly-parameters.md",
             regex=r'Winding Resistance\s*\|\s*Rm\s*\|\s*([0-9.eE+-]+)\s*\|',
-            expected=EXPECTED_RM,
-            note="body table (EN)",
+            expected=EXPECTED_MEASURED_RM,
+            note="body hand table (EN, measured_2026_07 record)",
         ),
         ParamCheck(
             file="simulator/genesis/control_allocation.py",
             regex=r'Km: float = [0-9eE.+-]+,\s*Rm: float = ([0-9eE.+-]+)',
-            expected=EXPECTED_RM,
-            note="thrust_to_duty() default Rm",
+            expected=EXPECTED_MEASURED_RM,
+            note="thrust_to_duty() default Rm (own D*V drive model, migration pending)",
         ),
         ParamCheck(
             file="control/design/loop_shaping_tool/index.html",
             regex=r'id="calc-rm" value="([0-9eE.+-]+)"',
-            expected=EXPECTED_RM,
-            note="Calculation tab calc-rm input (unscaled, Ω)",
+            expected=EXPECTED_MEASURED_RM,
+            note="Calculation tab calc-rm input (unscaled, ohm; own D*V drive model, migration pending)",
         ),
     ],
 
     # -------------------------------------------------------------------
-    # Km — back-EMF constant / 逆起電力定数
+    # Km — back-EMF constant (measured_2026_07, superseded; own D*V drive model)
+    # 逆起電力定数（置き換え済み measured_2026_07、独自 D×V 駆動モデル）
     # -------------------------------------------------------------------
     "Km": [
         ParamCheck(
+            file="tools/sysid/_generated_params.py",
+            regex=r'_KM_VALUE\s*=\s*([0-9.eE+-]+)',
+            expected=EXPECTED_MEASURED_KM,
+            note="module constant _KM_VALUE (generated, measured_2026_07 superseded)",
+        ),
+        ParamCheck(
             file="simulator/genesis/control_allocation.py",
             regex=r'def thrust_to_duty\([^)]*Km: float = ([0-9eE.+-]+)',
-            expected=EXPECTED_KM,
-            note="thrust_to_duty() default Km",
+            expected=EXPECTED_MEASURED_KM,
+            note="thrust_to_duty() default Km (own D*V drive model, migration pending)",
         ),
     ],
 
@@ -1025,3 +944,52 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ),
     ],
 }
+
+
+# =============================================================================
+# SILS plant propulsion rows (bench_2026_10_15): the generated header's plant
+# namespace and the generated Python constants, against the plant set.
+# SILS プラント推進系の行（bench_2026_10_15）: 生成ヘッダの plant 名前空間と
+# 生成 Python 定数を plant セットと照合する。
+# plant.hpp / plant.cpp read these symbolically (no literal to match there).
+# plant.hpp / plant.cpp は記号参照（照合すべきリテラルは無い）。
+# =============================================================================
+def _plant_groups() -> Dict[str, List[ParamCheck]]:
+    """Build the "plant_*" groups: one per bench-set constant, two rows each
+    (generated header + generated Python). / bench セットの定数ごとに
+    "plant_*" グループ（生成ヘッダ＋生成 Python の 2 行）を作る。"""
+    hpp = "simulator/sils/plant/generated_params.hpp"
+    py = "tools/sysid/_generated_params.py"
+    spec = (
+        # (group, C++ name, Python name, expected)
+        ("plant_Ke", "KE", "KE", EXPECTED_PLANT_KE),
+        ("plant_Kt", "KT", "KT", EXPECTED_PLANT_KT),
+        ("plant_Cq", "CQ", "CQ", EXPECTED_PLANT_CQ),
+        ("plant_Ct", "CT", "CT", EXPECTED_PLANT_CT),
+        ("plant_J", "J", "J", EXPECTED_PLANT_J),
+        ("plant_I0a", "I0A", "I0A", EXPECTED_PLANT_I0A),
+        ("plant_I0b", "I0B", "I0B", EXPECTED_PLANT_I0B),
+        ("plant_C_C", "C_C", "C_C", EXPECTED_PLANT_C_C),
+        ("plant_f_pwm", "F_PWM", "F_PWM", EXPECTED_PLANT_F_PWM),
+        ("plant_eta", "THRUST_EFFICIENCY", "THRUST_EFFICIENCY", EXPECTED_PLANT_THRUST_EFFICIENCY),
+    )
+    groups: Dict[str, List[ParamCheck]] = {}
+    for group, cpp_name, py_name, expected in spec:
+        groups[group] = [
+            ParamCheck(
+                file=hpp,
+                regex=rf'namespace plant \{{[^}}]*?constexpr float {cpp_name} = ([0-9eE.+-]+)f;',
+                expected=expected,
+                note=f"sils_params::plant::{cpp_name} (bench_2026_10_15)",
+            ),
+            ParamCheck(
+                file=py,
+                regex=rf'EXPECTED_PLANT_{py_name}\s*=\s*([0-9eE.+-]+)',
+                expected=expected,
+                note=f"generated EXPECTED_PLANT_{py_name}",
+            ),
+        ]
+    return groups
+
+
+MANIFEST.update(_plant_groups())

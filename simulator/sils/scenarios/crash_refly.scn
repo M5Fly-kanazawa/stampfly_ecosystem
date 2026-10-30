@@ -27,10 +27,26 @@
 #
 # Run: sf sils scenario simulator/sils/scenarios/crash_refly.scn --target vehicle --duration 33000000
 #
+#
+# 2026-10-31 R_out plant — why the hand must arrive early / 手が早く届く必要がある理由:
+# the R_out crash leaves the craft lying on its side (truth roll 90 deg). About 0.2 s after impact the firmware
+# sees 'placed on ground' and starts the 3.5 s boot calibration; if that completes on its side it measures
+# level_offset 1.5708 rad and keeps it in the estimator, so after the hand has levelled the craft the ARM guard
+# ('attitude estimate disagrees with gravity', correct behaviour, unchanged) rejects every re-ARM. The handling
+# trajectory itself already levels any crash attitude (SLERP to level), so the fix is timing only: the hand now
+# starts at 14.0 s (was 16.0 s), inside the calibration window, which restarts the calibration after placement on
+# a level craft. The scenario timeline from the re-calibration dwell on is unchanged; the .expect windows of the
+# crash-rest and lift checks moved by the same -2.0 s (no threshold changed).
+# R_out の墜落では機体が側臥（真値ロール 90 deg）で止まる。衝突の約 0.2 s 後にファームは「設置」と判定して 3.5 s の起動校正を
+# 始め、これが側臥のまま完了すると level_offset 1.5708 rad を推定器に保持し、手が水平に直した後も ARM の判定（「姿勢推定が
+# 重力と食い違う」、正しい挙動で不変）が再 ARM を全て拒否する。ハンドリング軌道は任意の墜落姿勢を水平へ戻す（SLERP）ので、
+# 直すのは時刻だけ: 手は 14.0 s（旧 16.0 s）に始まり校正の最中に届くため、校正は水平な設置後にやり直される。再校正以降の
+# 時刻は不変。.expect の墜落静止・持上げ判定の窓は同じ −2.0 s だけ移した（閾値は不変）。
+#
 #  <t>  ch     <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc     2048  2048   2048    2048  0     5000      50              # A: boot disarmed 5 s → IDLE_GROUND + boot calibration
    +    rc     2048  2048   2048    2048  1     1000      50              # B: ARM (rising edge)
-   +    rc     3243  2048   2048    2048  1     2500      50              # C: STABILIZE take-off climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用)
+   +    rc     3171  2048   2048    2048  1     2500      50              # C: STABILIZE take-off climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, ホバーduty 0.6976->0.7245 移動を打ち消す — stab_flight.scn で実測校正済みの値を流用) | 2026-10-31 R_out plant: STABILIZE/ACRO throttle 3243->3171 (deviation from 2048 x0.94: open-loop hover raw 3154->3088, SILS sweep at 3.87 V) / R_outプラントでホバーraw 3154->3088、偏差x0.94
    +    rc     2048  2048   2048    2048  1     3000      50        1     # D: ALT_HOLD hover 3 s (clean baseline)
 #  --- CRASH: asymmetric motor fault (tips the craft) + downward wind slams it down ---
 #  --- 墜落: 非対称モータ故障（機体を傾ける）＋下向き風で叩きつけ ---
@@ -41,13 +57,13 @@
 #  --- 外乱を解除し地上で静止（disarmed）、その後ハンドリング ---
    +    wind   0.0   0.0     0.0                                          # H: wind off
    +    fault  0     1.00                                                 # I: motor restored (healthy for the re-fly)
-   +    rc     2048  2048   2048    2048  0     2500      50              # J: disarmed settle 2.5 s (clean falling edge)
+   +    rc     2048  2048   2048    2048  0     500       50              # J: disarmed settle 0.5 s (clean falling edge). 2026-10-31 R_out plant: 2500->500 ms, hand arrives while the 3.5 s boot calibration of the side-lying craft is still running (see below) / 2500->500 ms、側臥した機体の起動校正（3.5 s）が終わる前に手が届くようにする
    +    handle 0.40  0.0     0.0     1200  1200  1200                     # K: lift → right → carry to origin → place (3.6 s)
-   +    rc     2048  2048   2048    2048  0     8000      50              # L: disarmed 8 s — handle 3.6 s + re-calibration (~3.5 s) + margin
+   +    rc     2048  2048   2048    2048  0     10000      50              # L: disarmed 10 s — handle 3.6 s + re-calibration (~3.5 s) + margin | 2026-10-31 R_out plant: 8000->10000 ms (absorbs J's 2.0 s so every later time is unchanged) / 8000->10000 ms（J の 2.0 s を吸収し以降の時刻は不変）
 #  --- RE-FLY: re-ARM, re-takeoff, hover recovery ---
 #  --- 再飛行: 再ARM・再離陸・ホバー回復 ---
    +    rc     2048  2048   2048    2048  1     1000      50              # M: RE-ARM (rising edge — gated until re-calibration done)
-   +    rc     3243  2048   2048    2048  1     2500      50              # N: RE-TAKEOFF climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, 同上)
+   +    rc     3171  2048   2048    2048  1     2500      50              # N: RE-TAKEOFF climb 2.5 s (2026-07-26 ODEプラント(実測Ct)対応再調整: 3330->3473, +4.3%, 同上) | 2026-10-31 R_out plant: STABILIZE/ACRO throttle 3243->3171 (deviation from 2048 x0.94: open-loop hover raw 3154->3088, SILS sweep at 3.87 V) / R_outプラントでホバーraw 3154->3088、偏差x0.94
    +    rc     2048  2048   2048    2048  1     5000      50        1     # O: ALT_HOLD hover recovery 5 s
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM

@@ -113,11 +113,6 @@ def promote_legacy_environment() -> None:
 ESTIMATORS = {"eskf": 0, "complementary": 1}
 ESTIMATOR_LABELS = {"eskf": "ESKF", "complementary": "Complementary"}
 NOISE_LEVELS = ["off", "n0", "n1", "n2"]
-# Named plant-fidelity profiles (SILS_EMU_PLANT_PROFILE, emu_main.cpp). "default" = the pre-fit
-# plant; "flip_fit_2026_10" = SSOT calibration set plant_fit_flip_2026_10 (opt-in).
-# 名前付きプラント忠実度プロファイル。"default" = フィット前、"flip_fit_2026_10" = SSOT の
-# plant_fit_flip_2026_10（オプトイン）。
-PLANT_PROFILES = ["default", "flip_fit_2026_10"]
 
 # Friendly firmware target name -> its emulator exe / CMake target name
 # (CMakeLists.txt names every emulator "emu_<target>"). "workshop" runs the
@@ -495,23 +490,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                    help="enable a deterministic 1-3 Hz lateral turbulence force [N] to excite "
                         "the attitude-wobble band (wobble-minimization study). Bare flag = 0.03 N. "
                         "Default OFF.")
-    p.add_argument("--plant-profile", choices=PLANT_PROFILES, default=None, metavar="NAME",
-                   help="named plant-fidelity profile (SILS_EMU_PLANT_PROFILE). 'default' (also "
-                        "when omitted) = the pre-fit plant; 'flip_fit_2026_10' = SSOT calibration "
-                        "set plant_fit_flip_2026_10 (torque_authority 0.60, motor_delay 6 ms, "
-                        "motor_slew 18 duty/s; fitted to ONE real roll-flip log, opt-in because it "
-                        "moves many non-flip metrics - simulation-policy.md section 5). "
-                        "--torque-authority/--motor-delay/--motor-slew still override single knobs.")
     p.add_argument("--motor-delay", type=float, default=None, metavar="MS",
                    help="motor transport delay in ms (model-match retrofit #1: real-hardware "
                         "system ID measured L=14.7/8.4/11.0 ms roll/pitch/yaw vs the current "
                         "SILS's ~0 ms explicit dead time, docs/architecture/simulation-policy.md "
                         "backlog #1). Inserted in the duty-path before the motor's first-order "
-                        "lag. Default OFF (0 ms); the flip-log fit (6 ms) comes with --plant-profile flip_fit_2026_10.")
+                        "lag. Default OFF (0 ms).")
     p.add_argument("--motor-slew", type=float, default=None, metavar="DUTY_PER_S",
                    help="duty-path slew-rate limit in duty/s (Plant::Config::motor_slew_per_s, "
-                        "flip-log fit 2026-10-02, simulation-policy.md §5). Default = SSOT "
-                        "plant_fit_flip_2026_10 (18 duty/s); 0 = off (pre-fit plant).")
+                        "simulation-policy.md §5). Default OFF (0 = no slew limit; the "
+                        "2026-10-02 flip-log fit was retired 2026-10-31).")
     p.add_argument("--thrust-eff", type=float, default=None, metavar="RATIO",
                    help="override the plant's real-vs-ideal thrust efficiency (Plant::Config::"
                         "thrust_efficiency; scales the MEAN of all 4 motor thrusts, so it cuts "
@@ -527,7 +515,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "gain-deficit injection study to model the in-flight-identified "
                         "~0.4-0.7x motor torque effectiveness without also cutting net thrust "
                         "(unlike --thrust-eff, which was found to stall takeoff at this "
-                        "magnitude). Default 1.0 (off); the flip-log fit (0.60) comes with --plant-profile flip_fit_2026_10.")
+                        "magnitude). Default 1.0 (off).")
     p.add_argument("--flow-scale", type=float, default=None, metavar="RATIO",
                    help="override the plant's optical-flow velocity under-read model "
                         "(Plant::Config::flow_vel_scale; multiplies synthesized flow dx/dy "
@@ -647,9 +635,6 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p = sub.add_parser("sysid-gate",
                        help="Model-match gate: fit SILS rate-loop (b,T,L) vs real-hardware "
                             "sysid (simulation-policy.md §4)")
-    p.add_argument("--plant-profile", choices=PLANT_PROFILES, default=None, metavar="NAME",
-                   help="named plant-fidelity profile, passed through to the scenario run "
-                        "(see `sf sils scenario --plant-profile`). Default = pre-fit plant.")
     p.add_argument("--motor-delay", type=float, default=None, metavar="MS",
                    help="motor transport delay in ms, passed through to the scenario run "
                         "(see `sf sils scenario --motor-delay`). Default OFF (0 ms).")
@@ -1206,6 +1191,34 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
         # both generations work. / np.trapz は numpy 2.0 で改名されたため手計算
         area = np.sum(0.5 * (rate[1:] + rate[:-1]) * np.diff(t_s)) if len(rate) > 1 else 0.0
         return float(np.degrees(area))
+    if name in ("flip_gyro_abort_phi_deg", "flip_gyro_abort_after_spin_s"):
+        # Gyro-limit abort of a FLIP (FlipResult 3 = AbortedGyroLimit, flight_log.yaml
+        # flight_phase.csv). Returns None -- so a `metric` check FAILS -- when the window
+        # holds no such abort: use it to REQUIRE an abort (flip_test2_repro).
+        #   flip_gyro_abort_phi_deg       firmware rotation angle flip_phi [deg] on the first
+        #                                 row whose flip_result is 3
+        #   flip_gyro_abort_after_spin_s  time [s] from the first Spin row (flip_phase 2) to
+        #                                 that row
+        # FLIP のジャイロ上限による打ち切り（FlipResult 3 = AbortedGyroLimit、flight_log.yaml
+        # flight_phase.csv）。窓内にその打ち切りが無ければ None を返し、`metric` 検査は失敗する
+        # ―― 打ち切りを「必須」にするために使う（flip_test2_repro）。
+        #   flip_gyro_abort_phi_deg       flip_result が最初に 3 になった行のファーム積算回転角
+        #                                 flip_phi [deg]
+        #   flip_gyro_abort_after_spin_s  最初の Spin 行（flip_phase 2）からその行までの時間 [s]
+        phase = log.streams.get("flight_phase")
+        if phase is None:
+            return None
+        phase = _window(phase).sort_values("timestamp_us")
+        aborted = phase[phase["flip_result"] == 3]
+        if aborted.empty:
+            return None
+        first = aborted.iloc[0]
+        if name == "flip_gyro_abort_phi_deg":
+            return float(np.degrees(first["flip_phi"]))
+        spin = phase[phase["flip_phase"] == 2]
+        if spin.empty:
+            return None
+        return float((first["timestamp_us"] - spin.iloc[0]["timestamp_us"]) * 1e-6)
     if name == "alt_drop_max":   # max altitude LOSS from the window's start [m], >=0
         return float(max(0.0, alt[0] - np.min(alt)))
     if name == "alt_rise_max":   # max altitude GAIN from the window's start [m], >=0
@@ -1302,7 +1315,8 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               pitch_rmse, att_rmse, alt_rmse, tilt_max,
                                               alt_band, alt_mean, alt_min, alt_max,
                                               duty_max, duty_spread_max, yaw_band, flip_roll_deg,
-                                              flip_pitch_deg, alt_drop_max,
+                                              flip_pitch_deg, flip_gyro_abort_phi_deg,
+                                              flip_gyro_abort_after_spin_s, alt_drop_max,
                                               alt_rise_max, settle_time_s
     """
     merged = out_text + err_text
@@ -1513,18 +1527,11 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
     md = getattr(args, "motor_delay", None)
     if md is not None:
         env["SILS_EMU_MOTOR_DELAY"] = str(md)
-    # --motor-slew: duty slew-rate limit [duty/s] (flip-log fit 2026-10-02); 0 = off.
-    # --motor-slew: duty スルーレート制限 [duty/s]（宙返りログのフィット）、0 で OFF。
+    # --motor-slew: duty slew-rate limit [duty/s]; 0 = off.
+    # --motor-slew: duty スルーレート制限 [duty/s]、0 で OFF。
     msl = getattr(args, "motor_slew", None)
     if msl is not None:
         env["SILS_EMU_MOTOR_SLEW"] = str(msl)
-    # --plant-profile: named plant-fidelity profile (applied by the emulator BEFORE the
-    # per-knob overrides above); omitted = default (pre-fit) plant.
-    # --plant-profile: 名前付きプラント忠実度プロファイル（エミュレータが上の個別ノブの
-    # 上書きより前に適用）。省略 = 既定（フィット前）プラント。
-    profile = getattr(args, "plant_profile", None)
-    if profile is not None:
-        env["SILS_EMU_PLANT_PROFILE"] = profile
 
     # --thrust-eff / --flow-scale: hikoki64 §3.3 SILS gain-deficit injection study —
     # override the plant's torque-authority and flow-velocity-under-read knobs
@@ -2696,7 +2703,6 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
         noise=getattr(args, "noise", "off"), seed=getattr(args, "seed", 12345),
         video=False, ground_effect=None, turbulence=None,
         motor_delay=getattr(args, "motor_delay", None), unpaired=False,
-        plant_profile=getattr(args, "plant_profile", None),
         params=getattr(args, "params", None),
     )
     run_scenario(scenario_ns)   # its own PASS/FAIL print already happened; see below for gating
@@ -2753,8 +2759,7 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
             sys.path.remove(tools_dir)
 
     console.info("Model-match gate (simulation-policy.md §4): SILS plant vs real-hardware sysid "
-                 f"(plant_profile={getattr(args, 'plant_profile', None) or 'default'}, "
-                 f"motor_delay={getattr(args, 'motor_delay', None)} ms)")
+                 f"(motor_delay={getattr(args, 'motor_delay', None)} ms)")
     header = (f"  {'axis':6s} {'b_sils':>10s} {'b_ref':>10s} {'b_err%':>8s}  "
               f"{'Ltot_sils':>9s} {'Ltot_ref':>9s} {'Ltot_err%':>10s}  "
               f"{'T[ms]':>6s} {'L[ms]':>6s} {'coh':>5s}  verdict")
@@ -2795,7 +2800,6 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
             "pass": all_pass,
             "tolerances": {"b_rel": SYSID_GATE_B_TOL, "L_total_rel": SYSID_GATE_LTOTAL_TOL},
             "reference": str(reference_path),
-            "plant_profile": getattr(args, "plant_profile", None) or "default",
             "motor_delay_ms": getattr(args, "motor_delay", None),
             "noise": getattr(args, "noise", "off"),
             "bundle": str(zip_path),

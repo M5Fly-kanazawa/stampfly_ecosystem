@@ -106,12 +106,12 @@ public:
         // (ToF R-σ=0.03, baro=0.10). The R-table values are the filter's ASSUMED noise,
         // deliberately inflated for robustness; the plant injects the real datasheet-class
         // noise (ToF datasheet 0.005–0.03, low end at close range). Using the inflated
-        // R-σ as the true ToF noise (0.03 > the 13 mm ground rest height) makes the
+        // R-σ as the true ToF noise (0.03 > the 21 mm ground rest height) makes the
         // near-ground reading go negative/invalid and breaks the boot ToF gate.
         // N2 — 測距/気圧センサの観測ノイズ。σ はセンサ出力（ToF 距離[m]・気圧高度[m]）の1サンプル
         // 標準偏差。これは「プラントの真のノイズ」で、doc §3 の R 表 σ（ToF 0.03・baro 0.10＝
         // フィルタが仮定する値、ロバスト性で膨らませてある）より小さい。R 値を真のノイズに使うと
-        // 0.03 > 地上静止高 13mm となり近地面で負/無効になり起動 ToF 判定を壊す。
+        // 0.03 > 地上静止高 21mm となり近地面で負/無効になり起動 ToF 判定を壊す。
         bool  obs_enable = false;          ///< N2: ToF/baro observation noise on
         float tof_sigma  = 0.01f;          ///< ToF range noise σ [m] (datasheet-class, < ESKF R-σ)
         float baro_sigma = 0.1f;           ///< baro altitude noise σ [m] (telemetry; not fused)

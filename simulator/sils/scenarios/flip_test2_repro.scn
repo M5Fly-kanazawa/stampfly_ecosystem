@@ -1,0 +1,84 @@
+# flip_test2_repro.scn — reproduce the REAL 2026-10-02 flip_test2 failure: the roll flip is aborted by the gyro limit
+#                    実機 2026-10-02 flip_test2 の失敗の再現: ロール宙返りがジャイロ上限で打ち切られる
+#
+# Real log (logs/flip_test2.sflog.zip, flight_phase.csv + imu.csv, hover at ~3.90 V board voltage):
+#   Boost 47.089 s -> Spin 47.237 s (= +0 s) -> flip_result = 3 (AbortedGyroLimit) at 47.360 s, i.e.
+#   +0.1225 s after the Spin start, firmware rotation angle flip_phi = 90.0 deg; the measured roll
+#   rate peaked at 1926 deg/s (47.372 s, BMI270 range 2000 deg/s) -> Brake (flip_phi 213 deg at the
+#   hand-off) -> Recover -> FLYING at 48.03 s.
+# 実機ログ（logs/flip_test2.sflog.zip、flight_phase.csv と imu.csv、ホバー時の基板電圧 約 3.90 V）:
+#   Boost 47.089 s → Spin 47.237 s（= +0 s）→ Spin 開始の 0.1225 s 後の 47.360 s に
+#   flip_result = 3（AbortedGyroLimit）、ファームの積算回転角 flip_phi = 90.0°。計測ロールレートの
+#   ピークは 1926 deg/s（47.372 s、BMI270 のレンジ 2000 deg/s）→ Brake（引き渡し時 flip_phi 213°）
+#   → Recover → 48.03 s に FLYING。
+#
+# This scenario guards against the SILS SUCCEEDING where the hardware FAILED. The earlier SILS plants
+# (the D*V electrical ODE, V0) flew this flip to completion (peak 1577 deg/s, no abort), so every SILS
+# flip test passed while the real vehicle aborted; the bench R_out drive plant (SSOT bench_2026_10_15,
+# thrust efficiency 0.976 from the flight hover balance) spins fast enough to reach the limit as the
+# hardware did. If a later plant change makes this scenario fail (no abort), the SILS has lost the
+# hardware's flip dynamics -- do not loosen the .expect to make it pass.
+# 本シナリオは「実機が失敗したのに SILS が成功してしまう」ことへの歯止め。従来の SILS プラント
+# （D×V 電気 ODE、V0）はこの宙返りを打ち切りなしで完走し（ピーク 1577 deg/s）、実機が打ち切られた
+# のに SILS の宙返り試験は全て通っていた。ベンチ R_out 駆動のプラント（SSOT bench_2026_10_15、
+# 飛行ホバー釣り合いから決めた推力効率 0.976）は、実機と同様に上限に達する速さまで回る。後の
+# プラント変更で本シナリオが落ちた（打ち切りが起きない）なら、SILS は実機の宙返りの動特性を
+# 失っている ―― 通すために .expect を緩めないこと。
+#
+# Parameter provenance (the exact firmware build flown is NOT known):
+#   flip.rate_ramp_rps2 = 300 and flip.brake_ramp_rps2 = 500 match the log (the spin ramp reached the
+#     abort in ~0.12 s) and the firmware defaults before 2026-10-02 20:32 (the planned 145 rad/s^2
+#     profile, commit 9bb4e43f, came after the flight);
+#   flip.gyro_abort_dps = 1800 matches the log (an abort at a 1926 deg/s peak) and the default before
+#     2026-10-02 19:21 -- or a value stored on the vehicle (the parameter range is 1000..1950).
+# The current defaults (145 / 145 / 1950) have NOT been flown. They are NOT used here.
+# パラメータの出自（飛ばしたファームのビルドは正確には不明）:
+#   flip.rate_ramp_rps2 = 300 と flip.brake_ramp_rps2 = 500 はログ（スピンのランプが約 0.12 s で
+#     打ち切りに達した）と、2026-10-02 20:32 より前のファーム既定に一致する（計画 145 rad/s²
+#     プロファイル、コミット 9bb4e43f はこの飛行の後）;
+#   flip.gyro_abort_dps = 1800 はログ（ピーク 1926 deg/s での打ち切り）と、2026-10-02 19:21 より前の
+#     既定、または機体に保存されていた値に一致する（param の範囲は 1000..1950）。
+# 現在の既定（145 / 145 / 1950）は飛ばしていない。ここでは使わない。
+#
+# --motor-delay 4 is the extra ~4 ms actuator delay that the flight data indicate (SSOT note in
+#   bench_2026_10_15; simulation-policy.md backlog #20: not adopted as a plant default until the
+#   duty-step bench measurement) and that gives the best as-flown flip reproduction. It is on the Run line
+#   for ROBUSTNESS: with the plant default (delay 0) the SILS roll rate peaks at 1790-1823 deg/s, within
+#   1.3 % of the 1800 deg/s limit, so the abort is knife-edge: it happens at eta = 0.976 (phi 115 deg)
+#   but not at eta = 0.95, 0.96, 0.99 or 1.0 (peaks 1790-1797 deg/s), nor with a 10 mm ground standoff.
+#   With 4 ms the abort is robust (eta 0.976 and 1.0 both abort, phi 91-92 deg, peak ~1900 deg/s) and
+#   matches the log (phi 90.0 deg, +0.12 s, peak 1926 deg/s).
+# --motor-delay 4 は飛行データが示す追加の約 4 ms のアクチュエータ遅れ（SSOT bench_2026_10_15 の注記、
+#   simulation-policy.md バックログ #20: Duty ステップのベンチ計測までプラント既定にはしない）で、飛んだ
+#   とおりの宙返りの再現が最もよく合う。Run 行に置くのは「頑健さ」のため: プラント既定（遅れ 0）だと
+#   SILS のロールレートのピークは 1790〜1823 deg/s で、上限 1800 deg/s の 1.3 % 以内にあり、
+#   打ち切りは紙一重（η=0.976 では起きる ― φ=115° ― が、η=0.95・0.96・0.99・1.0 では
+#   起きず（ピーク 1790〜1797 deg/s）、地上の底上げ 10 mm でも起きない）。4 ms なら打ち切りは頑健（η=0.976 でも 1.0 でも
+#   打ち切り、φ=91〜92°、ピーク約 1900 deg/s）で、ログ（φ=90.0°、+0.12 s、ピーク 1926 deg/s）と合う。
+#
+# Battery: no option needed. The default full-battery start hovers at a board voltage of ~3.88 V in the
+# SILS (log: 3.90 V; the SILS terminal voltage sags with the plant's R_int), so the thrust per duty
+# matches the flight. (A battery set to a lower charge would hover at ~3.6 V -- not the flight's.)
+# After the abort the real vehicle did not recover: flight_state fell to IDLE_GROUND at 48.03 s, 0.58 s
+# after the Recover hand-off (the 1.1 m fall of an inverted craft). The SILS likewise ends in an impact
+# disarm 0.40 s after the hand-off; the .expect does not assert that part.
+# 電池: オプション不要。SILS の既定（満充電開始）でホバー時の基板電圧は約 3.88 V（ログは 3.90 V。
+# SILS の端子電圧はプラントの R_int で下がる）なので、duty あたりの推力は飛行と一致する。
+# （充電率を下げた電池ではホバーが約 3.6 V になり、飛行と合わない。）
+# 打ち切り後、実機は立て直せなかった: Recover への引き渡しの 0.58 s 後の 48.03 s に flight_state が
+# IDLE_GROUND へ落ちた（反転した機体が 1.1 m 落下）。SILS も引き渡しの 0.40 s 後に衝撃検知の
+# DISARM で終わる。.expect はこの部分を判定しない。
+#
+# Run: sf sils scenario simulator/sils/scenarios/flip_test2_repro.scn --target vehicle --duration 36000000 --param flip.enable=1 --param flip.rate_ramp_rps2=300 --param flip.brake_ramp_rps2=500 --param flip.gyro_abort_dps=1800 --motor-delay 4
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes
+   +    api  "command"                                                           # B: enter SDK mode (t=6)
+   +    api  "takeoff"                                                           # C: take off → POS_HOLD hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC while the API flies (t=6-18)
+   +    api  "up 60"                                                             # E: climb to ~1.1 m (t=18)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # F: settle at flip height (t=18-23)
+   +    api  "flip r"                                                            # G: roll right — aborted by the gyro limit (t=23)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # H: abort + recovery + settle (t=23-28)
+   +    api  "land"                                                              # I: autonomous landing (t=28)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # J: neutral RC through touchdown (t=28-36)

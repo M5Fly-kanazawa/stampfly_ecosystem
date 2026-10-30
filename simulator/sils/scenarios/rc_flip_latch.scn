@@ -24,8 +24,8 @@
    0    rc   2048  2048   2048    2048  0     4000      50        0                        # A: boot at rest — IDLE_GROUND before ARM edge
    +    rc   2048  2048   2048    2048  0     1500      50        1                        # B: ALT switch ON while DISARMED (t=4-5.5)
    +    rc   2048  2048   2048    2048  1     1000      50        1                        # C: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=5.5-6.5)
-   +    rc   2048  2048   2048    2048  1     5000      50        1                        # D: neutral -> climb to 0.5 m target, settle (t=6.5-11.5)
-   +    rc   3600  2048   2048    2048  1     1800      50        1                        # E: throttle pulse -> climbing (t=11.5-13.3)
+   +    rc   2048  2048   2048    2048  1     4300      50        1                        # D: neutral -> climb to 0.5 m target, settle (t=6.5-10.8). 2026-10-31 R_out plant: 5000->4300 ms (shifted into E, timeline unchanged) / 5000->4300 ms（E へ振替、時刻は不変）
+   +    rc   3600  2048   2048    2048  1     2500      50        1                        # E: throttle pulse -> climbing (t=10.8-13.3). 2026-10-31 R_out plant: 1800->2500 ms so the press (F) happens at >=1.2 m (real flips started at 1.41 / 1.70 m); the climb input was tuned to the old plant / 旧プラントに合わせた上昇入力を延長
    +    rc   2048  2048   2048    2048  1     200       50        1     0    0    1        # F: FLIP pressed at the end of the climb: vz > 0.2 -> latched (t=13.3-13.5)
    +    rc   2048  2048   2048    2048  1     5000      50        1                        # G: neutral — climb settles, the latched flip starts, maneuver (t=13.5-18.5)
    +    rc   2048  2048   2048    2048  0     200       50                                 # H: release ARM button (t=18.5-18.7)

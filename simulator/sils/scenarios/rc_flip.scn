@@ -121,15 +121,19 @@
 #
 # Each cycle: ALT switch ON (disarmed, ground mode change) -> ARM in ALT_HOLD
 # (auto-takeoff to 0.5 m, same as alt_auto_takeoff.scn) -> throttle pushed up
-# for a 2.0 s pulse (raw 3600) to climb to a settled ~1.10-1.15 m (calibrated
-# empirically — clear of flip.min_height_m=1.0 m below and the SILS ToF
-# model's 1.4 m ceiling above, simulator/sils/devices/vl53_device.cpp MAX_MM)
+# for a 2.7 s pulse (raw 3600; 2.0 s until 2026-10-31) to climb to ~1.5 m so that every flip
+# press happens at >= 1.2 m (flip.min_height_m=1.0 m below; real flips started at 1.41 / 1.70 m;
+# the SILS ToF model's ceiling is 1.63 m since 2026-10-31, vl53_device.cpp MAX_MM). On the R_out plant
+# the craft sinks ~0.1 m/s after each flip and release, so a short re-climb pulse (raw 3600) precedes the
+# 2nd and 3rd press (rows H2, J2)
 # -> throttle back to centre (holds) -> flip(s) -> DISARM (ALT_HOLD auto-land,
 # same as alt_disarm_land.scn).
 # 各サイクル: ALT スイッチ ON（disarmed、地上モード変更）-> ALT_HOLD で ARM
-# （自動離陸0.5m、alt_auto_takeoff.scnと同じ）-> スロットルを2.0sパルス（生値3600）
-# 押し上げて約1.10-1.15mへ上昇・整定（実測で較正 — 下は flip.min_height_m=1.0m、
-# 上は SILS ToF模擬の上限1.4mから十分離す）-> スロットル中立（保持）-> 宙返り
+# （自動離陸0.5m、alt_auto_takeoff.scnと同じ）-> スロットルを2.7sパルス（生値3600、2026-10-31 まで 2.0s）
+# 押し上げて約1.5mへ上昇し、全ての宙返りボタン押下を1.2m以上で行う（下は flip.min_height_m=1.0m、
+# 実機の宙返り開始は 1.41 m・1.70 m、SILS ToF模擬の上限は 2026-10-31 から 1.63m）。R_out プラントでは
+# 宙返りと解放のたびに約 0.1 m/s で沈むため、2・3回目の押下の前に短い再上昇パルス（行 H2・J2）を入れる
+# -> スロットル中立（保持）-> 宙返り
 # -> DISARM（ALT_HOLD 自動着陸、alt_disarm_land.scnと同じ）。
 #
 # Flip requests: stick over flip.button_stick_threshold (0.5; raw 3400/696 ->
@@ -158,13 +162,17 @@
    0    rc   2048  2048   2048    2048  0     4000      50        0                        # A: boot at rest — IDLE_GROUND before ARM edge
    +    rc   2048  2048   2048    2048  0     1500      50        1                        # B: ALT switch ON while DISARMED -> ground mode change (t=4-5.5)
    +    rc   2048  2048   2048    2048  1     1000      50        1                        # C: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=5.5-6.5)
-   +    rc   2048  2048   2048    2048  1     5000      50        1                        # D: neutral -> climb to 0.5 m target, settle (t=6.5-11.5)
-   +    rc   3600  2048   2048    2048  1     2000      50        1                        # E: throttle pulse -> climb toward ~1.1 m (t=11.5-13.5)
+   +    rc   2048  2048   2048    2048  1     4300      50        1      # D: neutral -> climb to 0.5 m target, settle (t=6.5-10.8). 2026-10-31 R_out plant: 5000->4300 ms (shifted into E so the timeline is unchanged) / 5000->4300 ms（E へ振替、時刻は不変）
+   +    rc   3600  2048   2048    2048  1     2700      50        1      # E: throttle pulse -> climb to ~1.5 m (t=10.8-13.5). 2026-10-31 R_out plant: 2000->2700 ms so the press (G) happens at >=1.2 m (real flips started at 1.41 / 1.70 m); the climb input was tuned to the old plant / 旧プラントに合わせた上昇入力を延長
    +    rc   2048  2048   2048    2048  1     3000      50        1                        # F: throttle centred -> hold, settle before first flip (t=13.5-16.5)
    +    rc   2048  3400   2048    2048  1     200       50        1     0    0    1        # G: roll RIGHT (|sp.roll|~0.64 > 0.5 threshold) + flip -> Right (t=16.5-16.7)
-   +    rc   2048  2048   2048    2048  1     3000      50        1                        # H: neutral, maneuver + cooldown (t=16.7-19.7)
+   +    rc   2048  2048   2048    2048  1     1300      50        1      # H1: neutral, flip maneuver (t=16.7-18.0)
+   +    rc   3600  2048   2048    2048  1     500      50        1      # H2: re-climb pulse (t=18.0-18.5). 2026-10-31 R_out plant: added so the 2nd press (I) is also >=1.2 m (the craft sinks ~0.1 m/s after each flip on the R_out plant) / 2回目の押下も1.2 m以上にするため追加
+   +    rc   2048  2048   2048    2048  1     1200      50        1      # H3: neutral, settle + cooldown (t=18.5-19.7)
    +    rc   2048   696   2048    2048  1     200       50        1     0    0    1        # I: roll LEFT (|sp.roll|~0.64 > 0.5 threshold) + flip -> Left (t=19.7-19.9)
-   +    rc   2048  2048   2048    2048  1     3000      50        1                        # J: neutral, maneuver + cooldown (t=19.9-22.9)
+   +    rc   2048  2048   2048    2048  1     1250      50        1      # J1: neutral, flip maneuver (t=19.9-21.15)
+   +    rc   3600  2048   2048    2048  1     600      50        1      # J2: re-climb pulse (t=21.15-21.75). 2026-10-31 R_out plant: added so the 3rd press (K) is >=1.2 m / 3回目の押下も1.2 m以上にするため追加
+   +    rc   2048  2048   2048    2048  1     1150      50        1      # J3: neutral, settle + cooldown (t=21.75-22.9)
    +    rc   2048  2048   2048    2048  1     1500      50        1     0    0    1        # K: NEUTRAL sticks, flip HELD 1.5 s -> default direction (Right), single request despite the long hold (t=22.9-24.4)
    +    rc   2048  2048   2048    2048  1     3000      50        1                        # L: neutral, maneuver + cooldown (t=24.4-27.4)
    +    rc   2048  2048   2048    2048  0     200       50                                 # M: release ARM button (t=27.4-27.6)
@@ -174,8 +182,8 @@
 # ---- Cycle 2: Forward alone (t=35.8-61.9) ----
    +    rc   2048  2048   2048    2048  0     1500      50        1                        # P: ALT switch ON again while DISARMED (ground mode reset to STABILIZE after landing) (t=35.8-37.3)
    +    rc   2048  2048   2048    2048  1     1000      50        1                        # Q: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=37.3-38.3)
-   +    rc   2048  2048   2048    2048  1     5000      50        1                        # R: neutral -> climb to 0.5 m target, settle (t=38.3-43.3)
-   +    rc   3600  2048   2048    2048  1     2000      50        1                        # S: throttle pulse -> climb toward ~1.1 m (t=43.3-45.3)
+   +    rc   2048  2048   2048    2048  1     4300      50        1      # R: neutral -> climb to 0.5 m target, settle (t=38.3-42.6). 2026-10-31 R_out plant: 5000->4300 ms (shifted into S) / 5000->4300 ms（S へ振替）
+   +    rc   3600  2048   2048    2048  1     2700      50        1      # S: throttle pulse -> climb to ~1.5 m (t=42.6-45.3). 2026-10-31 R_out plant: 2000->2700 ms so the press (U) is >=1.2 m / U の押下を1.2 m以上にするため延長
    +    rc   2048  2048   2048    2048  1     3000      50        1                        # T: throttle centred -> hold, settle before the flip (t=45.3-48.3)
    +    rc   2048  2048    696    2048  1     200       50        1     0    0    1        # U: pitch FORWARD (|sp.pitch|~0.64 > 0.5 threshold, negative pitch = nose-down/forward) + flip -> Forward (t=48.3-48.5)
    +    rc   2048  2048   2048    2048  1     5000      50        1                        # V: neutral, maneuver + cooldown (pitch: 5 s like api_flip_pitch.scn) (t=48.5-53.5)

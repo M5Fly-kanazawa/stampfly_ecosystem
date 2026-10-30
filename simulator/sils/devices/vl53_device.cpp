@@ -78,7 +78,15 @@ constexpr float    ZERO_DIST_PHASE = 22528.0f;   // driver zdp for HISTOGRAM_LON
 // ambient 扱い→ピーク検出前に左へ4シフトされる。よって driver が output bin Bo で復号
 // すべきピークは RAW buffer の Bo+4 に置く（プローブで検証）。
 constexpr int      AMBIENT_BIN_STRIP = 4;
-constexpr float    MAX_MM            = 1400.0f;  // peak stays in usable output bins 11..18 (valid window)
+// 2026-10-31: 1400 -> 1630 mm. Real flight logs (121 logs + flip_test1/2, 150k ToF samples) read
+// status 0 (valid) 95-99 % of the time at 1.4-1.7 m (above ~1.7 m: 91 % at 1.7-1.8 m, 66-70 % at 1.8-2.0 m).
+// The synthesis cap is the 24-bin buffer: config A (4 ambient bins stripped) can place a peak up to
+// raw bin 22 + fraction, i.e. (23 - 10.5 zero-distance offset) x 192.5 mm/bin = 1636 mm; 1630 keeps the two-bin split inside the buffer
+// (probed: valid, |error| <= 17 mm up to 1.63 m, invalid above). The real 1.63-2.0 m range stays unmodelled.
+// 2026-10-31: 1400->1630 mm。実機ログ(121本+flip_test1/2、約15万サンプル)は 1.4-1.7 m で 95-99 % valid、
+// 1.7 m 超で低下(1.7-1.8 m 91 %、1.8-2.0 m 66-70 %)。合成の上限は 24 bin バッファで 1636 mm、
+// 1630 は 2 bin 分割がバッファ内に収まる値(プローブで 1.63 m まで valid・誤差 17 mm 以内)。
+constexpr float    MAX_MM            = 1630.0f;
 
 // Dual VCSEL-period wrap resolution (the key to DYNAMIC validity). The driver runs an
 // interleaved A/B ranging: it toggles ll_state.rd_timing_status every frame

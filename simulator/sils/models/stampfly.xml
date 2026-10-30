@@ -85,8 +85,25 @@
       <freejoint name="root"/>
       <inertial pos="0 0 0" mass="0.037" diaginertia="9.16e-6 13.3e-6 20.4e-6"/>
 
-      <!-- Collision: hidden box approximating the frame. / 衝突: 隠した箱。 -->
-      <geom name="collision" type="box" size="0.0408 0.0408 0.0103"
+      <!-- Collision: hidden box approximating the frame. Its half-height (size z) is the
+           GROUND STANDOFF: the body origin rests this high above the floor. The emulated
+           bottom ToF (VL53L3CX chip model, devices/vl53_device.cpp) reads 0.035 m there and
+           is VALID, which is the median valid reading of the real vehicle at rest on the
+           ground (341 samples before the first motor spin in 5 flight logs 2026-07-17..18;
+           per-log medians 0.031..0.038 m). The chip model decodes a true distance d as about
+           d + 0.014 m near the floor (21 mm -> 35 mm; 20 mm -> 33 mm, 120 mm -> 110 mm) and
+           reports INVALID below ~19 mm, so the old 0.0103 m made the ToF invalid at rest and
+           the firmware's firm-ground touchdown test (needs a valid ToF < 5 cm) could never
+           fire. See docs/architecture/simulation-policy.md.
+           衝突: フレームを近似する隠した箱。半高さ（size z）が「地上の底上げ（standoff）」で、
+           機体原点は床からこの高さで静止する。そこで下向き ToF 模擬（VL53L3CX チップモデル、
+           devices/vl53_device.cpp）は 0.035 m を有効として返す。これは実機が地上静止で返す
+           有効な読みの中央値（2026-07-17〜18 の 5 本のログ、最初のモータ回転前の 341 サンプル、
+           ログ別の中央値 0.031〜0.038 m）。チップモデルは床近くで真の距離 d を約 d+0.014 m と
+           復号し（21 mm→35 mm、20 mm→33 mm、120 mm→110 mm）、約 19 mm 未満は無効を返す。
+           旧値 0.0103 m では静止時に ToF が無効になり、ファームの確実な接地判定（有効な
+           ToF < 5 cm が必要）が成立しなかった。simulation-policy.md 参照。 -->
+      <geom name="collision" type="box" size="0.0408 0.0408 0.0212"
             rgba="0.5 0.5 0.5 0" group="3"/>
 
       <!-- Visual meshes (visual only; oriented STL→FLU). / 視覚メッシュ。 -->

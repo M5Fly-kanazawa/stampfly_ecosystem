@@ -58,7 +58,11 @@ namespace {
 sils::Plant g_plant;
 int64_t    g_last_step_us = 0;
 
-constexpr float kGroundZ = 0.013f;   // body rest height on the ground (ENU up)
+// Start clearance above the resting height [m]: the craft is released this far above the
+// floor and settles onto the ground standoff (Plant::restHeightM()).
+// 静止高さの上の開始クリアランス [m]: 床からこの分だけ上で放し、地上の底上げ
+// （Plant::restHeightM()）へ着地して静止する。
+constexpr float kStartClearanceM = 0.0027f;
 
 // P6 stage 1 (keyboard-piloted SILS): print a one-line HUD state row at ~30Hz,
 // ONLY in realtime mode (a non-realtime batch run would flood stdout with
@@ -165,31 +169,6 @@ sils::Plant::Config plant_config_from_env()
 {
     sils::Plant::Config cfg;   // defaults: noise OFF (clean path unchanged)
 
-    // SILS_EMU_PLANT_PROFILE selects a named plant-fidelity profile BEFORE the per-knob
-    // overrides below (so --torque-authority etc. still win). Unset / "default" = the
-    // pre-fit plant (torque_authority 1.0, no extra delay, no slew limit).
-    // "flip_fit_2026_10" = SSOT calibration set plant_fit_flip_2026_10 (fitted to ONE real
-    // roll-flip log; opt-in because it moves many non-flip metrics, simulation-policy.md §5).
-    // SILS_EMU_PLANT_PROFILE は名前付きプラント忠実度プロファイルを選ぶ。以下の個別ノブの
-    // 上書きより「前」に適用するので --torque-authority 等は優先される。未設定/"default" =
-    // フィット前のプラント。"flip_fit_2026_10" = SSOT の plant_fit_flip_2026_10（ロール軸の
-    // 宙返りログ 1 本にフィット。宙返り以外の多くの指標を動かすのでオプトイン）。
-    if (const char* pp = std::getenv("SILS_EMU_PLANT_PROFILE")) {
-        const std::string profile(pp);
-        if (profile == "flip_fit_2026_10") {
-            cfg.torque_authority = sils_params::plant_fit::TORQUE_AUTHORITY;
-            cfg.motor_delay_ms   = sils_params::plant_fit::MOTOR_DELAY_MS;
-            cfg.motor_slew_per_s = sils_params::plant_fit::MOTOR_SLEW_PER_S;
-            std::printf("[emu] plant profile = flip_fit_2026_10 (torque_authority %.2f, "
-                        "motor_delay %.1f ms, motor_slew %.1f duty/s)\n",
-                        cfg.torque_authority, cfg.motor_delay_ms, cfg.motor_slew_per_s);
-        } else if (profile != "default" && !profile.empty()) {
-            std::fprintf(stderr, "[emu] unknown SILS_EMU_PLANT_PROFILE '%s' "
-                         "(known: default, flip_fit_2026_10)\n", pp);
-            std::exit(2);
-        }
-    }
-
     // Battery sag/discharge model ON for the closed-loop emulator: the full firmware
     // runs power_task and reads the live INA3221 voltage to compensate thrust→duty,
     // so the dynamic supply is consistent end-to-end (Model Identity). Override with
@@ -273,10 +252,26 @@ sils::Plant::Config plant_config_from_env()
     // 済みのファーム＋実機の組み合わせとの、未計測の差の暫定的な代理値。ベンチ V-ω-T
     // 同時計測が済めば 1.0 に戻せる見込み（plant.hpp の Config::thrust_efficiency
     // コメントおよび docs/architecture/simulation-policy.md バックログ#3 参照）。
+    //
+    // UPDATE (2026-10-30): the default is now sils_params::plant::THRUST_EFFICIENCY =
+    // 1.0 (SSOT bench_2026_10_15). The plant uses the bench Ct with the measured R_out(D)
+    // drive, which removes the two-motor-family mismatch the 0.7133 above papered over
+    // (see plant.hpp's Config::thrust_efficiency comment).
+    // 追記（2026-10-30）: 既定値は sils_params::plant::THRUST_EFFICIENCY = 1.0（SSOT
+    // bench_2026_10_15）。プラントはベンチの Ct と実測 R_out(D) 駆動を使い、上の 0.7133 が
+    // 帳尻を合わせていた「2 モータ族の不一致」は解消した（plant.hpp の
+    // Config::thrust_efficiency コメント参照）。
+    // UPDATE (2026-10-31): the default is now sils_params::plant::THRUST_EFFICIENCY = 0.976,
+    // determined from the flight hover balance (299 hover samples in 9 flight logs; see
+    // plant.hpp's Config::thrust_efficiency comment).
+    // 追記（2026-10-31）: 既定値は sils_params::plant::THRUST_EFFICIENCY = 0.976。飛行ログの
+    // ホバー釣り合い（9 本の飛行ログの 299 サンプル）から決定（plant.hpp の
+    // Config::thrust_efficiency コメント参照）。
     if (const char* te = std::getenv("SILS_EMU_THRUST_EFF")) {
         float eff = (float)std::atof(te);
         if (eff > 0.0f) { cfg.thrust_efficiency = eff;
-            std::printf("[emu] thrust efficiency override = %.3f (default 0.7133)\n", cfg.thrust_efficiency); }
+            std::printf("[emu] thrust efficiency override = %.3f (default %.4f)\n", cfg.thrust_efficiency,
+                        sils_params::plant::THRUST_EFFICIENCY); }
     }
     // SILS_EMU_TORQUE_AUTHORITY overrides the plant's roll/pitch differential-torque
     // authority (Config::torque_authority; NET vertical thrust is unaffected — see
@@ -317,22 +312,18 @@ sils::Plant::Config plant_config_from_env()
     // L=14.7/8.4/11.0ms（roll/pitch/yaw）、現状 SILS に明示的なむだ時間は無い。既定 OFF。
     if (const char* md = std::getenv("SILS_EMU_MOTOR_DELAY")) {
         float delay_ms = (float)std::atof(md);
-        // >= 0 so 0 can switch the delay off even under SILS_EMU_PLANT_PROFILE=flip_fit_2026_10.
-        // 0 以上: SILS_EMU_PLANT_PROFILE=flip_fit_2026_10 の下でも 0 で遅れを切れる。
         if (delay_ms >= 0.0f) { cfg.motor_delay_ms = delay_ms;
-            std::printf("[emu] motor transport delay override = %.2f ms (fitted profile %.2f)\n",
-                        cfg.motor_delay_ms, sils_params::plant_fit::MOTOR_DELAY_MS); }
+            std::printf("[emu] motor transport delay override = %.2f ms\n", cfg.motor_delay_ms); }
     }
-    // SILS_EMU_MOTOR_SLEW = duty slew-rate limit [duty/s] (Config::motor_slew_per_s; flip-log
-    // fit 2026-10-02, fitted value sils_params::plant_fit::MOTOR_SLEW_PER_S via the
-    // flip_fit_2026_10 profile; default 0 = off).
-    // SILS_EMU_MOTOR_SLEW = duty スルーレート制限 [duty/s]（宙返りログのフィット、フィット値は
-    // プロファイル flip_fit_2026_10 経由の plant_fit::MOTOR_SLEW_PER_S、既定 0 = OFF）。
+    // SILS_EMU_MOTOR_SLEW = duty slew-rate limit [duty/s] (Config::motor_slew_per_s;
+    // default 0 = off; the 2026-10-02 flip-log fit was retired 2026-10-31).
+    // SILS_EMU_MOTOR_SLEW = duty スルーレート制限 [duty/s]（既定 0 = OFF。2026-10-02 の
+    // 宙返りログのフィットは 2026-10-31 に退役）。
     if (const char* sl = std::getenv("SILS_EMU_MOTOR_SLEW")) {
         float v = (float)std::atof(sl);
         if (v >= 0.0f) { cfg.motor_slew_per_s = v;
-            std::printf("[emu] motor duty slew limit override = %.2f duty/s (fitted profile %.2f)\n",
-                        cfg.motor_slew_per_s, sils_params::plant_fit::MOTOR_SLEW_PER_S); }
+            std::printf("[emu] motor duty slew limit override = %.2f duty/s\n",
+                        cfg.motor_slew_per_s); }
     }
     // SILS_EMU_IMU_GYRO_RANGE_DPS / SILS_EMU_IMU_ACCEL_RANGE_G override the plant's
     // IMU measurement-range saturation (Config::imu_gyro_range_dps/imu_accel_range_g,
@@ -435,7 +426,7 @@ int main(int argc, char** argv)
         std::fprintf(stderr, "[emu] plant init failed (model: %s)\n", model_path);
         return 1;
     }
-    g_plant.setStartHeight(kGroundZ);
+    g_plant.setStartHeight(g_plant.restHeightM() + kStartClearanceM);
     sils_board_attach_plant(&g_plant);
 
     sils::rtos::Scheduler::instance().set_on_advance(on_advance);

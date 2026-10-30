@@ -126,6 +126,315 @@ constants:
 # ならない。
 # ==============================================================================
 calibration_sets:
+  # ----------------------------------------------------------------------------
+  # SILS plant propulsion (2026-10-30, Phase A+B of the R_out plant change).
+  # Physical measurement ranks above the SILS (developer decision, 2026-10-30):
+  # the SILS plant's motor + drive model is the AVERAGED CAPACITOR-RECIRCULATION
+  # circuit model with the bench constants of 2026-10-15:
+  #   I_m  = (V_batt - Ke*w) / R_out(D)        (I_m = 0 when D < 0.01)
+  #   J dw/dt = Kt*I_m - Cq*w^2 - Kt*(I0a + I0b*w^2)
+  #   T    = eta * Ct * w^2                    (eta = thrust_efficiency)
+  # battery current per motor = max(I_m, 0) (in this circuit the mean battery
+  # current equals the mean motor current). The old D*V electrical model
+  # ((D*V - Km*w)/Rm) is removed from the plant (git history keeps it).
+  # Evidence, residuals and the open items: analysis/notes/ct_cq_bench_20261015.md.
+  # Circuit model: the developers' paper (under review) on StampFly's capacitor-
+  # recirculation drive circuit. R_out depends on D and C_C only, not on the
+  # battery voltage nor on w (as built); the code that computes the calculated
+  # table is NOT in this repository.
+  # SILS プラントの推進系（2026-10-30、R_out プラント変更の Phase A+B）。
+  # 物理の実測を SILS より上位に置く（開発者決定、2026-10-30）: SILS プラントの
+  # モータ＋駆動モデルを、2026-10-15 のベンチ定数を使った「コンデンサ還流方式の
+  # 平均化回路モデル」にする（式は上の英文参照）。電池電流（モータ1個あたり）は
+  # max(I_m,0)（この回路では平均電池電流が平均モータ電流に等しい）。旧 D×V 電気
+  # モデル（(D·V−Km·ω)/Rm）はプラントから撤去（履歴は git が保持）。
+  # 根拠・残差・未決事項は analysis/notes/ct_cq_bench_20261015.md。回路モデルは
+  # 開発者らの論文（査読中）による。R_out は D と C_C だけで決まり、電池電圧にも
+  # ω にもよらない（構成上）。計算表を出すコードは本リポジトリには無い。
+  #
+  # NOTE (extra actuator delay, NOT adopted): an extra ~4 ms actuator delay is
+  # indicated by flight data (flip forward model delta 3-4 ms, hover delta 4-8 ms,
+  # as-flown flip reproduction best at 4 ms) but not adopted; to be settled by the
+  # duty-step bench measurement (stampfly-motor-autotest
+  # docs/procedure_long_discharge.md, measurement D). The plant default
+  # motor_delay_ms therefore stays 0.
+  # 注（追加のアクチュエータ遅れ、未採用）: 飛行データは追加で約4 ms のアクチュエータ
+  # 遅れを示す（宙返りの順モデルで δ 3〜4 ms、ホバーで δ 4〜8 ms、飛んだとおりの
+  # 宙返りの再現は 4 ms が最良）が、採用しない。Duty ステップのベンチ計測
+  # （stampfly-motor-autotest の docs/procedure_long_discharge.md、計測D）で決める。
+  # よってプラント既定の motor_delay_ms は 0 のまま。
+  # ----------------------------------------------------------------------------
+  bench_2026_10_15:
+    status: adopted
+    role: "SILS plant propulsion"
+    coupled: true
+    note: >
+      Extra actuator delay (NOT adopted): an extra ~4 ms actuator delay is indicated
+      by flight data (flip forward model delta 3-4 ms, hover delta 4-8 ms, as-flown
+      flip reproduction best at 4 ms) but not adopted; to be settled by the duty-step
+      bench measurement (stampfly-motor-autotest docs/procedure_long_discharge.md,
+      measurement D). The plant default motor_delay_ms therefore stays 0.
+      追加のアクチュエータ遅れ（未採用）: 飛行データは追加で約 4 ms の遅れを示す
+      （宙返りの順モデルで δ 3〜4 ms、ホバーで δ 4〜8 ms、飛んだとおりの宙返りの
+      再現は 4 ms が最良）が採用しない。Duty ステップのベンチ計測（stampfly-motor-
+      autotest の docs/procedure_long_discharge.md、計測 D）で決める。プラント既定の
+      motor_delay_ms は 0 のまま。
+    params:
+      Ke:
+        value: 5.905e-4
+        unit: "V·s/rad"
+        method: "ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（開回路EMF）"
+        method_en: "Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (open-circuit EMF)"
+        date: "2026-10-15"
+        source: "bench measurement 2026-10-15 with the public stampfly-motor-autotest (data/2026-10-15); the developers' paper under review (circuit model)"
+        note: >
+          Back-EMF constant. Kt = Ke in SI units (same number, N·m/A). / 逆起電力定数。SI では Kt = Ke（同じ数値、N·m/A）。
+      Kt:
+        value: 5.905e-4
+        unit: "N·m/A"
+        method: "ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（Ke と同値）"
+        method_en: "Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (equal to Ke)"
+        date: "2026-10-15"
+        source: "bench measurement 2026-10-15 with the public stampfly-motor-autotest (data/2026-10-15); equal to Ke in SI"
+        note: >
+          Torque constant, equal to Ke in SI units. / トルク定数。SI では Ke と同値。
+      Cq:
+        value: 3.38e-11
+        unit: "N·m/(rad/s)²"
+        method: "ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）"
+        method_en: "Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15)"
+        date: "2026-10-15"
+        source: "bench measurement 2026-10-15 with the public stampfly-motor-autotest (data/2026-10-15)"
+        note: >
+          Torque coefficient Q = Cq·w^2 (the plant uses it directly as the body reaction torque).
+          / トルク係数 Q=Cq·ω²（プラントは機体への反トルクとして直接使う）。
+      Ct:
+        value: 7.60e-9
+        unit: "N/(rad/s)²"
+        method: "ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（推力は秤で計測）"
+        method_en: "Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (thrust on a scale)"
+        date: "2026-10-15"
+        source: "bench measurement 2026-10-15 with the public stampfly-motor-autotest (data/2026-10-15)"
+        note: >
+          Thrust coefficient T = eta·Ct·w^2. Per-step Ct varies from 6.3e-9 (D 0.1) to 7.8e-9 (D 0.9); the single value is the bench fit. 1 motor (M1) only.
+          / 推力係数 T=η·Ct·ω²。ステップごとの Ct は D 0.1 の 6.3e-9 から D 0.9 の 7.8e-9 まで変わる（1 値はベンチのフィット）。1 モータ（M1）のみ。
+      J:
+        value: 1.54e-8
+        unit: "kg·m²"
+        method: "ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（プロペラ込みのロータ慣性）"
+        method_en: "Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (rotor inertia including the propeller)"
+        date: "2026-10-15"
+        source: "bench measurement 2026-10-15 with the public stampfly-motor-autotest (data/2026-10-15)"
+      I0a:
+        value: 0.0443
+        unit: "A"
+        method: "ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（無負荷電流の定数部）"
+        method_en: "Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (constant part of the no-load current)"
+        date: "2026-10-15"
+        source: "bench measurement 2026-10-15 with the public stampfly-motor-autotest (data/2026-10-15); the developers' paper under review (circuit model)"
+        note: >
+          No-load current I0 = I0a + I0b·w^2. The constant part acts as Coulomb-like friction Kt·I0a, applied unconditionally (same style as the old Qf).
+          / 無負荷電流 I0=I0a+I0b·ω²。定数部はクーロン摩擦風の Kt·I0a で、旧 Qf と同じ流儀で無条件に減算。
+      I0b:
+        value: 2.915e-9
+        unit: "A/(rad/s)²"
+        method: "ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（無負荷電流の ω² 部）"
+        method_en: "Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (w^2 part of the no-load current)"
+        date: "2026-10-15"
+        source: "bench measurement 2026-10-15 with the public stampfly-motor-autotest (data/2026-10-15); the developers' paper under review (circuit model)"
+        note: >
+          Extra drag Kt·I0b·w^2. / 追加の抗力 Kt·I0b·ω²。
+      C_C:
+        value: 0.1e-6
+        unit: "F"
+        method: "基板の部品定数（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（R_out 表の前提）"
+        method_en: "Board component value (premise of the R_out table)"
+        date: "2026-10-15"
+        source: "board component value; the developers' paper under review (circuit model); premise of the R_out table"
+        note: >
+          Recirculation capacitor of the board. Informational: it only fixes which R_out table applies. / 基板の還流コンデンサ。情報用: どの R_out 表を使うかを決めるだけ。
+      f_pwm:
+        value: 150000.0
+        unit: "Hz"
+        method: "基板の PWM 周波数（情報用）"
+        method_en: "Board PWM frequency (informational)"
+        date: "2026-10-15"
+        source: "board PWM setting; the developers' paper under review (circuit model); informational"
+        note: >
+          Informational only; the averaged model does not use it directly. / 情報用。平均化モデルは直接使わない。
+      thrust_efficiency:
+        value: 0.976
+        unit: "-"
+        method: "飛行ログのホバー釣り合いから決定（η = m·g / Σ_i T(D_i, V)、9 本・299 サンプル）"
+        method_en: "Determined from the flight hover balance (eta = m*g / sum_i T(D_i, V), 9 logs, 299 samples)"
+        date: "2026-10-31"
+        source: "flight logs 2026-07-17 x5, 07-18 x2, 09-08, 10-02 flip_test1; analysis/notes/ct_cq_bench_20261015.md"
+        note: >
+          飛行ログのホバー釣り合いから決めた: η = m·g / Σ_i T(D_i, V)。
+          各モータの指令 duty D_i と基板電圧 V（1 秒ごとのホバー区間サンプル）を
+          採用した R_out 表（下記）に通して推力 T を計算する。9 本の飛行ログ
+          （2026-07-17 ×5、07-18 ×2、09-08、10-02 flip_test1）の 299 サンプル、
+          m = 0.037 kg。中央値 0.976、p16〜p84 は 0.963〜0.996、電圧に対する
+          傾きは 3.64〜4.10 V で +0.005/V（電圧依存なし）。解釈: ベンチの単独
+          モータと機体搭載時の間にある設置・干渉損失。m = 0.0364 kg（二本吊り
+          測定の質量）を使うと 0.960 になる。
+          Determined from the flight hover balance, eta = m*g / sum_i T(D_i, V),
+          with the per-motor commanded duties D_i and the board voltage V of every
+          1-s hover sample, evaluated through the adopted R_out table (below), in
+          9 flight logs (2026-07-17 x5, 07-18 x2, 09-08, 10-02 flip_test1; 299
+          samples), m = 0.037 kg: median 0.976, p16-p84 0.963-0.996, slope versus
+          voltage +0.005 per V over 3.64-4.10 V (no voltage dependence).
+          Interpretation: installation/interference loss between the single motor
+          on the bench and the airframe in flight. With m = 0.0364 kg (the
+          bifilar measurement mass) it would be 0.960.
+          (Previously 1.0 = bench Ct as-is, 2026-10-30; the former default 0.7133
+          was bookkeeping for the firmware curve and the old plant motor being two
+          different motors, 2026-08-22.)
+          （旧: 2026-10-30 は 1.0＝ベンチの Ct そのまま。さらに前の既定 0.7133 は
+          ファームの曲線と旧プラントのモータが別物だったことへの帳尻合わせ、
+          2026-08-22。）
+    # --- R_out(D) table: three layers, all stored here --------------------------
+    # --- R_out(D) 表: 3 層、すべてここに保存 -------------------------------------
+    # (a) measured_points : bench measurement. R_out = (V_DD - Ke*w) / I_bat from the
+    #     bench summary. D is the COMMANDED duty.
+    # (b) calc            : period-steady averaged circuit solved by state-transition
+    #     matrices for the board C_C (code not in this repository); independent of the
+    #     battery voltage. D = 0.01 .. 1.00 in 0.01 steps [ohm].
+    # (c) adopted         : calc x r(D), r piecewise-linear through the measured/calc
+    #     ratios at D 0.1 .. 0.9 (the two D 0.5 ratios averaged), held constant below
+    #     0.1 and above 0.9. COMPUTED BY THE GENERATOR (tools/params_audit/generate.py)
+    #     from (a) and (b): no hand-typed adopted numbers. The plant uses (c).
+    # (a) measured_points: ベンチ実測。R_out=(V_DD−Ke·ω)/I_bat（ベンチ要約）。D は指令 duty。
+    # (b) calc: 基板の C_C に対し、周期定常の平均化回路を状態遷移行列で解いた表
+    #     （コードは本リポジトリに無い）。電池電圧によらない。D=0.01〜1.00、0.01 刻み[Ω]。
+    # (c) adopted: calc × r(D)。r は D 0.1〜0.9 の実測/計算比を通る区分線形
+    #     （D 0.5 の 2 点は平均）、0.1 未満と 0.9 超は定数で保持。生成器が (a)(b) から
+    #     計算する（手書きの採用値は無い）。プラントは (c) を使う。
+    rout_table:
+      measured_points:
+        # [D, R_out_ohm, V_DD_V, run_tag]
+        - [0.1, 26.187, 4.378, pwm_c01_d10]
+        - [0.2, 12.065, 4.364, pwm_c01_d20]
+        - [0.3, 7.332, 4.349, pwm_c01_d30]
+        - [0.4, 4.884, 4.328, pwm_c01_d40]
+        - [0.5, 3.479, 4.302, pwm_c01_d50]
+        - [0.5, 3.463, 4.236, pwm_c01_d50_rep]
+        - [0.6, 2.563, 4.278, pwm_c01_d60]
+        - [0.7, 2.072, 4.253, pwm_c01_d70]
+        - [0.8, 1.547, 4.223, pwm_c01_d80]
+        - [0.9, 0.941, 4.173, pwm_c01_d90]
+      calc:
+        method: "period-steady averaged circuit solved by state-transition matrices (code not in this repository)"
+        method_ja: "状態遷移行列で解いた周期定常の平均化回路（コードは本リポジトリに無い）"
+        source: "analysis/scripts/ct_cq_bench_20261015/rout/rout_table_c01.csv"
+        c_c_farad: 0.1e-6
+        # [D, R_out_ohm], D = 0.01 .. 1.00
+        points:
+        - [0.01, 65.370970]
+        - [0.02, 61.559885]
+        - [0.03, 56.301752]
+        - [0.04, 50.636193]
+        - [0.05, 45.182287]
+        - [0.06, 40.227661]
+        - [0.07, 35.860443]
+        - [0.08, 32.067839]
+        - [0.09, 28.794401]
+        - [0.10, 25.972153]
+        - [0.11, 23.534522]
+        - [0.12, 21.421883]
+        - [0.13, 19.583067]
+        - [0.14, 17.975096]
+        - [0.15, 16.562249]
+        - [0.16, 15.314956]
+        - [0.17, 14.208752]
+        - [0.18, 13.223355]
+        - [0.19, 12.341901]
+        - [0.20, 11.550307]
+        - [0.21, 10.836764]
+        - [0.22, 10.191320]
+        - [0.23, 9.605546]
+        - [0.24, 9.072269]
+        - [0.25, 8.585354]
+        - [0.26, 8.139528]
+        - [0.27, 7.730236]
+        - [0.28, 7.353525]
+        - [0.29, 7.005948]
+        - [0.30, 6.684484]
+        - [0.31, 6.386479]
+        - [0.32, 6.109583]
+        - [0.33, 5.851716]
+        - [0.34, 5.611024]
+        - [0.35, 5.385852]
+        - [0.36, 5.174720]
+        - [0.37, 4.976301]
+        - [0.38, 4.789402]
+        - [0.39, 4.612956]
+        - [0.40, 4.446002]
+        - [0.41, 4.287686]
+        - [0.42, 4.137242]
+        - [0.43, 3.993997]
+        - [0.44, 3.857354]
+        - [0.45, 3.726797]
+        - [0.46, 3.601880]
+        - [0.47, 3.482225]
+        - [0.48, 3.367518]
+        - [0.49, 3.257502]
+        - [0.50, 3.151975]
+        - [0.51, 3.050783]
+        - [0.52, 2.953814]
+        - [0.53, 2.860993]
+        - [0.54, 2.772274]
+        - [0.55, 2.687632]
+        - [0.56, 2.607062]
+        - [0.57, 2.530565]
+        - [0.58, 2.458144]
+        - [0.59, 2.389798]
+        - [0.60, 2.325513]
+        - [0.61, 2.265257]
+        - [0.62, 2.208976]
+        - [0.63, 2.156582]
+        - [0.64, 2.107952]
+        - [0.65, 2.062921]
+        - [0.66, 2.021277]
+        - [0.67, 1.982754]
+        - [0.68, 1.947030]
+        - [0.69, 1.913721]
+        - [0.70, 1.882382]
+        - [0.71, 1.852504]
+        - [0.72, 1.823518]
+        - [0.73, 1.794805]
+        - [0.74, 1.765705]
+        - [0.75, 1.735539]
+        - [0.76, 1.703632]
+        - [0.77, 1.669346]
+        - [0.78, 1.632117]
+        - [0.79, 1.591494]
+        - [0.80, 1.547176]
+        - [0.81, 1.499050]
+        - [0.82, 1.447206]
+        - [0.83, 1.391954]
+        - [0.84, 1.333806]
+        - [0.85, 1.273459]
+        - [0.86, 1.211750]
+        - [0.87, 1.149609]
+        - [0.88, 1.088007]
+        - [0.89, 1.027903]
+        - [0.90, 0.970206]
+        - [0.91, 0.915740]
+        - [0.92, 0.865228]
+        - [0.93, 0.819285]
+        - [0.94, 0.778420]
+        - [0.95, 0.743049]
+        - [0.96, 0.713509]
+        - [0.97, 0.690074]
+        - [0.98, 0.672967]
+        - [0.99, 0.662362]
+        - [1.00, 0.658380]
+      adopted:
+        method: "calc x r(D); r = piecewise-linear through the measured/calc ratios at D 0.1..0.9 (D 0.5 ratios averaged), constant outside"
+        method_ja: "calc × r(D)。r は D 0.1〜0.9 の実測/計算比を通る区分線形（D 0.5 は平均）、範囲外は定数"
+        computed_by: "tools/params_audit/generate.py (build_view)"
+
   # Current adopted family — Cq/Jmp/Dm/Qf/Rm/Km are confirmed by the
   # 2026-07-15..17 measurement campaign (multicopter_introduction qa_log
   # Q4-9..13) plus the 2026-07-26 coast-down 3-term refit (Dm/Qf). Ct is a
@@ -144,6 +453,15 @@ calibration_sets:
   # UPDATE (2026-10-30): bench co-measurement done 2026-10-15 (one motor), not
   # adopted; see analysis/notes/ct_cq_bench_20261015.md.
   # 2026-10-30 更新: 2026-10-15 にベンチ同時計測済み（1モータ）、採用見送り。
+  # FOLLOW-UP (2026-10-30, same day, later): the "not adopted" above referred to
+  # swapping Ct/Cq alone while keeping the D*V drive. The bench values WERE then
+  # adopted for the SILS plant as a whole, together with the averaged
+  # capacitor-recirculation drive model: see bench_2026_10_15 (above) and the
+  # UPDATE note just below. This set is superseded for the SILS plant.
+  # 続報（2026-10-30、同日の後刻）: 上の「採用見送り」は D×V 駆動のまま Ct/Cq だけを
+  # 差し替える案を指す。その後、ベンチ値は平均化コンデンサ還流駆動モデルと一式で
+  # SILS プラントに採用した: bench_2026_10_15（上）と直下の UPDATE 注記を参照。
+  # 本セットは SILS プラントについては置き換え済み。
   # 現行採用ファミリ — Cq/Jmp/Dm/Qf/Rm/Km は2026-07-15〜17測定キャンペーン
   # （multicopter_introduction qa_log Q4-9..13）に加え、2026-07-26 の
   # コーストダウン3項再フィット（Dm/Qf）で確定。Ct は2026-08-03時点で暫定値
@@ -158,15 +476,31 @@ calibration_sets:
   # 本セットの採用（暫定）Ct 値と一致する -- 暫定値がたまたま下記
   # legacy_motor_curve.Ct（2026-07-15以前の旧値）と同値のため、
   # 2026-08-03の撤回をまたいで数値上の変更はない。
+  # UPDATE (2026-10-30): SUPERSEDED for the SILS plant by bench_2026_10_15 (above)
+  # on this date (physical measurement ranks above the SILS). Values untouched.
+  # Still the reference for Genesis (simulator/genesis/motor_model.py,
+  # control_allocation.py), VPython (simulator/vpython/core/motors.py), the
+  # loop_shaping_tool Calculation tab, tools/sysid/defaults.py and the hand tables
+  # in docs/architecture/stampfly-parameters.md: they keep their own D*V drive
+  # model (V = D*Vbat, Rm/Km/Dm/Qf) until migrated. simulator/sils/plant no longer
+  # reads any member of this set.
+  # 2026-10-30 更新: SILS プラントについては、本日付で bench_2026_10_15（上）に
+  # 置き換えられた（物理の実測を SILS より上位に置く）。値は変更しない。
+  # Genesis・VPython・loop_shaping_tool の計算タブ・tools/sysid/defaults.py・
+  # docs/architecture/stampfly-parameters.md の手書き表は、移行までは独自の D×V
+  # 駆動モデル（V=D·Vbat、Rm/Km/Dm/Qf）のまま本セットを基準とする。
+  # simulator/sils/plant は本セットのどのメンバーも読まなくなった。
   measured_2026_07:
-    status: adopted
+    status: superseded
+    superseded_by: bench_2026_10_15
+    superseded_date: "2026-10-30"
     coupled: true
     params:
       Ct:
         value: 1.00e-8
         unit: "N/(rad/s)²"
-        method: "暫定採用（同径プロペラの過去実測＋理論シミュレーション整合）。2026-10-15 にベンチ同時計測済み、2026-10-30 の SILS 検討で採用見送り"
-        method_en: "Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency). Bench co-measurement done 2026-10-15; adoption declined after the 2026-10-30 SILS study"
+        method: "暫定採用（同径プロペラの過去実測＋理論シミュレーション整合）。2026-10-15 にベンチ同時計測済み、2026-10-30 の SILS 検討で採用見送り（Ct/Cq だけの差し替え。同日後刻に駆動モデルごと bench_2026_10_15 として採用）"
+        method_en: "Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency). Bench co-measurement done 2026-10-15; adoption declined after the 2026-10-30 SILS study (a Ct/Cq-only swap; adopted later the same day together with the drive model as bench_2026_10_15)"
         date: "2026-08-03"
         note: >
           新プロペラでは印加電圧・回転数・推力の3量同時計測が一度も行われて
@@ -186,6 +520,13 @@ calibration_sets:
           one motor (Ct 7.60e-9, Cq 3.38e-11). Not adopted as of 2026-10-30
           because the model-match check worsens and the regression tests break;
           see analysis/notes/ct_cq_bench_20261015.md.
+          続報（2026-10-30、同日の後刻）: 上の「採用見送り」は Ct/Cq だけの差し替えの
+          こと。ベンチ値は平均化駆動モデルと一式で SILS プラントに採用した
+          （bench_2026_10_15）。本 Ct は SILS プラントでは使われなくなった。
+          Follow-up (2026-10-30, same day, later): the "not adopted" above was about a
+          Ct/Cq-only swap. The bench values were then adopted for the SILS plant
+          together with the averaged drive model (bench_2026_10_15); this Ct is no
+          longer read by the SILS plant.
       Cq:
         value: 4.10e-11
         unit: "N·m/(rad/s)²"
@@ -285,6 +626,10 @@ calibration_sets:
   # co-measurement that will confirm or replace the provisional Ct.
   # UPDATE (2026-10-30): the bench co-measurement was done on 2026-10-15 (one
   # motor) and was not adopted; see analysis/notes/ct_cq_bench_20261015.md.
+  # FOLLOW-UP (2026-10-30, same day, later): the bench values were then adopted for
+  # the SILS plant as a whole (bench_2026_10_15); this legacy family is history only.
+  # 続報（2026-10-30、同日の後刻）: その後ベンチ値は一式で SILS プラントに採用した
+  # （bench_2026_10_15）。この旧ファミリは履歴のみ。
   # UPDATE (2026-08-22): "surviving consumer" above must now be read as
   # "consumer of the same functional form", not a literal numeric match --
   # actuator.cpp's MOTOR_AM/MOTOR_BM/MOTOR_CM hold the flight_anchored_
@@ -447,10 +792,44 @@ calibration_sets:
   # どちらも）物理的に正しいかは未決着のまま（バックログ#3）。本畳み込みは
   # 新しい物理を主張するものでも、その未決着を解消するものでもなく、単一の
   # 飛行実証済み写像（legacy曲線+corr1.12）を1箇所に集約しただけである。
+  # UPDATE (2026-10-30): this set is now THE explicit firmware thrust->duty set
+  # (status adopted, role firmware). Ct_gauge and kappa were added to it so the
+  # five constants firmware/vehicle/components/sf_actuator/actuator.cpp holds
+  # (MOTOR_CT, KAPPA, MOTOR_AM, MOTOR_BM, MOTOR_CM) live in ONE set, instead of
+  # Ct/kappa riding on measured_2026_07 (which the SILS plant no longer reads).
+  # Extended rather than duplicated into a new set so Am/Bm/Cm keep their fold
+  # provenance above. Generated as sils_params::firmware_curve (C++) and the
+  # EXPECTED_FW_* constants (Python). The values are the ones actuator.cpp holds
+  # today; firmware is unchanged.
+  # 2026-10-30 更新: 本セットを「ファームの推力→duty 換算の明示的な1セット」とする
+  # （status adopted、role firmware）。actuator.cpp が持つ5定数（MOTOR_CT・KAPPA・
+  # MOTOR_AM・MOTOR_BM・MOTOR_CM）を1か所にまとめるため Ct_gauge と kappa を追加した
+  # （Ct/kappa を、SILS プラントがもう読まない measured_2026_07 に同居させない）。
+  # 新セットに複製せず拡張したのは、Am/Bm/Cm の畳み込みの来歴を保つため。
+  # 値は actuator.cpp が現在持つ値そのまま。ファームは変更しない。
   flight_anchored_motor_curve:
-    status: frozen_for_implementation
+    status: adopted
+    role: firmware
     coupled: true
     params:
+      Ct_gauge:
+        value: 1.00e-8
+        unit: "N/(rad/s)²"
+        date: "2026-10-30"
+        method: "ファームの換算が使う推力ゲージ係数（actuator.cpp の MOTOR_CT）。2026-08-03 の暫定採用値"
+        method_en: "Thrust gauge coefficient the firmware conversion uses (MOTOR_CT in actuator.cpp). Provisional adoption of 2026-08-03"
+        note: >
+          ω=sqrt(T/Ct_gauge) in the firmware's thrust->duty conversion. It is a GAUGE constant of the firmware curve, not a claim about the propeller's true Ct (bench Ct is 7.60e-9, see bench_2026_10_15). Am/Bm/Cm below are expressed against this Ct_gauge.
+          ファームの推力→duty 換算の ω=sqrt(T/Ct_gauge)。ファーム曲線の「ゲージ」定数であり、プロペラの真の Ct の主張ではない（ベンチの Ct は 7.60e-9、bench_2026_10_15 参照）。下の Am/Bm/Cm はこの Ct_gauge に対する値。
+      kappa:
+        value: 4.10e-3
+        unit: "m"
+        date: "2026-08-03"
+        method: "ファームのミキサー B^-1 が使うトルク/推力比（actuator.cpp の KAPPA）= Cq/Ct の丸め不要の値"
+        method_en: "Torque/thrust ratio the firmware mixer B^-1 uses (KAPPA in actuator.cpp) = Cq/Ct, exact"
+        note: >
+          measured_2026_07.kappa_adopted と同値（4.10e-3）。ファームの rate.yaw.kp / rate.yaw.max_torque はこの κ に対して同率再スケール済み。bench の Cq/Ct（3.38e-11/7.60e-9=4.45e-3）はファーム未反映。
+          Same value as measured_2026_07.kappa_adopted. The firmware's rate.yaw.kp / rate.yaw.max_torque are rescaled against this kappa. The bench Cq/Ct (3.38e-11/7.60e-9 = 4.45e-3) is NOT in the firmware.
       Am:
         value: 6.0368e-8
         unit: "V/(rad/s)²"
@@ -491,18 +870,32 @@ calibration_sets:
   # are effective plant-level correction factors identified so that the SILS
   # plant reproduces the hardware duty -> roll-rate dynamics of the failed flip
   # (logs/flip_test1.sflog.zip). They are consumed ONLY by the SILS plant
-  # (simulator/sils/plant/plant.hpp Config defaults via
-  # generated_params.hpp sils_params::plant_fit::*); the firmware does not use
-  # them. Evidence and residuals: docs/architecture/simulation-policy.md §5
+  # (formerly via the opt-in profile flip_fit_2026_10; retired 2026-10-31); the
+  # firmware does not use them. Evidence and residuals: docs/architecture/simulation-policy.md §5
   # ("2026-10-02 追記") and docs/plans/flip-maneuver-plan.md §5.6.
   # 最初の実機宙返りログ（2026-10-02）からの SILS プラント忠実度フィット。
   # 単一の物理量のベンチ実測ではなく、SILS プラントが失敗した宙返りの実機の
   # duty→ロールレート動特性を再現するよう同定した、プラント全体の実効補正係数
-  # （3 値）。SILS プラント専用（plant.hpp Config 既定値、generated_params.hpp
-  # sils_params::plant_fit::* 経由）。ファームは使わない。
+  # （3 値）。SILS プラント専用（旧オプトインのプロファイル flip_fit_2026_10 経由、
+  # 2026-10-31 に退役）。ファームは使わない。
   # ----------------------------------------------------------------------------
+  # UPDATE (2026-10-31): SUPERSEDED and RETIRED (values untouched). These factors
+  # were identified against the OLD V0 motor model (D*V electrical ODE); they
+  # double-count with the R_out drive of bench_2026_10_15 (which already
+  # reproduces the lower duty->roll-acceleration gain). The opt-in plant profile
+  # flip_fit_2026_10, the sils_params::plant_fit::* generator output and the
+  # *_fit scenarios were removed on 2026-10-31; this set is kept as a record only.
+  # The as-flown failure is reproduced instead by the scenario flip_test2_repro.
+  # 2026-10-31 更新: 置き換え済み、かつ退役（値は変更しない）。これらの係数は旧 V0
+  # モータモデル（D×V 電気 ODE）に対して同定したもので、bench_2026_10_15 の R_out
+  # 駆動（duty→ロール角加速度ゲインの低さを既に再現する）と二重に効く。
+  # オプトインのプラントプロファイル flip_fit_2026_10・生成物 sils_params::plant_fit::*・
+  # *_fit シナリオは 2026-10-31 に削除した。本セットは記録としてのみ残す。
+  # 飛んだとおりの失敗は、代わりにシナリオ flip_test2_repro で再現する。
   plant_fit_flip_2026_10:
-    status: adopted
+    status: superseded
+    superseded_by: bench_2026_10_15
+    superseded_date: "2026-10-30"
     coupled: true
     params:
       torque_authority:

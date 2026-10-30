@@ -86,6 +86,15 @@ bool Plant::init(const char* model_path, const Config& cfg)
     pos_sid_   = mj_name2id(m_, mjOBJ_SENSOR, "body_pos");
     vel_sid_   = mj_name2id(m_, mjOBJ_SENSOR, "body_vel");
 
+    // Ground standoff: the collision box half-height is the height at which the body origin
+    // rests on the floor (and so what the emulated bottom ToF reads there).
+    // 地上の底上げ: 衝突箱の半高さが、機体原点が床に静止する高さ（下向き ToF 模擬がそこで
+    // 返す値）。
+    const int collision_gid = mj_name2id(m_, mjOBJ_GEOM, "collision");
+    if (collision_gid >= 0 && m_->geom_type[collision_gid] == mjGEOM_BOX) {
+        rest_height_m_ = (float)m_->geom_size[3 * collision_gid + 2];
+    }
+
     // Seed the sensor-noise model (default OFF). Deterministic per cfg.noise.seed.
     // センサノイズモデルをシード（既定 OFF）。cfg.noise.seed で決定論的。
     noise_.init(cfg_.noise);
@@ -140,17 +149,16 @@ void Plant::setDuty(const sf::MotorOutput& cmd)
 void Plant::primeMotors()
 {
     for (int i = 0; i < 4; ++i) {
-        // Duty itself carries no lag anymore (the first-order motor_tau smoothing
-        // stage was retired 2026-07-26, backlog #2) — the ODE state omega is now the
-        // ONLY spool-up dynamics, so prime IT directly to the steady-state speed for
-        // this target duty. Without this, a from-rest warm start would show
-        // ~3·τ_eff ≈ 50 ms of electromechanical spin-up that primeMotors() exists to
-        // skip.
-        // duty 自体にはもう遅れが無い（一次遅れ段 motor_tau は 2026-07-26 バックログ#2
-        // で撤去）— 残るスプールアップ動特性は ODE 状態 omega のみなので、これを目標
-        // duty の定常回転数へ直接プライムする。これをしないと、静止からの暖機起動が
-        // primeMotors() 本来の目的である約3·τ_eff≈50ms の電気機械的立上りを見せてしまう。
-        motor_omega_[i] = steadyStateOmega(motor_target_[i] * v_batt_);
+        // Duty itself carries no lag (the first-order motor_tau smoothing stage was
+        // retired 2026-07-26, backlog #2) — the ODE state omega is the ONLY spool-up
+        // dynamics, so prime IT directly to the steady-state speed for this target
+        // duty (R_out model, 2026-10-30). Without this, a from-rest warm start would
+        // show the electromechanical spin-up that primeMotors() exists to skip.
+        // duty 自体には遅れが無い（一次遅れ段 motor_tau は 2026-07-26 バックログ#2 で撤去）
+        // — 残るスプールアップ動特性は ODE 状態 omega のみなので、これを目標 duty の
+        // 定常回転数へ直接プライムする（R_out モデル、2026-10-30）。これをしないと、静止から
+        // の暖機起動が primeMotors() 本来の目的である電気機械的立上りを見せてしまう。
+        motor_omega_[i] = steadyStateOmega(motor_target_[i], v_batt_);
 
         // Also pre-fill the transport-delay ring buffer (if enabled) with the target
         // duty, so a delayed path does not ramp up from the zero-filled boot buffer.
@@ -326,40 +334,78 @@ void Plant::handlingSubstep(float h)
 }
 
 // -----------------------------------------------------------------------------
-// omegaDot / steadyStateOmega — the motor+propeller electromechanical ODE
-// (backlog #2, 2026-07-26), ported from simulator/genesis/motor_model.py
-// Motor.omega_dot() (motor_model.py:132-150):
-//   dω/dt = [-(Dm + Km²/Rm)·ω - Cq·ω² - Qf + Km·V/Rm] / Jmp
-// omegaDot() is the RHS the RK4 integrator in substep() calls every substep —
-// THIS is the dynamics now; there is no more static V-ω curve standing in for
-// it. steadyStateOmega() solves the SAME equation at equilibrium (dω/dt = 0),
-// i.e. the positive root of Cq·ω² + (Dm+Km²/Rm)·ω + (Qf − Km·V/Rm) = 0 — used
-// ONLY by dutyToThrust() (duty→thrust, steady-state) and primeMotors()
-// (warm-start), NEVER inside substep()'s per-step dynamics.
+// R_out model of the motor + drive circuit + propeller (2026-10-30; replaces the
+// 2026-07-26 D·V ODE (D·V − Km·ω)/Rm — git history keeps it). Averaged capacitor-
+// recirculation drive with the bench constants of 2026-10-15 (SSOT
+// bench_2026_10_15 via generated_params.hpp sils_params::plant):
+//   I_m = (V − Ke·ω) / R_out(D)                    (I_m = 0 when D < 0.01)
+//   J·dω/dt = Kt·I_m − Cq·ω² − Kt·(I0a + I0b·ω²)
+// routOhm(): linear interpolation of the tabulated R_out(D). motorCurrent(): I_m.
+// omegaDot(): the RHS the RK4 integrator in substep() calls every substep — THIS is
+// the dynamics. The constant friction Kt·I0a is subtracted unconditionally, exactly
+// like the old Coulomb term Qf (no sign / stiction logic); substep() clamps ω ≥ 0
+// after integration. steadyStateOmega() solves the SAME equation at equilibrium
+// (dω/dt = 0): the positive root of A·ω² + B·ω + C = 0 with
+//   A = Cq + Kt·I0b,   B = Kt·Ke/R_out,   C = Kt·I0a − Kt·V/R_out
+// — used ONLY by dutyToThrust() (duty→thrust, steady state) and primeMotors()
+// (warm start), NEVER inside substep()'s per-step dynamics.
 //
-// omegaDot / steadyStateOmega — モータ+プロペラの電気機械 ODE（バックログ#2,
-// 2026-07-26）。simulator/genesis/motor_model.py の Motor.omega_dot() を移植:
-//   dω/dt = [-(Dm+Km²/Rm)·ω - Cq·ω² - Qf + Km·V/Rm]/Jmp
-// omegaDot() は substep() の RK4 積分器が毎回呼ぶ右辺そのもの — これが動特性で
-// あり、もはや代替の静的 V-ω 曲線は無い。steadyStateOmega() は同じ式を平衡点
-// （dω/dt=0）で解いた Cq·ω²+(Dm+Km²/Rm)·ω+(Qf−Km·V/Rm)=0 の正根 —
-// dutyToThrust()（duty→推力、定常）と primeMotors()（暖機起動）のみで使用、
-// substep() の毎ステップ動特性では絶対に使わない。
+// モータ＋駆動回路＋プロペラの R_out モデル（2026-10-30。2026-07-26 の D·V ODE
+// (D·V−Km·ω)/Rm を置き換え — 履歴は git が保持）。2026-10-15 のベンチ定数
+// （SSOT bench_2026_10_15、generated_params.hpp の sils_params::plant）を使った平均化
+// コンデンサ還流駆動。式は上の英文参照。routOhm(): 表化した R_out(D) の線形補間。
+// motorCurrent(): I_m。omegaDot(): substep() の RK4 積分器が毎回呼ぶ右辺 — これが
+// 動特性そのもの。定数摩擦 Kt·I0a は旧クーロン項 Qf と同様に無条件で減算する
+// （符号・静止摩擦の処理なし）。積分後に substep() が ω≥0 にクランプする。
+// steadyStateOmega() は同じ式を平衡点（dω/dt=0）で解く: A·ω²+B·ω+C=0 の正根
+// （A=Cq+Kt·I0b、B=Kt·Ke/R_out、C=Kt·I0a−Kt·V/R_out）— dutyToThrust()（duty→推力、
+// 定常）と primeMotors()（暖機起動）のみで使用、substep() の毎ステップ動特性では
+// 絶対に使わない。
 // -----------------------------------------------------------------------------
-float Plant::omegaDot(float omega, float v_motor) const
+float Plant::routOhm(float duty)
 {
-    const float drag = (cfg_.Dm + cfg_.motor_Km * cfg_.motor_Km / cfg_.motor_Rm) * omega
-                        + cfg_.Cq * omega * omega + cfg_.Qf;
-    const float drive = cfg_.motor_Km * v_motor / cfg_.motor_Rm;
-    return (drive - drag) / cfg_.Jmp;
+    // The table is uniform in D (entry k ↔ D = k·step); entry 0 (D = 0.00) is a
+    // placeholder never reached because callers return I_m = 0 for D < 0.01.
+    // 表は D について等間隔（要素 k ↔ D=k·刻み）。要素 0（D=0.00）は穴埋めで、D<0.01 では
+    // 呼び出し側が I_m=0 を返すため到達しない。
+    constexpr int   kLast = sils_params::plant::ROUT_N - 1;
+    constexpr float kStep = sils_params::plant::ROUT_D[1] - sils_params::plant::ROUT_D[0];
+    constexpr float kDutyMin = sils_params::plant::ROUT_D[1];
+    if (duty <= kDutyMin) return sils_params::plant::ROUT_OHM[1];
+    if (duty >= 1.0f)     return sils_params::plant::ROUT_OHM[kLast];
+    const float pos = duty / kStep;
+    int i = static_cast<int>(pos);
+    if (i > kLast - 1) i = kLast - 1;
+    const float frac = pos - static_cast<float>(i);
+    return sils_params::plant::ROUT_OHM[i]
+           + frac * (sils_params::plant::ROUT_OHM[i + 1] - sils_params::plant::ROUT_OHM[i]);
 }
 
-float Plant::steadyStateOmega(float v_motor) const
+float Plant::motorCurrent(float omega, float duty, float v_supply) const
 {
-    if (v_motor <= 0.0f) return 0.0f;
-    const float a = cfg_.Cq;
-    const float b = cfg_.Dm + cfg_.motor_Km * cfg_.motor_Km / cfg_.motor_Rm;
-    const float c = cfg_.Qf - cfg_.motor_Km * v_motor / cfg_.motor_Rm;
+    // D < 0.01 → no drive (explicit; the table's D = 0.00 entry is never used).
+    // D<0.01 → 駆動なし（明示。表の D=0.00 要素は使わない）。
+    if (duty < sils_params::plant::ROUT_D[1]) return 0.0f;
+    const float d = duty > 1.0f ? 1.0f : duty;
+    return (v_supply - cfg_.Ke * omega) / routOhm(d);
+}
+
+float Plant::omegaDot(float omega, float duty, float v_supply) const
+{
+    const float i_m = motorCurrent(omega, duty, v_supply);
+    const float drag = cfg_.Cq * omega * omega
+                       + cfg_.Kt * (cfg_.I0a + cfg_.I0b * omega * omega);
+    return (cfg_.Kt * i_m - drag) / cfg_.J;
+}
+
+float Plant::steadyStateOmega(float duty, float v_supply) const
+{
+    if (duty < sils_params::plant::ROUT_D[1]) return 0.0f;     // no drive / 駆動なし
+    const float d = duty > 1.0f ? 1.0f : duty;
+    const float r = routOhm(d);
+    const float a = cfg_.Cq + cfg_.Kt * cfg_.I0b;
+    const float b = cfg_.Kt * cfg_.Ke / r;
+    const float c = cfg_.Kt * cfg_.I0a - cfg_.Kt * v_supply / r;
     const float disc = b * b - 4.0f * a * c;
     if (disc <= 0.0f) return 0.0f;
     const float omega = (-b + std::sqrt(disc)) / (2.0f * a);
@@ -367,20 +413,18 @@ float Plant::steadyStateOmega(float v_motor) const
 }
 
 // -----------------------------------------------------------------------------
-// dutyToThrust — normalized duty [0,1] → STEADY-STATE thrust [N] via the ODE's
-// equilibrium (backlog #2, 2026-07-26): V = duty·v_batt (current supply);
-// ω = steadyStateOmega(V); T = η·Ct·ω². This is the thrust a HELD duty
-// eventually settles to, not the per-step transient (substep()'s RK4
-// integration owns that).
-// dutyToThrust — 正規化 duty[0,1] → ODE 平衡での定常推力[N]（バックログ#2,
-// 2026-07-26）: V=duty·v_batt（現在の電源）、ω=steadyStateOmega(V)、
-// T=η·Ct·ω²。保持した duty が最終的に落ち着く推力であり、過渡ではない
-// （過渡は substep() の RK4 積分が担う）。
+// dutyToThrust — normalized duty [0,1] → STEADY-STATE thrust [N] through the
+// motor equilibrium: ω = steadyStateOmega(D, v_batt_) at the current supply;
+// T = η·Ct·ω². This is the thrust a HELD duty eventually settles to, not the
+// per-step transient (substep()'s RK4 integration owns that).
+// dutyToThrust — 正規化 duty[0,1] → モータ平衡での定常推力[N]: ω=steadyStateOmega
+// (D, v_batt_)（現在の電源）、T=η·Ct·ω²。保持した duty が最終的に落ち着く推力であり、
+// 過渡ではない（過渡は substep() の RK4 積分が担う）。
 // -----------------------------------------------------------------------------
 float Plant::dutyToThrust(float duty) const
 {
     if (duty <= 0.0f) return 0.0f;
-    const float omega = steadyStateOmega(duty * v_batt_);
+    const float omega = steadyStateOmega(duty, v_batt_);
     return cfg_.thrust_efficiency * cfg_.Ct * omega * omega;   // thrust T [N]
 }
 
@@ -425,26 +469,28 @@ void Plant::updateBattery(float i_total_a, float h)
 }
 
 // -----------------------------------------------------------------------------
-// hoverDuty — per-motor duty that gives mg/4 of thrust at ODE STEADY STATE
-// (backlog #2, 2026-07-26). Inverts T = η·Ct·ω² for ω, then inverts the ODE's
-// equilibrium (dω/dt = 0, same equation steadyStateOmega() solves the other
-// direction) for the voltage V that holds that ω:
-//   Km·V/Rm = (Dm+Km²/Rm)·ω + Cq·ω² + Qf
-//   ⇒ V = Km·ω + (Rm/Km)·(Cq·ω² + Dm·ω + Qf)
-// hoverDuty — ODE 定常状態で mg/4 の推力を出す各モータ duty（バックログ#2,
-// 2026-07-26）。T=η·Ct·ω² を ω について逆算し、続いて ODE 平衡
-// （dω/dt=0、steadyStateOmega() が逆方向に解くのと同じ式）をその ω を保持する
-// 電圧 V について逆算する:
-//   Km·V/Rm = (Dm+Km²/Rm)·ω + Cq·ω² + Qf  ⇒  V = Km·ω + (Rm/Km)·(Cq·ω²+Dm·ω+Qf)
+// hoverDuty — per-motor duty that gives mg/4 of thrust at motor STEADY STATE
+// (R_out model, 2026-10-30). The old closed-form inversion of the D·V equilibrium no
+// longer exists (R_out depends on D through the table), so bisect on the duty D such
+// that dutyToThrust(D) = mg/4. dutyToThrust() increases monotonically with D, so the
+// bracket [0.01, 1.0] converges; 60 halvings reach float resolution. The result
+// saturates at 1.0 if even full duty cannot lift mg/4 at the current supply.
+// hoverDuty — モータ定常状態で mg/4 の推力を出す各モータ duty（R_out モデル、
+// 2026-10-30）。旧 D·V 平衡の閉形式逆算は無くなった（R_out が表を介して D に依存する）
+// ので、dutyToThrust(D)=mg/4 となる D を二分法で求める。dutyToThrust() は D に単調増加
+// なので区間 [0.01, 1.0] で収束する。60 回の二分で float 分解能に達する。現在の電源で
+// 全開 duty でも mg/4 を持ち上げられない場合は 1.0 に飽和する。
 // -----------------------------------------------------------------------------
 float Plant::hoverDuty() const
 {
-    const float thrust = cfg_.mass * cfg_.g / 4.0f;       // per-motor hover thrust [N]
-    const float omega = std::sqrt(thrust / (cfg_.Ct * cfg_.thrust_efficiency));  // ω = √(T/(Ct·η))
-    const float V = cfg_.motor_Km * omega
-                     + (cfg_.motor_Rm / cfg_.motor_Km)
-                           * (cfg_.Cq * omega * omega + cfg_.Dm * omega + cfg_.Qf);
-    return V / v_batt_;                                    // duty = V / v_batt (current supply)
+    const float target = cfg_.mass * cfg_.g / 4.0f;       // per-motor hover thrust [N]
+    float lo = sils_params::plant::ROUT_D[1];             // lowest driven duty (0.01)
+    float hi = 1.0f;
+    for (int k = 0; k < 60; ++k) {
+        const float mid = 0.5f * (lo + hi);
+        if (dutyToThrust(mid) < target) lo = mid; else hi = mid;
+    }
+    return 0.5f * (lo + hi);
 }
 
 // -----------------------------------------------------------------------------
@@ -501,24 +547,20 @@ void Plant::step(float dt)
 // -----------------------------------------------------------------------------
 void Plant::substep(float h)
 {
-    // Motor+propeller electromechanical ODE (backlog #2, 2026-07-26): each motor's
-    // angular velocity omega_i is now a genuine INTEGRATED STATE (motor_omega_[i]),
-    // not a value solved instantaneously from a static V-ω curve. Terminal voltage
-    // is duty_cmd·v_supply (this substep's supply); the ODE (dω/dt = [-(Dm+Km²/Rm)ω
-    // - Cq·ω² - Qf + Km·V/Rm]/Jmp, ported from simulator/genesis/motor_model.py) is
-    // integrated one classical-RK4 step of length h below. This IS the "motor lag"
-    // now — there is no separate first-order duty-smoothing stage (the retired
-    // Config::motor_tau). Electrical current I=(V−Km·ω)/Rm is accumulated to drive
-    // the battery sag (computed with this substep's v_batt_, then v_batt_ is
-    // updated for the next substep — an explicit 1-substep lag at 4kHz).
-    // モータ+プロペラ電気機械 ODE（バックログ#2, 2026-07-26）: 各モータ角速度
-    // omega_i は静的 V-ω 曲線から瞬時に解くのでなく、真の積分状態
-    // （motor_omega_[i]）になった。端子電圧は duty_cmd·v_supply（本 substep の
-    // 電源）。ODE（simulator/genesis/motor_model.py 移植）を下で長さ h の古典 RK4 で
-    // 1ステップ積分する。これが「モータ遅れ」そのもの — 別建ての一次遅れ段
-    // （撤去済みの Config::motor_tau）は無い。電気電流 I=(V−Km·ω)/Rm を積算し
-    // 電池電圧低下を駆動（本 substep の v_batt_ で計算、その後 v_batt_ を更新＝4kHz で
-    // 陽的に1 substep 遅れ）。
+    // Motor+drive+propeller ODE: each motor's angular velocity omega_i is a genuine
+    // INTEGRATED STATE (motor_omega_[i]). The ODE (R_out model, 2026-10-30:
+    // dω/dt = [Kt·I_m − Cq·ω² − Kt·(I0a+I0b·ω²)]/J with I_m = (V−Ke·ω)/R_out(D)) is
+    // integrated one classical-RK4 step of length h below, with the duty D and this
+    // substep's supply voltage held. This IS the "motor lag" — there is no separate
+    // first-order duty-smoothing stage (the retired Config::motor_tau). The mean motor
+    // current I_m drives the battery sag (computed with this substep's v_batt_, then
+    // v_batt_ is updated for the next substep — an explicit 1-substep lag at 4kHz).
+    // モータ＋駆動＋プロペラ ODE: 各モータ角速度 omega_i は真の積分状態（motor_omega_[i]）。
+    // ODE（R_out モデル、2026-10-30: dω/dt=[Kt·I_m−Cq·ω²−Kt·(I0a+I0b·ω²)]/J、
+    // I_m=(V−Ke·ω)/R_out(D)）を、duty D と本 substep の電源電圧を保持して、下で長さ h の
+    // 古典 RK4 により 1 ステップ積分する。これが「モータ遅れ」そのもの — 別建ての一次遅れ段
+    // （撤去済みの Config::motor_tau）は無い。平均モータ電流 I_m が電池電圧低下を駆動
+    // （本 substep の v_batt_ で計算、その後 v_batt_ を更新＝4kHz で陽的に1 substep 遅れ）。
     const float v_supply = v_batt_;          // this substep's supply voltage
 
     // Motor transport delay (duty-path): the "L" of the identified G(s)=b·e^(−Ls)/
@@ -561,19 +603,17 @@ void Plant::substep(float h)
     float i_total = cfg_.avionics_current_a; // battery current [A] (avionics baseline)
     float tau_yaw_flu_z = 0.0f;              // accumulated per-motor below
     for (int i = 0; i < 4; ++i) {
-        float v_motor = duty_cmd[i] * v_supply;
-        if (v_motor < 0.0f) v_motor = 0.0f;
-        if (v_motor > v_supply) v_motor = v_supply;  // V clamped to [0, v_supply]
+        float duty_i = duty_cmd[i];
+        if (duty_i < 0.0f) duty_i = 0.0f;
+        if (duty_i > 1.0f) duty_i = 1.0f;            // duty clamped to [0, 1]
 
-        // Classical RK4, one substep of length h (genesis Motor.step(),
-        // motor_model.py:152-181, ported 1:1).
-        // 古典 RK4、長さ h の1 substep（genesis Motor.step()、motor_model.py:152-181
-        // を1:1移植）。
+        // Classical RK4, one substep of length h (duty and supply held).
+        // 古典 RK4、長さ h の 1 substep（duty・電源は保持）。
         const float omega0 = motor_omega_[i];
-        const float k1 = omegaDot(omega0, v_motor);
-        const float k2 = omegaDot(omega0 + 0.5f * h * k1, v_motor);
-        const float k3 = omegaDot(omega0 + 0.5f * h * k2, v_motor);
-        const float k4 = omegaDot(omega0 + h * k3, v_motor);
+        const float k1 = omegaDot(omega0, duty_i, v_supply);
+        const float k2 = omegaDot(omega0 + 0.5f * h * k1, duty_i, v_supply);
+        const float k3 = omegaDot(omega0 + 0.5f * h * k2, duty_i, v_supply);
+        const float k4 = omegaDot(omega0 + h * k3, duty_i, v_supply);
         float omega1 = omega0 + (h / 6.0f) * (k1 + 2.0f * k2 + 2.0f * k3 + k4);
         if (omega1 < 0.0f) omega1 = 0.0f;             // ω clamped ≥ 0
         motor_omega_[i] = omega1;
@@ -581,13 +621,15 @@ void Plant::substep(float h)
 
         thrust[i] = cfg_.thrust_efficiency * cfg_.Ct * omega1 * omega1 * cfg_.health[i] * ge_mult;
 
-        // Motor electrical current (DC model: V = I·Rm + Km·ω). Clamp ≥ 0.
-        // モータ電気電流（DC モデル: V = I·Rm + Km·ω）。0 以上にクランプ。
-        const float i_motor = (v_motor - cfg_.motor_Km * omega1) / cfg_.motor_Rm;
+        // Battery current per motor = max(I_m, 0): in the recirculation circuit the mean
+        // battery current equals the mean motor current I_m = (V − Ke·ω)/R_out(D).
+        // モータ毎の電池電流 = max(I_m, 0): 還流回路では平均電池電流が平均モータ電流
+        // I_m=(V−Ke·ω)/R_out(D) に等しい。
+        const float i_motor = motorCurrent(omega1, duty_i, v_supply);
         i_total += (i_motor > 0.0f) ? i_motor : 0.0f;
 
         // Per-motor reaction torque about body +Z(FLU): aerodynamic drag Cq·ω² PLUS
-        // the rotor's own angular-momentum reaction Jmp·ω̇ (backlog #2, 2026-07-26) —
+        // the rotor's own angular-momentum reaction J·ω̇ (backlog #2, 2026-07-26) —
         // this is what reproduces the real yaw-axis reaction-torque zero τ_z
         // (firmware/vehicle/docs/yaw_axis_model.md), replacing the old kappa·T
         // shortcut. health[i]/ge_mult scale it the same way they scale thrust[i]
@@ -595,12 +637,12 @@ void Plant::substep(float h)
         // CCW props (M1 FR=0, M3 RL=2) react −Z_FLU; CW props (M2 RR=1, M4 FL=3)
         // react +Z_FLU — same sign pattern as before.
         // 機体+Z(FLU)まわりの毎モータ反トルク: 空力抗力 Cq·ω² に加えローター自身の
-        // 角運動量反作用 Jmp·ω̇（バックログ#2, 2026-07-26）— 旧 kappa·T 近似を置換し、
+        // 角運動量反作用 J·ω̇（バックログ#2, 2026-07-26）— 旧 kappa·T 近似を置換し、
         // 実機ヨー軸反トルク零点 τ_z（yaw_axis_model.md）を再現する。health[i]/
         // ge_mult は上の thrust[i] と同じ倍率で適用（P7モータ劣化シナリオ・GEとの
         // 挙動整合）。CCW(M1=0,M3=2)は−Z_FLU、CW(M2=1,M4=3)は+Z_FLU（符号パターンは
         // 従来と同一）。
-        const float reaction = (cfg_.Cq * omega1 * omega1 + cfg_.Jmp * omega_dot)
+        const float reaction = (cfg_.Cq * omega1 * omega1 + cfg_.J * omega_dot)
                                 * cfg_.health[i] * ge_mult;
         tau_yaw_flu_z += (i == 0 || i == 2) ? -reaction : reaction;
     }
@@ -850,12 +892,13 @@ sf::TofData Plant::tof() const
     out.valid = (dist > 0.0f && dist < 4.0f);   // VL53L3CX range gate (true distance)
 
     // N2 observation noise, applied ONLY above the VL53 reliable close-range minimum
-    // (kTofMinRange). The body rests at ~13 mm, which is BELOW the sensor's reliable
-    // range; adding σ-class noise there drives the reading negative/invalid and makes
+    // (kTofMinRange). The body origin rests at ~21 mm (ground standoff; the emulated
+    // ToF reads 35 mm there), which is BELOW the sensor's reliable range;
+    // adding σ-class noise there drives the reading negative/invalid and makes
     // the boot ToF gate (and the takeoff/landing state machine) chatter. Above ~5 cm the
     // craft is airborne where the noise actually matters for altitude hold. No-op unless
     // N2 obs noise is enabled; then it propagates through the VL53 model to the firmware.
-    // N2 観測ノイズは VL53 の信頼近接下限（kTofMinRange）より上でのみ付与。静止高 ~13mm は
+    // N2 観測ノイズは VL53 の信頼近接下限（kTofMinRange）より上でのみ付与。静止高 ~21mm（ToF 模擬は 35mm を返す）は
     // 信頼範囲より近く、そこへ σ 級ノイズを載せると負/無効になり起動 ToF 判定と離着陸状態機械が
     // チャタリングする。~5cm 超は空中で高度保持にノイズが効く領域。N2 ON 時のみ、VL53 経由で伝播。
     constexpr float kTofMinRange = 0.05f;       // VL53 reliable close-range minimum [m]

@@ -4,7 +4,7 @@
 # physical handling (lift/right/carry/place) → re-calibrate → re-ARM → re-takeoff →
 # recovered LEVEL hover.
 #
-# Timeline (absolute s): hover D 8.5–11.5, crash 11.5, on-ground 13.5–16, handle K 16–19.6
+# Timeline (absolute s): hover D 8.5–11.5, crash 11.5, on-ground 12–14, handle K 14–17.6 (2026-10-31: was 16–19.6)
 # (carry alt 0.40), re-calib dwell to ~24, re-takeoff N 25–27.5, recovered hover O 27.5–32.5.
 #
 # crash_refly.expect — Phase-8 ★ロバスト再飛行キャップストーン判定。G1 状態機械の連鎖
@@ -27,8 +27,8 @@ order "Drone held in hand" "Drone placed on ground" # lifted, then placed
 order "Drone placed on ground" "DISARM accepted"   # re-fly DISARM is after the re-placement
 # --- G3: physical-truth milestones (from the run's flight-log bundle — truth.csv/attitude.csv/...) ---
 metric alt_max > 0.40  in 9.0 11.3     # hovered before the crash
-metric alt_max < 0.10  in 14.0 16.0    # crashed: down on the ground (motors cut)
-metric alt_max > 0.30  in 16.8 18.4    # PHYSICALLY LIFTED by the hand (ToF rose → IDLE_HELD)
+metric alt_max < 0.10  in 12.0 14.0    # crashed: down on the ground (motors cut). 2026-10-31: window 14.0-16.0 -> 12.0-14.0 (hand now arrives at 14.0 s, see crash_refly.scn)
+metric alt_max > 0.30  in 14.8 16.4    # PHYSICALLY LIFTED by the hand (ToF rose → IDLE_HELD). 2026-10-31: window 16.8-18.4 -> 14.8-16.4 (same -2.0 s)
 metric alt_max > 0.50  in 27.0 32.4    # RE-TOOK OFF and climbed after re-calibration
 metric alt_min > 0.30  in 30.0 32.4    # recovered hover holds (no second crash)
 metric tilt_max < 0.2618 in 29.0 32.4  # 15.0 deg  # recovered hover is LEVEL — inverted crash righted + ESKF recovered

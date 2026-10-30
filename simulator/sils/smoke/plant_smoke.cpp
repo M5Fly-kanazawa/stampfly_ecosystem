@@ -49,7 +49,7 @@ int main(int argc, char** argv)
     const char* model_path =
         (argc > 1) ? argv[1] : "simulator/sils/models/stampfly.xml";
 
-    sils::Plant::Config cfg;  // documented motor curve: Am/Bm/Cm/Ct, v_batt 3.7
+    sils::Plant::Config cfg;  // R_out motor model (bench_2026_10_15), v_batt 3.7
     const float mg = cfg.mass * cfg.g;
 
     // =========================================================================
@@ -62,8 +62,8 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // Hover duty from the real motor curve (inverts V=Am·ω²+Bm·ω+Cm, T=Ct·ω²).
-    // 実モータ曲線から導くホバー duty（V=Am·ω²+Bm·ω+Cm, T=Ct·ω² の逆算）。
+    // Hover duty from the R_out motor model (bisection on the steady-state thrust T=η·Ct·ω²).
+    // R_out モータモデルから導くホバー duty（定常推力 T=η·Ct·ω² に対する二分法）。
     const float hover_duty = plant.hoverDuty();
     printf("[plant_smoke] mg=%.4f N, hover_duty=%.4f, thrust/motor=%.4f N\n",
            mg, hover_duty, plant.dutyToThrust(hover_duty));
