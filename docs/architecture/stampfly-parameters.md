@@ -145,7 +145,7 @@ VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulat
 | Iyy | Pitch慣性モーメント | 1.33×10⁻⁵ | kg·m² | unknown | - |
 | Izz | Yaw慣性モーメント | 2.04×10⁻⁵ | kg·m² | unknown | - |
 | arm_offset | モーメントアーム | 0.023 | m | unknown | - |
-| Ct | 推力係数 | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | 暫定採用（同径プロペラの過去実測＋理論シミュレーション整合、ベンチ同時計測待ち） |
+| Ct | 推力係数 | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | 暫定採用（同径プロペラの過去実測＋理論シミュレーション整合）。2026-10-15 にベンチ同時計測済み、2026-10-30 の SILS 検討で採用見送り |
 | Cq | トルク係数 | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | コーストダウン法 |
 | Jmp | 回転子慣性モーメント | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | 写真法+諸元法（プロペラ写真デジタイズ+画素積分＋コーストダウン） |
 | Rm | 巻線抵抗 | 0.593 | Ω | 2026-07-15 | 論文 Foster 同定値（NanoVNA 実測） |
@@ -635,7 +635,7 @@ The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coex
 | Iyy | Pitch moment of inertia | 1.33×10⁻⁵ | kg·m² | unknown | - |
 | Izz | Yaw moment of inertia | 2.04×10⁻⁵ | kg·m² | unknown | - |
 | arm_offset | Moment arm | 0.023 | m | unknown | - |
-| Ct | Thrust coefficient | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency; pending bench co-measurement) |
+| Ct | Thrust coefficient | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency). Bench co-measurement done 2026-10-15; adoption declined after the 2026-10-30 SILS study |
 | Cq | Torque coefficient | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | Coast-down method |
 | Jmp | Rotor inertia | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | Photographic + spec-sheet method (propeller photo digitization + pixel integration + coast-down) |
 | Rm | Winding resistance | 0.593 | Ω | 2026-07-15 | Paper's Foster fit (NanoVNA data) |

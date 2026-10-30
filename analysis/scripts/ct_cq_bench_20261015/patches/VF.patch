@@ -1,0 +1,63 @@
+diff --git a/firmware/vehicle/components/sf_actuator/actuator.cpp b/firmware/vehicle/components/sf_actuator/actuator.cpp
+index 1364dd3f..1e4ed906 100644
+--- a/firmware/vehicle/components/sf_actuator/actuator.cpp
++++ b/firmware/vehicle/components/sf_actuator/actuator.cpp
+@@ -114,9 +114,9 @@ static constexpr float ARM_D    = 0.023f;    // moment arm (x/y offset) [m]
+ // ではない——rate.yaw.kp と rate.yaw.max_torque を同率で再スケール
+ // （params.cpp）し、物理ヨートルク出力は不変（閉ループ挙動の恒等性）。
+ // 2026-07-17 の再スケールと同じパターンを踏襲。
+-static constexpr float KAPPA    = 4.10e-3f;  // torque/thrust ratio Cq/Ct [m], rescaled 2026-08-03 (Cq measured 2026-07-15, Ct provisional)
+-static constexpr float MOTOR_AM = 6.0368e-8f;  // V = Am·ω² + Bm·ω + Cm
+-static constexpr float MOTOR_BM = 6.699042e-4f;
++static constexpr float KAPPA    = 4.447e-3f;  // torque/thrust ratio Cq/Ct [m], rescaled 2026-08-03 (Cq measured 2026-07-15, Ct provisional)
++static constexpr float MOTOR_AM = 4.587968e-8f;  // V = Am·ω² + Bm·ω + Cm
++static constexpr float MOTOR_BM = 5.840089e-4f;
+ static constexpr float MOTOR_CM = 1.53e-2f;
+ // thrust T = Ct·ω² [N]. PROVISIONAL as of 2026-08-03 (numerically unchanged
+ // from before: the retracted 2026-07-15 thrust-stand Ct never reached
+@@ -131,7 +131,7 @@ static constexpr float MOTOR_CM = 1.53e-2f;
+ // での過去の確からしい実測、(2) 理論シミュレーションとの整合。現行
+ // プロペラでのベンチ V-ω-T 同時計測で確定・置換予定。正典:
+ // control/models/stampfly_physical.yaml measured_2026_07.Ct。
+-static constexpr float MOTOR_CT = 1.00e-8f;
++static constexpr float MOTOR_CT = 7.6e-9f;
+ 
+ // Supply voltage used to convert motor curve volts → PWM duty (duty = V/Vbat).
+ // Uses the LIVE battery voltage from sensor_power so the thrust→duty stage tracks
+diff --git a/firmware/vehicle/components/sf_core/params.cpp b/firmware/vehicle/components/sf_core/params.cpp
+index a37b925c..7128d198 100644
+--- a/firmware/vehicle/components/sf_core/params.cpp
++++ b/firmware/vehicle/components/sf_core/params.cpp
+@@ -226,7 +226,7 @@ namespace param_vars {
+     // KAPPA と本 kp が連動して動くため、指令レート誤差あたりの物理ヨートルクは
+     // 不変。2026-07-17 と同じ理由で、書き込み後の `param reset`（または rate.yaw.*
+     // の明示再設定）が再度必須。
+-    float rate_yaw_kp     = 8.029796e-4f;  // = 1.198594e-3 (2026-07-17 κ-corrected) × 4.10/6.12 (2026-08-03 κ rescale)
++    float rate_yaw_kp     = 8.710112e-4f;  // = 1.198594e-3 (2026-07-17 κ-corrected) × 4.10/6.12 (2026-08-03 κ rescale)
+     float rate_yaw_ti     = 0.8f;
+     float rate_yaw_td     = 0.01f;
+ 
+@@ -265,7 +265,7 @@ namespace param_vars {
+     //                                      新κでは 2·0.168N·κ_new≈1.38e-3）
+     // 物理トルク上限は2026-08-03以前と完全に恒等——ミキサーのKAPPAと本上限が連動して
+     // 動くため、飛行挙動の変化はない。
+-    float rate_yaw_max_torque = 1.226e-3f;
++    float rate_yaw_max_torque = 1.329872e-3f;
+ 
+     // Scheduled autotune (solo pilot, hands-free): a single operator cannot type
+     // `autotune` mid-flight, so SET these on the GROUND, then arm and fly. After the
+@@ -814,12 +814,12 @@ static const ParamEntry table[] = {
+     {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.426432e-3f, 0.0f, 0.01f,  &notifyControllerReload},
+     {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
+     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.025f,    0.0f,  1.0f,   &notifyControllerReload},
+-    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    8.029796e-4f, 0.0f, 0.01f,  &notifyControllerReload},
++    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    8.710112e-4f, 0.0f, 0.01f,  &notifyControllerReload},
+     {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    0.8f,      0.01f, 100.0f, &notifyControllerReload},
+     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+     // Yaw torque cap — see the param_vars comment (NT-Kanazawa saturation treatment).
+     // ヨートルク上限 — param_vars のコメント参照（NT金沢飽和の治療）。
+-    {"rate.yaw.max_torque", ParamType::FLOAT, &rate_yaw_max_torque, 1.226e-3f, 1.0e-4f, 1.41e-3f, &notifyControllerReload},
++    {"rate.yaw.max_torque", ParamType::FLOAT, &rate_yaw_max_torque, 1.329872e-3f, 1.0e-4f, 1.529461e-3f, &notifyControllerReload},
+     {"autotune.sched.axis",  ParamType::INT,   &autotune_sched_axis,  -1.0f, -1.0f,  2.0f,   nullptr},
+     {"autotune.sched.delay", ParamType::FLOAT, &autotune_sched_delay, 20.0f,  3.0f, 120.0f,  nullptr},
+     // Autotune sysid results (written by autotune, read-back only). Wide ranges = result store.

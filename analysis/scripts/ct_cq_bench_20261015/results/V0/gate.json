@@ -1,0 +1,60 @@
+{
+  "pass": false,
+  "tolerances": {
+    "b_rel": 0.5,
+    "L_total_rel": 0.2
+  },
+  "reference": "<worktree>/analysis/reports/rate_sysid_reference/reference.json",
+  "plant_profile": "default",
+  "motor_delay_ms": null,
+  "noise": "off",
+  "bundle": "<worktree>/simulator/sils/viz/out_scn_sysid_gate/sils_sysid_gate_20261030T210248.sflog.zip",
+  "scenario_pass": true,
+  "axes": [
+    {
+      "axis": "roll",
+      "b_sils": 102334.42135874892,
+      "b_ref": 65384.09272293463,
+      "b_err_pct": 56.51271906821659,
+      "b_pass": false,
+      "L_total_sils_ms": 16.86065382518222,
+      "L_total_ref_ms": 14.360847410451912,
+      "L_total_err_pct": 17.407095440001203,
+      "L_total_pass": true,
+      "T_ms": 15.2384216199049,
+      "L_ms": 1.622232205277316,
+      "coherence_mean": 0.9653242371385721,
+      "pass": false
+    },
+    {
+      "axis": "pitch",
+      "b_sils": 95639.8326738822,
+      "b_ref": 30723.65806876013,
+      "b_err_pct": 211.29051254195855,
+      "b_pass": false,
+      "L_total_sils_ms": 17.088843597185225,
+      "L_total_ref_ms": 17.287289343822085,
+      "L_total_err_pct": -1.1479286468227015,
+      "L_total_pass": true,
+      "T_ms": 15.568783302137364,
+      "L_ms": 1.5200602950478597,
+      "coherence_mean": 0.9942579318159208,
+      "pass": false
+    },
+    {
+      "axis": "yaw",
+      "b_sils": 195398.5944707185,
+      "b_ref": 111896.6692640488,
+      "b_err_pct": 74.624138283889,
+      "b_pass": false,
+      "L_total_sils_ms": 0.5780468317909377,
+      "L_total_ref_ms": 10.82327137520285,
+      "L_total_err_pct": -94.65922259775083,
+      "L_total_pass": false,
+      "T_ms": 0.5778748378245655,
+      "L_ms": 0.0001719939663721414,
+      "coherence_mean": 0.9949206228899157,
+      "pass": false
+    }
+  ]
+}

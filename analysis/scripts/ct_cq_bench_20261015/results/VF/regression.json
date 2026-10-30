@@ -1,0 +1,651 @@
+{
+  "total": 44,
+  "pass": 38,
+  "known_fail": 5,
+  "xpass": 0,
+  "fail": 0,
+  "skip": 1,
+  "scenarios": [
+    {
+      "name": "acro_crash_relevel",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.0,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "acro_flight",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.0,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "alt_arm_rollpitch",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.8,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "alt_auto_takeoff",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.8,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "alt_disarm_land",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.9,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "alt_disarm_land_steer",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.9,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "alt_flight",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.7,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "alt_inflight_switch",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.7,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "alt_recenter_gate",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.7,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "alt_takeoff_steer",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.9,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "api_flight",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "40000000"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.7,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "api_flip_pitch",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "41000000",
+        "--param",
+        "flip.enable=1"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.7,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "api_flip_pitch_fit",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "41000000",
+        "--param",
+        "flip.enable=1",
+        "--plant-profile",
+        "flip_fit_2026_10"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.6,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "api_flip_roll",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "39000000",
+        "--param",
+        "flip.enable=1"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.4,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "api_flip_roll_fit",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "39000000",
+        "--param",
+        "flip.enable=1",
+        "--plant-profile",
+        "flip_fit_2026_10"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.5,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "api_rc",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "40000000"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.6,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "autotune",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "55000000"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 3.3,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "boot_motion",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.7,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "calib",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": false,
+      "exit_code": 2,
+      "elapsed_s": 2.2,
+      "xfail_reason": "injected IMU bias x new ODE-plant takeoff dynamics produce a 0.6-0.7 Hz self-oscillation, close to the ~0.9 Hz real-hardware ACRO limit-cycle band (simulation-policy backlog #4/#13)",
+      "status": "KNOWN-FAIL"
+    },
+    {
+      "name": "commloss",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.6,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "commloss_land_level",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": false,
+      "exit_code": 2,
+      "elapsed_s": 1.9,
+      "xfail_reason": "LANDING leveling gate roll convergence insufficient under the ODE motor plant, attitude damping-margin gap under investigation (simulation-policy backlog #13)",
+      "status": "KNOWN-FAIL"
+    },
+    {
+      "name": "crash_refly",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "33000000"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.2,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "flip_abort_recover",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "37000000",
+        "--param",
+        "flip.enable=1",
+        "--param",
+        "flip.gyro_abort_dps=1000",
+        "--param",
+        "flip.rate_ramp_rps2=300",
+        "--param",
+        "flip.brake_ramp_rps2=500"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.3,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "flip_brake_timeout",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "37000000",
+        "--param",
+        "flip.enable=1",
+        "--param",
+        "flip.brake_timeout_ms=50",
+        "--param",
+        "flip.brake_ramp_rps2=250",
+        "--param",
+        "flip.handoff_rate_dps=50",
+        "--param",
+        "flip.handoff_force_deg=360"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.3,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "flip_disabled",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "30000000"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.0,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "modeswitch",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.7,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "pairing",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--unpaired"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.1,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "pairing_held",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--unpaired"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.9,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "pairing_two_controllers",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--unpaired"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.0,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "pos_auto_takeoff",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.9,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "pos_flight",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": false,
+      "exit_code": 2,
+      "elapsed_s": 1.9,
+      "xfail_reason": "ODE plant exposes yaw torque-authority saturation (duty ceiling lock) under combined/rotation maneuvers, real-hardware NT-Kanazawa class issue; needs firmware rate.yaw.max_torque headroom review under new hover duty 0.7245 (simulation-policy backlog #12)",
+      "status": "KNOWN-FAIL"
+    },
+    {
+      "name": "pos_pitch",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.8,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "pos_reposition",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.8,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "pos_roll",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.7,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "pos_yaw",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": false,
+      "exit_code": 2,
+      "elapsed_s": 2.1,
+      "xfail_reason": "ODE plant exposes yaw torque-authority saturation (duty ceiling lock) under combined/rotation maneuvers, real-hardware NT-Kanazawa class issue; needs firmware rate.yaw.max_torque headroom review under new hover duty 0.7245 (simulation-policy backlog #12)",
+      "status": "KNOWN-FAIL"
+    },
+    {
+      "name": "prearm",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.0,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "rc_flip",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "64000000",
+        "--param",
+        "flip.enable=1"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 4.1,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "rc_flip_latch",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "27000000",
+        "--param",
+        "flip.enable=1"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 1.9,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "stab_flight",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.0,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "stab_ground_windup",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "40000000"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 3.2,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "sysid_gate",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "44000000"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.9,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "sysid_rate",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle",
+        "--duration",
+        "32000000"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 2.1,
+      "xfail_reason": null,
+      "status": "PASS"
+    },
+    {
+      "name": "workshop_acro",
+      "target": "workshop",
+      "extra_args": [
+        "--target",
+        "workshop"
+      ],
+      "pass": true,
+      "exit_code": 0,
+      "elapsed_s": 0.0,
+      "xfail_reason": null,
+      "status": "SKIP"
+    },
+    {
+      "name": "yaw_hold",
+      "target": "vehicle",
+      "extra_args": [
+        "--target",
+        "vehicle"
+      ],
+      "pass": false,
+      "exit_code": 2,
+      "elapsed_s": 1.8,
+      "xfail_reason": "yaw-band degradation under the ODE motor plant, same root cause as pos_flight/pos_yaw (yaw-axis fidelity gap, simulation-policy backlog #11/#12)",
+      "status": "KNOWN-FAIL"
+    }
+  ]
+}

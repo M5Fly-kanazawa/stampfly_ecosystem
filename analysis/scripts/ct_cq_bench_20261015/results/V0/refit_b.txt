@@ -1,0 +1,5 @@
+mode b file <worktree>/tools/sysid/plant_fit.py
+  CT=1e-08 AM=4.58797e-08 BM=0.000584009 CM=0.0153 KAPPA=0.0041
+  roll  b=77774 T_ms=15.238 L_ms=1.622 coh=0.965
+  pitch b=72686 T_ms=15.569 L_ms=1.520 coh=0.994
+  yaw   b=154010 T_ms=0.001 L_ms=0.005 coh=0.995

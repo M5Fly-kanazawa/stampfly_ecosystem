@@ -1,0 +1,244 @@
+diff --git a/control/models/stampfly_physical.yaml b/control/models/stampfly_physical.yaml
+index 9ea3e01d..0180e324 100644
+--- a/control/models/stampfly_physical.yaml
++++ b/control/models/stampfly_physical.yaml
+@@ -150,7 +150,7 @@ calibration_sets:
+     coupled: true
+     params:
+       Ct:
+-        value: 1.00e-8
++        value: 7.60e-9
+         unit: "N/(rad/s)²"
+         method: "暫定採用（同径プロペラの過去実測＋理論シミュレーション整合、ベンチ同時計測待ち）"
+         method_en: "Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency; pending bench co-measurement)"
+@@ -166,20 +166,20 @@ calibration_sets:
+           （backlog #3 のファーム側切替を待たず、暫定値が旧リテラルと
+           一致したため実質的に揃っている）。
+       Cq:
+-        value: 4.10e-11
++        value: 3.551e-11
+         unit: "N·m/(rad/s)²"
+         method: "コーストダウン法"
+         method_en: "Coast-down method"
+         date: "2026-07-15"
+         note: "Q = Cq·ω²。plant.hpp は独立した Cq 定数を持たない（反トルクは kappa·T で計算）。"
+       Jmp:
+-        value: 1.375e-8
++        value: 1.54e-8
+         unit: "kg·m²"
+         method: "写真法+諸元法（プロペラ写真デジタイズ+画素積分＋コーストダウン）"
+         method_en: "Photographic + spec-sheet method (propeller photo digitization + pixel integration + coast-down)"
+         date: "2026-07-15"
+       Rm:
+-        value: 0.593
++        value: 0.594
+         unit: "Ω"
+         method: "論文 Foster 同定値（NanoVNA 実測）"
+         method_en: "Paper's Foster fit (NanoVNA data)"
+@@ -198,7 +198,7 @@ calibration_sets:
+           旧候補0.34Ω（別個体疑いの旧LCR実測）・0.63Ω（vpython側の更新漏れの
+           旧初期値）は競合する実測ではなく更新漏れと判明。0.593Ωに統一。
+       Km:
+-        value: 5.682e-4
++        value: 5.90e-4
+         unit: "V/(rad/s)"
+         method: "コーストダウン開回路EMF実測（SCPI公式換算）"
+         method_en: "Coast-down open-circuit EMF measurement (SCPI-formula conversion)"
+@@ -221,7 +221,7 @@ calibration_sets:
+           16.26ms（qa_logの16.3msと一致）。legacy_motor_curve.Dm(3.69e-8、旧
+           Am/Bm/Cmの代数的言い換え)とは別系統のフィット——単独差し替え不可。
+       Qf:
+-        value: 9.507e-6
++        value: 2.596e-5
+         unit: "N·m"
+         method: "コーストダウン3項フィット ω̇=−a·ω²−b·ω−c の c 項 × Jmp"
+         method_en: "Coast-down 3-term fit ω̇=−a·ω²−b·ω−c, c term × Jmp"
+@@ -230,7 +230,7 @@ calibration_sets:
+           c=691.41 rad/s² × Jmp(1.375e-8 kg·m²) = 9.507e-6 N·m。既知の
+           τ_c≈9.5e-6（旧知見）と一致。2026-07-26 再実行で数値確定。
+       kappa_adopted:
+-        value: 4.10e-3
++        value: 4.447e-3
+         unit: "m"
+         method: "kappa = Cq/Ct（丸め不要、厳密値）"
+         method_en: "kappa = Cq/Ct (exact, no rounding needed)"
+diff --git a/docs/architecture/stampfly-parameters.md b/docs/architecture/stampfly-parameters.md
+index 98c7d98e..654ce067 100644
+--- a/docs/architecture/stampfly-parameters.md
++++ b/docs/architecture/stampfly-parameters.md
+@@ -145,12 +145,12 @@ VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulat
+ | Iyy | Pitch慣性モーメント | 1.33×10⁻⁵ | kg·m² | unknown | - |
+ | Izz | Yaw慣性モーメント | 2.04×10⁻⁵ | kg·m² | unknown | - |
+ | arm_offset | モーメントアーム | 0.023 | m | unknown | - |
+-| Ct | 推力係数 | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | 暫定採用（同径プロペラの過去実測＋理論シミュレーション整合、ベンチ同時計測待ち） |
+-| Cq | トルク係数 | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | コーストダウン法 |
+-| Jmp | 回転子慣性モーメント | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | 写真法+諸元法（プロペラ写真デジタイズ+画素積分＋コーストダウン） |
+-| Rm | 巻線抵抗 | 0.593 | Ω | 2026-07-15 | 論文 Foster 同定値（NanoVNA 実測） |
+-| Km | 逆起電力定数 | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | コーストダウン開回路EMF実測（SCPI公式換算） |
+-| κ | トルク/推力比（採用値） | 4.1×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct（丸め不要、厳密値） |
++| Ct | 推力係数 | 7.6×10⁻⁹ | N/(rad/s)² | 2026-08-03 | 暫定採用（同径プロペラの過去実測＋理論シミュレーション整合、ベンチ同時計測待ち） |
++| Cq | トルク係数 | 3.551×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | コーストダウン法 |
++| Jmp | 回転子慣性モーメント | 1.54×10⁻⁸ | kg·m² | 2026-07-15 | 写真法+諸元法（プロペラ写真デジタイズ+画素積分＋コーストダウン） |
++| Rm | 巻線抵抗 | 0.594 | Ω | 2026-07-15 | 論文 Foster 同定値（NanoVNA 実測） |
++| Km | 逆起電力定数 | 5.9×10⁻⁴ | V/(rad/s) | 2026-07-16 | コーストダウン開回路EMF実測（SCPI公式換算） |
++| κ | トルク/推力比（採用値） | 4.447×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct（丸め不要、厳密値） |
+ <!-- AUTO-GENERATED:params END -->
+ 
+ ### モーター配置と回転方向
+@@ -635,12 +635,12 @@ The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coex
+ | Iyy | Pitch moment of inertia | 1.33×10⁻⁵ | kg·m² | unknown | - |
+ | Izz | Yaw moment of inertia | 2.04×10⁻⁵ | kg·m² | unknown | - |
+ | arm_offset | Moment arm | 0.023 | m | unknown | - |
+-| Ct | Thrust coefficient | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency; pending bench co-measurement) |
+-| Cq | Torque coefficient | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | Coast-down method |
+-| Jmp | Rotor inertia | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | Photographic + spec-sheet method (propeller photo digitization + pixel integration + coast-down) |
+-| Rm | Winding resistance | 0.593 | Ω | 2026-07-15 | Paper's Foster fit (NanoVNA data) |
+-| Km | Back-EMF constant | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | Coast-down open-circuit EMF measurement (SCPI-formula conversion) |
+-| κ | Torque/thrust ratio (adopted) | 4.1×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct (exact, no rounding needed) |
++| Ct | Thrust coefficient | 7.6×10⁻⁹ | N/(rad/s)² | 2026-08-03 | Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency; pending bench co-measurement) |
++| Cq | Torque coefficient | 3.551×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | Coast-down method |
++| Jmp | Rotor inertia | 1.54×10⁻⁸ | kg·m² | 2026-07-15 | Photographic + spec-sheet method (propeller photo digitization + pixel integration + coast-down) |
++| Rm | Winding resistance | 0.594 | Ω | 2026-07-15 | Paper's Foster fit (NanoVNA data) |
++| Km | Back-EMF constant | 5.9×10⁻⁴ | V/(rad/s) | 2026-07-16 | Coast-down open-circuit EMF measurement (SCPI-formula conversion) |
++| κ | Torque/thrust ratio (adopted) | 4.447×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct (exact, no rounding needed) |
+ <!-- AUTO-GENERATED:params END -->
+ 
+ ### Motor Layout and Rotation Direction
+diff --git a/firmware/vehicle/components/sf_actuator/actuator.cpp b/firmware/vehicle/components/sf_actuator/actuator.cpp
+index 1364dd3f..1e4ed906 100644
+--- a/firmware/vehicle/components/sf_actuator/actuator.cpp
++++ b/firmware/vehicle/components/sf_actuator/actuator.cpp
+@@ -114,9 +114,9 @@ static constexpr float ARM_D    = 0.023f;    // moment arm (x/y offset) [m]
+ // ではない——rate.yaw.kp と rate.yaw.max_torque を同率で再スケール
+ // （params.cpp）し、物理ヨートルク出力は不変（閉ループ挙動の恒等性）。
+ // 2026-07-17 の再スケールと同じパターンを踏襲。
+-static constexpr float KAPPA    = 4.10e-3f;  // torque/thrust ratio Cq/Ct [m], rescaled 2026-08-03 (Cq measured 2026-07-15, Ct provisional)
+-static constexpr float MOTOR_AM = 6.0368e-8f;  // V = Am·ω² + Bm·ω + Cm
+-static constexpr float MOTOR_BM = 6.699042e-4f;
++static constexpr float KAPPA    = 4.447e-3f;  // torque/thrust ratio Cq/Ct [m], rescaled 2026-08-03 (Cq measured 2026-07-15, Ct provisional)
++static constexpr float MOTOR_AM = 4.587968e-8f;  // V = Am·ω² + Bm·ω + Cm
++static constexpr float MOTOR_BM = 5.840089e-4f;
+ static constexpr float MOTOR_CM = 1.53e-2f;
+ // thrust T = Ct·ω² [N]. PROVISIONAL as of 2026-08-03 (numerically unchanged
+ // from before: the retracted 2026-07-15 thrust-stand Ct never reached
+@@ -131,7 +131,7 @@ static constexpr float MOTOR_CM = 1.53e-2f;
+ // での過去の確からしい実測、(2) 理論シミュレーションとの整合。現行
+ // プロペラでのベンチ V-ω-T 同時計測で確定・置換予定。正典:
+ // control/models/stampfly_physical.yaml measured_2026_07.Ct。
+-static constexpr float MOTOR_CT = 1.00e-8f;
++static constexpr float MOTOR_CT = 7.6e-9f;
+ 
+ // Supply voltage used to convert motor curve volts → PWM duty (duty = V/Vbat).
+ // Uses the LIVE battery voltage from sensor_power so the thrust→duty stage tracks
+diff --git a/firmware/vehicle/components/sf_core/params.cpp b/firmware/vehicle/components/sf_core/params.cpp
+index a37b925c..7128d198 100644
+--- a/firmware/vehicle/components/sf_core/params.cpp
++++ b/firmware/vehicle/components/sf_core/params.cpp
+@@ -226,7 +226,7 @@ namespace param_vars {
+     // KAPPA と本 kp が連動して動くため、指令レート誤差あたりの物理ヨートルクは
+     // 不変。2026-07-17 と同じ理由で、書き込み後の `param reset`（または rate.yaw.*
+     // の明示再設定）が再度必須。
+-    float rate_yaw_kp     = 8.029796e-4f;  // = 1.198594e-3 (2026-07-17 κ-corrected) × 4.10/6.12 (2026-08-03 κ rescale)
++    float rate_yaw_kp     = 8.710112e-4f;  // = 1.198594e-3 (2026-07-17 κ-corrected) × 4.10/6.12 (2026-08-03 κ rescale)
+     float rate_yaw_ti     = 0.8f;
+     float rate_yaw_td     = 0.01f;
+ 
+@@ -265,7 +265,7 @@ namespace param_vars {
+     //                                      新κでは 2·0.168N·κ_new≈1.38e-3）
+     // 物理トルク上限は2026-08-03以前と完全に恒等——ミキサーのKAPPAと本上限が連動して
+     // 動くため、飛行挙動の変化はない。
+-    float rate_yaw_max_torque = 1.226e-3f;
++    float rate_yaw_max_torque = 1.329872e-3f;
+ 
+     // Scheduled autotune (solo pilot, hands-free): a single operator cannot type
+     // `autotune` mid-flight, so SET these on the GROUND, then arm and fly. After the
+@@ -814,12 +814,12 @@ static const ParamEntry table[] = {
+     {"rate.pitch.kp",   ParamType::FLOAT, &rate_pitch_kp,  1.426432e-3f, 0.0f, 0.01f,  &notifyControllerReload},
+     {"rate.pitch.ti",   ParamType::FLOAT, &rate_pitch_ti,  0.7f,      0.01f, 100.0f, &notifyControllerReload},
+     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.025f,    0.0f,  1.0f,   &notifyControllerReload},
+-    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    8.029796e-4f, 0.0f, 0.01f,  &notifyControllerReload},
++    {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    8.710112e-4f, 0.0f, 0.01f,  &notifyControllerReload},
+     {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    0.8f,      0.01f, 100.0f, &notifyControllerReload},
+     {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+     // Yaw torque cap — see the param_vars comment (NT-Kanazawa saturation treatment).
+     // ヨートルク上限 — param_vars のコメント参照（NT金沢飽和の治療）。
+-    {"rate.yaw.max_torque", ParamType::FLOAT, &rate_yaw_max_torque, 1.226e-3f, 1.0e-4f, 1.41e-3f, &notifyControllerReload},
++    {"rate.yaw.max_torque", ParamType::FLOAT, &rate_yaw_max_torque, 1.329872e-3f, 1.0e-4f, 1.529461e-3f, &notifyControllerReload},
+     {"autotune.sched.axis",  ParamType::INT,   &autotune_sched_axis,  -1.0f, -1.0f,  2.0f,   nullptr},
+     {"autotune.sched.delay", ParamType::FLOAT, &autotune_sched_delay, 20.0f,  3.0f, 120.0f,  nullptr},
+     // Autotune sysid results (written by autotune, read-back only). Wide ranges = result store.
+diff --git a/simulator/sils/plant/generated_params.hpp b/simulator/sils/plant/generated_params.hpp
+index 916e30a4..a9f11920 100644
+--- a/simulator/sils/plant/generated_params.hpp
++++ b/simulator/sils/plant/generated_params.hpp
+@@ -25,15 +25,15 @@ constexpr float ARM_OFFSET = 0.023f;  ///< moment arm [m]
+ // longer 'reference only' -- the static Am/Bm/Cm curve they used to sit
+ // beside is retired).
+ namespace adopted {
+-constexpr float CT = 1e-08f;  ///< N/(rad/s)^2, Config::Ct source (T = Ct*omega^2)
+-constexpr float CQ = 4.1e-11f;  ///< N*m/(rad/s)^2, Config::Cq source (Q = Cq*omega^2, also the ODE's aero-drag term)
+-constexpr float JMP = 1.375e-08f;  ///< kg*m^2, Config::Jmp source (ODE rotor inertia)
++constexpr float CT = 7.6e-09f;  ///< N/(rad/s)^2, Config::Ct source (T = Ct*omega^2)
++constexpr float CQ = 3.551e-11f;  ///< N*m/(rad/s)^2, Config::Cq source (Q = Cq*omega^2, also the ODE's aero-drag term)
++constexpr float JMP = 1.54e-08f;  ///< kg*m^2, Config::Jmp source (ODE rotor inertia)
+ constexpr float DM = 0.0f;  ///< N*m*s/rad, Config::Dm source (viscous damping, ~0 -- 2026-07-26 coast-down refit)
+-constexpr float QF = 9.507e-06f;  ///< N*m, Config::Qf source (Coulomb friction torque)
+-constexpr float RM = 0.593f;  ///< ohm, winding resistance
+-constexpr float KM = 0.0005682f;  ///< V/(rad/s), back-EMF constant
+-constexpr float KAPPA = 0.0041f;  ///< m, adopted/rounded (matches firmware actuator.cpp KAPPA)
+-constexpr float KAPPA_EXACT = 0.0041f;  ///< m, full-precision Cq/Ct (reference only, unused)
++constexpr float QF = 2.596e-05f;  ///< N*m, Config::Qf source (Coulomb friction torque)
++constexpr float RM = 0.594f;  ///< ohm, winding resistance
++constexpr float KM = 0.00059f;  ///< V/(rad/s), back-EMF constant
++constexpr float KAPPA = 0.004447f;  ///< m, adopted/rounded (matches firmware actuator.cpp KAPPA)
++constexpr float KAPPA_EXACT = 0.004672368421052632f;  ///< m, full-precision Cq/Ct (reference only, unused)
+ }  // namespace adopted
+ 
+ // --- calibration_sets.legacy_motor_curve (status: frozen_for_implementation, backlog #3) ---
+diff --git a/simulator/sils/plant/plant.hpp b/simulator/sils/plant/plant.hpp
+index e3feb623..d7f430c8 100644
+--- a/simulator/sils/plant/plant.hpp
++++ b/simulator/sils/plant/plant.hpp
+@@ -144,7 +144,7 @@ public:
+         /// 新しい物理計測ではない——ベンチ V-ω-T 同時計測で両側のモータ族が統一されれば
+         /// 見直すべきで、おそらく 1.0 に戻せる（docs/architecture/simulation-policy.md
+         /// バックログ#3 参照）。
+-        float thrust_efficiency = 0.7133f;  ///< 1.0 = ODE curve is the actual output (see above)
++        float thrust_efficiency = 0.9412f;  ///< 1.0 = ODE curve is the actual output (see above)
+ 
+         // Roll/pitch DIFFERENTIAL torque authority — Model fidelity (hikoki64 §3.3 SILS
+         // injection study, 2026-08-02). Deliberately SEPARATE from thrust_efficiency
+diff --git a/tools/sysid/_generated_params.py b/tools/sysid/_generated_params.py
+index e2335179..61137462 100644
+--- a/tools/sysid/_generated_params.py
++++ b/tools/sysid/_generated_params.py
+@@ -12,21 +12,21 @@ Regenerate: sf params generate
+ # --- calibration_sets.measured_2026_07 (status: adopted) ---
+ # tools/sysid/defaults.py's module constants and
+ # tools/params_audit/params_manifest.py's EXPECTED_* both import from here.
+-_CT_VALUE = 1e-08   # N/(rad/s)^2 -- thrust coeff
+-_CQ_VALUE = 4.1e-11   # N*m/(rad/s)^2 -- torque coeff
+-_JMP_VALUE = 1.375e-08   # kg*m^2 -- rotor inertia
++_CT_VALUE = 7.6e-09   # N/(rad/s)^2 -- thrust coeff
++_CQ_VALUE = 3.551e-11   # N*m/(rad/s)^2 -- torque coeff
++_JMP_VALUE = 1.54e-08   # kg*m^2 -- rotor inertia
+ _DM_VALUE = 0.0   # N*m*s/rad -- viscous damping (2026-07-26 coast-down 3-term refit, b term ~0)
+-_QF_VALUE = 9.507e-06   # N*m -- Coulomb friction torque (2026-07-26 coast-down 3-term refit, c term x Jmp)
+-_RM_VALUE = 0.593   # ohm -- winding resistance
+-_KM_VALUE = 0.0005682   # V/(rad/s) -- back-EMF constant
+-_KAPPA_VALUE = 0.0041   # m -- kappa = Cq/Ct, full precision (derived)
++_QF_VALUE = 2.596e-05   # N*m -- Coulomb friction torque (2026-07-26 coast-down 3-term refit, c term x Jmp)
++_RM_VALUE = 0.594   # ohm -- winding resistance
++_KM_VALUE = 0.00059   # V/(rad/s) -- back-EMF constant
++_KAPPA_VALUE = 0.004672368421052632   # m -- kappa = Cq/Ct, full precision (derived)
+ 
+ # Rounded/adopted kappa (3 sig figs), hand-written into firmware's B^-1
+ # mixer (actuator.cpp KAPPA) and simulator/sils/plant Config::kappa on
+ # 2026-07-17. Differs from _KAPPA_VALUE (full precision) by ~1e-4 relative --
+ # both are kept (see control/models/stampfly_physical.yaml kappa_adopted note)
+ # to avoid changing that existing rounding (behavior neutrality).
+-KAPPA_ADOPTED = 0.0041
++KAPPA_ADOPTED = 0.004447
+ 
+ # --- constants (calibration-independent) ---
+ EXPECTED_MASS = 0.037

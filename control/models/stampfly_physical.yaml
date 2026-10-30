@@ -131,6 +131,9 @@ calibration_sets:
   # matches this set's adopted (provisional) Ct value -- numerically
   # unchanged across the 2026-08-03 retraction, since the provisional value
   # happens to equal the pre-2026-07-15 legacy_motor_curve.Ct below.
+  # UPDATE (2026-10-30): bench co-measurement done 2026-10-15 (one motor), not
+  # adopted; see analysis/notes/ct_cq_bench_20261015.md.
+  # 2026-10-30 更新: 2026-10-15 にベンチ同時計測済み（1モータ）、採用見送り。
   # 現行採用ファミリ — Cq/Jmp/Dm/Qf/Rm/Km は2026-07-15〜17測定キャンペーン
   # （multicopter_introduction qa_log Q4-9..13）に加え、2026-07-26 の
   # コーストダウン3項再フィット（Dm/Qf）で確定。Ct は2026-08-03時点で暫定値
@@ -152,8 +155,8 @@ calibration_sets:
       Ct:
         value: 1.00e-8
         unit: "N/(rad/s)²"
-        method: "暫定採用（同径プロペラの過去実測＋理論シミュレーション整合、ベンチ同時計測待ち）"
-        method_en: "Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency; pending bench co-measurement)"
+        method: "暫定採用（同径プロペラの過去実測＋理論シミュレーション整合）。2026-10-15 にベンチ同時計測済み、2026-10-30 の SILS 検討で採用見送り"
+        method_en: "Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency). Bench co-measurement done 2026-10-15; adoption declined after the 2026-10-30 SILS study"
         date: "2026-08-03"
         note: >
           新プロペラでは印加電圧・回転数・推力の3量同時計測が一度も行われて
@@ -165,6 +168,14 @@ calibration_sets:
           改定）。firmware actuator.cpp の MOTOR_CT は本値と数値一致
           （backlog #3 のファーム側切替を待たず、暫定値が旧リテラルと
           一致したため実質的に揃っている）。
+          2026-10-30 追記: 2026-10-15 に1モータでベンチ同時計測を実施
+          （Ct 7.60e-9、Cq 3.38e-11）。2026-10-30 時点では採用を見送った
+          （モデル一致の確認が悪化し、再確認試験が壊れるため）。詳細は
+          analysis/notes/ct_cq_bench_20261015.md。
+          Update 2026-10-30: the bench co-measurement was done on 2026-10-15 on
+          one motor (Ct 7.60e-9, Cq 3.38e-11). Not adopted as of 2026-10-30
+          because the model-match check worsens and the regression tests break;
+          see analysis/notes/ct_cq_bench_20261015.md.
       Cq:
         value: 4.10e-11
         unit: "N·m/(rad/s)²"
@@ -262,6 +273,8 @@ calibration_sets:
   # in the SSOT for historical reference (V-ω curve coefficients, pre-
   # 2026-07-14 measurement) and pending the ongoing bench V-ω-T
   # co-measurement that will confirm or replace the provisional Ct.
+  # UPDATE (2026-10-30): the bench co-measurement was done on 2026-10-15 (one
+  # motor) and was not adopted; see analysis/notes/ct_cq_bench_20261015.md.
   # UPDATE (2026-08-22): "surviving consumer" above must now be read as
   # "consumer of the same functional form", not a literal numeric match --
   # actuator.cpp's MOTOR_AM/MOTOR_BM/MOTOR_CM hold the flight_anchored_
