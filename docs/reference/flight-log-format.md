@@ -297,7 +297,7 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ。Status パケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。 |
 | `uptime_ms` | int | ms | 起動からの経過時間。 |
 | `voltage` | float | V | バッテリ電圧。 |
-| `current_ma` | float | mA | バッテリ電流。StatusPacket v3 (57B) 以降のみ送信。旧ファーム （v1/v2）を読んだ場合はこの列が空欄になる。 |
+| `current_ma` | float | mA | バッテリ電流。StatusPacket v3 (57B) 以降のみ送信。旧ファーム （v1/v2）を読んだ場合はこの列が空欄になる。2026-10-30 の修正 （シャント抵抗値 0.1 Ω → 0.01 Ω）より前のファームで記録した ログの値は、真の電池電流の 1/10 である。 |
 | `flight_state` | int | enum | 飛行状態（FlightState、起動シーケンス〜飛行〜着陸）。 |
 | `sensor_health` | int | bitmask | センサ健全性のビットマスク。 |
 | `eskf_status` | int | bitmask | ESKF 状態のビットマスク。bit0 = 推定器初期化済み。 |
@@ -678,7 +678,7 @@ Source: Status (0x4F) / Nominal rate: 1 Hz / Required: no
 | `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp. The Status packet only carries uptime_ms, so timestamp_us = uptime_ms * 1000. |
 | `uptime_ms` | int | ms | Elapsed time since boot. |
 | `voltage` | float | V | Battery voltage. |
-| `current_ma` | float | mA | Battery current. Sent only by StatusPacket v3 (57B) and later; empty when the source firmware only sent v1/v2. |
+| `current_ma` | float | mA | Battery current. Sent only by StatusPacket v3 (57B) and later; empty when the source firmware only sent v1/v2. Logs recorded by firmware before the 2026-10-30 fix (shunt resistor 0.1 ohm -> 0.01 ohm) contain 1/10 of the true battery current. |
 | `flight_state` | int | enum | Flight state (FlightState enum: boot sequence, flight, landing, ...). |
 | `sensor_health` | int | bitmask | Sensor health bitmask. |
 | `eskf_status` | int | bitmask | ESKF status bitmask. bit0 = estimator initialized. |

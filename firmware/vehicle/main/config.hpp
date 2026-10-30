@@ -310,6 +310,16 @@ inline constexpr uint32_t SENSOR_HEALTH_STALE_US = 500000;  // 0.5 s
 // だった。値は旧 vehicle/ の飛行実績 POWER_BATTERY_CHANNEL。
 inline constexpr uint8_t POWER_BATTERY_CHANNEL = 1;
 
+// Battery-path shunt resistor on INA3221 channel 2 (R12 in the StampFly v1.0
+// schematic): 0.01 ohm. Current resolution is 40 uV / 0.01 ohm = 4 mA per count,
+// full scale about +/-16.4 A. Until 2026-10-30 the firmware assumed 0.1 ohm and
+// therefore reported 1/10 of the true battery current.
+// INA3221 チャネル 2 の電池経路シャント抵抗（StampFly v1.0 回路図の R12）:
+// 0.01 Ω。電流分解能は 40 µV / 0.01 Ω = 1 カウントあたり 4 mA、フルスケールは
+// 約 ±16.4 A。2026-10-30 までファームは 0.1 Ω と仮定しており、電池電流を真値の
+// 1/10 で報告していた。
+inline constexpr float POWER_BATTERY_SHUNT_OHM = 0.01f;
+
 // =============================================================================
 // Bench Motor Test (CLI `motor test|all|sweep|stop`)
 // ベンチモータテスト（CLI `motor test|all|sweep|stop`）

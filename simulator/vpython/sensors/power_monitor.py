@@ -65,7 +65,11 @@ class PowerMonitor:
     # INA3221 specifications (from datasheet)
     # INA3221仕様（データシートより）
     VOLTAGE_LSB_MV = 8.0       # 8mV per LSB for bus voltage
-    CURRENT_LSB_UA = 40.0      # 40µA per LSB for shunt voltage (with 0.1Ω)
+    # Shunt voltage LSB is 40 uV; with the StampFly R12 = 0.01 ohm shunt this is
+    # 40 uV / 0.01 ohm = 4 mA = 4000 uA per LSB (full scale about +/-16.4 A).
+    # シャント電圧 LSB は 40 µV。StampFly の R12 = 0.01 Ω では
+    # 40 µV / 0.01 Ω = 4 mA = 4000 µA / LSB（フルスケール約 ±16.4 A）。
+    CURRENT_LSB_UA = 4000.0
     NUM_CHANNELS = 3
 
     # LiPo battery characteristics (1S)
@@ -85,7 +89,7 @@ class PowerMonitor:
         initial_voltage: float = 4.2,
         capacity_mah: float = 300.0,
         internal_resistance_ohm: float = 0.1,
-        shunt_resistor_ohm: float = 0.1,
+        shunt_resistor_ohm: float = 0.01,
         voltage_noise_std: float = 0.005,
         current_noise_std: float = 5.0,
     ):

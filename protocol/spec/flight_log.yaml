@@ -997,10 +997,14 @@ streams:
         unit: "mA"
         description_ja: >-
           バッテリ電流。StatusPacket v3 (57B) 以降のみ送信。旧ファーム
-          （v1/v2）を読んだ場合はこの列が空欄になる。
+          （v1/v2）を読んだ場合はこの列が空欄になる。2026-10-30 の修正
+          （シャント抵抗値 0.1 Ω → 0.01 Ω）より前のファームで記録した
+          ログの値は、真の電池電流の 1/10 である。
         description_en: >-
           Battery current. Sent only by StatusPacket v3 (57B) and later;
-          empty when the source firmware only sent v1/v2.
+          empty when the source firmware only sent v1/v2. Logs recorded by
+          firmware before the 2026-10-30 fix (shunt resistor 0.1 ohm ->
+          0.01 ohm) contain 1/10 of the true battery current.
       - name: flight_state
         type: int
         unit: "enum"
