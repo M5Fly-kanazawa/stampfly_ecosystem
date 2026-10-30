@@ -235,7 +235,7 @@ $R_\text{out}$ モデルでは、平均の電池電流はモータ電流の平�
 | 9/8 ホバリング | 0.95 | 1.39 | 0.84 |
 | 10/2 地上でモータを回したログ（2 本） | 0.99〜1.01 | — | — |
 
-単純な平均モデルは否定され、$R_\text{out}$ モデルはベンチでの精度（±8 %）の範囲に入った。ただしこの比は ×10 が正確な場合の値で、×10 は回路図の値、エネルギー収支から言えるのは 7.6 倍以上まで。たとえば 9.5 倍なら $R_\text{out}$ モデルは 0.89〜0.90 になり、現行 SILS（0.84）との差は ×10 の不確かさの中に入る。単純な平均モデルの否定はどの倍率でも変わらない。実機で `sensor power` を測れば確定する。宙返りの照合は電流を使わないので、この不確かさとは独立している。
+単純な平均モデルは否定され、$R_\text{out}$ モデルはベンチでの精度（±8 %）の範囲に入った。×10 は回路図のシャント抵抗 R12 = 0.01 Ω とファームの想定 0.1 Ω の比で、エネルギー収支（7.6 倍以上が必要）とも整合する。残る不確かさはシャント抵抗の部品精度（数 %）程度。
 
 ### ホバリング Duty と電池電圧
 
@@ -265,7 +265,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 | 0.9 | 4.173 | 0.941 | 0.970 | 0.97 |
 
 - Duty 0.5 の 2 回は $V_{DD}$ が 1.5 % 違うが、実測の $R_\text{out}$ の違いは 0.5 %。範囲は狭いが「$R_\text{out}$ は電池電圧によらない」と矛盾しない。
-- Duty 0.3〜0.7 では実測が計算値より約 10 % 大きい。Duty 0.1・0.8・0.9 ではほぼ一致するので、×10 の誤差のような一様なずれではない。
+- Duty 0.3〜0.7 では実測が計算値より約 10 % 大きい。Duty 0.1・0.8・0.9 ではほぼ一致するので、全 Duty に一様に掛かるずれではなく、計算値の形のずれである。
 - ホバリング付近で $R_\text{out}$ が 10 % 大きいと、推力は約 7 % 小さくなる（線形化による見積もり）。飛行ログのホバリングの釣り合いで要った $\eta$ 0.93〜0.95 と、電流の比 0.94〜0.95 の大部分は、これで説明できる可能性がある。
 - 物理の実測を上位に置く方針（8 章）では、SILS には計算値ではなく実測の $R_\text{out}(D)$ を基準として入れる。実測は Duty 0.1 刻みの 9 点なので、間は計算値の形を実測に合わせて補う。
 
@@ -278,7 +278,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 | 小信号の同定（遅れ・ゲイン） | — | — | できない（振動ノイズで両方同じ形になる） |
 | ホバリング Duty の電圧依存 | 傾き 0 の予測より強い | 予測より弱い | 論文の前提と食い違う。実験で確かめる |
 
-動特性は、電流を使わない宙返りの照合で、ベンチと論文の式が実機でも成り立つと確かめられた。電流は ×10 が正確なら同じ結論を支える。電池電圧への静的な依存だけは論文の前提と食い違っており、ファームの変換に使う前に実験で確かめる必要がある。
+動特性は、電流を使わない宙返りの照合で、ベンチと論文の式が実機でも成り立つと確かめられた。電流の照合も同じ結論を支える。電池電圧への静的な依存だけは論文の前提と食い違っており、ファームの変換に使う前に実験で確かめる必要がある。
 
 ## 7. 見つかった解析ツールの不具合
 
@@ -316,7 +316,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 | 判定ツールの逆算定数 | 7 章の 3 つのリテラルを `sf params check` の検査対象にするか（小さな修正） |
 | 再確認試験の 6 件 | R1 で新たに不合格になった原因の調査（5 章）。宙返り用の補正（0.6、6 ms、変化率制限）は外せる見込み |
 | 宙返りの倍率 $s \approx 0.8$ | 6 章に挙げた候補（宙返り中の電池電圧の低下、$\eta$、そのほかのモデル誤差）の切り分け |
-| 電池電流の ×10 | 実機で `sensor power` を測って確定する（6 章） |
+| 修正後のファームの電流表示 | 実機で `sensor power` を確認する（シャント修正 d685c9fd の動作確認） |
 | SILS に入れる $R_\text{out}$ | ベンチの実測値を基準にし、その表で $\eta$ がほぼ 1 になるかを飛行ログのホバリングの釣り合いで確かめる（6 章） |
 
 ### 再現手順
@@ -565,7 +565,7 @@ In the $R_\text{out}$ model the mean battery current equals the mean motor curre
 | 9/8 hover | 0.95 | 1.39 | 0.84 |
 | 10/2 motors spun on the ground (2 logs) | 0.99 to 1.01 | — | — |
 
-The simple average model is rejected, and the $R_\text{out}$ model falls within the bench accuracy (±8 %). These ratios assume that the ×10 is exact; the ×10 comes from the schematic, and the energy balance only supports 7.6× or more. For example with 9.5× the $R_\text{out}$ model gives 0.89 to 0.90, and the gap to the current SILS (0.84) falls within the ×10 uncertainty. The rejection of the simple average model holds for any factor. Measuring `sensor power` on hardware would settle it. The flip comparison does not use current, so it is independent of this uncertainty.
+The simple average model is rejected, and the $R_\text{out}$ model falls within the bench accuracy (±8 %). The ×10 is the ratio of the schematic shunt R12 = 0.01 Ω to the firmware's assumed 0.1 Ω and agrees with the energy balance (7.6× or more required); the remaining uncertainty is the shunt's part tolerance (a few percent).
 
 ### Hover Duty and battery voltage
 
@@ -595,7 +595,7 @@ From each step's measured values, $R_\text{out} = (V_{DD} - K_e\,\omega)/I_\text
 | 0.9 | 4.173 | 0.941 | 0.970 | 0.97 |
 
 - The two Duty 0.5 steps differ by 1.5 % in $V_{DD}$ but only 0.5 % in measured $R_\text{out}$: a narrow range, but consistent with "$R_\text{out}$ does not depend on the battery voltage".
-- At Duty 0.3 to 0.7 the measurement is about 10 % above the calculation; at Duty 0.1, 0.8 and 0.9 they agree, so this is not a uniform error such as the ×10.
+- At Duty 0.3 to 0.7 the measurement is about 10 % above the calculation; at Duty 0.1, 0.8 and 0.9 they agree, so this is not an error applied uniformly over all Duty values but a difference in the shape of the calculation.
 - A 10 % larger $R_\text{out}$ near hover lowers the thrust by about 7 % (linearised estimate). Most of the hover-balance $\eta$ of 0.93 to 0.95 and of the current ratio of 0.94 to 0.95 in the flight logs may be explained by this.
 - Under the policy that physical measurement ranks above the SILS (chapter 8), the SILS takes the measured $R_\text{out}(D)$ as its reference rather than the calculation. The measurement has 9 points at 0.1 steps, so the shape in between follows the calculation scaled to the measurement.
 
@@ -608,7 +608,7 @@ From each step's measured values, $R_\text{out} = (V_{DD} - K_e\,\omega)/I_\text
 | Small-signal identification (delay, gain) | — | — | no (vibration noise gives both the same form) |
 | Voltage dependence of hover Duty | stronger than the slope-0 prediction | weaker than predicted | conflicts with the paper's premise; to be settled by experiment |
 
-The dynamics were confirmed to hold on the real aircraft, with the bench and paper equations, by the flip comparison, which does not use current. The current supports the same conclusion if the ×10 is exact. Only the static dependence on battery voltage conflicts with the paper's premise, and it must be checked by experiment before it is used in the firmware conversion.
+The dynamics were confirmed to hold on the real aircraft, with the bench and paper equations, by the flip comparison, which does not use current. The current cross-check supports the same conclusion. Only the static dependence on battery voltage conflicts with the paper's premise, and it must be checked by experiment before it is used in the firmware conversion.
 
 ## 7. Analysis-tool defect found
 
@@ -646,7 +646,7 @@ Refitting the same recorded data leaves $T$ and $L$ unchanged, which confirms th
 | Back-calculation constants of the judging tool | Whether to put the 3 literals of chapter 7 under `sf params check` (a small fix) |
 | The 6 regression-test failures | Investigate the new failures in R1 (chapter 5). The flip compensation (0.6, 6 ms, rate limit) is expected to be removable |
 | Flip scale $s \approx 0.8$ | Separate the candidates listed in chapter 6 (battery-voltage sag during the flip, $\eta$, other model error) |
-| The ×10 of the battery current | Settle by measuring `sensor power` on hardware (chapter 6) |
+| Current display of the fixed firmware | Check `sensor power` on hardware (verification of the shunt fix d685c9fd) |
 | $R_\text{out}$ in the SILS | Use the bench measurement as the reference and check with the flight-log hover balance whether $\eta$ then comes out near 1 (chapter 6) |
 
 ### Reproduction
