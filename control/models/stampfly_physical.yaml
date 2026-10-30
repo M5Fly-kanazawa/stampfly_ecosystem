@@ -75,12 +75,19 @@ constants:
     unit: "kg·m²"
     date: "unknown"
     source: >
-      Roll慣性モーメント。開発者による2点吊り法（捻り振子の周期から
-      I = m·g·b²·T²/(4π²·L)）の実測値。周期などの生データは残っていない。
-      公開教材 multicopter_introduction 付録 D に方法と結果、垂直軸の定理に
-      よる検算（Ixx+Iyy=22.5e-6 対 Izz=20.4e-6、比 0.91）がある。
-      Measured by the developer with the bifilar (two-string) torsion-pendulum
-      method; raw period data not retained (multicopter_introduction, appendix D).
+      Roll慣性モーメント。開発者による2点吊り法の実測値。
+      J = m·g·D²·T²/(16·h·π²)（h: 糸の長さ、D: 糸の間隔、T: 捻り振動の周期）、
+      m = 0.0364 kg（測定時の機体質量）。測定記録（2026-10-30 に開発者が提示）:
+        x: h 0.282 m, D 0.078 m, T 0.43404 s → 9.19e-6
+        y: h 0.350 m, D 0.078 m, T 0.58230 s → 13.3e-6
+        z: h 0.370 m, D 0.100 m, T 0.57815 s → 20.4e-6
+      注意: この記録から計算すると Ixx は 9.188e-6 で、本値 9.16e-6 と 0.3 % 違う
+      （本値の由来は未確認。値は変更していない）。垂直軸の定理による検算
+      Ixx+Iyy=22.5e-6 対 Izz=20.4e-6（比 0.91）は公開教材 multicopter_introduction
+      付録 D にある。
+      Developer's bifilar (two-string torsion pendulum) measurement,
+      J = m g D^2 T^2 / (16 h pi^2), m = 0.0364 kg; record above. The record
+      gives Ixx = 9.188e-6, 0.3 % above this value (origin of 9.16e-6 unconfirmed).
   Iyy:
     value: 13.3e-6
     unit: "kg·m²"
