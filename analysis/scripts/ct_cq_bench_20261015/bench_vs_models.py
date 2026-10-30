@@ -44,13 +44,16 @@ P_FULL = dict(Ct=7.6e-9, Cq=3.38e-11 + 5.90e-4 * 2.9e-9, Rm=0.594, Km=5.90e-4, Q
 
 
 def main(path):
-    rows = sorted(json.load(open(path)), key=lambda r: r['duty_meas'])
+    # Use the COMMANDED duty ('duty'): the firmware and the SILS receive it. 'duty_meas' (from the drain
+# waveform) is 0.006-0.015 larger and is not used. <Vm> stays as measured.
+    # 指令 Duty（'duty'）を使う。ファームと SILS が受け取るのは指令値。duty_meas は使わない。
+    rows = sorted(json.load(open(path)), key=lambda r: r['duty'])
     k = 1000 / G  # N -> g
     print(f"{'d':>5} {'VDD':>5} {'dV':>5} {'Vm':>5} | {'w_b':>5} {'T_b':>5} | {'w_fw':>5} {'T_fw':>5} | "
           f"{'w_now':>5} {'T_now':>5} | {'w_cq':>5} {'T_cq':>5} | {'w_fl':>5} {'T_fl':>5} | {'T_fl(Vm)':>8}")
     table = []
     for r in rows:
-        d, vdd, vm = r['duty_meas'], r['VDD'], r['Vm_avg']
+        d, vdd, vm = r['duty'], r['VDD'], r['Vm_avg']
         wb, tb = r['omega'], r['thrust_g']
         v = d * vdd
         wf, tf = fw(v)
@@ -83,7 +86,7 @@ def main(path):
         w, _ = plant(v_h, **dict(p, eta=1.0))
         eta = th / (p['Ct'] * w * w)
         print(f"{name}: re-derived eta {eta:.4f}  hover omega {w:.0f} rad/s")
-    pts = sorted((r['thrust_g'], r['duty_meas'] * r['VDD'], r['omega'], r['Vm_avg']) for r in rows)
+    pts = sorted((r['thrust_g'], r['duty'] * r['VDD'], r['omega'], r['Vm_avg']) for r in rows)
     thg = th * k
     for p0, p1 in zip(pts, pts[1:]):
         if p0[0] <= thg <= p1[0]:

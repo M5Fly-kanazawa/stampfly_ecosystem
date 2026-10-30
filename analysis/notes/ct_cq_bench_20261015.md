@@ -69,21 +69,21 @@
 ### 分かったこと
 
 1. 現行の SILS プラント（$\eta=0.7133$）とファームの曲線は、どの Duty でも同じ推力を出す（2026-08-22 に等価にした）。
-2. Duty × 電池電圧で駆動すると、両モデルとも低 Duty でベンチ推力を下回り（Duty 0.11 で 0.48 g 対 0.93 g）、ホバー付近では近い。**測定したモータ平均電圧 $\langle V_m\rangle$ で駆動すると、ベンチ一式の定数を入れたプラント ODE はベンチ推力を0.35 g 以内（ホバー付近の Duty 0.5〜0.7 では 0.2〜2.7 %）で再現する。** ベンチの定数同士は矛盾しておらず、ずれの所在は Duty → $\langle V_m\rangle$ の関係にある。SILS プラントはこれを $V=\text{Duty}\times v_\text{batt}$ と仮定している。
+2. Duty × 電池電圧で駆動すると、両モデルとも低 Duty でベンチ推力を下回り（Duty 0.1 で 0.37 g 対 0.93 g）、ホバー付近では近い。**測定したモータ平均電圧 $\langle V_m\rangle$ で駆動すると、ベンチ一式の定数を入れたプラント ODE はベンチ推力を0.35 g 以内（ホバー付近の Duty 0.5〜0.7 では 0.2〜2.7 %）で再現する。** ベンチの定数同士は矛盾しておらず、ずれの所在は Duty → $\langle V_m\rangle$ の関係にある。SILS プラントはこれを $V=\text{Duty}\times v_\text{batt}$ と仮定している。なお、この比較の Duty はファームと SILS が受け取る指令値である（ベンチで波形から測った Duty は指令より 0.006〜0.015 大きい）。本ノートの初版（2026-10-30）は測定 Duty で比較しており、同日中に指令 Duty へ訂正した。
 3. 区間ごとの傾き（推力 対 Duty×$V_{DD}$、および $\langle V_m\rangle$ 対 Duty×$V_{DD}$。$V_{DD}$ は計測時の電池電圧）:
 
 | Duty 区間 | ベンチ [g/V] | モデル [g/V] | 比 | $\mathrm{d}\langle V_m\rangle/\mathrm{d}(\text{Duty}\cdot V_{DD})$ |
 |---|---|---|---|---|
-| 0.11→0.21 | 3.54 | 2.49 | 1.42 | 1.08 |
-| 0.21→0.31 | 4.19 | 3.56 | 1.18 | 0.91 |
-| 0.31→0.41 | 4.49 | 4.42 | 1.02 | 0.82 |
-| 0.41→0.51 | 4.66 | 5.12 | 0.91 | 0.80 |
-| 0.51→0.61 | 4.79 | 5.72 | 0.84 | 0.70 |
-| 0.61→0.71 | 3.75 | 6.23 | 0.60 | 0.53 |
-| 0.71→0.81 | 5.93 | 6.66 | 0.89 | 0.76 |
-| 0.81→0.91 | 11.69 | 7.02 | 1.67 | 1.50 |
+| 0.1→0.2 | 3.51 | 2.31 | 1.52 | 1.07 |
+| 0.2→0.3 | 4.05 | 3.43 | 1.18 | 0.88 |
+| 0.3→0.4 | 4.53 | 4.32 | 1.05 | 0.83 |
+| 0.4→0.5 | 4.54 | 5.05 | 0.90 | 0.78 |
+| 0.5→0.6 | 4.98 | 5.65 | 0.88 | 0.73 |
+| 0.6→0.7 | 3.67 | 6.17 | 0.59 | 0.52 |
+| 0.7→0.8 | 5.85 | 6.61 | 0.88 | 0.75 |
+| 0.8→0.9 | 11.14 | 6.99 | 1.59 | 1.43 |
 
-   ホバー付近（Duty 0.4〜0.8）では、実際の Duty 当たり推力ゲイン（傾き）はモデルの 0.60〜0.91 倍である。SILS のモデル一致の確認で出た実機/SILS のロールゲイン比 0.64（65384/102334）、および 2026-10-02 の宙返りログのフィットによる `torque_authority` 0.60 と同じ向きで、この差の大きな部分を説明する可能性がある。ただし全部を説明するとは示していない（1 モータ、$V_{DD}$ 4.2〜4.4 V、4 モータ同時の電池電圧低下なし）。
+   ホバー付近（Duty 0.4〜0.8）では、実際の Duty 当たり推力ゲイン（傾き）はモデルの 0.59〜0.90 倍である。SILS のモデル一致の確認で出た実機/SILS のロールゲイン比 0.64（65384/102334）、および 2026-10-02 の宙返りログのフィットによる `torque_authority` 0.60 と同じ向きで、この差の大きな部分を説明する可能性がある。ただし全部を説明するとは示していない（1 モータ、$V_{DD}$ 4.2〜4.4 V、4 モータ同時の電池電圧低下なし）。
 4. ホバー点で合わせた $\eta$: 1 モータ当たりのホバー推力は 0.0907 N（質量 0.037 kg）、ファームのホバー電圧は 2.581 V。プラントがこの電圧でホバーするよう $\eta$ を求め直すと次のとおり。
 
 | 条件 | $\eta$ | ホバー $\omega$ [rad/s] | ホバー時のモータ時定数 [ms] | ファームが指令したヨートルクに対するプラントのヨートルク | ホバーでの $\mathrm{d}T/\mathrm{d}V$ [mN/V] |
@@ -92,7 +92,7 @@
 | V1 $C_T$, $C_Q$ のみ | 0.880 | 3682 | 17.3 | 1.136 | 59.5 |
 | V2 ベンチ一式（$K_e$, $R$, $Q_f=K_e\cdot0.044$, $C_Q$ に $K_e\cdot2.9\times10^{-9}$ を含める, $J=1.54\times10^{-8}$） | 0.941 | 3561 | 18.4 | 1.116 | 60.3 |
 
-   $\eta$ の補正は推力にだけ掛かるため、現状のプラントのヨー権限はファームの想定の 1.40 倍になっている。ベンチの 1 モータがホバー推力に達するのは Duty×$V_{DD}$ = 2.44 V で、ファームの 2.58 V より小さい。つまり飛行に合わせ込んだファームの曲線は、ベンチより約 7 % 多い推力能力を要求している（原因は未特定。質量、機体の空力干渉、4 モータ時の電池電圧低下が候補）。
+   $\eta$ の補正は推力にだけ掛かるため、現状のプラントのヨー権限はファームの想定の 1.40 倍になっている。ベンチの 1 モータがホバー推力に達するのは Duty×$V_{DD}$ = 2.39 V で、ファームの 2.58 V より小さい。つまり飛行に合わせ込んだファームの曲線は、ベンチより約 8 % 多い推力能力を要求している（原因は未特定。質量、機体の空力干渉、4 モータ時の電池電圧低下が候補）。
 
 ## 4. SILS での検討
 
@@ -243,21 +243,21 @@ Reproduce: `python3 -I analysis/scripts/ct_cq_bench_20261015/bench_vs_models.py 
 ### Findings
 
 1. The current SILS plant ($\eta=0.7133$) and the firmware curve give the same thrust at every Duty (made equivalent on 2026-08-22).
-2. Driven by Duty × battery voltage, both models under-predict the bench thrust at low Duty (0.48 g vs 0.93 g at Duty 0.11) and are close near hover. **Driven by the measured average motor voltage $\langle V_m\rangle$, the plant ODE with the full bench set reproduces the bench thrust within 0.35 g (0.2 to 2.7 % near hover, Duty 0.5 to 0.7).** The bench constants are mutually consistent; the mismatch sits in the Duty to $\langle V_m\rangle$ relation, which the SILS plant assumes to be $V=\text{Duty}\times v_\text{batt}$.
+2. Driven by Duty × battery voltage, both models under-predict the bench thrust at low Duty (0.37 g vs 0.93 g at Duty 0.1) and are close near hover. **Driven by the measured average motor voltage $\langle V_m\rangle$, the plant ODE with the full bench set reproduces the bench thrust within 0.35 g (0.2 to 2.7 % near hover, Duty 0.5 to 0.7).** The bench constants are mutually consistent; the mismatch sits in the Duty to $\langle V_m\rangle$ relation, which the SILS plant assumes to be $V=\text{Duty}\times v_\text{batt}$. The Duty used in this comparison is the commanded value, which the firmware and the SILS receive (the Duty the bench measured from the drain waveform is 0.006 to 0.015 larger); the first version of this note (2026-10-30) compared at the measured Duty and was corrected the same day.
 3. Per-interval slopes (thrust vs Duty×$V_{DD}$, and $\langle V_m\rangle$ vs Duty×$V_{DD}$; $V_{DD}$ is the battery voltage at measurement):
 
 | Duty interval | bench [g/V] | model [g/V] | ratio | $\mathrm{d}\langle V_m\rangle/\mathrm{d}(\text{Duty}\cdot V_{DD})$ |
 |---|---|---|---|---|
-| 0.11→0.21 | 3.54 | 2.49 | 1.42 | 1.08 |
-| 0.21→0.31 | 4.19 | 3.56 | 1.18 | 0.91 |
-| 0.31→0.41 | 4.49 | 4.42 | 1.02 | 0.82 |
-| 0.41→0.51 | 4.66 | 5.12 | 0.91 | 0.80 |
-| 0.51→0.61 | 4.79 | 5.72 | 0.84 | 0.70 |
-| 0.61→0.71 | 3.75 | 6.23 | 0.60 | 0.53 |
-| 0.71→0.81 | 5.93 | 6.66 | 0.89 | 0.76 |
-| 0.81→0.91 | 11.69 | 7.02 | 1.67 | 1.50 |
+| 0.1→0.2 | 3.51 | 2.31 | 1.52 | 1.07 |
+| 0.2→0.3 | 4.05 | 3.43 | 1.18 | 0.88 |
+| 0.3→0.4 | 4.53 | 4.32 | 1.05 | 0.83 |
+| 0.4→0.5 | 4.54 | 5.05 | 0.90 | 0.78 |
+| 0.5→0.6 | 4.98 | 5.65 | 0.88 | 0.73 |
+| 0.6→0.7 | 3.67 | 6.17 | 0.59 | 0.52 |
+| 0.7→0.8 | 5.85 | 6.61 | 0.88 | 0.75 |
+| 0.8→0.9 | 11.14 | 6.99 | 1.59 | 1.43 |
 
-   Near hover (Duty 0.4 to 0.8) the real thrust-per-duty gain (slope) is 0.60 to 0.91 of the model's. This points the same way as the real/SILS roll gain ratio of 0.64 (65384/102334) in the SILS model-match check and the `torque_authority` of 0.60 from the 2026-10-02 flip-log fit, and plausibly explains a large part of that gap; it is not shown to explain all of it (single motor, $V_{DD}$ 4.2 to 4.4 V, no 4-motor battery voltage drop).
+   Near hover (Duty 0.4 to 0.8) the real thrust-per-duty gain (slope) is 0.59 to 0.90 of the model's. This points the same way as the real/SILS roll gain ratio of 0.64 (65384/102334) in the SILS model-match check and the `torque_authority` of 0.60 from the 2026-10-02 flip-log fit, and plausibly explains a large part of that gap; it is not shown to explain all of it (single motor, $V_{DD}$ 4.2 to 4.4 V, no 4-motor battery voltage drop).
 4. Hover anchoring: per-motor hover thrust is 0.0907 N (mass 0.037 kg) and the firmware hover voltage is 2.581 V. Re-deriving $\eta$ so that the plant hovers at that voltage:
 
 | Variant | $\eta$ | hover $\omega$ [rad/s] | motor time constant at hover [ms] | plant yaw torque per firmware-commanded yaw torque | $\mathrm{d}T/\mathrm{d}V$ at hover [mN/V] |
@@ -266,7 +266,7 @@ Reproduce: `python3 -I analysis/scripts/ct_cq_bench_20261015/bench_vs_models.py 
 | V1 $C_T$, $C_Q$ only | 0.880 | 3682 | 17.3 | 1.136 | 59.5 |
 | V2 full bench set ($K_e$, $R$, $Q_f=K_e\cdot0.044$, $C_Q$ including $K_e\cdot2.9\times10^{-9}$, $J=1.54\times10^{-8}$) | 0.941 | 3561 | 18.4 | 1.116 | 60.3 |
 
-   The $\eta$ compensator applies to thrust only, so today the plant's yaw authority is 1.40 times what the firmware assumes. The bench motor reaches hover thrust at Duty×$V_{DD}$ = 2.44 V against the firmware's 2.58 V: the flight-anchored firmware needs about 7 % more thrust capability than the bench shows (cause not identified; candidates are mass, airframe interference and battery voltage drop under 4 motors).
+   The $\eta$ compensator applies to thrust only, so today the plant's yaw authority is 1.40 times what the firmware assumes. The bench motor reaches hover thrust at Duty×$V_{DD}$ = 2.39 V against the firmware's 2.58 V: the flight-anchored firmware needs about 8 % more thrust capability than the bench shows (cause not identified; candidates are mass, airframe interference and battery voltage drop under 4 motors).
 
 ## 4. SILS study
 
