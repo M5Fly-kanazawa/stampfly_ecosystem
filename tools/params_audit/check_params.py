@@ -160,7 +160,9 @@ def check_entry(repo_root: Path, param_name: str, entry: ParamCheck,
         return ResultRow(param_name, location_base, None, _expected_label(entry.expected),
                           "ERROR", detail="regex did not match — pattern is stale")
 
-    line_no = _line_number(content, match.start())
+    # Line of the captured VALUE (a multi-line regex may start earlier).
+    # 捕捉した「値」の行番号（複数行の正規表現は開始位置がもっと手前になり得る）。
+    line_no = _line_number(content, match.start(1))
     location = f"{entry.file}:{line_no}" + (f" ({entry.note})" if entry.note else "")
     try:
         current_value = parse_value(match.group(1))

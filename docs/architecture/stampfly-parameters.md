@@ -136,7 +136,7 @@ VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulat
 ## 3. モーター・プロペラパラメータ
 
 <!-- AUTO-GENERATED:params BEGIN -->
-> 以下は `control/models/stampfly_physical.yaml`（Single Source of Truth）から `sf params generate` が生成した確定値の一覧である。手編集しないこと。
+> 以下は `control/models/stampfly_physical.yaml`（Single Source of Truth）から `sf params generate` が生成した確定値の一覧である。手編集しないこと。SILS プラントの推進系（`bench_2026_10_15`、2026-10-15 のベンチ実測。駆動回路の等価出力抵抗 R_out(D) の表は同ファイルにあり、プラントは D·V でなく R_out を介して電流を求める）と、ファームの推力→duty 換算の定数（`flight_anchored_motor_curve`）を別々に示す。旧セット `measured_2026_07` は SILS プラントについては置き換え済みで、独自の D·V 駆動モデルを持つ Genesis・VPython 等が移行までなお参照する（本節の下の手書き表）。
 
 | 記号 | パラメータ | 値 | 単位 | 実測日 | 方法 |
 |---|---|---|---|---|---|
@@ -145,12 +145,21 @@ VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulat
 | Iyy | Pitch慣性モーメント | 1.33×10⁻⁵ | kg·m² | unknown | - |
 | Izz | Yaw慣性モーメント | 2.04×10⁻⁵ | kg·m² | unknown | - |
 | arm_offset | モーメントアーム | 0.023 | m | unknown | - |
-| Ct | 推力係数 | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | 暫定採用（同径プロペラの過去実測＋理論シミュレーション整合）。2026-10-15 にベンチ同時計測済み、2026-10-30 の SILS 検討で採用見送り |
-| Cq | トルク係数 | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | コーストダウン法 |
-| Jmp | 回転子慣性モーメント | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | 写真法+諸元法（プロペラ写真デジタイズ+画素積分＋コーストダウン） |
-| Rm | 巻線抵抗 | 0.593 | Ω | 2026-07-15 | 論文 Foster 同定値（NanoVNA 実測） |
-| Km | 逆起電力定数 | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | コーストダウン開回路EMF実測（SCPI公式換算） |
-| κ | トルク/推力比（採用値） | 4.1×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct（丸め不要、厳密値） |
+| Ke | 逆起電力定数（SILS プラント） | 5.905×10⁻⁴ | V·s/rad | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（開回路EMF） |
+| Kt | トルク定数（SILS プラント） | 5.905×10⁻⁴ | N·m/A | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（Ke と同値） |
+| Cq | トルク係数（SILS プラント） | 3.38×10⁻¹¹ | N·m/(rad/s)² | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15） |
+| Ct | 推力係数（SILS プラント） | 7.6×10⁻⁹ | N/(rad/s)² | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（推力は秤で計測） |
+| J | ロータ慣性（SILS プラント） | 1.54×10⁻⁸ | kg·m² | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（プロペラ込みのロータ慣性） |
+| I0a | 無負荷電流・定数部（SILS プラント） | 0.0443 | A | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（無負荷電流の定数部） |
+| I0b | 無負荷電流・ω² 部（SILS プラント） | 2.915×10⁻⁹ | A/(rad/s)² | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（無負荷電流の ω² 部） |
+| C_C | 還流コンデンサ（SILS プラント） | 1×10⁻⁷ | F | 2026-10-15 | 基板の部品定数（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（R_out 表の前提） |
+| f_pwm | PWM 周波数（SILS プラント） | 150000 | Hz | 2026-10-15 | 基板の PWM 周波数（情報用） |
+| η | 推力効率（SILS プラント） | 1 | - | 2026-10-30 | ベンチの Ct をそのまま使う（補正なし） |
+| Ct_gauge | 推力ゲージ係数（ファーム） | 1×10⁻⁸ | N/(rad/s)² | 2026-10-30 | ファームの換算が使う推力ゲージ係数（actuator.cpp の MOTOR_CT）。2026-08-03 の暫定採用値 |
+| κ | トルク/推力比（ファーム） | 4.1×10⁻³ | m | 2026-08-03 | ファームのミキサー B^-1 が使うトルク/推力比（actuator.cpp の KAPPA）= Cq/Ct の丸め不要の値 |
+| Am | 2次係数（ファーム） | 6.037×10⁻⁸ | V/(rad/s)² | 2026-08-22 | - |
+| Bm | 1次係数（ファーム） | 6.699×10⁻⁴ | V/(rad/s) | 2026-08-22 | - |
+| Cm | 定数項（ファーム） | 0.0153 | V | 2026-08-22 | - |
 <!-- AUTO-GENERATED:params END -->
 
 ### モーター配置と回転方向
@@ -626,7 +635,7 @@ The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coex
 ## 3. Motor & Propeller Parameters
 
 <!-- AUTO-GENERATED:params BEGIN -->
-> The table below is generated from `control/models/stampfly_physical.yaml` (Single Source of Truth) by `sf params generate`. Do not hand-edit it.
+> The table below is generated from `control/models/stampfly_physical.yaml` (Single Source of Truth) by `sf params generate`. Do not hand-edit it. It lists the SILS plant propulsion constants (`bench_2026_10_15`, bench measurement of 2026-10-15; the drive circuit's equivalent output resistance R_out(D) is tabulated in the same file, and the plant derives the current from R_out rather than from D*V) and the firmware thrust-to-duty constants (`flight_anchored_motor_curve`) separately. The old set `measured_2026_07` is superseded for the SILS plant; Genesis, VPython and others, which keep their own D*V drive model, still use it until migrated (the hand tables in section 3 below).
 
 | Symbol | Parameter | Value | Unit | Date | Method |
 |---|---|---|---|---|---|
@@ -635,12 +644,21 @@ The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coex
 | Iyy | Pitch moment of inertia | 1.33×10⁻⁵ | kg·m² | unknown | - |
 | Izz | Yaw moment of inertia | 2.04×10⁻⁵ | kg·m² | unknown | - |
 | arm_offset | Moment arm | 0.023 | m | unknown | - |
-| Ct | Thrust coefficient | 1×10⁻⁸ | N/(rad/s)² | 2026-08-03 | Provisional adoption (past same-diameter-propeller measurement + theoretical simulation consistency). Bench co-measurement done 2026-10-15; adoption declined after the 2026-10-30 SILS study |
-| Cq | Torque coefficient | 4.1×10⁻¹¹ | N·m/(rad/s)² | 2026-07-15 | Coast-down method |
-| Jmp | Rotor inertia | 1.375×10⁻⁸ | kg·m² | 2026-07-15 | Photographic + spec-sheet method (propeller photo digitization + pixel integration + coast-down) |
-| Rm | Winding resistance | 0.593 | Ω | 2026-07-15 | Paper's Foster fit (NanoVNA data) |
-| Km | Back-EMF constant | 5.682×10⁻⁴ | V/(rad/s) | 2026-07-16 | Coast-down open-circuit EMF measurement (SCPI-formula conversion) |
-| κ | Torque/thrust ratio (adopted) | 4.1×10⁻³ | m | 2026-08-03 | kappa = Cq/Ct (exact, no rounding needed) |
+| Ke | Back-EMF constant (SILS plant) | 5.905×10⁻⁴ | V·s/rad | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (open-circuit EMF) |
+| Kt | Torque constant (SILS plant) | 5.905×10⁻⁴ | N·m/A | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (equal to Ke) |
+| Cq | Torque coefficient (SILS plant) | 3.38×10⁻¹¹ | N·m/(rad/s)² | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) |
+| Ct | Thrust coefficient (SILS plant) | 7.6×10⁻⁹ | N/(rad/s)² | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (thrust on a scale) |
+| J | Rotor inertia (SILS plant) | 1.54×10⁻⁸ | kg·m² | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (rotor inertia including the propeller) |
+| I0a | No-load current, constant part (SILS plant) | 0.0443 | A | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (constant part of the no-load current) |
+| I0b | No-load current, w^2 part (SILS plant) | 2.915×10⁻⁹ | A/(rad/s)² | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (w^2 part of the no-load current) |
+| C_C | Recirculation capacitor (SILS plant) | 1×10⁻⁷ | F | 2026-10-15 | Board component value (premise of the R_out table) |
+| f_pwm | PWM frequency (SILS plant) | 150000 | Hz | 2026-10-15 | Board PWM frequency (informational) |
+| η | Thrust efficiency (SILS plant) | 1 | - | 2026-10-30 | Bench Ct used as-is (no correction) |
+| Ct_gauge | Thrust gauge coefficient (firmware) | 1×10⁻⁸ | N/(rad/s)² | 2026-10-30 | Thrust gauge coefficient the firmware conversion uses (MOTOR_CT in actuator.cpp). Provisional adoption of 2026-08-03 |
+| κ | Torque/thrust ratio (firmware) | 4.1×10⁻³ | m | 2026-08-03 | Torque/thrust ratio the firmware mixer B^-1 uses (KAPPA in actuator.cpp) = Cq/Ct, exact |
+| Am | Quadratic coefficient (firmware) | 6.037×10⁻⁸ | V/(rad/s)² | 2026-08-22 | - |
+| Bm | Linear coefficient (firmware) | 6.699×10⁻⁴ | V/(rad/s) | 2026-08-22 | - |
+| Cm | Constant term (firmware) | 0.0153 | V | 2026-08-22 | - |
 <!-- AUTO-GENERATED:params END -->
 
 ### Motor Layout and Rotation Direction

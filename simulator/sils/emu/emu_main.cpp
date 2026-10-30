@@ -273,10 +273,20 @@ sils::Plant::Config plant_config_from_env()
     // 済みのファーム＋実機の組み合わせとの、未計測の差の暫定的な代理値。ベンチ V-ω-T
     // 同時計測が済めば 1.0 に戻せる見込み（plant.hpp の Config::thrust_efficiency
     // コメントおよび docs/architecture/simulation-policy.md バックログ#3 参照）。
+    //
+    // UPDATE (2026-10-30): the default is now sils_params::plant::THRUST_EFFICIENCY =
+    // 1.0 (SSOT bench_2026_10_15). The plant uses the bench Ct with the measured R_out(D)
+    // drive, which removes the two-motor-family mismatch the 0.7133 above papered over
+    // (see plant.hpp's Config::thrust_efficiency comment).
+    // 追記（2026-10-30）: 既定値は sils_params::plant::THRUST_EFFICIENCY = 1.0（SSOT
+    // bench_2026_10_15）。プラントはベンチの Ct と実測 R_out(D) 駆動を使い、上の 0.7133 が
+    // 帳尻を合わせていた「2 モータ族の不一致」は解消した（plant.hpp の
+    // Config::thrust_efficiency コメント参照）。
     if (const char* te = std::getenv("SILS_EMU_THRUST_EFF")) {
         float eff = (float)std::atof(te);
         if (eff > 0.0f) { cfg.thrust_efficiency = eff;
-            std::printf("[emu] thrust efficiency override = %.3f (default 0.7133)\n", cfg.thrust_efficiency); }
+            std::printf("[emu] thrust efficiency override = %.3f (default %.4f)\n", cfg.thrust_efficiency,
+                        sils_params::plant::THRUST_EFFICIENCY); }
     }
     // SILS_EMU_TORQUE_AUTHORITY overrides the plant's roll/pitch differential-torque
     // authority (Config::torque_authority; NET vertical thrust is unaffected — see
