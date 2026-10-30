@@ -1,0 +1,215 @@
+diff --git a/simulator/sils/plant/plant.cpp b/simulator/sils/plant/plant.cpp
+index 3b3d23fc..14d4773e 100644
+--- a/simulator/sils/plant/plant.cpp
++++ b/simulator/sils/plant/plant.cpp
+@@ -150,7 +150,7 @@ void Plant::primeMotors()
+         // で撤去）— 残るスプールアップ動特性は ODE 状態 omega のみなので、これを目標
+         // duty の定常回転数へ直接プライムする。これをしないと、静止からの暖機起動が
+         // primeMotors() 本来の目的である約3·τ_eff≈50ms の電気機械的立上りを見せてしまう。
+-        motor_omega_[i] = steadyStateOmega(motor_target_[i] * v_batt_);
++        motor_omega_[i] = steadyStateOmega(motor_target_[i], v_batt_);
+ 
+         // Also pre-fill the transport-delay ring buffer (if enabled) with the target
+         // duty, so a delayed path does not ramp up from the zero-filled boot buffer.
+@@ -346,23 +346,39 @@ void Plant::handlingSubstep(float h)
+ // dutyToThrust()（duty→推力、定常）と primeMotors()（暖機起動）のみで使用、
+ // substep() の毎ステップ動特性では絶対に使わない。
+ // -----------------------------------------------------------------------------
+-float Plant::omegaDot(float omega, float v_motor) const
++float Plant::motorCurrent(float omega, float duty, float v_supply) const
+ {
+-    const float drag = (cfg_.Dm + cfg_.motor_Km * cfg_.motor_Km / cfg_.motor_Rm) * omega
+-                        + cfg_.Cq * omega * omega + cfg_.Qf;
+-    const float drive = cfg_.motor_Km * v_motor / cfg_.motor_Rm;
+-    return (drive - drag) / cfg_.Jmp;
++    // R1: I_m = (v_batt - Ke*w) / R_out(duty); zero below the 1 % duty floor.
++    // R1: I_m = (v_batt - Ke*w)/R_out(duty)。duty が 1% 未満は 0。
++    if (duty < sils_drive::kRoutDutyMin) return 0.0f;
++    const float d = duty > 1.0f ? 1.0f : duty;
++    return (v_supply - cfg_.drive_Ke * omega) / sils_drive::routOhm(d);
+ }
+ 
+-float Plant::steadyStateOmega(float v_motor) const
++float Plant::omegaDot(float omega, float duty, float v_supply) const
+ {
+-    if (v_motor <= 0.0f) return 0.0f;
+-    const float a = cfg_.Cq;
+-    const float b = cfg_.Dm + cfg_.motor_Km * cfg_.motor_Km / cfg_.motor_Rm;
+-    const float c = cfg_.Qf - cfg_.motor_Km * v_motor / cfg_.motor_Rm;
+-    const float disc = b * b - 4.0f * a * c;
++    // Friction Kt*I0a is subtracted unconditionally, exactly like the old Qf (no sign /
++    // stiction logic); substep() clamps omega >= 0 after integration.
++    // 摩擦 Kt*I0a は旧 Qf と同様に無条件で減算（符号・静止摩擦処理なし）。積分後に omega>=0 にクランプ。
++    const float i_m = motorCurrent(omega, duty, v_supply);
++    const float drag = cfg_.Cq * omega * omega
++                       + cfg_.drive_Kt * (cfg_.drive_I0a + cfg_.drive_I0b * omega * omega);
++    return (cfg_.drive_Kt * i_m - drag) / cfg_.Jmp;
++}
++
++float Plant::steadyStateOmega(float duty, float v_supply) const
++{
++    // Positive root of A w^2 + B w + C = 0 with A = Cq + Kt*I0b, B = Kt*Ke/R, C = Kt*I0a - Kt*v/R.
++    // A w^2 + B w + C = 0 の正根。
++    if (duty < sils_drive::kRoutDutyMin) return 0.0f;
++    const float d = duty > 1.0f ? 1.0f : duty;
++    const float r = sils_drive::routOhm(d);
++    const float a = cfg_.Cq + cfg_.drive_Kt * cfg_.drive_I0b;
++    const float bb = cfg_.drive_Kt * cfg_.drive_Ke / r;
++    const float c = cfg_.drive_Kt * cfg_.drive_I0a - cfg_.drive_Kt * v_supply / r;
++    const float disc = bb * bb - 4.0f * a * c;
+     if (disc <= 0.0f) return 0.0f;
+-    const float omega = (-b + std::sqrt(disc)) / (2.0f * a);
++    const float omega = (-bb + std::sqrt(disc)) / (2.0f * a);
+     return omega > 0.0f ? omega : 0.0f;
+ }
+ 
+@@ -380,7 +396,7 @@ float Plant::steadyStateOmega(float v_motor) const
+ float Plant::dutyToThrust(float duty) const
+ {
+     if (duty <= 0.0f) return 0.0f;
+-    const float omega = steadyStateOmega(duty * v_batt_);
++    const float omega = steadyStateOmega(duty, v_batt_);
+     return cfg_.thrust_efficiency * cfg_.Ct * omega * omega;   // thrust T [N]
+ }
+ 
+@@ -439,12 +455,15 @@ void Plant::updateBattery(float i_total_a, float h)
+ // -----------------------------------------------------------------------------
+ float Plant::hoverDuty() const
+ {
+-    const float thrust = cfg_.mass * cfg_.g / 4.0f;       // per-motor hover thrust [N]
+-    const float omega = std::sqrt(thrust / (cfg_.Ct * cfg_.thrust_efficiency));  // ω = √(T/(Ct·η))
+-    const float V = cfg_.motor_Km * omega
+-                     + (cfg_.motor_Rm / cfg_.motor_Km)
+-                           * (cfg_.Cq * omega * omega + cfg_.Dm * omega + cfg_.Qf);
+-    return V / v_batt_;                                    // duty = V / v_batt (current supply)
++    // R1: bisection on duty so that dutyToThrust(duty) = mg/4 (monotone increasing in duty).
++    // R1: dutyToThrust(duty)=mg/4 となる duty を二分法で求める（duty に単調増加）。
++    const float target = cfg_.mass * cfg_.g / 4.0f;
++    float lo = sils_drive::kRoutDutyMin, hi = 1.0f;
++    for (int k = 0; k < 60; ++k) {
++        const float mid = 0.5f * (lo + hi);
++        if (dutyToThrust(mid) < target) lo = mid; else hi = mid;
++    }
++    return 0.5f * (lo + hi);
+ }
+ 
+ // -----------------------------------------------------------------------------
+@@ -561,19 +580,15 @@ void Plant::substep(float h)
+     float i_total = cfg_.avionics_current_a; // battery current [A] (avionics baseline)
+     float tau_yaw_flu_z = 0.0f;              // accumulated per-motor below
+     for (int i = 0; i < 4; ++i) {
+-        float v_motor = duty_cmd[i] * v_supply;
+-        if (v_motor < 0.0f) v_motor = 0.0f;
+-        if (v_motor > v_supply) v_motor = v_supply;  // V clamped to [0, v_supply]
+-
+-        // Classical RK4, one substep of length h (genesis Motor.step(),
+-        // motor_model.py:152-181, ported 1:1).
+-        // 古典 RK4、長さ h の1 substep（genesis Motor.step()、motor_model.py:152-181
+-        // を1:1移植）。
++        float duty_i = duty_cmd[i];
++        if (duty_i < 0.0f) duty_i = 0.0f;
++        if (duty_i > 1.0f) duty_i = 1.0f;
++
+         const float omega0 = motor_omega_[i];
+-        const float k1 = omegaDot(omega0, v_motor);
+-        const float k2 = omegaDot(omega0 + 0.5f * h * k1, v_motor);
+-        const float k3 = omegaDot(omega0 + 0.5f * h * k2, v_motor);
+-        const float k4 = omegaDot(omega0 + h * k3, v_motor);
++        const float k1 = omegaDot(omega0, duty_i, v_supply);
++        const float k2 = omegaDot(omega0 + 0.5f * h * k1, duty_i, v_supply);
++        const float k3 = omegaDot(omega0 + 0.5f * h * k2, duty_i, v_supply);
++        const float k4 = omegaDot(omega0 + h * k3, duty_i, v_supply);
+         float omega1 = omega0 + (h / 6.0f) * (k1 + 2.0f * k2 + 2.0f * k3 + k4);
+         if (omega1 < 0.0f) omega1 = 0.0f;             // ω clamped ≥ 0
+         motor_omega_[i] = omega1;
+@@ -583,7 +598,7 @@ void Plant::substep(float h)
+ 
+         // Motor electrical current (DC model: V = I·Rm + Km·ω). Clamp ≥ 0.
+         // モータ電気電流（DC モデル: V = I·Rm + Km·ω）。0 以上にクランプ。
+-        const float i_motor = (v_motor - cfg_.motor_Km * omega1) / cfg_.motor_Rm;
++        const float i_motor = motorCurrent(omega1, duty_i, v_supply);
+         i_total += (i_motor > 0.0f) ? i_motor : 0.0f;
+ 
+         // Per-motor reaction torque about body +Z(FLU): aerodynamic drag Cq·ω² PLUS
+diff --git a/simulator/sils/plant/plant.hpp b/simulator/sils/plant/plant.hpp
+index e3feb623..89a4a9d9 100644
+--- a/simulator/sils/plant/plant.hpp
++++ b/simulator/sils/plant/plant.hpp
+@@ -46,6 +46,7 @@
+ #include "data_types.hpp"
+ #include "sensor_noise.hpp"
+ #include "generated_params.hpp"
++#include "drive_rout_table.hpp"
+ 
+ namespace sils {
+ 
+@@ -87,9 +88,17 @@ public:
+         // control/models/stampfly_physical.yaml の calibration_sets.measured_2026_07
+         // （2026-07-15/16/26 の単一測定キャンペーンで連動同定）から生成
+         // （係数毎の方法・日付は同 YAML の note 参照）。
+-        float Ct  = sils_params::adopted::CT;   ///< thrust coeff [N/(rad/s)²]  (T = Ct·ω²)
+-        float Cq  = sils_params::adopted::CQ;   ///< torque coeff [N·m/(rad/s)²]  (Q = Cq·ω², also the ODE's aero-drag term)
+-        float Jmp = sils_params::adopted::JMP;  ///< rotor inertia [kg·m²]
++        float Ct  = 7.60e-9f; /* R1 study: literal, NOT generated */   ///< thrust coeff [N/(rad/s)²]  (T = Ct·ω²)
++        float Cq  = 3.38e-11f; /* R1 study: literal, NOT generated */   ///< torque coeff [N·m/(rad/s)²]  (Q = Cq·ω², also the ODE's aero-drag term)
++        float Jmp = 1.54e-8f; /* R1 study: literal, NOT generated */  ///< rotor inertia [kg·m²]
++        // R1 study: averaged capacitor-recirculation drive model (replaces Rm/Km DC-motor ODE):
++        //   I_m = (v_batt - Ke*w)/R_out(duty) (0 if duty<0.01);
++        //   dw/dt = [Kt*I_m - Cq*w^2 - Kt*(I0a + I0b*w^2)] / J
++        // R1 研究: コンデンサ還流方式の平均化駆動モデル。
++        float drive_Ke  = 5.905e-4f;    ///< back-EMF constant Ke [V/(rad/s)]
++        float drive_Kt  = 5.905e-4f;    ///< torque constant Kt [N.m/A]
++        float drive_I0a = 0.0443f;      ///< no-load current, constant part [A] (Coulomb-like friction Kt*I0a)
++        float drive_I0b = 2.915e-9f;    ///< no-load current, w^2 part [A/(rad/s)^2] (extra drag Kt*I0b*w^2)
+         float Dm  = sils_params::adopted::DM;   ///< viscous damping [N·m·s/rad] — 0 (2026-07-26 coast-down 3-term refit: b term not detectable, lower-bound clamped)
+         float Qf  = sils_params::adopted::QF;   ///< Coulomb friction torque [N·m] (2026-07-26 coast-down 3-term refit, c term × Jmp)
+ 
+@@ -144,7 +153,7 @@ public:
+         /// 新しい物理計測ではない——ベンチ V-ω-T 同時計測で両側のモータ族が統一されれば
+         /// 見直すべきで、おそらく 1.0 に戻せる（docs/architecture/simulation-policy.md
+         /// バックログ#3 参照）。
+-        float thrust_efficiency = 0.7133f;  ///< 1.0 = ODE curve is the actual output (see above)
++        float thrust_efficiency = 0.8975f;  ///< 1.0 = ODE curve is the actual output (see above)
+ 
+         // Roll/pitch DIFFERENTIAL torque authority — Model fidelity (hikoki64 §3.3 SILS
+         // injection study, 2026-08-02). Deliberately SEPARATE from thrust_efficiency
+@@ -567,7 +576,9 @@ private:
+     /// integrand substep() calls every substep. See plant.cpp for the derivation.
+     /// モータ+プロペラ ODE の右辺 dω/dt（バックログ#2, 2026-07-26）— substep() が
+     /// 毎回呼ぶ RK4 の被積分関数。導出は plant.cpp 参照。
+-    float omegaDot(float omega, float v_motor) const;
++    float omegaDot(float omega, float duty, float v_supply) const;
++    /// Motor current I_m [A] of the R1 drive model (0 when duty < 0.01).
++    float motorCurrent(float omega, float duty, float v_supply) const;
+ 
+     /// Steady-state prop speed ω for a HELD voltage V (positive root of the ODE's
+     /// equilibrium dω/dt = 0). Used ONLY by dutyToThrust() and primeMotors() (warm
+@@ -576,7 +587,7 @@ private:
+     /// 保持電圧 V に対する定常回転 ω（ODE 平衡 dω/dt=0 の正根）。dutyToThrust() と
+     /// primeMotors()（暖機起動）のみで使用 — substep() の毎ステップ動特性では
+     /// 使わない（そちらは瞬時平衡を解くのでなく ODE を直接積分する）。
+-    float steadyStateOmega(float v_motor) const;
++    float steadyStateOmega(float duty, float v_supply) const;
+ 
+     /// Open-circuit voltage [V] from remaining charge [mAh] (1S LiPo discharge
+     /// curve, ported from simulator/vpython/sensors/power_monitor.py).
+diff --git a/simulator/sils/smoke/plant_smoke.cpp b/simulator/sils/smoke/plant_smoke.cpp
+index ffc1e870..964ab26b 100644
+--- a/simulator/sils/smoke/plant_smoke.cpp
++++ b/simulator/sils/smoke/plant_smoke.cpp
+@@ -67,6 +67,15 @@ int main(int argc, char** argv)
+     const float hover_duty = plant.hoverDuty();
+     printf("[plant_smoke] mg=%.4f N, hover_duty=%.4f, thrust/motor=%.4f N\n",
+            mg, hover_duty, plant.dutyToThrust(hover_duty));
++    // Hover duty versus constant battery voltage (study print).
++    // 一定電池電圧に対するホバー duty（研究用表示）。
++    for (float vb : {3.6f, 3.8f, 4.0f, 4.2f}) {
++        sils::Plant::Config cv = cfg;
++        cv.v_batt = vb;
++        sils::Plant pv;
++        if (pv.init(model_path, cv))
++            printf("[plant_smoke] hover_duty at v_batt=%.1f V: %.4f\n", vb, pv.hoverDuty());
++    }
+ 
+     sf::MotorOutput hover{};
+     for (int i = 0; i < 4; ++i) hover.duty[i] = hover_duty;

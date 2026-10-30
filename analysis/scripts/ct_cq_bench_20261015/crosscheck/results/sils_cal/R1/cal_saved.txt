@@ -1,0 +1,8 @@
+saved roll excitation window 18.00-22.00 s: gyro std 18.15 deg/s, truth rate std 18.15 deg/s
+saved pitch excitation window 24.00-28.00 s: gyro std 13.38 deg/s, truth rate std 13.37 deg/s
+saved roll  duty b=53886 T_ms=36.50 L_ms=1.24 T+L_ms=37.74 coh=0.979
+saved pitch duty b=33246 T_ms=34.55 L_ms=1.41 T+L_ms=35.96 coh=0.991
+saved yaw   duty b=44391 T_ms=0.00 L_ms=0.63 T+L_ms=0.63 coh=0.998
+saved roll  kp   b=53746 T_ms=36.15 L_ms=1.26 T+L_ms=37.41 coh=0.979
+saved pitch kp   b=33255 T_ms=34.55 L_ms=1.41 T+L_ms=35.97 coh=0.991
+saved yaw   kp   b=44458 T_ms=0.00 L_ms=0.63 T+L_ms=0.63 coh=0.998

@@ -1,0 +1,8 @@
+n2 roll excitation window 18.00-22.00 s: gyro std 39.33 deg/s, truth rate std 32.77 deg/s
+n2 pitch excitation window 24.00-28.00 s: gyro std 25.92 deg/s, truth rate std 19.83 deg/s
+n2 roll  duty b=53588 T_ms=0.00 L_ms=13.71 T+L_ms=13.71 coh=0.806
+n2 pitch duty b=44520 T_ms=15.28 L_ms=8.93 T+L_ms=24.21 coh=0.745
+n2 yaw   duty b=52700 T_ms=0.00 L_ms=11.82 T+L_ms=11.82 coh=0.336
+n2 roll  kp   b=64045 T_ms=0.00 L_ms=12.90 T+L_ms=12.90 coh=0.897
+n2 pitch kp   b=42239 T_ms=14.96 L_ms=9.43 T+L_ms=24.38 coh=0.779
+n2 yaw   kp   b=53049 T_ms=0.00 L_ms=13.31 T+L_ms=13.31 coh=0.312

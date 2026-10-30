@@ -1,0 +1,8 @@
+n0small roll excitation window 18.00-22.00 s: gyro std 6.37 deg/s, truth rate std 6.37 deg/s
+n0small pitch excitation window 24.00-28.00 s: gyro std 5.53 deg/s, truth rate std 5.53 deg/s
+n0small roll  duty b=115303 T_ms=12.12 L_ms=3.01 T+L_ms=15.14 coh=0.801
+n0small pitch duty b=53999 T_ms=11.27 L_ms=7.25 T+L_ms=18.51 coh=0.648
+n0small yaw   duty b=43503 T_ms=0.00 L_ms=15.96 T+L_ms=15.96 coh=0.599
+n0small roll  kp   b=53808 T_ms=6.93 L_ms=5.56 T+L_ms=12.49 coh=0.798
+n0small pitch kp   b=31314 T_ms=7.27 L_ms=8.15 T+L_ms=15.42 coh=0.739
+n0small yaw   kp   b=41295 T_ms=0.00 L_ms=14.99 T+L_ms=14.99 coh=0.453
