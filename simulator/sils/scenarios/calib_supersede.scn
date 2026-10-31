@@ -1,0 +1,26 @@
+# calib_supersede.scn — a later negligible calibration must replace an earlier applied one
+#                       後の「ずれなし」の校正が、先に入れた校正値を置き換えること
+#
+# Regression for the supersede rule of the still-calibration (tasks/imu_task.cpp, detailed_design §3 note 10).
+# A calibration whose bias is below the deadband leaves the estimator untouched; before 2026-11-01 that also
+# held when an earlier calibration had already been applied, so the old seed stayed and reseedCalibration()
+# re-applied it after every estimator Reset. Sequence:
+#   1. boot with an injected accel bias of 0.2 m/s^2 on x: the boot calibration applies it.
+#   2. the injected bias is removed (the IMU is now clean).
+#   3. the hand lifts and places the craft (IDLE_HELD -> IDLE_GROUND): Reset + recalibration on a level craft,
+#      which measures a negligible bias. It must supersede the 0.2 seed ("previous seed superseded").
+# 静止校正の置き換え規則（tasks/imu_task.cpp、detailed_design §3 注10）の再確認試験。デッドバンド未満の校正は推定器に
+# 触れないが、2026-11-01 より前は先に校正を適用済みの場合も同じで、古い値が残り、推定器の Reset のたびに
+# reseedCalibration() が再適用していた。手順: 1. x 軸に 0.2 m/s^2 の加速度のずれを注入して起動し、起動校正がそれを
+# 適用する。2. 注入を外す（IMU は無誤差に戻る）。3. 手が持ち上げて置き直す（IDLE_HELD→IDLE_GROUND）: Reset と水平な
+# 機体での再校正。結果は「ずれなし」で、0.2 の値を置き換えなければならない（"previous seed superseded"）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/calib_supersede.scn --target vehicle --duration 22000000
+#
+#  <t>  ch     <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    bias   0.2   0      0       0     0     0                         # A: accel bias +0.2 m/s^2 on x from boot / 起動から x 軸に +0.2 m/s^2
+   0    rc     2048  2048   2048    2048  0     6000      50              # B: boot disarmed 6 s → boot calibration applies 0.2 / 起動校正が 0.2 を適用
+   +    bias   0     0      0       0     0     0                         # C: remove the injected bias / 注入を外す
+   +    rc     2048  2048   2048    2048  0     1000      50              # D: settle 1 s / 1 s 待つ
+   +    handle 0.40  0.0    0.0     1200  1200  1200                      # E: lift, carry, place level / 持ち上げて水平に置く
+   +    rc     2048  2048   2048    2048  0     11000     50              # F: rest 11 s → recalibration completes / 再校正の完了まで待つ

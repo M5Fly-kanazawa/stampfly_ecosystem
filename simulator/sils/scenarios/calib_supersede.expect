@@ -1,0 +1,13 @@
+# calib_supersede.expect — supersede rule of the still-calibration (detailed_design §3 note 10).
+# The boot calibration applies the injected 0.2 m/s^2 bias; after the bias is removed and the hand places the
+# craft, the negligible recalibration must replace it. FAILS on a build without the rule (it logs "estimator left
+# untouched" and the 0.2 seed stays).
+# 起動校正が注入した 0.2 m/s^2 のずれを適用し、注入を外して手が置き直した後の「ずれなし」の再校正がそれを置き換えること。
+# 置き換え規則の無いビルドでは失敗する（"estimator left untouched" を出し、0.2 の値が残る）。
+exit 0
+log_contains any "Boot calibration applied"                # the boot calibration seeded the 0.2 bias
+log_contains any "Drone held in hand"                      # the hand lifted it (IDLE_HELD)
+log_contains any "previous seed superseded"                # the level recalibration replaced the seed
+log_absent   any "estimator left untouched"                # no recalibration kept the old seed
+order "Boot calibration applied" "previous seed superseded"
+order "Drone held in hand" "previous seed superseded"

@@ -53,6 +53,7 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | `crash_refly` | P8 ★ロバスト再飛行（墜落→自動DISARM→物理ハンドリング→再校正→再飛行）。`--duration 33000000` 必須 | vehicle |
 | `stab_ground_windup` | **STABILIZE 地上 ARM 中の積分巻き上がり回帰**（実機ログ ground_spin_stab 由来）: 校正後に加速度バイアスを注入し床の上で低スロットル 25 s → 地上で姿勢/レート積分器を保持するので `duty_spread_max`<0.05・離床でも傾き<5°。保持が無いと duty 差 0.59、離床で転倒（傾き 180°）。`--duration 40000000` 必須 | vehicle |
 | `calib_side_lying` | **校正の水平チェック**（2026-11-01、detailed_design §3 注10）: 墜落で横倒しになった機体を校正窓 1 回分（3.5 s）より長く置いても `Calibration window rejected: not level` で棄却し続け、横倒しのまま校正が完了して加速度バイアス約 ±9.8 m/s² が入らない。手が水平に置いた後は校正が完了して ARM が受理される。水平チェックの無いビルドでは失敗（ARM 全拒否）。`--duration 39000000` 必須 | vehicle |
+| `calib_supersede` | **校正の置き換え規則**（2026-11-01、detailed_design §3 注10）: 起動校正が注入した加速度のずれ 0.2 m/s² を適用した後、注入を外して手が置き直すと、「ずれなし」の再校正が先の値を置き換える（`previous seed superseded`）。置き換え規則の無いビルドでは `estimator left untouched` となり 0.2 の値が残るので失敗。`--duration 22000000` 必須 | vehicle |
 | `boot_motion` | 静止判定付き起動校正（運搬中は校正完了せず ARM 拒否、設置後に完了→飛行） | vehicle |
 | `alt_auto_takeoff` | **ARM トリガ** ALT_HOLD 自動離陸（再設計 2026-06-14）: スプール中 duty=0、固定 0.3 m/s 上昇、**目標 0.5m を捕捉**（行き過ぎでなく目標値） | vehicle |
 | `pos_auto_takeoff` | ARM トリガ POS_HOLD 自動離陸（上昇中の発進点保持を含む、目標 0.5m 捕捉） | vehicle |
@@ -160,6 +161,8 @@ Per layer, isolate each axis first (`<layer>_<axis>.scn`), then a combined capst
 (broadband excitation, roadmap §3.1.3), so duty is intentionally not gated.
 
 **Added 2026-11-01 — `calib_side_lying` (vehicle, `--duration 39000000`):** regression for the level check of the still-calibration (detailed_design §3 note 10). A craft left lying on its side after a crash for longer than one 3.5 s calibration window keeps being rejected (`Calibration window rejected: not level`), so no calibration completes on its side and no accel_bias of about +-9.8 m/s^2 is seeded; once the hand places it level, calibration completes and ARM is accepted. It fails on a build without the level check (every ARM rejected by the tilt guard).
+
+**Added 2026-11-01 — `calib_supersede` (vehicle, `--duration 22000000`):** regression for the supersede rule of the still-calibration (detailed_design §3 note 10). The boot calibration applies an injected accel bias of 0.2 m/s^2; after the injection is removed and the hand places the craft, the negligible recalibration replaces the earlier seed (`previous seed superseded`). It fails on a build without the rule (`estimator left untouched`, the 0.2 seed stays).
 
 ## 3. How to run
 
