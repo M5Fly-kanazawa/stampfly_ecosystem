@@ -113,6 +113,16 @@ OCV_KNEE_LOW = 0.05                # plant.cpp:443 SoC below which OCV is steep
 OCV_STEEP_OFFSET = 0.9             # plant.cpp:443
 OCV_STEEP_GAIN = 2.0               # plant.cpp:443-444
 
+# SILS-only log convention: against the plant's own truth the prediction lines up best
+# when delayed by exactly one plant substep (measured on sysid_gate: roll/pitch/yaw
+# residual 1.3/1.5/2.4 % -> 0.01/0.28/0.07 %; cause in the SILS scheduler/log ordering
+# NOT traced -> 未確認). A real vehicle has its own delay: fit it, do not use this.
+# SILS 専用のログ規約: プラント自身の真値と比べると予測を 1 substep (0.25 ms) 遅らせた
+# ときに最もよく合う (原因はスケジューラとログ順序、未追跡 = 未確認)。実機では使わず
+# 実機側の遅れを当てはめる。
+SILS_LOG_ALIGNMENT_DELAY_S = PLANT_SUBSTEP_S
+AIRBORNE_MIN_ALT_M = 0.05          # rows below this are excluded (ground contact is not modelled)
+
 # Rotor sites in body FLU [m] (models/stampfly.xml:121-124) and spin sign.
 # Order = log columns FR, RR, RL, FL. Reaction torque sign about +Z_FLU:
 # CCW props (FR, RL) -> -1, CW props (RR, FL) -> +1 (plant.cpp:645-647).
@@ -412,15 +422,15 @@ def load_logged_motion(path) -> LoggedMotion:
     )
 
 
-def predict_angular_accel(
+def predict_torque_trace(
     motion: LoggedMotion,
-    voltage_mode: str = "battery",
-    delay_s: float = 0.0,
-    include_gyroscopic: bool = True,
+    voltage_mode="battery",
     const: PlantConstants = DEFAULT_CONSTANTS,
-) -> np.ndarray:
-    """Predicted mean body angular acceleration per control period, FRD, (N, 3).
-    制御周期ごとの機体角加速度 (周期内平均) の予測, FRD, (N, 3)。
+    pwm_bits: Optional[int] = PWM_RESOLUTION_BITS,
+):
+    """Run the motor simulation once; returns (trace, torque_substeps (M,3)).
+    Reuse it for many delays through `accel_from_trace`.
+    モータシミュレーションを 1 回だけ走らせる。遅れを変えた複数予測は accel_from_trace で。
 
     voltage_mode: "battery" (plant battery model re-run; default), "log" (logged
     1 Hz voltage held), or a float (constant volts, e.g. plant.hpp v_batt 3.7).
@@ -435,9 +445,23 @@ def predict_angular_accel(
     else:
         volt = np.full(len(motion.t_s), float(voltage_mode))
     trace = simulate_motors(
-        motion.duty, motion.dt, volt, const, pre_elapsed_s=float(motion.t_s[0])
+        motion.duty, motion.dt, volt, const,
+        pre_elapsed_s=float(motion.t_s[0]), pwm_bits=pwm_bits,
     )
-    tau = row_mean(body_torque(trace, const), trace, delay_s)
+    return trace, body_torque(trace, const)
+
+
+def accel_from_trace(
+    motion: LoggedMotion,
+    trace: MotorTrace,
+    torque_sub: np.ndarray,
+    delay_s: float = 0.0,
+    include_gyroscopic: bool = True,
+    const: PlantConstants = DEFAULT_CONSTANTS,
+) -> np.ndarray:
+    """Mean body angular acceleration per control period, FRD, (N, 3), for one delay.
+    1 つの遅れに対する制御周期ごとの機体角加速度 (周期内平均), FRD, (N, 3)。"""
+    tau = row_mean(torque_sub, trace, delay_s)
     gyro = None
     if include_gyroscopic:
         # Mean of the rates at both ends of the period / 周期両端の角速度の平均
@@ -445,18 +469,57 @@ def predict_angular_accel(
     return angular_accel(tau, gyro, const)
 
 
+def predict_angular_accel(
+    motion: LoggedMotion,
+    voltage_mode="battery",
+    delay_s: float = 0.0,
+    include_gyroscopic: bool = True,
+    const: PlantConstants = DEFAULT_CONSTANTS,
+) -> np.ndarray:
+    """One-shot prediction (see predict_torque_trace / accel_from_trace).
+    1 回限りの予測 (詳細は predict_torque_trace / accel_from_trace)。"""
+    trace, torque_sub = predict_torque_trace(motion, voltage_mode, const)
+    return accel_from_trace(motion, trace, torque_sub, delay_s, include_gyroscopic, const)
+
+
+def load_truth(path):
+    """Ground truth of a SILS bundle: (t_s, body rate FRD (K,3) [rad/s], altitude (K,) [m]).
+    truth.csv has NED position (z down) and body rates in FRD.
+    SILS バンドルの真値: (時刻, 機体角速度 FRD, 高度)。pos_z は NED (下向き正)。"""
+    import zipfile
+    from pathlib import Path
+    import pandas as pd
+
+    p = Path(path)
+    if p.is_dir():
+        df = pd.read_csv(p / "truth.csv")
+    else:
+        with zipfile.ZipFile(p) as zf:
+            with zf.open("truth.csv") as fh:
+                df = pd.read_csv(fh)
+    t = df["timestamp_us"].to_numpy(dtype=float) * 1e-6
+    rate = df[["rate_x", "rate_y", "rate_z"]].to_numpy(dtype=float)
+    return t, rate, -df["pos_z"].to_numpy(dtype=float)
+
+
 # --------------------------------------------------------------------------
 # Comparison helpers / 比較ヘルパー
 # --------------------------------------------------------------------------
-def accel_from_rate(t_s: np.ndarray, rate: np.ndarray, dt: float, shift_s: float = 0.0) -> np.ndarray:
+def accel_from_rate(
+    t_s: np.ndarray, rate: np.ndarray, dt: float, shift_s: float = 0.0,
+    t_src: Optional[np.ndarray] = None,
+) -> np.ndarray:
     """Mean angular acceleration over [t_k, t_k+dt) from a rate series:
     (w(t_k+dt+shift) - w(t_k+shift))/dt, linear interpolation. Last row is NaN.
-    角速度系列から [t_k, t_k+dt) の平均角加速度を求める (線形補間)。最終行は NaN。"""
+    角速度系列から [t_k, t_k+dt) の平均角加速度を求める (線形補間)。最終行は NaN。
+    `t_src`: time stamps of `rate` when they differ from the row times `t_s` (e.g. truth.csv).
+    `t_src`: rate の時刻が行時刻 t_s と異なるとき (truth.csv など) に指定。"""
     rate = np.asarray(rate, float)
-    out = np.empty_like(rate)
+    src = t_s if t_src is None else t_src
+    out = np.empty((len(t_s), rate.shape[1]))
     for axis in range(rate.shape[1]):
-        w0 = np.interp(t_s + shift_s, t_s, rate[:, axis])
-        w1 = np.interp(t_s + dt + shift_s, t_s, rate[:, axis])
+        w0 = np.interp(t_s + shift_s, src, rate[:, axis])
+        w1 = np.interp(t_s + dt + shift_s, src, rate[:, axis])
         out[:, axis] = (w1 - w0) / dt
     out[-1] = np.nan
     return out
