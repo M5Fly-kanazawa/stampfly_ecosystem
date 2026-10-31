@@ -191,6 +191,19 @@ inline constexpr float CALIB_STILL_ACCEL_NORM_MAX = 10.3f;  // [m/s²] EMA |acce
 inline constexpr float CALIB_STILL_ACCEL_VAR_MAX  = 0.05f;  // [(m/s²)²] window variance max
 inline constexpr float CALIB_STILL_EMA_ALPHA      = 0.05f;  // EMA factor (~3Hz @400Hz)
 
+// Level check on the completed calibration window (@design detailed_design.md §3 note 10).
+// Real craft sit at about 1-2 deg on a bench. The calibration removes gravity from body
+// Z only, so a tilted craft (e.g. on its side after a crash) would seed a gravity
+// component as accel bias. The tilt guard safety.tilt_check.max_deg is 10 deg, and a
+// calibration at tilt θ later placed level leaves an attitude error of about θ, so this
+// limit must stay well below 10 deg.
+// 完了した校正窓の水平チェック（@design detailed_design.md §3 注10）。実機は机上で約 1〜2 度
+// 傾く。校正は重力を機体 Z からのみ除去するので、傾いた機体（墜落後の横倒し等）では重力
+// 成分が加速度バイアスとして種付けされる。傾き検査 safety.tilt_check.max_deg は 10 度で、
+// 傾き θ で校正して後で水平に置くと姿勢誤差が約 θ 残るため、この上限は 10 度より十分
+// 小さく保つこと。
+inline constexpr float CALIB_LEVEL_MAX_DEG        = 5.0f;   // [deg] max tilt of mean accel from body -Z
+
 // Bias deadband: if the measured boot bias is below these magnitudes it is treated as
 // negligible and NOT seeded into the estimator — the calibration stays a true no-op
 // instead of overwriting the filter's own (already ~zero) online bias estimate. This

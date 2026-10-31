@@ -115,7 +115,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | CLI コマンド群（約50） | 自律飛行（`takeoff`/`land`/`hover`/`jump`）、Tello 風相対移動（`up/down/forward/.../cw/ccw`）、クエリ（`battery?` 等）、`trim`/`gain` | Tello API（§3）と同根。教材価値が高い |
 | flight_command サービス | 上記コマンドの実行系（自律コマンドキュー） | 同上 |
 | USB バイナリログ取得 | 旧 `sf log capture`（USB 経由） | Data Stream USB 変種（§3）として実現予定 |
-| レベル基準の活用 | 旧 level_calibrator 相当。新は level_offset を計算するが**未使用**（ログのみ） | 傾いた机での校正精度に関わる |
+| レベル基準の活用 | 旧 level_calibrator 相当。新は level_offset と同じ量（窓平均の重力ベクトルの傾き）を校正窓の**水平チェック**に使う（機体 −Z から `CALIB_LEVEL_MAX_DEG`=5° 超なら窓を棄却してやり直し）。傾き補正としての適用（姿勢への加算）は未実装 | 傾いた机での校正精度に関わる |
 
 ### 意図的に廃止（設計判断）
 
@@ -201,7 +201,7 @@ All retrofitted into the design documents.
 | ~50 CLI commands (autonomous `takeoff`/`land`/`hover`/`jump`, Tello-style moves, queries, `trim`/`gain`) | Same root as the Tello API item (§3); high educational value |
 | flight_command service (autonomous command queue) | Ditto |
 | USB binary log capture (`sf log capture`) | To be realized as the USB Data Stream variant |
-| Level-reference usage | level_offset is computed but unused (log only) |
+| Level-reference usage | The window tilt (same gravity-vector angle as level_offset) is used as a level check: a calibration window whose mean accel is more than `CALIB_LEVEL_MAX_DEG` (5 deg) from body -Z is rejected and restarted. Applying the offset as an attitude correction is not implemented |
 
 ### Deliberately dropped
 

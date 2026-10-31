@@ -500,6 +500,7 @@ static void startBootCalibration()
     still.accel_norm_max = config::CALIB_STILL_ACCEL_NORM_MAX;
     still.accel_var_max  = config::CALIB_STILL_ACCEL_VAR_MAX;
     still.ema_alpha      = config::CALIB_STILL_EMA_ALPHA;
+    still.level_max_deg  = config::CALIB_LEVEL_MAX_DEG;
     g_calib.startGyroCal(config::CALIB_GYRO_SAMPLES, still);
     g_calib_active        = true;
     g_calib_settle_cycles = config::CALIB_SETTLE_MS * 1000u / config::IMU_PERIOD_US;
@@ -507,6 +508,20 @@ static void startBootCalibration()
     ESP_LOGI(TAG, "Boot calibration: settle %lu cycles, then average %lu samples",
              static_cast<unsigned long>(g_calib_settle_cycles),
              static_cast<unsigned long>(config::CALIB_GYRO_SAMPLES));
+}
+
+/// Seed the estimator with a calibration result and retain it for re-seeding after
+/// every later estimator reset (see reseedCalibration).
+/// 校正結果を推定器に種付けし、以後の estimator reset 後の再シード用に保持する
+/// （reseedCalibration 参照）。
+static void applyCalibrationResult(const sf::CalibrationData& result)
+{
+    g_estimator->applyCalibration(result.gyro_bias, result.accel_bias);
+    g_calib_applied = true;
+    for (int i = 0; i < 3; ++i) {
+        g_applied_gyro_bias[i]  = result.gyro_bias[i];
+        g_applied_accel_bias[i] = result.accel_bias[i];
+    }
 }
 
 /// Per-cycle boot-calibration step (called from the 400Hz loop while active). Discards
@@ -578,6 +593,20 @@ static void feedBootCalibration(const sf::ImuData& imu)
     // 「校正」を実行中に種付けするとフィルタの収束済みバイアス推定を上書きし、脆弱な
     // POSITION_HOLD 入口を撹乱する — 補正すべきものが無ければ推定器に触れない（真の no-op）。
     if (gyro_mag < config::CALIB_GYRO_DEADBAND && accel_mag < config::CALIB_ACCEL_DEADBAND) {
+        // A previous calibration may already be applied (and re-seeded after every
+        // estimator reset). The new, verified result supersedes it even when negligible;
+        // otherwise a stale seed (e.g. from an earlier bad placement) would persist.
+        // 以前の校正が適用済みの場合（estimator reset のたびに再シードされる）、新しい検証済みの
+        // 結果は無視可能な大きさでもそれを置き換える。さもないと古い種（以前の悪い置き方由来等）が残る。
+        if (g_calib_applied) {
+            applyCalibrationResult(d);
+            ESP_LOGI(TAG,
+                     "Boot calibration: bias negligible — previous seed superseded "
+                     "(gyro_bias=[%.4f %.4f %.4f] rad/s, accel_bias=[%.3f %.3f %.3f] m/s2)",
+                     d.gyro_bias[0], d.gyro_bias[1], d.gyro_bias[2],
+                     d.accel_bias[0], d.accel_bias[1], d.accel_bias[2]);
+            return;
+        }
         ESP_LOGI(TAG,
                  "Boot calibration: bias negligible (gyro %.4f<%.4f, accel %.3f<%.3f) "
                  "— estimator left untouched",
@@ -587,12 +616,7 @@ static void feedBootCalibration(const sf::ImuData& imu)
 
     // Significant bias: seed the estimator (gravity already removed for accel Z).
     // 有意なバイアス: 推定器に種付け（加速度 Z の重力は除去済み）。
-    g_estimator->applyCalibration(d.gyro_bias, d.accel_bias);
-    g_calib_applied = true;
-    for (int i = 0; i < 3; ++i) {
-        g_applied_gyro_bias[i]  = d.gyro_bias[i];
-        g_applied_accel_bias[i] = d.accel_bias[i];
-    }
+    applyCalibrationResult(d);
     ESP_LOGI(TAG,
              "Boot calibration applied: gyro_bias=[%.4f %.4f %.4f] rad/s, "
              "accel_bias=[%.3f %.3f %.3f] m/s2",

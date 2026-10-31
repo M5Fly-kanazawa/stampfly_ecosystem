@@ -36,6 +36,9 @@ static const char* NVS_KEY       = "cal_data";
 // ここではローカルリテラルで保持）
 static constexpr float G = 9.80665f;
 
+// Radians to degrees / ラジアンから度への換算
+static constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;
+
 namespace sf {
 
 // -----------------------------------------------------------------------------
@@ -145,6 +148,15 @@ void CalibrationMgr::restartAccumulation()
                       "restarting (keep the craft still)",
                  static_cast<unsigned long>(sample_count_));
     }
+    clearWindow();
+}
+
+// -----------------------------------------------------------------------------
+// clearWindow — discard the accumulated window (no log; callers log the reason)
+// 窓の消去 — 蓄積した窓を破棄する（ログなし。理由は呼び出し側がログする）
+// -----------------------------------------------------------------------------
+void CalibrationMgr::clearWindow()
+{
     sample_count_ = 0;
     memset(gyro_sum_,     0, sizeof(gyro_sum_));
     memset(accel_sum_,    0, sizeof(accel_sum_));
@@ -175,6 +187,74 @@ float CalibrationMgr::windowVariance(const double sum[3], const double sq_sum[3]
         }
     }
     return static_cast<float>(total);
+}
+
+// -----------------------------------------------------------------------------
+// meanAccelTiltDeg — angle between the window's mean accel and the level-rest direction
+// 窓平均加速度の傾き — 窓平均の加速度と水平静止の向きとの成す角
+// -----------------------------------------------------------------------------
+float CalibrationMgr::meanAccelTiltDeg() const
+{
+    // At level rest the accelerometer reads about [0, 0, −G] (see computeLevelOffset
+    // for the sign convention), so the tilt is the angle between the mean vector and
+    // body −Z. atan2 keeps it well-defined (> 90 deg) even when the craft lies upside down.
+    // 水平静止では加速度計は約 [0, 0, −G] を返す（符号規約は computeLevelOffset 参照）ので、
+    // 傾きは平均ベクトルと機体 −Z の成す角。atan2 なら裏返し（90 度超）でも定義できる。
+    const double n  = static_cast<double>(sample_count_);
+    const double mx = accel_sum_[0] / n;
+    const double my = accel_sum_[1] / n;
+    const double mz = accel_sum_[2] / n;
+    const double tilt_rad = std::atan2(std::sqrt(mx * mx + my * my), -mz);
+    return static_cast<float>(tilt_rad * kRadToDeg);
+}
+
+// -----------------------------------------------------------------------------
+// isWindowAcceptable — final window check: variance (slow motion) and level (placement)
+// 窓の最終判定 — 分散（ゆっくりした動き）と水平（置き方）
+// -----------------------------------------------------------------------------
+//
+// @design detailed_design.md §3 note 10 — recalibration needs a level craft; the
+//         level check rejects a craft lying tilted (e.g. on its side after a crash) [OK]
+//
+bool CalibrationMgr::isWindowAcceptable()
+{
+    // The EMA gate can miss slow, smooth motion (e.g. a gentle hand sway), but that
+    // motion leaves a variance fingerprint over the whole window. Variance is
+    // bias-insensitive (computed around the window's own mean), so it judges precisely
+    // even though the sensor offsets are not yet known.
+    // EMA 判定はゆっくり滑らかな動き（手のゆったりした揺れ等）を見逃しうるが、その動きは
+    // 窓全体の分散に痕跡を残す。分散は窓自身の平均まわりで計算されバイアス不感のため、
+    // センサオフセット未知でも精密に判定できる。
+    const float gyro_var  = windowVariance(gyro_sum_,  gyro_sq_sum_,  sample_count_);
+    const float accel_var = windowVariance(accel_sum_, accel_sq_sum_, sample_count_);
+    if (gyro_var > still_.gyro_var_max || accel_var > still_.accel_var_max) {
+        ESP_LOGW(TAG, "Calibration window rejected: gyro var %.5f (max %.5f), "
+                      "accel var %.4f (max %.4f) — slow motion? restarting",
+                 static_cast<double>(gyro_var),
+                 static_cast<double>(still_.gyro_var_max),
+                 static_cast<double>(accel_var),
+                 static_cast<double>(still_.accel_var_max));
+        restartAccumulation();
+        return false;
+    }
+
+    // Level check: the calibration removes gravity from body Z only, so a tilted
+    // craft would fold a gravity component into the accel bias. Reject and restart.
+    // 水平チェック: 校正は重力を機体 Z からのみ除去するので、傾いた機体では重力成分が
+    // 加速度バイアスに混入する。破棄してやり直す。
+    const float tilt_deg = meanAccelTiltDeg();
+    if (tilt_deg > still_.level_max_deg) {
+        ESP_LOGW(TAG, "Calibration window rejected: not level (tilt %.1f deg > %.1f deg) "
+                      "— place the craft level; restarting",
+                 static_cast<double>(tilt_deg),
+                 static_cast<double>(still_.level_max_deg));
+        // Not motion, so skip the "keep the craft still" log of restartAccumulation.
+        // 動きではないので、restartAccumulation の「静止させて」ログは出さない。
+        ++restart_count_;
+        clearWindow();
+        return false;
+    }
+    return true;
 }
 
 // -----------------------------------------------------------------------------
@@ -212,25 +292,10 @@ bool CalibrationMgr::feedSample(const float gyro[3], const float accel[3])
         return false;   // still accumulating / まだ蓄積中
     }
 
-    // Window complete — final validity check: the EMA gate can miss slow,
-    // smooth motion (e.g. a gentle hand sway), but that motion leaves a
-    // variance fingerprint over the whole window. Variance is bias-insensitive
-    // (computed around the window's own mean), so it judges precisely even
-    // though the sensor offsets are not yet known. Reject and start over.
-    // 窓完了 — 最終妥当性チェック: EMA 判定はゆっくり滑らかな動き（手のゆったり
-    // した揺れ等）を見逃しうるが、その動きは窓全体の分散に痕跡を残す。分散は窓自身の
-    // 平均まわりで計算されバイアス不感のため、センサオフセット未知でも精密に判定
-    // できる。検出したら破棄してやり直す。
-    const float gyro_var  = windowVariance(gyro_sum_,  gyro_sq_sum_,  sample_count_);
-    const float accel_var = windowVariance(accel_sum_, accel_sq_sum_, sample_count_);
-    if (gyro_var > still_.gyro_var_max || accel_var > still_.accel_var_max) {
-        ESP_LOGW(TAG, "Calibration window rejected: gyro var %.5f (max %.5f), "
-                      "accel var %.4f (max %.4f) — slow motion? restarting",
-                 static_cast<double>(gyro_var),
-                 static_cast<double>(still_.gyro_var_max),
-                 static_cast<double>(accel_var),
-                 static_cast<double>(still_.accel_var_max));
-        restartAccumulation();
+    // Window complete — final validity check (variance, then level). On failure the
+    // window is discarded and accumulation restarts.
+    // 窓完了 — 最終妥当性チェック（分散、次に水平）。失敗時は窓を破棄してやり直す。
+    if (!isWindowAcceptable()) {
         return false;
     }
 

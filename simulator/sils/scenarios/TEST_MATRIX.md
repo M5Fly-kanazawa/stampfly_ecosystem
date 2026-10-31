@@ -52,6 +52,7 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | `modeswitch` | P8 飛行中モード切替（ALT↔POS）で姿勢/高度有界 | vehicle |
 | `crash_refly` | P8 ★ロバスト再飛行（墜落→自動DISARM→物理ハンドリング→再校正→再飛行）。`--duration 33000000` 必須 | vehicle |
 | `stab_ground_windup` | **STABILIZE 地上 ARM 中の積分巻き上がり回帰**（実機ログ ground_spin_stab 由来）: 校正後に加速度バイアスを注入し床の上で低スロットル 25 s → 地上で姿勢/レート積分器を保持するので `duty_spread_max`<0.05・離床でも傾き<5°。保持が無いと duty 差 0.59、離床で転倒（傾き 180°）。`--duration 40000000` 必須 | vehicle |
+| `calib_side_lying` | **校正の水平チェック**（2026-11-01、detailed_design §3 注10）: 墜落で横倒しになった機体を校正窓 1 回分（3.5 s）より長く置いても `Calibration window rejected: not level` で棄却し続け、横倒しのまま校正が完了して加速度バイアス約 ±9.8 m/s² が入らない。手が水平に置いた後は校正が完了して ARM が受理される。水平チェックの無いビルドでは失敗（ARM 全拒否）。`--duration 39000000` 必須 | vehicle |
 | `boot_motion` | 静止判定付き起動校正（運搬中は校正完了せず ARM 拒否、設置後に完了→飛行） | vehicle |
 | `alt_auto_takeoff` | **ARM トリガ** ALT_HOLD 自動離陸（再設計 2026-06-14）: スプール中 duty=0、固定 0.3 m/s 上昇、**目標 0.5m を捕捉**（行き過ぎでなく目標値） | vehicle |
 | `pos_auto_takeoff` | ARM トリガ POS_HOLD 自動離陸（上昇中の発進点保持を含む、目標 0.5m 捕捉） | vehicle |
@@ -114,7 +115,7 @@ sf sils scenario simulator/sils/scenarios/pos_flight.scn --target vehicle --vide
 | `calib.expect` の xfail 印 | 削除 | xfail の理由（0.6〜0.7 Hz の自励振動）が出なくなり、回帰試験 2 回で XPASS、直接実行 2 回で PASS（att_rmse 0.55 deg） | 実機の対応値なし |
 | SILS の下向き ToF 模擬の最大距離（`simulator/sils/devices/vl53_device.cpp` の `MAX_MM`） | 1400 → 1630 mm | (b) 実機ログ（121 本＋flip_test1/2、約 15 万サンプル）では 1.4〜1.7 m で 95〜99 % が有効（status 0）、1.7〜1.8 m で 91 %、1.8〜2.0 m で 66〜70 %、2.0〜2.1 m で 22 %（無効時の status は 255 が大半。SILS も 255）。模擬の上限は 24 bin バッファが決める 1636 mm で、1630 は 2 bin 分割がバッファに収まる値（プローブで 1.63 m まで有効・誤差 17 mm 以内）。1.63〜2.0 m は未模擬のまま | 実機の有効率（高度は ESKF 高度） |
 | `alt_inflight_switch.expect` の `alt_band` 上限（窓 14.7〜18.7 s） | < 0.32 → < 0.38（SILS の値 0.351） | STABILIZE→ALT_HOLD 捕捉後の減衰振動。閾値側のコメントが「開始外乱の大きさによらない固定振幅」と記録しているもの。R_out の値 0.351 に約 8 % の余裕 | 実機の対応値なし・未検証（飛行中に ALT_HOLD へ切り替えた実機ログが必要） |
-| `crash_refly`（`.scn` 行J・行L、`.expect` の 2 つの窓） | 行J 2500→500 ms、行L 8000→10000 ms（再校正以降の時刻は不変）。`.expect`: 墜落静止の窓 14〜16 s → 12〜14 s、持上げの窓 16.8〜18.4 s → 14.8〜16.4 s（閾値は不変、手が届く時刻と同じ −2.0 s の移動） | (a) R_out の墜落は機体が側臥（ロール 90 deg）で止まり、衝突の約 0.2 s 後に始まる 3.5 s の起動校正が側臥のまま完了して level_offset 1.5708 rad が推定器に残る。手が水平に直した後も ARM の判定（姿勢推定が重力と食い違う、正しい挙動で不変）が再 ARM を拒否した。ハンドリング軌道は任意の墜落姿勢を水平へ戻すので、手を校正の最中（14.0 s）に届かせて水平な設置後に校正をやり直させる。再飛行は実際に飛ぶ（上昇 1.33 m、終端ホバー 0.87 m） | 実機の対応値なし |
+| `crash_refly`（`.scn` 行J・行L、`.expect` の 2 つの窓） | 行J 2500→500 ms、行L 8000→10000 ms（再校正以降の時刻は不変）。`.expect`: 墜落静止の窓 14〜16 s → 12〜14 s、持上げの窓 16.8〜18.4 s → 14.8〜16.4 s（閾値は不変、手が届く時刻と同じ −2.0 s の移動） | (a) R_out の墜落は機体が横倒し（ロール 90 deg）で止まり、衝突の約 0.2 s 後に始まる 3.5 s の起動校正が横倒しのまま完了して level_offset 1.5708 rad が推定器に残る。手が水平に直した後も ARM の判定（姿勢推定が重力と食い違う、正しい挙動で不変）が再 ARM を拒否した。ハンドリング軌道は任意の墜落姿勢を水平へ戻すので、手を校正の最中（14.0 s）に届かせて水平な設置後に校正をやり直させる。再飛行は実際に飛ぶ（上昇 1.33 m、終端ホバー 0.87 m） | 実機の対応値なし |
 | `pos_flight.expect` の xfail 印 | 削除 | ヨートルク権限飽和（デューティ天井固定）が R_out プラントでは出なくなった（ホバー duty が低くヨーに余裕がある）。回帰試験 2 回で XPASS。`pos_yaw`・`yaw_hold` の印は残す | 実機の対応値なし |
 
 **変更しなかったもの（未確認を含む）:** `commloss_land_level`・`pos_yaw`・`yaw_hold` の xfail 印（KNOWN-FAIL のまま。`commloss_land_level` は着陸後の `alt_max` 0.156 m > 0.1 m で不合格）。
@@ -157,6 +158,8 @@ Per layer, isolate each axis first (`<layer>_<axis>.scn`), then a combined capst
 
 **Note 1 (ACRO G4):** ACRO rate doublets saturate the motors briefly BY DESIGN
 (broadband excitation, roadmap §3.1.3), so duty is intentionally not gated.
+
+**Added 2026-11-01 — `calib_side_lying` (vehicle, `--duration 39000000`):** regression for the level check of the still-calibration (detailed_design §3 note 10). A craft left lying on its side after a crash for longer than one 3.5 s calibration window keeps being rejected (`Calibration window rejected: not level`), so no calibration completes on its side and no accel_bias of about +-9.8 m/s^2 is seeded; once the hand places it level, calibration completes and ARM is accepted. It fails on a build without the level check (every ARM rejected by the tilt guard).
 
 ## 3. How to run
 

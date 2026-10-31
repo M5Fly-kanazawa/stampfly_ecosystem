@@ -1,0 +1,43 @@
+# calib_side_lying.scn — a crash leaves the craft on its side; the calibration must NOT run there
+#                        墜落で機体が横倒しになったまま — 校正を横倒しのまま完了させてはならない
+#
+# Regression for the level check of the still-calibration (sf_calibration, detailed_design §3 note 10).
+# The calibration removes gravity from body Z only and its stillness gate sees only |accel|, so a craft
+# lying on its side used to complete a calibration and seed accel_bias of about [0, -9.81, +9.81] m/s^2
+# into the ESKF; the tilt guard (ARM pre-check 4) then rejected every ARM. Sequence:
+#   1. take off, hover in ALTITUDE_HOLD, then CRASH (motor fault + downward wind, as crash_refly.scn)
+#      -> impact failsafe -> auto-DISARM; the craft rests on its side (truth roll 90 deg).
+#   2. it lies there disarmed for 9 s (longer than one 3.5 s calibration window): the level check must
+#      reject every window ("not level"), so no calibration completes on the side.
+#   3. the hand lifts, levels and places it back (IDLE_HELD -> IDLE_GROUND) -> calibration on the level craft.
+#   4. ARM must be accepted (no 'attitude estimate disagrees with gravity'), then DISARM from the ground.
+# Unlike crash_refly.scn the hand arrives only AFTER one full calibration window (row J = 9 s), i.e. this
+# scenario does NOT use the timing workaround of crash_refly (hand during the first window).
+#
+# 横倒しの機体への校正の水平チェック（sf_calibration、detailed_design §3 注10）の再確認試験。校正は重力を機体 Z からのみ
+# 除去し、静止判定は |accel| しか見ないため、横倒しのまま校正が完了して加速度バイアス約 [0, -9.81, +9.81] m/s^2 が
+# ESKF に種付けされ、傾き検査（ARM 前判定4）が以降の ARM を全て拒否していた。手順: 1. 離陸・ALT_HOLD ホバー後に墜落
+# （crash_refly と同じモータ故障＋下向き風）→ 衝撃 → 自動 DISARM、機体は横倒し（真値ロール 90 deg）。2. 横倒しのまま 9 s
+# （校正窓 3.5 s より長い）置く: 水平チェックが全窓を棄却し横倒しのまま校正が完了しない。3. 手が持上げ・正立・設置
+# （IDLE_HELD→IDLE_GROUND）→水平な機体で校正。4. ARM が受理され（「姿勢推定が重力と食い違う」で拒否されない）、地上から DISARM。
+# crash_refly と違い手は校正窓 1 回分より後（行 J = 9 s）に届く（crash_refly の「窓の最中に手が届く」時刻回避は使わない）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/calib_side_lying.scn --target vehicle --duration 39000000
+#
+#  <t>  ch     <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc     2048  2048   2048    2048  0     5000      50              # A: boot disarmed 5 s → IDLE_GROUND + boot calibration (level)
+   +    rc     2048  2048   2048    2048  1     1000      50              # B: ARM (rising edge)
+   +    rc     3171  2048   2048    2048  1     2500      50              # C: STABILIZE take-off climb 2.5 s
+   +    rc     2048  2048   2048    2048  1     3000      50        1     # D: ALT_HOLD hover 3 s
+   +    fault  0     0.30                                                 # E: motor 0 (M1 FR) → 30% — tips the craft
+   +    wind   0.0   0.0     2.0                                          # F: 2 N downward shove — impact
+   +    rc     2048  2048   2048    2048  1     2000      50        1     # G: armed slam 2 s → impact → auto-DISARM
+   +    wind   0.0   0.0     0.0                                          # H: wind off
+   +    fault  0     1.00                                                 # I: motor restored
+   +    rc     2048  2048   2048    2048  0     9000      50              # J: side-lying, disarmed 9 s (> one 3.5 s calibration window)
+   +    handle 0.40  0.0     0.0     1200  1200  1200                     # K: lift → right → carry → place (3.6 s)
+   +    rc     2048  2048   2048    2048  0     10000     50              # L: level, disarmed 10 s (handle 3.6 s + calibration 3.5 s + margin)
+   +    rc     2048  2048   2048    2048  1     1000      50              # M: ARM from the ground (must be accepted)
+   +    rc     2048  2048   2048    2048  0     200       50              # N: release ARM button
+   +    rc     2048  2048   2048    2048  1     200       50              # O: press again → DISARM (toggle)
+   +    rc     2048  2048   2048    2048  0     600       50              # P: settle disarmed
