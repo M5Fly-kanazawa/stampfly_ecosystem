@@ -15,7 +15,7 @@
 | 項目 | 結論 | 主な理由 |
 |---|---|---|
 | $C_T$・$C_Q$ だけの SILS プラントへの差し替え（駆動部分は Duty × 電圧のまま） | **採らない。$C_T$・$C_Q$ は駆動回路の平均モデルの一式として入れる** | 駆動部分を替えずに定数だけ替えても、宙返り・電流の照合で問題になる駆動部分の形が残る。当初の理由に挙げたモデル一致の確認（`sf sils sysid-gate`）の悪化（ロール $b$ +56.5 % → +67 / +76 %、$L_\text{total}$ +17 % → +30 / +41 %）は、6 章でこの確認がモータモデルを判別できないと分かったため、根拠にならない。再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験。`sf sils regression` の 44 シナリオ）では V1 で 1 件、V2 で 2 件が不合格になった |
-| 駆動回路の平均モデル（$R_\text{out}$、開発者らの論文） | **宙返りと電流の照合で支持。電池電圧への依存は論文の前提と食い違う** | 合わせ込みなしで、宙返りの角加速度の残差は 0.30（現行モデルは 1.0）、飛行中の電池電流は実測の 5〜6 % 以内（5 章・6 章）。ホバリング Duty の電池電圧への依存だけは予測より弱く出た |
+| 駆動回路の平均モデル（$R_\text{out}$、開発者らの論文） | **宙返りと電流の照合で支持。電池電圧への依存は論文の前提と食い違う** | 合わせ込みなしで、宙返りの角加速度の残差は 0.29（現行モデルは 0.98〜1.02）、飛行中の電池電流は実測の 5〜6 % 以内（5 章・6 章）。ホバリング Duty の電池電圧への依存だけは予測より弱く出た |
 | ファーム側だけの換算替え（VF） | **単独では採用不可（変更なし）** | SILS 上の挙動は変わらないことを確認したが、yaml を変えないと `sf params check --strict` が 4 行で不一致になる。パラメータ基準ファイルでファームの曲線とプラントの定数組を分ける方針の決定が先に要る |
 | 次の手 | 8 章の決定 | 物理の実測を SILS より上位に置く。$R_\text{out}$ モデルを公開する。モデル一致の確認を作り直す。電池電圧依存の実験は方法を検討する |
 
@@ -216,8 +216,8 @@ $$\bar I_m=\frac{V_\text{BAT}-K_e\,\omega}{R_\text{out}(D,\,C_C)},\qquad J\frac{
 
 | モデル | 合わせ込みなしの残差 | 最適な倍率 $s$ | 最適な追加の遅れ | そのときの残差 |
 |---|---|---|---|---|
-| 現行モデル | 1.00〜1.02 | 0.54〜0.56 | 13〜17 ms | 0.15〜0.21 |
-| $R_\text{out}$ モデル（$\eta$ = 1） | 0.30〜0.31 | 0.79〜0.80 | 3〜4 ms | 0.09〜0.10 |
+| 現行モデル | 0.98〜1.02 | 0.54〜0.56 | 13〜17 ms | 0.15〜0.21 |
+| $R_\text{out}$ モデル（$\eta$ = 1） | 0.29 | 0.79〜0.80 | 3〜4 ms | 0.09〜0.10 |
 
 - 残差は、予測と実測の差の二乗平均平方根を、実測の二乗平均平方根で割った値。2 本の宙返りで同じ結果になった。
 - $R_\text{out}$ モデルは、記録と通信の遅れ程度（3〜4 ms）の追加だけで合う。現行モデルは、効きを半分にして 13〜17 ms 遅らせないと合わない。宙返り用の補正（`torque_authority` 0.6、遅れ 6 ms、Duty の変化率制限）が埋めていたのは、この差と読める。
@@ -345,7 +345,7 @@ Should the propulsion constants measured on a single-motor bench on 2026-10-15 r
 | Item | Conclusion | Main reasons |
 |---|---|---|
 | Swapping only $C_T$ and $C_Q$ in the SILS plant (drive still Duty × voltage) | **Not taken. $C_T$ and $C_Q$ go in as part of the averaged drive-circuit model** | Changing the constants without the drive keeps the drive form that the flip and current cross-checks reject. The originally cited worsening of the model-match check (`sf sils sysid-gate`; roll $b$ +56.5 % to +67 / +76 %, $L_\text{total}$ +17 % to +30 / +41 %) is no evidence, because chapter 6 shows that check cannot tell motor models apart. The regression test suite (44 scenarios of `sf sils regression`, which automatically confirms that existing behaviour is not broken) failed in 1 scenario for V1 and 2 for V2 |
-| Averaged drive-circuit model ($R_\text{out}$, the developers' paper) | **Supported by the flip and current cross-checks; its battery-voltage dependence conflicts with the paper's premise** | Without any fitting, the flip angular-acceleration residual is 0.30 (1.0 for the current model) and the in-flight battery current is within 5 to 6 % of the measurement (chapters 5 and 6). Only the battery-voltage dependence of the hover Duty came out weaker than predicted |
+| Averaged drive-circuit model ($R_\text{out}$, the developers' paper) | **Supported by the flip and current cross-checks; its battery-voltage dependence conflicts with the paper's premise** | Without any fitting, the flip angular-acceleration residual is 0.29 (0.98 to 1.02 for the current model) and the in-flight battery current is within 5 to 6 % of the measurement (chapters 5 and 6). Only the battery-voltage dependence of the hover Duty came out weaker than predicted |
 | Firmware-only re-gauging (VF) | **Not adoptable alone (unchanged)** | SILS behaviour is preserved, but with the yaml unchanged `sf params check --strict` fails on 4 rows. A decision on how the parameter file separates the firmware curve from the plant constants must come first |
 | Next step | Decisions in chapter 8 | Physical measurement ranks above the SILS. The $R_\text{out}$ model is published. The model-match check is rebuilt. The method of the battery-voltage experiment is to be decided |
 
@@ -546,8 +546,8 @@ The recorded 400 Hz Duty and battery voltage were passed through each model to p
 
 | Model | residual without fitting | best scale $s$ | best extra delay | residual then |
 |---|---|---|---|---|
-| current model | 1.00 to 1.02 | 0.54 to 0.56 | 13 to 17 ms | 0.15 to 0.21 |
-| $R_\text{out}$ model ($\eta$ = 1) | 0.30 to 0.31 | 0.79 to 0.80 | 3 to 4 ms | 0.09 to 0.10 |
+| current model | 0.98 to 1.02 | 0.54 to 0.56 | 13 to 17 ms | 0.15 to 0.21 |
+| $R_\text{out}$ model ($\eta$ = 1) | 0.29 | 0.79 to 0.80 | 3 to 4 ms | 0.09 to 0.10 |
 
 - The residual is the RMS of (prediction − measurement) divided by the RMS of the measurement. Both flips give the same result.
 - The $R_\text{out}$ model matches with only the delay of recording and communication (3 to 4 ms) added. The current model needs its effectiveness halved and 13 to 17 ms of delay. The flip-specific compensation (`torque_authority` 0.6, 6 ms delay, Duty rate limit) can be read as having filled exactly this gap.
