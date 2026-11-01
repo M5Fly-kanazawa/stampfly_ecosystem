@@ -261,8 +261,8 @@ void loop_400Hz(float dt) {
     float gx = ws::gyro_x(), gy = ws::gyro_y();
     float ax = ws::accel_x(), ay = ws::accel_y(),
           az = ws::accel_z();
-    float accel_roll  = atan2f(ay, az);
-    float accel_pitch = atan2f(-ax, az);
+    float accel_roll  = atan2f(-ay, -az);
+    float accel_pitch = atan2f(ax, sqrtf(ay*ay + az*az));
     constexpr float alpha = 0.98f;
     cf_roll  = alpha*(cf_roll + gx*dt) + (1-alpha)*accel_roll;
     cf_pitch = alpha*(cf_pitch + gy*dt) + (1-alpha)*accel_pitch;
