@@ -20,17 +20,17 @@ Every term below is copied from the plant (file:line of simulator/sils/plant/):
 
   0. PWM quantisation (the LOGGED duty is the float command BEFORE it):
      the firmware writes duty_counts = (uint32)(duty * 255) (truncation, 8-bit
-     LEDC; firmware/vehicle/components/sf_hal_motor/motor_driver.cpp:163-164)
+     LEDC; firmware/vehicle/components/sf_hal_motor/motor_driver.cpp:162-163)
      and the SILS board turns that back into counts/255
      (simulator/sils/devices/virtual_board.cpp:501-510, esp_idf_host/driver/
-     ledc.h:190). The plant therefore sees floor(duty*255)/255 (a mean loss of
+     ledc.h). The plant therefore sees floor(duty*255)/255 (a mean loss of
      half a count, 0.2 % duty, and up to 0.4 % duty at a time).
      PWM 量子化 (ログの duty はこの前の float 指令): 8bit LEDC, 切り捨て。
   1. Duty path (plant.cpp:576-594): duty -> [optional transport delay, 4 kHz
      substeps] -> [optional slew limit, NOT modelled here: default 0 = off]
      -> clamp to [0, 1] (plant.cpp:606-608). Held constant within one 400 Hz
      control period (the plant steps 10 substeps of h = 0.25 ms per period,
-     models/stampfly.xml:44 timestep, plant.cpp:516-531).
+     models/stampfly.xml:29 timestep, plant.cpp:516-531).
      duty 経路: 輸送遅れ (任意) -> スルー制限 (本ファイルは未実装, 既定 0=OFF) ->
      [0,1] クランプ。400Hz 制御周期ごとに保持, 周期内に h=0.25ms の substep 10 回。
   2. Motor ODE (plant.cpp:384-399): I_m = (V - Ke*w)/R_out(D) (0 when D < 0.01),
@@ -38,7 +38,7 @@ Every term below is copied from the plant (file:line of simulator/sils/plant/):
      interpolated from the 101-entry table (plant.cpp:365-382). Integrated
      with classical RK4 per substep, w clamped >= 0 (plant.cpp:610-619).
      モータ ODE: 上式, R_out(D) は表の線形補間, 1 substep ごとに古典 RK4, w>=0 に制限。
-  3. Supply voltage (plant.cpp:564, 454-469): V is the plant's battery model
+  3. Supply voltage (plant.cpp:564, 457-468): V is the plant's battery model
      V = OCV(SoC) - I_total*R_int, held within a substep, updated after each
      substep from the Coulomb count. The log only carries a 1 Hz "voltage"
      (INA3221 reading), so the default here re-runs the same battery model
@@ -51,8 +51,8 @@ Every term below is copied from the plant (file:line of simulator/sils/plant/):
      ground effect = 0 (plant.hpp:301 ge_gain = 0) are assumed.
      推力。health=1, 地面効果 OFF (ge_gain=0) を仮定。
   5. Roll/pitch torque: MuJoCo applies each thrust along its rotor site +Z at
-     (+-0.023, +-0.023, +0.005) m (models/stampfly.xml:121-124, gear
-     "0 0 1 0 0 0" at :129-132), so tau = r x F gives the arm moments for
+     (+-0.023, +-0.023, +0.005) m (models/stampfly.xml:131-134, gear
+     "0 0 1 0 0 0" at :141-144), so tau = r x F gives the arm moments for
      free; torque_authority = 1 (plant.hpp:211, bypass at plant.cpp:701).
      ロール/ピッチ: MuJoCo がロータ site の +Z に推力を加えるので r x F がそのまま
      腕のモーメント。torque_authority=1 (素通し)。
@@ -62,12 +62,12 @@ Every term below is copied from the plant (file:line of simulator/sils/plant/):
      term IS included (it is the plant's rotor-inertia reaction torque).
      ヨー: モータ毎 (Cq*w^2 + J*dw/dt)。CCW(FR,RL)は -Z_FLU, CW(RR,FL)は +Z_FLU。
      J*dw/dt (ロータ慣性反作用) を含む。
-  7. Rigid body (models/stampfly.xml:101 inertial, diag 9.16e-6 / 13.3e-6 /
+  7. Rigid body (models/stampfly.xml:86 inertial, diag 9.16e-6 / 13.3e-6 /
      20.4e-6 kg m^2): MuJoCo integrates I*alpha + w x (I*w) = tau. The
      gyroscopic term w x (I*w) is included when the logged body rates are
      given (`gyro` argument) and omitted otherwise. Aerodynamic drag on the
      body and turbulence/wind torque are NOT modelled by the plant's torque
-     path in the default scenarios (turbulence_n = 0, plant.cpp:726).
+     path in the default scenarios (turbulence_n = 0, plant.cpp:727).
      剛体: I*alpha + w x (I*w) = tau。ジャイロ項は記録角速度を与えたときのみ含める。
      機体の空力抵抗モーメントはプラントに無い。乱流 (turbulence_n) は既定 0 で未実装。
 
@@ -100,8 +100,8 @@ from . import _generated_params as gp
 # SSOT 生成物に無い定数 (plant.hpp の Config 既定値から)
 # --------------------------------------------------------------------------
 CONTROL_PERIOD_S = 0.0025         # 400 Hz control tick (rows of the log)
-PWM_RESOLUTION_BITS = 8            # actuator.cpp:175 MOTOR_PWM_RESOLUTION_BIT / ledc.h:190
-PLANT_SUBSTEP_S = 0.00025          # models/stampfly.xml:44 timestep [s]
+PWM_RESOLUTION_BITS = 8            # actuator.cpp:72,175 MOTOR_PWM_RESOLUTION_BIT
+PLANT_SUBSTEP_S = 0.00025          # models/stampfly.xml:29 timestep [s]
 DUTY_DRIVE_MIN = 0.01              # plant.cpp:388 / ROUT_D[1]: below this = no drive
 BATT_CAPACITY_MAH = 300.0          # plant.hpp:320
 BATT_R_INT_OHM = 0.1               # plant.hpp:321
@@ -124,7 +124,7 @@ OCV_STEEP_GAIN = 2.0               # plant.cpp:443-444
 SILS_LOG_ALIGNMENT_DELAY_S = PLANT_SUBSTEP_S
 AIRBORNE_MIN_ALT_M = 0.05          # rows below this are excluded (ground contact is not modelled)
 
-# Rotor sites in body FLU [m] (models/stampfly.xml:121-124) and spin sign.
+# Rotor sites in body FLU [m] (models/stampfly.xml:131-134) and spin sign.
 # Order = log columns FR, RR, RL, FL. Reaction torque sign about +Z_FLU:
 # CCW props (FR, RL) -> -1, CW props (RR, FL) -> +1 (plant.cpp:645-647).
 # ロータ位置 (FLU) と反トルク符号。順序はログ列 FR, RR, RL, FL。
@@ -158,7 +158,7 @@ DEFAULT_CONSTANTS = PlantConstants()
 
 def quantise_duty(duty, bits: Optional[int] = PWM_RESOLUTION_BITS):
     """Duty as the plant receives it: floor(duty*(2^bits-1))/(2^bits-1) in float32
-    (motor_driver.cpp:163-164, virtual_board.cpp:506-510). bits=None: pass through.
+    (motor_driver.cpp:162-163, virtual_board.cpp:506-510). bits=None: pass through.
     プラントが受け取る duty。切り捨て量子化 (float32)。bits=None なら素通し。"""
     duty = np.clip(np.asarray(duty, dtype=float), 0.0, 1.0)
     if bits is None:
