@@ -30,18 +30,29 @@
 #
 # 2026-10-31 R_out plant — why the hand must arrive early / 手が早く届く必要がある理由:
 # the R_out crash leaves the craft lying on its side (truth roll 90 deg). About 0.2 s after impact the firmware
-# sees 'placed on ground' and starts the 3.5 s boot calibration; if that completes on its side it measures
-# level_offset 1.5708 rad and keeps it in the estimator, so after the hand has levelled the craft the ARM guard
+# sees 'placed on ground' and starts the 3.5 s boot calibration; if that completes on its side it seeds gravity
+# as accel bias (about [0, -9.81, +9.81] m/s^2; the log shows level_offset 1.5708 rad, which itself is unused), so
+# after the hand has levelled the craft the ARM guard
 # ('attitude estimate disagrees with gravity', correct behaviour, unchanged) rejects every re-ARM. The handling
 # trajectory itself already levels any crash attitude (SLERP to level), so the fix is timing only: the hand now
 # starts at 14.0 s (was 16.0 s), inside the calibration window, which restarts the calibration after placement on
 # a level craft. The scenario timeline from the re-calibration dwell on is unchanged; the .expect windows of the
 # crash-rest and lift checks moved by the same -2.0 s (no threshold changed).
-# R_out の墜落では機体が側臥（真値ロール 90 deg）で止まる。衝突の約 0.2 s 後にファームは「設置」と判定して 3.5 s の起動校正を
-# 始め、これが側臥のまま完了すると level_offset 1.5708 rad を推定器に保持し、手が水平に直した後も ARM の判定（「姿勢推定が
+# R_out の墜落では機体が横倒し（真値ロール 90 deg）で止まる。衝突の約 0.2 s 後にファームは「設置」と判定して 3.5 s の起動校正を
+# 始め、これが横倒しのまま完了すると重力の分を加速度バイアス（約 [0, -9.81, +9.81] m/s^2）として推定器に入れ（ログには level_offset 1.5708 rad と出るが、この値自体は未使用）、手が水平に直した後も ARM の判定（「姿勢推定が
 # 重力と食い違う」、正しい挙動で不変）が再 ARM を全て拒否する。ハンドリング軌道は任意の墜落姿勢を水平へ戻す（SLERP）ので、
 # 直すのは時刻だけ: 手は 14.0 s（旧 16.0 s）に始まり校正の最中に届くため、校正は水平な設置後にやり直される。再校正以降の
 # 時刻は不変。.expect の墜落静止・持上げ判定の窓は同じ −2.0 s だけ移した（閾値は不変）。
+#
+# 2026-11-01 level check — the cause above is now fixed in the firmware: the still-calibration rejects a window
+# whose mean accel is more than 5 deg from body -Z ('Calibration window rejected: not level'), so a calibration can
+# no longer complete on the side-lying craft whatever the hand's timing (see calib_side_lying.scn, which keeps the
+# craft lying longer than one window). Row J / L keep the 2026-10-31 timing; with the original row J = 2500 ms and
+# row L = 8000 ms (and the original .expect windows) this scenario also passes (21/21 checks).
+# 2026-11-01 水平チェック — 上記の原因はファーム側で解消した: 起動校正は窓平均の加速度が機体 −Z から 5 deg 超の窓を棄却する
+# （'Calibration window rejected: not level'）ので、手の届く時刻によらず横倒しの機体で校正が完了することはない
+# （横倒しを校正窓 1 回分より長く続ける calib_side_lying.scn 参照）。行 J・L は 2026-10-31 の時刻のまま。元の行 J = 2500 ms・
+# 行 L = 8000 ms（と元の .expect の窓）でも本シナリオは合格する（21/21 チェック）。
 #
 #  <t>  ch     <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc     2048  2048   2048    2048  0     5000      50              # A: boot disarmed 5 s → IDLE_GROUND + boot calibration
@@ -57,7 +68,7 @@
 #  --- 外乱を解除し地上で静止（disarmed）、その後ハンドリング ---
    +    wind   0.0   0.0     0.0                                          # H: wind off
    +    fault  0     1.00                                                 # I: motor restored (healthy for the re-fly)
-   +    rc     2048  2048   2048    2048  0     500       50              # J: disarmed settle 0.5 s (clean falling edge). 2026-10-31 R_out plant: 2500->500 ms, hand arrives while the 3.5 s boot calibration of the side-lying craft is still running (see below) / 2500->500 ms、側臥した機体の起動校正（3.5 s）が終わる前に手が届くようにする
+   +    rc     2048  2048   2048    2048  0     500       50              # J: disarmed settle 0.5 s (clean falling edge). 2026-10-31 R_out plant: 2500->500 ms, hand arrives while the 3.5 s boot calibration of the side-lying craft is still running (see below) / 2500->500 ms、横倒しになった機体の起動校正（3.5 s）が終わる前に手が届くようにする
    +    handle 0.40  0.0     0.0     1200  1200  1200                     # K: lift → right → carry to origin → place (3.6 s)
    +    rc     2048  2048   2048    2048  0     10000      50              # L: disarmed 10 s — handle 3.6 s + re-calibration (~3.5 s) + margin | 2026-10-31 R_out plant: 8000->10000 ms (absorbs J's 2.0 s so every later time is unchanged) / 8000->10000 ms（J の 2.0 s を吸収し以降の時刻は不変）
 #  --- RE-FLY: re-ARM, re-takeoff, hover recovery ---

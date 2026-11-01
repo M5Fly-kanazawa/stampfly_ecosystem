@@ -1,0 +1,15 @@
+# calib_side_lying.expect — level check of the still-calibration (detailed_design §3 note 10).
+# A craft lying on its side after a crash must not complete a calibration; after the hand places it
+# level, calibration completes and ARM is accepted. FAILS on a build without the level check
+# (it seeds accel_bias of about [0, -9.81, +9.81], the ESKF tilt guard rejects every ARM).
+# 墜落後に横倒しになった機体は校正を完了してはならない。手が水平に置いた後は校正が完了し ARM が受理される。
+# 水平チェックの無いビルドでは失敗する（accel_bias 約 [0, -9.81, +9.81] を種付けし、傾き検査が全 ARM を拒否）。
+exit 0
+log_contains any "Impact detected"                         # the crash happened
+log_contains any "not level"                               # the level check rejected the side-lying window
+log_absent   any "Boot calibration applied"                # no calibration result was seeded (clean IMU: only a bad one would be)
+log_contains any "Drone held in hand"                      # the hand lifted it (IDLE_HELD)
+log_absent   any "ARM rejected"                            # no ARM rejection (tilt guard) after placement
+log_contains any "DISARM accepted (ARMED_GROUND"           # the post-crash ARM from the ground was accepted, then DISARM
+order "Impact detected" "not level"                        # rejection came after the crash
+order "Drone held in hand" "DISARM accepted (ARMED_GROUND"  # the ARM from the ground came only after the hand handled it

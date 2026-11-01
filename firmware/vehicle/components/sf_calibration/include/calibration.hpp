@@ -74,6 +74,18 @@ struct StillnessConfig {
     float accel_norm_max  = 10.3f;  // [m/s²] max EMA-filtered |accel| / EMA後の|accel|上限
     float accel_var_max   = 0.05f;  // [(m/s²)²] max accel variance over the window / 窓内分散上限
     float ema_alpha       = 0.05f;  // EMA factor (~3 Hz cutoff at 400 Hz) / EMA係数
+    // Level check on the completed window: the calibration removes gravity from body Z
+    // only, so a tilted craft (e.g. lying on its side after a crash) would fold a
+    // gravity component into the accel bias. The window is rejected when the mean
+    // accel is further than this from body -Z. Must stay well below the tilt guard
+    // (safety.tilt_check.max_deg = 10 deg): calibrating at tilt θ and later placing the
+    // craft level leaves an attitude error of about θ.
+    // @design detailed_design.md §3 note 10 (recalibration needs a level craft) [OK]
+    // 完了した窓の水平チェック: 校正は重力を機体 Z からのみ除去するので、傾いた機体
+    // （墜落後の横倒し等）では重力成分が加速度バイアスに混入する。窓平均の加速度が機体 −Z
+    // からこの角度より離れていれば窓を棄却する。傾き検査（safety.tilt_check.max_deg = 10 度）
+    // より十分小さく保つこと: 傾き θ で校正して後で水平に置くと姿勢誤差が約 θ 残る。
+    float level_max_deg   = 5.0f;   // [deg] max tilt of the mean accel from body -Z / 窓平均加速度の機体 −Z からの傾き上限
 };
 
 /// Calibration manager
@@ -130,6 +142,18 @@ private:
     /// 部分蓄積を破棄して（動き検出）やり直す
     void restartAccumulation();
 
+    /// Clear the accumulated window without logging (callers log their own reason)
+    /// 蓄積した窓をログなしで消去する（理由のログは呼び出し側が出す）
+    void clearWindow();
+
+    /// Final window check (variance, then level); on failure discards the window
+    /// 窓の最終判定（分散、次に水平）。失敗時は窓を破棄する
+    bool isWindowAcceptable();
+
+    /// Angle [deg] between the window's mean accel and body -Z (0 at level rest)
+    /// 窓平均加速度と機体 −Z の成す角 [deg]（水平静止で 0）
+    float meanAccelTiltDeg() const;
+
     /// Total variance of an accumulated 3-axis window (Σ per-axis variance)
     /// 蓄積した3軸窓の分散合計（軸ごとの分散の和）
     static float windowVariance(const double sum[3], const double sq_sum[3],
@@ -150,7 +174,7 @@ private:
     bool     ema_primed_     = false; // First sample primes the EMAs / 初サンプルでEMA初期化
     float    gyro_mag_ema_   = 0;     // EMA of |gyro| [rad/s]  / |gyro| のEMA
     float    accel_norm_ema_ = 0;     // EMA of |accel| [m/s²]  / |accel| のEMA
-    uint32_t restart_count_  = 0;     // Motion restarts (diagnostics) / 動きによるやり直し回数
+    uint32_t restart_count_  = 0;     // Window restarts: motion or not level (diagnostics) / 動き・水平でないことによるやり直し回数
 };
 
 }  // namespace sf
