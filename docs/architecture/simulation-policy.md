@@ -185,6 +185,7 @@ Code Identity のおかげで、実機同定に使ったのと同一の同定パ
 | 19 | 電池の開回路電圧（OCV）と内部抵抗 $R_{int}$ の長時間放電計測による較正 | #7 の具体化。SILS の電池モデルは仮値（OCV は SoC に対し 3.3〜4.2 V の線形、$R_{int}$=0.1 Ω）。満充電開始のホバー端子電圧は SILS 3.88 V、実機 flip_test2 のホバー 3.90 V と合うが、較正した結果ではない。計測手順は stampfly-motor-autotest の `docs/procedure_long_discharge.md`。結果で OCV(SoC) と $R_{int}$ を決め、η の電圧依存（現状は見えない）も再確認する | 計測待ち |
 | 20 | 追加の約 4 ms のアクチュエータ遅れ | 飛行データは追加の約 4 ms を示す（宙返りの順モデルで δ 3〜4 ms、ホバーで δ 4〜8 ms、飛んだとおりの宙返りの再現は 4 ms が最良）が未採用（`motor_delay_ms` 既定 0）。Duty ステップのベンチ計測（`docs/procedure_long_discharge.md` の計測 D）で決める。採用時は #15 の余裕試験を再実施する | 計測待ち |
 | 21 | モデル一致の判定（`sf sils sysid-gate`）の作り直し | 旧方式は 2026-06 の同定値（b, T, L）と SILS の同定の比較だった。R_out 駆動では、ログに残した 400 Hz の duty を（電圧とともに）プラントに通した順方向の角加速度を実機ジャイロと直接比べる「順モデル照合」が自然（2026-10-02 の宙返りフィットで使った手法） | **実装済み（2026-11-01）** — 自己無矛盾性＋実機宙返り2本のロール4基準（§5）。実機ログは `analysis/datasets/flightlog/` に公開、CI で実行。ヨー軸の実機照合・基準ログの追加は未着手 |
+| 22 | 加速度計の鉛直成分の振動依存の確認 | 会場ログ（2026-06-27 164611）でホバー中の鉛直比力の平均が 0.88 $g$（夜間ログは 1.00 $g$）、加速度計の鉛直成分が ToF の高度から求めた加速度と相関しない（下の「2026-11-01 ホバー中の高度の上下動」）。機体を固定してモータを回し、duty ごとに加速度計 z の平均と振動を測る（ベンチ）。結果次第で N1 振動モデル（#8）に平均のずれを入れ、加速度ベースの外乱オブザーバ（`altitude.dob.fc`）の入力を見直す。2026-11-01 の解析スクリプトはリポジトリ未収録 | 未着手 |
 
 ### 2026-10-31 R_out プラントに伴うシナリオ入力・閾値の変更
 
@@ -204,6 +205,26 @@ Code Identity のおかげで、実機同定に使ったのと同一の同定パ
 | `pos_flight.expect` の xfail 印 | 削除 | ヨートルク権限飽和（デューティ天井固定）が R_out プラントでは出なくなった（ホバー duty が低くヨーに余裕がある）。回帰試験 2 回で XPASS。`pos_yaw`・`yaw_hold` の印は残す | 実機の対応値なし |
 
 **変更しなかったもの（未確認を含む）:** `commloss_land_level`・`pos_yaw`・`yaw_hold` の xfail 印（KNOWN-FAIL のまま。`commloss_land_level` は着陸後の `alt_max` 0.156 m > 0.1 m で不合格）。
+
+### 2026-11-01 ホバー中の高度の上下動: SILS が再現するもの・しないもの
+
+調べた範囲: R_out プラントの SILS（`alt_auto_takeoff`・`pos_auto_takeoff`・`alt_flight`・`pos_flight` と、60 s ホバーの臨時シナリオ）と、実機ログ 5 本（2026-06-27 の 020137 と 164611、2026-07-17 の 231940、2026-07-18 の 022929、2026-09-08 の 121243）。
+
+| 項目 | SILS | 実機 | 読み |
+|---|---|---|---|
+| 離陸後の行き過ぎ（目標 0.5 m） | 最高 0.81 m（満充電 4.19 V で離陸）、0.66 m（電圧一定 3.7 V）。約 8 s で収まる | 約 0.8 m（2026-06-27。離陸時の電圧は未確認） | `alt_band`（窓 12〜16 s）の 0.2668 m は、この減衰の途中を切り取った値。行き過ぎは離陸時の電圧に依存する |
+| ホバー中の持続的な上下動（4 s ごとの最大−最小） | 2〜8 cm（0.02〜0.3 Hz、鋭い山なし）。電池モデルを切ると（`SILS_EMU_BATTERY=off`）2〜6 mm | 標準偏差 6.6〜17 cm、会場で RMS 23 cm | SILS に残る分は電池電圧の低下（4.19→3.8 V、ホバー duty 0.64→0.69）による。決まった周波数の自励振動はない |
+
+実機の上下動の残り（発生源は未特定）:
+
+- 2026-06〜07 の「環境外乱」$d_{ext}$ は、ファームの推力指令を実際の推力とみなし、加速度計の鉛直比力との差として求めた値で、発生源は測っていない。
+- R_out の順モデル（記録した duty と電圧から推力を予測）で求め直した結果:
+  - 平均とゆっくりした変化は推力モデルの誤差だった。夜間ログ（020137）で、予測推力は電圧 3.86→3.50 V の間 361〜363 mN でほぼ一定（$mg$ = 362.9 mN）、推力指令は 388→407 mN。
+  - 0.02〜1 Hz の帯域成分は、加速度計を基準にすると R_out でもほとんど減らない（5 本中 4 本で比 0.90〜1.02）。夜間ログの低電圧区間（3.6 V 以下）だけは 0.07〜0.23 Hz で 0.56 倍。
+  - ところが、加速度計の鉛直成分は ToF の高度から求めた加速度（0.1〜1 Hz）と相関しない（−0.44〜+0.48）。ToF の加速度と R_out の予測推力の相関は 0.84〜0.91。ToF を基準にした残差は、0.1〜0.3 Hz で推力指令のときの 0.27〜0.49 倍（1〜3 mN）に下がる。
+  - 会場ログ（164611）では、ホバー中の鉛直比力の平均が 0.88 $g$（夜間ログは 1.00 $g$）。高度を保っている以上、真の平均は $g$ なので、加速度計の読みが低い。記録値に飽和の積み上がりは無い（$|a_z|$ の最大 18.7 m/s²）。振動（30 Hz 以上の成分の RMS: 会場 2.97 m/s²、夜間 1.95 m/s²）との関係が疑われるが、原因は未確認（バックログ #22）。
+- 帰結: 加速度計を基準にした外乱の再構成と、それを入力にする加速度ベースの外乱オブザーバ（`altitude.dob.fc`）は、加速度計側の成分を含んでいる可能性がある。SILS は IMU の振動による平均のずれを模擬していないので、この成分は SILS に出ない。
+- 推力指令が予測推力より 7〜11 % 大きいこと（夜間ログ）は、ファームの推力→duty の換算が暫定の $C_T$（1.00e-8）に基づくことと、ホバー推力の学習値 `hover.thrust_corr`（既定 1.12）が補っていることと整合する（因果は未確認）。
 
 ## 9. 関連文書マップ
 
@@ -417,6 +438,7 @@ Policy: a realistic division of labor is to run training with Genesis (or MJX) a
 | 19 | Calibrate the battery open-circuit voltage (OCV) and internal resistance $R_{int}$ from the long-discharge measurement | Makes #7 concrete. The SILS battery model uses placeholder values (OCV linear in SoC from 3.3 to 4.2 V, $R_{int}$ = 0.1 ohm). The hover terminal voltage from a full-charge start is 3.88 V in the SILS against 3.90 V in the real flip_test2 hover, which agree but are not a calibrated result. The procedure is `docs/procedure_long_discharge.md` of stampfly-motor-autotest. Use the result to set OCV(SoC) and $R_{int}$, and re-check the voltage dependence of eta (none visible now) | Awaiting measurement |
 | 20 | The extra ~4 ms actuator delay | Flight data indicate an extra ~4 ms (flip forward model delta 3-4 ms, hover delta 4-8 ms, as-flown flip reproduction best at 4 ms) but it is not adopted (`motor_delay_ms` default 0). To be settled by the duty-step bench measurement (measurement D of `docs/procedure_long_discharge.md`). When adopted, re-run the #15 margin test | Awaiting measurement |
 | 21 | Rebuild the model-match check (`sf sils sysid-gate`) | The old method compared the 2026-06 identified values (b, T, L) with the SILS identification. With the R_out drive the natural check is a forward-model comparison: pass the logged 400 Hz duty (with the voltage) through the plant and compare the forward angular acceleration with the real gyro directly (the method used in the 2026-10-02 flip fit) | **Implemented (2026-11-01)** — self-consistency plus four roll criteria on two real flip flights (§5). The real logs are published in `analysis/datasets/flightlog/` and the check runs in CI. Real-vehicle yaw check and more reference logs: not started |
+| 22 | Check the vibration dependence of the accelerometer's vertical axis | In the event-venue log (2026-06-27 164611) the mean vertical specific force in hover is 0.88 $g$ (night log: 1.00 $g$), and the accelerometer's vertical component does not correlate with the acceleration derived from the ToF altitude (subsection "Hover altitude oscillation, 2026-11-01" below). Restrain the vehicle, spin the motors and measure the mean and vibration of accelerometer z per duty (bench). Depending on the result, add a mean offset to the N1 vibration model (#8) and revisit the input of the accel-based disturbance observer (`altitude.dob.fc`). The 2026-11-01 analysis scripts are not in the repository | Not started |
 
 ### Scenario input/threshold changes on 2026-10-31 for the R_out plant
 
@@ -436,6 +458,26 @@ Policy: physical measurement ranks above the SILS. A scenario input or threshold
 | xfail marker of `pos_flight.expect` | Removed | The yaw torque-authority saturation (duty ceiling lock) no longer appears on the R_out plant (lower hover duty leaves yaw headroom). XPASS in two regression runs. The markers of `pos_yaw` and `yaw_hold` stay | No real counterpart |
 
 **Not changed (including unverified items):** the xfail markers of `commloss_land_level`, `pos_yaw` and `yaw_hold` (still KNOWN-FAIL; `commloss_land_level` fails on `alt_max` 0.156 m > 0.1 m after touchdown).
+
+### Hover altitude oscillation, 2026-11-01: what SILS reproduces and what it does not
+
+Scope: the R_out-plant SILS (`alt_auto_takeoff`, `pos_auto_takeoff`, `alt_flight`, `pos_flight` and an ad hoc 60 s hover scenario) and five real logs (2026-06-27 020137 and 164611, 2026-07-17 231940, 2026-07-18 022929, 2026-09-08 121243).
+
+| Item | SILS | Real vehicle | Reading |
+|---|---|---|---|
+| Overshoot after takeoff (setpoint 0.5 m) | Peak 0.81 m (takeoff on a full 4.19 V battery), 0.66 m (constant 3.7 V); settles in about 8 s | About 0.8 m (2026-06-27; voltage at takeoff not checked) | The `alt_band` of 0.2668 m (window 12-16 s) is a slice of this decay. The overshoot depends on the voltage at takeoff |
+| Sustained hover oscillation (max − min per 4 s) | 2-8 cm (0.02-0.3 Hz, no sharp peak); 2-6 mm with the battery model off (`SILS_EMU_BATTERY=off`) | Std 6.6-17 cm, RMS 23 cm at the event venue | What remains in SILS comes from the battery-voltage drop (4.19 → 3.8 V, hover duty 0.64 → 0.69). No fixed-frequency self-oscillation |
+
+The rest of the real oscillation (source not identified):
+
+- The "environmental disturbance" $d_{ext}$ of June-July 2026 took the firmware's thrust command as the actual thrust and was the difference to the accelerometer's vertical specific force; its source was never measured.
+- Recomputed with the R_out forward model (thrust predicted from the logged duty and voltage):
+  - The mean and the slow drift were thrust-model error. In the night log (020137) the predicted thrust stays at 361-363 mN while the voltage falls from 3.86 to 3.50 V ($mg$ = 362.9 mN); the thrust command goes from 388 to 407 mN.
+  - The 0.02-1 Hz band content, with the accelerometer as the reference, hardly shrinks with R_out (ratio 0.90-1.02 in four of five logs); only the low-voltage part of the night log (≤ 3.6 V) gives 0.56× at 0.07-0.23 Hz.
+  - However, the accelerometer's vertical component does not correlate with the acceleration derived from the ToF altitude (0.1-1 Hz; −0.44 to +0.48), while the ToF acceleration and the R_out predicted thrust correlate at 0.84-0.91. With ToF as the reference the residual at 0.1-0.3 Hz drops to 0.27-0.49× of the thrust-command case (1-3 mN).
+  - In the venue log (164611) the mean vertical specific force in hover is 0.88 $g$ (night log 1.00 $g$). Since the altitude is held, the true mean is $g$, so the accelerometer reads low. The logged values show no pile-up at a limit (max $|a_z|$ 18.7 m/s²). A link with vibration (RMS above 30 Hz: venue 2.97 m/s², night 1.95 m/s²) is suspected; the cause is not confirmed (backlog #22).
+- Consequence: disturbance reconstructions referenced to the accelerometer, and the accel-based disturbance observer that uses it as input (`altitude.dob.fc`), may contain an accelerometer-side component. SILS does not model a vibration-induced mean offset of the IMU, so this component does not appear in SILS.
+- The thrust command being 7-11 % above the predicted thrust (night log) is consistent with the firmware's thrust-to-duty conversion using the provisional $C_T$ (1.00e-8) and with the learned hover thrust `hover.thrust_corr` (default 1.12) compensating for it (causality not confirmed).
 
 ## 9. Related Document Map
 
