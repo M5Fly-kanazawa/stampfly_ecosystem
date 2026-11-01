@@ -1,31 +1,27 @@
-# sysid_gate.scn — model-match gate excitation: roll/pitch/yaw rate-loop chirps
+# sysid_gate.scn — model-match check excitation: roll/pitch/yaw rate-loop chirps
 #                  モデル一致の合否判定の励振: roll/pitch/yaw のレートループチャープ
 #
 # Chain: API takeoff (POS_HOLD hover) → three sequential rate-loop identification
 # chirps (roll, then pitch, then yaw — same "sysid <axis> chirp 25 4" verb as
 # sysid_rate.scn, one axis at a time so each axis's excitation is isolated) →
-# land. Driven by `sf sils sysid-gate` with SILS_EMU_RATE_STREAM set, so the run
-# also records a 400Hz rate_ref+gyro CSV (+ a gains.json sidecar) that
-# tools/log_analyzer/rate_sysid.py — the SAME code used on real-hardware logs —
-# fits into (b, T, L) per axis for comparison against
-# analysis/reports/rate_sysid_reference/reference.json
-# (docs/architecture/simulation-policy.md §4 — model-match gate).
+# land. Driven by `sf sils sysid-gate`, which checks that the Python forward model of
+# the plant (tools/sysid/forward_model.py), fed the LOGGED duty, reproduces this run's
+# truth.csv angular acceleration, then judges the same model on the real flip/hover logs
+# in analysis/datasets/flightlog/ (docs/architecture/simulation-policy.md §5).
 #
 # 連鎖: API 離陸（POS_HOLD ホバー）→ ロール・ピッチ・ヨーの順で1軸ずつレートループ同定
 # チャープ（sysid_rate.scn と同じ "sysid <軸> chirp 25 4" verb。1軸ずつなので励振が
-# 軸間で混ざらない）→ 着陸。`sf sils sysid-gate` が SILS_EMU_RATE_STREAM を設定して駆動し、
-# 実行と同時に400Hz rate_ref+gyro CSV（+ gains.json sidecar）を記録する。これを
-# tools/log_analyzer/rate_sysid.py（実機ログに使ったのと同じコード）で軸別に (b,T,L)
-# フィットし、analysis/reports/rate_sysid_reference/reference.json の実機同定値と比較
-# する（simulation-policy.md §4 モデル一致の合否判定）。
+# 軸間で混ざらない）→ 着陸。`sf sils sysid-gate` が駆動し、ログされた duty を入れた
+# プラントの Python 順モデル（tools/sysid/forward_model.py）が、この実行の truth.csv の
+# 角加速度を再現することを確認したうえで、同じモデルを analysis/datasets/flightlog/ の
+# 実機の宙返り・ホバーログで判定する（simulation-policy.md §5）。
 #
 # This .expect only checks NORMAL COMPLETION (arm/takeoff/disarm log lines +
-# loose G3 attitude/actuator bounds) — the (b,T,L) fit judgment itself is made by
-# `sf sils sysid-gate`, not by this file (fit tolerances live in
-# analysis/reports/rate_sysid_reference/ + the gate command, not in a .expect).
+# loose G3 attitude/actuator bounds) — the model-match verdict itself is made by
+# `sf sils sysid-gate` (thresholds in analysis/datasets/flightlog/forward_check.yaml).
 # この .expect は「正常完走」（arm/takeoff/disarm ログ＋緩い G3 姿勢・アクチュエータ境界）
-# のみを見る — (b,T,L) フィットの合否判定は `sf sils sysid-gate` が行う（許容差は
-# reference.json と判定コマンド側にあり、この .expect には入れない）。
+# のみを見る — モデル一致の合否判定は `sf sils sysid-gate` が行う（閾値は
+# analysis/datasets/flightlog/forward_check.yaml）。
 #
 # Run: sf sils sysid-gate                              (recommended — see lib/sfcli/commands/sils.py)
 #  or: sf sils scenario simulator/sils/scenarios/sysid_gate.scn --target vehicle --duration 44000000

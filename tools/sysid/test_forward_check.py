@@ -15,7 +15,7 @@ published real flip logs through
 モデル (2026-10 以前のプラント。下に自己完結で記述。ロールの 4 基準すべて・両ログで不合格に
 なること) に通す。
 
-Runtime / 実行時間: about 25 s (R_out 2 x ~3.5 s, old model 2 x ~4 s, plus spectra).
+Runtime / 実行時間: about 10 s measured (the module-scoped fixtures run R_out and the old model once, 2 logs each).
 """
 
 from __future__ import annotations
