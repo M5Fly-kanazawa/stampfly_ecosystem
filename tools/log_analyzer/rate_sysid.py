@@ -374,13 +374,13 @@ def _fit_core(r, y, duty_u, duty_quality, duty_reason, axis, gains, f_lo, f_hi,
               plot_path, input_mode):
     """Shared tail of the pipeline, from "recover u" onward: input-mode
     resolution -> ETFE -> parametric (b, T, L) -> optional plot. fit_from_df()
-    (both the SILS `sysid-gate` and real-vehicle flight-log-bundle callers --
+    (both SILS-recorded and real-vehicle flight-log-bundle callers --
     both now go through the SAME StampFly flight-log v1 bundle, see the
     module docstring) builds (r, y, duty_u, duty_quality, duty_reason) its own
     way, then calls this ONE function.
     パイプラインの後半（「u を復元」以降）の共有部分: 入力モード解決 -> ETFE ->
-    パラメトリックフィット (b,T,L) -> 任意のプロット。fit_from_df()（SILS の
-    `sysid-gate` と実機フライトログ一式の両方の呼び出し元 -- 今はどちらも同じ
+    パラメトリックフィット (b,T,L) -> 任意のプロット。fit_from_df()（SILS 記録と
+    実機フライトログ一式の両方の呼び出し元 -- 今はどちらも同じ
     StampFly フライトログ v1 一式を経由する。モジュール docstring 参照）が
     (r, y, duty_u, duty_quality, duty_reason) を組み立てた後、この1つの関数を
     呼ぶ。
@@ -448,12 +448,12 @@ def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
     """Full pipeline on an aligned flight-log-bundle DataFrame: df -> recover
     u -> ETFE -> parametric (b, T, L). This is the entry point `sf sysid
     rate-fit` uses for a real vehicle flight-log bundle, AND the entry point
-    the SILS `sysid-gate` uses on a SILS-recorded bundle (both go through the
+    for a SILS-recorded bundle (the old SILS `sysid-gate` used it until 2026-11-01) (both go through the
     SAME StampFly flight-log v1 bundle format now -- see
     docs/plans/flight-log-format-plan.md section 3.3).
     整列済みフライトログ一式 DataFrame での全手順: df -> u 復元 -> ETFE ->
     (b,T,L)。実機フライトログ一式に対して `sf sysid rate-fit` が使う入口で
-    あり、かつ SILS `sysid-gate` が SILS 記録の一式に対して使う入口でもある
+    あり、かつ SILS 記録の一式に対して使う入口でもある（旧 SILS `sysid-gate` が 2026-11-01 まで使用）
     （どちらも今は同じ StampFly フライトログ v1 一式形式を経由する --
     flight-log-format-plan.md 3.3節参照）。
 
@@ -730,12 +730,12 @@ def selftest(verbose=True):
     # --- fit_from_df() regression: package the SAME synthetic flight as a
     # minimal bundle DataFrame (reusing r/y/duty_fr../vbat_arr already built
     # above) and confirm the DataFrame front-end (used by `sf sysid rate-fit`
-    # on a real vehicle flight-log bundle, AND by the SILS `sysid-gate` on a
+    # on a real vehicle flight-log bundle, AND on a
     # SILS-recorded bundle) reaches the same fit via input_mode='duty'.
     # fit_from_df() の再確認試験: 同じ合成フライト（上で作った r/y/duty_fr../
     # vbat_arr を再利用）を最小限の一式 DataFrame に詰め、DataFrame 側の入口
     # （実機フライトログ一式に `sf sysid rate-fit` が使い、かつ SILS
-    # `sysid-gate` が SILS 記録の一式に使う）が input_mode='duty' で同じ
+    # 記録の一式にも使う）が input_mode='duty' で同じ
     # フィットに到達することを確認する。
     import pandas as _pd
     df_selftest = _pd.DataFrame({

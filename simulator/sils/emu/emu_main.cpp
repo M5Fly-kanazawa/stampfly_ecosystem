@@ -542,10 +542,10 @@ int main(int argc, char** argv)
 
     // Flight-log bundle: snapshot the LIVE rate-loop gains (SSOT params, after
     // every override above) into the bundle's gains.json sidecar — this is the
-    // gain set `sf sils sysid-gate` must replay to reconstruct the rate loop's
-    // torque output. No-op unless SILS_EMU_FLIGHTLOG was set.
+    // gain set a rate-loop replay (tools/log_analyzer/rate_sysid.py) needs to
+    // reconstruct the rate loop's torque output. No-op unless SILS_EMU_FLIGHTLOG was set.
     // フライトログ一式: 上の全上書き適用後の実ゲイン（SSOT params）を一式の
-    // gains.json sidecar へ書く — sf sils sysid-gate の再生に必須。
+    // gains.json sidecar へ書く — レートループの再生（tools/log_analyzer/rate_sysid.py）に必要。
     // SILS_EMU_FLIGHTLOG 未設定なら no-op。
     sils_emu_flightlog_write_gains();
 
