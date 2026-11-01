@@ -1,0 +1,149 @@
+\documentclass[aspectratio=169, 14pt]{beamer}
+\usepackage{stampfly_slides}
+\input{preamble}
+% ==============================================================================
+% 2026-11-01 revision of sci_tutorial.tex (the deck used on 2026-09-10, kept unchanged).
+% Use this file for future runs of the tutorial. Build with `make sci-rev`.
+% Corrections: (1) the "hold 5 s for system reset" claim (not implemented),
+% (2) the unpaired LED colour and the pairing steps (the controller now selects
+% the vehicle by the last 4 digits of its MAC), (3) Kp_yaw = 2.0 vs the zeta table,
+% (4) the P-control steady-state error explanation, (5) the atan2f sign,
+% (6) the ALT/POS auto-takeoff safety rule, (7) the model-match check slide
+% (sf sils sysid-gate is now the forward-model check).
+% 2026-11-01 改訂版。2026-09-10 当日に使った sci_tutorial.tex は変更せず残してある。
+% 次回以降の講習ではこのファイルを使う。ビルドは `make sci-rev`。
+% 訂正点: (1) 「5 秒長押しでシステムリセット」の記述（未実装），
+% (2) 未ペア時の LED 色とペアリング手順（コントローラが MAC 下 4 桁で機体を選ぶ），
+% (3) Kp_yaw = 2.0 と ζ の表，(4) P 制御の定常偏差の説明，(5) atan2f の符号，
+% (6) ALT/POS の自動離陸に関する安全規則，(7) モデル一致の合否判定ページ
+% （sf sils sysid-gate は順モデル照合に変更）。
+% ==============================================================================
+\usepackage{ccicons}   % Creative Commons icons for the title page / 表紙の CC アイコン
+
+% --- License notice on the title page ---------------------------------------
+% The deck is published under CC BY 4.0. Change the licence in this one place
+% (icon macro from ccicons: \ccby, \ccbysa, \ccbync, ...; text; URL).
+% 表紙のライセンス表示。種別を変えるときはこの 3 行だけを直す。
+\newcommand{\sciLicenseIcon}{\ccby}
+\newcommand{\sciLicenseText}{この資料は CC BY 4.0（クリエイティブ・コモンズ 表示 4.0 国際）で公開}
+\newcommand{\sciLicenseURL}{https://creativecommons.org/licenses/by/4.0/deed.ja}
+
+% --- "read later" badge for frame titles -----------------------------------
+% Marks frames the instructor skims live but participants should read later.
+% Usage: \begin{frame}{タイトル\later}
+% 講師が当日は流し、参加者に後で読んでほしいフレームの目印。
+% 使い方: \begin{frame}{タイトル\later}
+% Badge geometry: a strut sets the box height (taller than the text), and
+% \raisebox lifts it so its centre sits on the title's visual centre line.
+% バッジの高さは支柱で確保し、\raisebox でタイトル文字の上下中央に合わせる。
+\newcommand{\later}{\hspace{0pt plus 1filll}\raisebox{0.35ex}{\colorbox{white}{\rule[-0.55ex]{0pt}{2.1ex}\textcolor{sfdark}{\footnotesize\,あとで読む\,}}}}
+
+% --- SCI tutorial session-divider macro ------------------------------------
+% \lessondivider (stampfly_slides.sty) hardcodes the word "Lesson N". The SCI
+% tutorial is organised as five timetabled sessions, so define a local divider
+% that shows the session number, title and time slot instead. The shared style
+% file is left untouched (same approach as dxh_workshop.tex).
+% \lessondivider は "Lesson N" を固定表示するため、時間割で区切る本チュートリアル
+% には合わない。共有スタイルは触らず、セッション番号・題目・時間帯を出す専用の
+% 区切りマクロをここで定義する（dxh_workshop.tex と同じ方針）。
+% --- Footer: current session on the left, course title + lecturer in the middle
+% The shared footline (stampfly_slides.sty) shows author | title | page. For
+% a timetabled day the instructor wants the current session on the left and
+% the lecturer folded into the course title, so override the footline here
+% (shared style untouched, same policy as \scisession). \sciFooterSession is
+% set by \scisession's 4th argument; the opening sets it explicitly below.
+% 共有フッター（著者｜題目｜ページ）を、本デッキだけ「現在のセッション｜
+% 講習名（講師名を統合）｜ページ」に置き換える。共有スタイルは触らない。
+% \sciFooterSession は \scisession の第 4 引数で更新し、オープニングは下で明示する。
+\newcommand{\sciFooterSession}{}
+\newcommand{\sciFooterTitle}{StampFly Ecosystem の紹介（2026-11-01 改訂版）｜ 伊藤 恒平（金沢工業大学）}
+\setbeamertemplate{footline}{%
+  \leavevmode\hbox{%
+    \begin{beamercolorbox}[wd=.30\paperwidth,ht=2.5ex,dp=1ex,center]{palette primary}%
+      \usebeamerfont{author in head/foot}\sciFooterSession
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.55\paperwidth,ht=2.5ex,dp=1ex,center]{palette secondary}%
+      \usebeamerfont{title in head/foot}\sciFooterTitle
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.15\paperwidth,ht=2.5ex,dp=1ex,right]{palette tertiary}%
+      \usebeamerfont{date in head/foot}%
+      \insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
+    \end{beamercolorbox}%
+  }\vskip0pt%
+}
+
+% #1 session number, #2 title, #3 time slot, #4 short label for the footer
+% #1 セッション番号, #2 題目, #3 時間帯, #4 フッター用の短い表示名
+\newcommand{\scisession}[4]{%
+  \gdef\sciFooterSession{#4}%
+  \begin{frame}[plain]
+    \centering
+    \vspace*{\fill}
+    \begin{tikzpicture}
+      \node[
+        rectangle, rounded corners=8pt,
+        draw=sfblue, line width=1.5pt,
+        fill=sflight,
+        inner xsep=20pt, inner ysep=16pt,
+        align=center,
+        text width=120mm,
+      ] {%
+        {\fontsize{30}{36}\selectfont\bfseries\textcolor{sfblue}{Session #1}}\\[8pt]
+        {\Large\bfseries\textcolor{sfdark}{#2}}\\[4pt]
+        {\normalsize\textcolor{sfgray}{#3}}%
+      };
+    \end{tikzpicture}
+    \vspace*{\fill}
+    \par
+    {\small\textcolor{sfgray}{SCI/SICE チュートリアル講座 2026}}\par
+    \vspace{8mm}
+  \end{frame}
+}
+
+\title{制御教育教材 StampFly Ecosystem の紹介}
+\subtitle{コーディングから飛行試験、データ取得まで（2026-11-01 改訂版）}
+\author{伊藤 恒平（金沢工業大学）}
+\setbeamerfont{date}{size=\small}   % keep the two-line date from wrapping to three / 日付の 3 行折り返しを防ぐ
+\date{2026年9月10日（木）大阪大学中之島センター + Zoom\\ システム制御情報学会・計測自動制御学会 チュートリアル講座 2026}
+
+\begin{document}
+
+% === Title page ===
+\begin{frame}
+  \titlepage
+  \vspace{-1.5em}
+  \begin{center}
+    {\large\sciLicenseIcon}\enspace{\scriptsize\textcolor{sfgray}{\sciLicenseText}}\\[-1pt]
+    {\scriptsize\textcolor{sfgray}{\url{\sciLicenseURL}}}
+  \end{center}
+\end{frame}
+
+% === Opening: how this day works, participation levels, materials ===
+\gdef\sciFooterSession{オープニング}
+\input{chapters/sci_intro_rev20261101}
+
+% === Session 1: overview and design philosophy (10:05-11:00) ===
+\scisession{1}{StampFly Ecosystem の全体像と設計思想}{10:05 -- 11:00}{Session 1: 全体像と設計思想}
+\input{chapters/sci_s1_overview}
+
+% === Session 2: environment setup and sensor data (11:00-12:00) ===
+\scisession{2}{開発環境のセットアップとセンサデータの取得}{11:00 -- 12:00}{Session 2: 環境構築とセンサ}
+\input{chapters/sci_s2_setup_sensors_rev20261101}
+
+% === Session 3: motor control and controller input (13:00-14:00) ===
+\scisession{3}{モータ制御とコントローラ入力の実装}{13:00 -- 14:00}{Session 3: モータとコントローラ}
+\input{chapters/sci_s3_motor_controller_rev20261101}
+
+% === Session 4: feedback control basics, PID attitude stabilisation (14:00-15:00) ===
+\scisession{4}{フィードバック制御の基礎 --- PID による姿勢安定化}{14:00 -- 15:00}{Session 4: PID 姿勢安定化}
+\input{chapters/sci_s4_pid_rev20261101}
+
+% === Session 5: simulator, analysis tools, advanced topics, Q&A (15:30-16:30) ===
+\scisession{5}{シミュレータ・解析ツールの活用と発展的テーマ}{15:30 -- 16:30}{Session 5: シミュレータと発展}
+\input{chapters/sci_s5_sim_analysis_rev20261101}
+
+% === Appendix: cheat sheets, review paths, troubleshooting ===
+\scisession{付録}{チートシートと復習パス}{持ち帰り資料}{付録: チートシート・復習パス}
+\input{chapters/sci_appendix}
+
+\end{document}

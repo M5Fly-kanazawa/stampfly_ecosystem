@@ -42,7 +42,8 @@
 
 | 資料 | 場所 |
 |------|------|
-| スライド本編（PDF） | `docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`（`make sci` でビルド） |
+| スライド本編（PDF、2026-09-10 当日の版） | `docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf`（`make sci` でビルド） |
+| スライド本編 改訂版（PDF、次回以降の講習ではこちらを使う） | `docs/events/sci_tutorial_2026/slides/sci_tutorial_rev20261101.pdf`（`make sci-rev` でビルド）。当日の版にあった誤り 6 点（5 秒長押しのリセット・未ペア時の LED とペアリング手順・Kp_yaw と ζ・P 制御の定常偏差・atan2f の符号・ALT/POS の自動離陸）と「モデル一致の合否判定」のページを直した版 |
 | スライド要点版（PDF） | `docs/events/sci_tutorial_2026/slides/sci_tutorial_core.pdf`（`make sci-core` でビルド） |
 | スライド（Docswell版・QRなし） | `docs/events/sci_tutorial_2026/slides/sci_tutorial_docswell.pdf`（`make sci-docswell` でビルド） |
 | 告知チラシ | `docs/events/sci_tutorial_2026/チュートリアル講座2026広告最終案.pdf` |
@@ -169,7 +170,8 @@ Every session follows the same flow: map (where we are) -> what this session say
 
 | Material | Location |
 |----------|----------|
-| Main slide deck (PDF) | `docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf` (build with `make sci`) |
+| Main slide deck (PDF, as used on 2026-09-10) | `docs/events/sci_tutorial_2026/slides/sci_tutorial.pdf` (build with `make sci`) |
+| Main slide deck, revised (PDF; use this for future runs) | `docs/events/sci_tutorial_2026/slides/sci_tutorial_rev20261101.pdf` (build with `make sci-rev`). Fixes six errors of the 2026-09-10 deck (5-s reset, unpaired LED and pairing steps, Kp_yaw vs zeta, P-control steady-state error, atan2f sign, ALT/POS auto-takeoff) and the model-match check slide |
 | Slides (Docswell variant, no QR codes) | `docs/events/sci_tutorial_2026/slides/sci_tutorial_docswell.pdf` (build with `make sci-docswell`) |
 | Announcement flyer | `docs/events/sci_tutorial_2026/チュートリアル講座2026広告最終案.pdf` |
 | Review-session guide | [`handson_guide.md`](handson_guide.md) |

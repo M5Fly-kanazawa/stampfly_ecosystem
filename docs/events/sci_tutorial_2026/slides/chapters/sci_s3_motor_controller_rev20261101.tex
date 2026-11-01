@@ -1,0 +1,364 @@
+% ==============================================================================
+% sci_s3_motor_controller.tex — SCI/SICE tutorial Session 3:
+% motor control and controller input implementation
+% SCI/SICE チュートリアル セッション3: モータ制御とコントローラ入力の実装
+% ==============================================================================
+
+% ------------------------------------------------------------------
+\begin{frame}{開発サイクルの地図と今の位置（セッション3）}
+  \begin{columns}[c]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \resizebox{\columnwidth}{!}{\scisessionmap{3}}
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \small
+      セッション2でセンサの値を読めるようになった。ここでは読んだ値を使って機体を動かす側（モータ・コントローラ）を作る
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{モータを回し、操縦し、それだけでは飛べないと知る}
+  \begin{enumerate}
+    \item モータは PWM（パルス幅変調）の Duty 比で駆動する。4基の配置と回転方向はトルクバランスで決まっている
+    \item コントローラのスティック値は ESP-NOW で 14 バイトの \code{ControlPacket} として届く
+    \item \api{ws::motor\_mixer(T,R,P,Y)} で手動ミキシングしても、フィードバックがない限り安定して飛べない。ここに次セッションの動機がある
+  \end{enumerate}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{安全}
+  \begin{alertblock}{モータを回す実習の注意}
+    \begin{itemize}\footnotesize\setlength{\itemsep}{1pt}
+      \item \warn{必ず机上}で行う。回転中はモータに手を近づけない
+      \item \warn{Duty は 0.15 以下}に固定する。ファーム側では強制されないので数値を必ず確認する
+      \item \warn{ARM} は機体ボタンの単クリックまたはコントローラで行う。コードの中で自動 ARM しない
+      \item 異常な振動・音・回転が起きたら即座に \warn{DISARM}（機体ボタン再クリック）
+      \item コントローラの左ボタン（高度モード）は OFF（ALT/POS にしない），右ボタン（制御モード）は STABILIZE か ACRO にしておく。ALT/POS では ARM 直後に自動離陸に入り，ボタンで DISARM できない
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{0.3em}
+
+  {\small 止め方: 機体ボタンをもう一度クリック（DISARM）。バッテリー駆動での確認を基本とする}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{モータと PWM}
+  \begin{columns}[T]
+    \begin{column}{0.45\textwidth}
+      \centering
+      \resizebox{!}{0.62\textheight}{\input{../../_shared/tikz/pwm_waveform}}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \vspace{1em}
+      \begin{itemize}\small
+        \item LEDC（ESP32 のハードウェア PWM）でモータを駆動する
+        \item Duty 0\% = 停止、100\% = 最大回転
+        \item API: \api{ws::motor\_set\_duty(id, duty)}\\
+              \small id=1--4, duty=0.0--1.0
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{モータ配置}
+  \begin{center}
+    \resizebox{0.4\textwidth}{!}{\input{../../_shared/tikz/motor_layout}}
+  \end{center}
+  \begin{itemize}\small
+    \item モータ ID: 1=FR（右前）、2=RR（右後）、3=RL（左後）、4=FL（左前）
+    \item 対角のモータが同じ方向に回転する。M1・M3 = CCW、M2・M4 = CW（反トルクを打ち消す）
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 3: Duty をハードコードして回す}
+  \vspace{0.15em}
+  {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
+  \vspace{0.15em}
+
+  \begin{columns}[T]
+    \begin{column}{0.44\textwidth}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{1pt}
+        \item \code{sf lesson switch sci2026:3}
+        \item \code{sf lesson edit} で右のコードにして保存
+        \item \code{sf lesson build}
+        \item \code{sf lesson flash}
+        \item 機体ボタンを1回クリックして ARM
+        \item 確認: FR モータだけが回る
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
+void loop_400Hz(float dt) {
+    ws::motor_set_duty(1, 0.10f);   // FR
+    ws::motor_set_duty(2, 0.00f);   // RR
+    ws::motor_set_duty(3, 0.00f);   // RL
+    ws::motor_set_duty(4, 0.00f);   // FL
+}
+      \end{sflisting}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.15em}
+
+  {\footnotesize \warn{注意}: 配布される模範解答（\texttt{--solution}）は起動時に自動 ARM する。必ず机上に置いた状態で起動すること（コードの中で自動 ARM しない）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{コントローラ}
+  \begin{center}
+    \adjustbox{max width=0.92\textwidth, max height=0.78\textheight}{\input{../../_shared/tikz/controller_annotated}}
+  \end{center}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{ESP-NOW と ControlPacket}
+  \begin{center}
+    \adjustbox{max width=0.92\textwidth, max height=0.68\textheight}{\input{../../_shared/tikz/espnow_dataflow}}
+  \end{center}
+
+  \vspace{0.3em}
+
+  {\small コントローラとStampFlyは ESP-NOW で直接通信する。1パケット \code{ControlPacket} は \textbf{14バイト}（throttle/roll/pitch/yaw + flags + checksum）を約 \textbf{50\,Hz}（TDMA フレーム周期 20\,ms）で送信する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{TDMA で 30 機を同時に飛ばす}
+  \begin{block}{TDMA（時分割多重アクセス、Time Division Multiple Access）}
+    \footnotesize 1つの無線チャンネルを短い時間枠（スロット）に分割し、機体ごとに送信タイミングをずらして電波の衝突を避ける方式
+  \end{block}
+
+  \vspace{0.2em}
+
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{ll}
+      \hline
+      フレーム周期 20\,ms、スロット幅 2\,ms & $\to$ 1フレーム10スロット \\
+      \textbf{1チャンネルあたり最大10機} & 非重複3チャンネル（1/6/11ch）で\textbf{理論上30機} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.1em}
+
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{alertblock}{なぜ必要か}
+        \scriptsize 教室で複数の送信機が無調整のまま同時に電波を出すと衝突し、機体が通信途絶と判断して自動着陸する
+      \end{alertblock}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{exampleblock}{スロットの割当}
+        \scriptsize タッチメニューで \textbf{Device ID}（0--9）を手動設定し NVS（不揮発性メモリ）に保存（再起動後に反映）。ID=0 が20\,msごとにビーコンを送る「親機」、他はその受信時刻を基準に自分自身のスロットのみで送信する。ペアリングでは自動割当されない
+      \end{exampleblock}
+    \end{column}
+  \end{columns}
+
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{ペアリングとチャンネル}
+  \begin{block}{ペアリング}
+    \scriptsize コントローラの M5 ボタン（LCD パネル）を押しながら電源ON $\to$ 画面の候補一覧から機体のラベルと同じ MAC 下 4 桁の行を右スティックで選び，M5 ボタンで確定。ペア済みの機体は本体ボタンを \warn{3 秒以上}押してペアリング待ち（青の速い点滅）にする。LED が緑になれば完了。次回以降は自動接続
+  \end{block}
+
+  \vspace{0.1em}
+
+  \begin{alertblock}{チャンネル設定}
+    \footnotesize 教室内で複数機体が同時に飛ぶと混信する。チャンネルは実習 1 (2/2) の初期設定で \code{param set wifi.channel N}（1/6/11、講師が指定）として保存済み。実習コードの中では変更しない。コントローラはペアリング時に機体のチャンネルへ自動追従する
+  \end{alertblock}
+
+  \vspace{0.3em}
+
+  \begin{exampleblock}{自分で購入したコントローラを使う場合}
+    \footnotesize ご購入直後のコントローラには出荷時点のファームウェアが入っているが、本チュートリアルで使う版とは異なる。最初に一度だけ、\code{sf flash controller} で書き込み直す必要がある
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{オープンループ制御}
+  \begin{center}
+    \resizebox{0.7\textwidth}{!}{\input{../../_shared/tikz/open_loop}}
+  \end{center}
+
+  \vspace{0.3em}
+
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{ll}
+      \hline
+      \api{ws::rc\_throttle/roll/pitch/yaw()} & スティック値の取得 \\
+      \api{ws::motor\_mixer(T, R, P, Y)}      & 4モータへの配分 \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{ミキサ行列}
+  \begin{columns}[T]
+    \begin{column}{0.45\textwidth}
+      \centering
+      \resizebox{0.95\columnwidth}{!}{\input{../../_shared/tikz/mixer_matrix}}
+    \end{column}
+    \begin{column}{0.52\textwidth}
+      \vspace{0.3em}
+      {\footnotesize
+      Pitch+ $\to$ 前傾 $\to$ 前(M1,M4)強 + 後(M2,M3)弱\\[2pt]
+      Roll+ $\to$ 右傾 $\to$ 右(M1,M2)弱 + 左(M3,M4)強}
+      \vspace{0.3em}
+      \begin{exampleblock}{意味}\footnotesize
+        各式は「T/R/P/Yの指令を4モータのDutyにどう配分するか」を表す。式ごとの符号がモータ配置（motor\_layout）と対応する
+      \end{exampleblock}
+      \vspace{0.2em}
+      {\footnotesize 実機ファーム（sf\_actuator）は $\tau/L$，$\kappa$ を使う物理量ベースのミキサ。演習の \api{ws::motor\_mixer} は共通スケール（$0.25/3.7$）の簡易版}
+    \end{column}
+  \end{columns}
+
+  {\scriptsize $T$ は \api{ws::rc\_throttle()} の正規化スティック値で $[0,1]$，$R,P,Y$ は \api{ws::rc\_roll/pitch/yaw()} で $[-1,1]$。\api{ws::motor\_set\_duty} は Duty を $[0,1]$ にクランプする}
+  % Web版のみ: T/R/P/Yスライダーで4モータのDutyを実際に動かして確認する
+  % @web: widget=mixer height=480
+  % @web: layout=replace
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 4: スティックでモータを回す}
+  \vspace{0.15em}
+  {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
+
+  \begin{columns}[T]
+    \begin{column}{0.44\textwidth}
+      \footnotesize
+      \begin{enumerate}\setlength{\itemsep}{0pt}
+        \item \code{sf lesson switch sci2026:4}
+        \item コントローラとペアリング
+        \item \code{sf lesson edit} で右のコードにして保存
+        \item \code{sf lesson build}
+        \item \code{sf lesson flash}
+        \item 確認: スティックで回転差が出る
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.54\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{user\_code.cpp}
+void loop_400Hz(float dt) {
+    float t = ws::rc_throttle();
+    float r = ws::rc_roll();
+    float p = ws::rc_pitch();
+    float y = ws::rc_yaw();
+    ws::motor_mixer(t, r, p, y);
+}
+      \end{sflisting}
+    \end{column}
+  \end{columns}
+
+  \begin{alertblock}{これでは飛べない理由}
+    \scriptsize モータの個体差，機体のミスアライメント（推力軸のずれ・重心ずれ），電池電圧の低下といった外乱に対して何の補正もかからないため，スティック指令どおりの回転を保てない
+  \end{alertblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{プラントの定義}
+  \small 本セッションで作った経路（ミキサ $\to$ モータ $\to$ 機体）が、そのまま制御対象（プラント）の入出力になる
+
+  \begin{columns}[T]
+    \begin{column}{0.4\textwidth}
+      \centering
+      \vspace{0.5em}
+      \resizebox{0.95\columnwidth}{!}{%
+      \begin{tikzpicture}[
+        block/.style={rectangle, draw=sfdark, line width=1.2pt, fill=sflight,
+                      rounded corners=2pt, minimum width=22mm, minimum height=13mm,
+                      font=\small},
+        arr/.style={-{Stealth[length=2.5mm]}, line width=1pt, draw=sfdark},
+      ]
+        \node[block] (plant) {プラント};
+        \coordinate (pin) at ($(plant.west)+(-12mm,0)$);
+        \coordinate (pout) at ($(plant.east)+(12mm,0)$);
+        \draw[arr] (pin) -- (plant.west)
+          node[pos=0.3, above, font=\scriptsize] {Duty};
+        \draw[arr] (plant.east) -- (pout)
+          node[pos=0.7, above, font=\scriptsize] {角速度 $\omega$};
+      \end{tikzpicture}}
+    \end{column}
+    \begin{column}{0.55\textwidth}
+      \vspace{0.3em}
+      \begin{itemize}\footnotesize\setlength{\itemsep}{3pt}
+        \item \textbf{入力}: ミキサが出す4つの Duty（\api{ws::motor\_mixer(T,R,P,Y)} の R/P/Y トルク指令に相当）
+        \item \textbf{出力}: \api{ws::gyro\_x/y/z()} が返す角速度の実測値
+      \end{itemize}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.5em}
+
+  \begin{exampleblock}{次セッションへ}
+    \footnotesize セッション4 の PID 制御器がこの間にフィードバックループを作り，出力を目標値に近づける。伝達関数とゲイン $K_p$ の設計がセッション4「フィードバック制御の基礎」の主題である
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{理論とコードの対応表\later}
+  \vspace{0.3em}
+
+  {\small ここまで登場した理論用語・API・通信・実装トピックの対応を一覧できるようにまとめた早見表}
+
+  \vspace{0.3em}
+
+  \begin{table}
+    \centering\footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{30mm}>{\raggedright\arraybackslash}p{40mm}>{\raggedright\arraybackslash}p{35mm}>{\raggedright\arraybackslash}p{26mm}}
+      \hline
+      \textbf{理論} & \textbf{コード} & \textbf{通信} & \textbf{トピック} \\
+      \hline
+      Duty比 $[0,1]$ & \api{ws::\allowbreak motor\_set\_duty(id,d)} & --- & \code{actuator\_\allowbreak motor} \\
+      スティック指令 $T,R,P,Y$ & \api{ws::\allowbreak rc\_throttle()} 等 & \code{ControlPacket}（14B） & \code{command\_\allowbreak setpoint} \\
+      ミキシング & \api{ws::\allowbreak motor\_mixer(T,R,P,Y)} & --- & --- \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{復習パス\later}
+  \begin{table}
+    \centering\footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{40mm}>{\raggedright\arraybackslash}p{35mm}>{\raggedright\arraybackslash}p{55mm}}
+      \hline
+      \textbf{コマンド} & \textbf{実習} & \textbf{文書} \\
+      \hline
+      \code{sf lesson switch sci2026:3} & 実習 3 モータ制御 & \code{firmware/\allowbreak vehicle/\allowbreak docs/\allowbreak hardware\_init.md} \\
+      \code{sf lesson switch sci2026:4} & 実習 4 コントローラ入力 & \code{protocol/\allowbreak spec/}（ControlPacket） \\
+      \code{sf flash controller} & --- & \code{docs/\allowbreak commands/\allowbreak sf-flasher.md} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  {\small すべて \code{sf lesson build} $\to$ \code{sf lesson flash} で実機に反映する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{チェックポイント}
+  \begin{alertblock}{確認事項}
+    \begin{itemize}
+      \item[$\square$] Duty とモータ配置・回転方向の対応を説明できる
+      \item[$\square$] ControlPacket がどの経路（ESP-NOW）でどれだけの頻度で届くか説明できる
+      \item[$\square$] オープンループ制御が「なぜ飛べないか」を自分の言葉で説明できる
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{1em}
+
+  \begin{block}{次のセッション}
+    セッション4: フィードバック制御の基礎 --- PID による姿勢安定化（14:00 -- 15:00）
+  \end{block}
+\end{frame}

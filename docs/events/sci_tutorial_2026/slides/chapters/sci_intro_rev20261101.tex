@@ -1,0 +1,272 @@
+% ==============================================================================
+% sci_intro.tex — SCI/SICE tutorial: opening (instructor, format, map, safety)
+% SCI/SICE チュートリアル: オープニング（講師紹介・進め方・地図・安全）
+% ==============================================================================
+
+% ------------------------------------------------------------------
+% \scisessionmap{N} — five-session-of-the-day map, overlaid on the
+% ecosystem's own design->implementation->experiment->analysis->education
+% cycle (see CLAUDE.md "Project Overview"). N selects which node(s) to
+% highlight (1-5); N=0 highlights nothing (used for the whole-day view in
+% this opening chapter). Defined here so S2-S5 can reuse it at the start
+% of their own chapter with \scisessionmap{2}..\scisessionmap{5}.
+%
+% \scisessionmap{N} --- 5セッションの地図。エコシステム自身の
+% 「設計→実装→実験→解析→教育」という循環（CLAUDE.md「Project Overview」）
+% に、本日の5セッションを重ねて示す。N (1-5) で該当ノードを強調表示する。
+% N=0 は強調なし（本章の全体像ページで使用）。S2〜S5 の各章が冒頭で
+% \scisessionmap{2}..\scisessionmap{5} として再利用できるよう、ここで定義する。
+% ------------------------------------------------------------------
+\newcommand{\scisessionmap}[1]{%
+  \def\cycDesignStyle{cycnode}%
+  \def\cycImplStyle{cycnode}%
+  \def\cycExpStyle{cycnode}%
+  \def\cycAnaStyle{cycnode}%
+  \def\cycEduStyle{cycnode}%
+  \ifnum#1=1 \def\cycDesignStyle{cychl}\fi
+  \ifnum#1=2 \def\cycImplStyle{cychl}\fi
+  \ifnum#1=3 \def\cycImplStyle{cychl}\fi
+  \ifnum#1=4 \def\cycExpStyle{cychl}\fi
+  \ifnum#1=5 \def\cycAnaStyle{cychl}\def\cycEduStyle{cychl}\fi
+  \begin{tikzpicture}[
+      cycnode/.style={
+        rectangle, rounded corners=3pt, draw=sfgray, line width=0.8pt,
+        fill=sfgray!6, text=sfgray, minimum width=32mm, minimum height=15mm,
+        align=center, font=\bfseries
+      },
+      cychl/.style={
+        rectangle, rounded corners=3pt, draw=sfblue, line width=2pt,
+        fill=sfblue!15, text=sfdark, minimum width=32mm, minimum height=15mm,
+        align=center, font=\bfseries
+      },
+      cycarr/.style={-{Stealth[length=2.6mm]}, line width=1.1pt, draw=sfgray!70},
+    ]
+    \node[\cycDesignStyle] (design) at (90:38mm)  {設計\\{\footnotesize\normalfont セッション1}};
+    \node[\cycImplStyle]   (impl)   at (18:38mm)  {実装\\{\footnotesize\normalfont セッション2\textperiodcentered\ 3}};
+    \node[\cycExpStyle]    (exp)    at (-54:38mm) {実験\\{\footnotesize\normalfont セッション4}};
+    \node[\cycAnaStyle]    (ana)    at (234:38mm) {解析\\{\footnotesize\normalfont セッション5}};
+    \node[\cycEduStyle]    (edu)    at (162:38mm) {教育\\{\footnotesize\normalfont セッション5}};
+
+    \draw[cycarr] (design) to[bend left=18] (impl);
+    \draw[cycarr] (impl)   to[bend left=18] (exp);
+    \draw[cycarr] (exp)    to[bend left=18] (ana);
+    \draw[cycarr] (ana)    to[bend left=18] (edu);
+    \draw[cycarr] (edu)    to[bend left=18] (design);
+  \end{tikzpicture}%
+}
+
+% ------------------------------------------------------------------
+\begin{frame}{講師紹介}
+  \begin{block}{伊藤 恒平}
+    \small 金沢工業大学\\
+    情報理工学部 ロボティクス学科\\[3pt]
+    StampFly Ecosystem の開発者。専門はドローンの飛行制御工学
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{itemize}\small
+    \item 4+1 日ワークショップ（大学生向け、一般の方も参加可。講義・実習と精密着陸競技会）で同じ教材を使用
+    \item ZEP エンジニアリング主催の講習会（2025 年 8 月、品川、2 日間）
+    \item 高校教員向け DXH 講座（2026 年 7 月、操縦体験と書き込み実習）
+    \item 学会チュートリアル（本日）
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Pulled forward from Session 2 (sci_s2_setup_sensors.tex) so participants who
+% haven't installed yet can start now and work through it while Session 1 is
+% being presented, instead of losing S2 time to it. The verification step
+% (setup_env -> sf doctor) stays in S2's "実習1". These frames first restate
+% the 3-step structure from the README's overview table (common across
+% OSes), then preview the OS-specific commands one slide per OS, then show
+% what a successful sf doctor run looks like.
+% Session 2 (sci_s2_setup_sensors.tex) から先出し: 未導入の参加者が今から
+% 始め、Session 1 を聞いている間に並行して進められるようにする（S2の時間を
+% 削らない）。確認ステップ（setup_env → sf doctor）はS2「実習1」に残すため、
+% ここではまずREADMEの概要表と同じ3手順（どのOSでも共通）を示し、続けて
+% OS別に打つコマンドを先出しし、最後にsf doctorが成功した時の表示例を
+% 示す1枚を添える。
+\begin{frame}{開発環境の導入（先出し）: 手順はどのOSも共通}
+  \begin{exampleblock}{① 前提ツール}
+    \small Git を入れる（専用の Python 3.12 と ESP-IDF v5.5.2 はインストーラが自動導入）
+  \end{exampleblock}
+  \begin{exampleblock}{② 取得と導入}
+    \small リポジトリを取得し、インストーラを実行する
+  \end{exampleblock}
+  \begin{exampleblock}{③ 有効化と診断}
+    \small 開発環境を有効化し、\code{sf doctor} で確認する
+  \end{exampleblock}
+
+  \vspace{0.3em}
+  {\small 具体的なコマンドはOSごとに違う → 次の3枚（Windows / macOS / Linux）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{開発環境の導入（先出し）: Windows}
+  \begin{exampleblock}{① 前提ツール}
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt, alsoletter={-}]
+winget install Git.Git --accept-source-agreements --accept-package-agreements
+    \end{lstlisting}
+  \end{exampleblock}
+  \begin{exampleblock}{② 取得と導入}
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
+cd stampfly_ecosystem
+install.bat
+    \end{lstlisting}
+  \end{exampleblock}
+  \begin{exampleblock}{③ 有効化と診断}
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+setup_env.bat
+sf doctor
+    \end{lstlisting}
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{開発環境の導入（先出し）: macOS}
+  \begin{exampleblock}{① 前提ツール}
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install cmake ninja dfu-util ccache
+    \end{lstlisting}
+  \end{exampleblock}
+  \begin{exampleblock}{② 取得と導入}
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
+cd stampfly_ecosystem
+./install.sh
+    \end{lstlisting}
+  \end{exampleblock}
+  \begin{exampleblock}{③ 有効化と診断}
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+source setup_env.sh
+sf doctor
+    \end{lstlisting}
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{開発環境の導入（先出し）: Linux}
+  \begin{exampleblock}{① 前提ツール}
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+sudo apt update
+sudo apt install -y git curl tar cmake ninja-build wget flex bison gperf ccache \
+    libffi-dev libssl-dev dfu-util libusb-1.0-0
+    \end{lstlisting}
+  \end{exampleblock}
+  \begin{exampleblock}{② 取得と導入}
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+git clone https://github.com/M5Fly-kanazawa/stampfly_ecosystem.git
+cd stampfly_ecosystem
+./install.sh
+    \end{lstlisting}
+  \end{exampleblock}
+  \begin{exampleblock}{③ 有効化と診断}
+    \begin{lstlisting}[style=sfbash, numbers=none, basicstyle=\ttfamily\scriptsize, aboveskip=1pt, belowskip=1pt]
+source setup_env.sh
+sf doctor
+    \end{lstlisting}
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{開発環境の導入（先出し）: sf doctor の出力例}
+  \begin{exampleblock}{④ うまくいった例}
+    \begin{lstlisting}[style=sfbash, numbers=none, aboveskip=1pt, belowskip=1pt]
+[INFO] Running environment diagnostics...
+
+Environment:  [OK] Dedicated environment: ~/.stampfly
+ESP-IDF:      [OK] Found: ~/.stampfly/esp-idf (v5.5.2)
+Python:       [OK] Version: 3.12.14
+Project:      [OK] Vehicle firmware found
+Serial:       [OK] Port found: /dev/tty.usbmodem14101
+
+[OK] All checks passed!
+    \end{lstlisting}
+  \end{exampleblock}
+
+  \vspace{0.3em}
+  \small すべて \textcolor{sfgreen}{\textbf{[OK]}} になれば準備完了
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{本日の進め方}
+  \begin{block}{つまずいても大丈夫}
+    \footnotesize 講師が実演しながら説明を進める。環境構築や操作でつまずいても、無理にその場で追いつこうとしなくていい。録画と資料で、あとから必ず追いつける
+  \end{block}
+
+  \vspace{0.15em}
+
+  \begin{block}{参加のしかたは自由}
+    \begin{itemize}\footnotesize
+      \item \textbf{見るだけ}: 画面とスクリーンを見ているだけで流れがわかる
+      \item \textbf{一緒に打つ}: 持参のPCとStampFlyでコマンドを再現する
+      \item \textbf{帰宅後に再現}: 会場では見るだけにして、録画と資料で後日試す
+    \end{itemize}
+  \end{block}
+
+  \vspace{0.15em}
+
+  \begin{exampleblock}{資料はすべて公開されている}
+    \footnotesize
+    リポジトリ: \url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem}\\
+    ドキュメント: \url{https://www.docswell.com/s/Kouhei_Ito/5L387D-2026-09-10-064635}\\
+    本日の内容はオンデマンド配信でも後日視聴できる
+  \end{exampleblock}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{今日の地図}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \centering
+      \vspace{-3mm}
+      \resizebox{0.84\columnwidth}{!}{\scisessionmap{0}}
+
+      \vspace{0.1em}
+      {\scriptsize セッション2・3は「実装」、セッション5は「解析・教育」を担当}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \small
+      StampFly Ecosystem は「設計 $\to$ 実装 $\to$ 実験 $\to$ 解析 $\to$ 教育」を循環させながら育ってきた。本日の5セッションはこの循環の上を進む
+      \vspace{0.5em}
+
+      \begin{table}
+        \centering\footnotesize
+        \begin{tabular}{ll}
+          \hline
+          セッション1 & 10:05 -- 11:00 \\
+          セッション2 & 11:00 -- 12:00 \\
+          \multicolumn{2}{c}{(昼休み)} \\
+          セッション3 & 13:00 -- 14:00 \\
+          セッション4 & 14:00 -- 15:00 \\
+          \multicolumn{2}{c}{(休憩)} \\
+          セッション5 & 15:30 -- 16:30 \\
+          \hline
+        \end{tabular}
+      \end{table}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{必要機材と安全ルール}
+  \begin{block}{持参いただくもの}
+    \footnotesize ノートPC、StampFly 実機とコントローラ（いずれも実習に参加する場合）
+  \end{block}
+
+  \vspace{0.2em}
+
+  \begin{alertblock}{飛行時の安全ルール}
+    \begin{itemize}\footnotesize\setlength{\itemsep}{1pt}
+      \item 飛んでいる機体からは距離を保つ
+      \item 飛行は\warn{指定のエリア}の中だけで行う
+      \item 飛行の操作は\warn{必ず立って}行う。座ったまま飛ばさない
+      \item \warn{ARM} は機体ボタンの単クリックまたはコントローラで行う。予期せず回転したら即座に \warn{DISARM}
+      \item 机上でモータを回す実習（実習 3, 4）では，コントローラの左ボタン（高度モード）を OFF（ALT/POS にしない），右ボタン（制御モード）を STABILIZE か ACRO にしておく。ALT/POS では ARM 直後に自動離陸に入り，ボタンで DISARM できない
+      \item 機体の真上には顔や手を出さない
+    \end{itemize}
+  \end{alertblock}
+\end{frame}
