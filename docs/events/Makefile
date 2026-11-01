@@ -27,11 +27,13 @@
 #   make sci-web          — Native HTML slide deck for the SCI tutorial, parsed
 #                           directly from the Beamer .tex sources (tools/slides/
 #                           beamer_to_html.py, into sci_tutorial_2026/web/)
+#   make sci-rev-web      — Same as sci-web, for the 2026-11-01 revised deck (into
+#                           sci_tutorial_2026/web/index_rev20261101.html)
 #   make chapter NAME=<x> — Single chapter, searched across all events'
 #                           chapters/ directories: make chapter NAME=led_control
 #   make clean           — Remove build artifacts
 
-.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-rev sci-core sci-docswell sci-html dxh-html workshop-html sci-web chapter clean
+.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-rev sci-core sci-docswell sci-html dxh-html workshop-html sci-web sci-rev-web chapter clean
 
 # ---------------------------------------------------------------------------
 # Shared TikZ diagrams
@@ -213,6 +215,14 @@ BEAMER_TO_HTML := ../../tools/slides/beamer_to_html.py
 sci-web:
 	python3 $(BEAMER_TO_HTML) --sci-dir sci_tutorial_2026 --tikz-dir $(TIKZ_DIR) \
 		--images-dir $(IMAGES_DIR) --build-tikz
+
+# Revised 2026-11-01 deck. It shares web/assets with the 2026-09-10 deck, so run
+# `make sci-web` first if the assets are missing.
+# 2026-11-01 改訂版。web/assets は 2026-09-10 の版と共有するため、素材が
+# 無いときは先に `make sci-web` を実行する。
+sci-rev-web:
+	python3 $(BEAMER_TO_HTML) --sci-dir sci_tutorial_2026 --master sci_tutorial_rev20261101.tex \
+		--out sci_tutorial_2026/web/index_rev20261101.html --tikz-dir $(TIKZ_DIR) --images-dir $(IMAGES_DIR)
 
 # ---------------------------------------------------------------------------
 # Single chapter build (for fast iteration)
