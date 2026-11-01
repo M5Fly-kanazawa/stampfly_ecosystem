@@ -99,6 +99,7 @@ from . import _generated_params as gp
 # Constants not in the SSOT-generated file (copied from plant.hpp Config defaults)
 # SSOT 生成物に無い定数 (plant.hpp の Config 既定値から)
 # --------------------------------------------------------------------------
+CONTROL_PERIOD_S = 0.0025         # 400 Hz control tick (rows of the log)
 PWM_RESOLUTION_BITS = 8            # actuator.cpp:175 MOTOR_PWM_RESOLUTION_BIT / ledc.h:190
 PLANT_SUBSTEP_S = 0.00025          # models/stampfly.xml:44 timestep [s]
 DUTY_DRIVE_MIN = 0.01              # plant.cpp:388 / ROUT_D[1]: below this = no drive
@@ -420,6 +421,96 @@ def load_logged_motion(path) -> LoggedMotion:
         gyro=df[_GYRO_COLUMNS].to_numpy(dtype=float),
         voltage=voltage,
     )
+
+
+# How rows that share one IMU time stamp are handled in a REAL log / 実機ログの同一時刻行の扱い
+REUSE_TIMESTAMP = "timestamp"   # one value per distinct stamp (last row of the group); duty rows dropped
+REUSE_SPREAD = "spread"         # all rows kept; rows of a group spread evenly back over the stall
+REUSE_RAW = "raw"               # rows taken as uniformly spaced, stale gyro kept (naive)
+REUSE_TREATMENTS = (REUSE_TIMESTAMP, REUSE_SPREAD, REUSE_RAW)
+VOLTAGE_COLUMN = "voltage"      # 1 Hz INA3221 reading, merged on status_timestamp_us
+STATUS_STAMP_COLUMN = "status_timestamp_us"
+
+
+def _status_voltage(df):
+    """(t_s, volts) of the distinct status samples of an aligned real-log table.
+    整列済み実機ログ表から status (1 Hz 電圧) の実サンプルを取り出す。"""
+    if VOLTAGE_COLUMN not in df.columns or STATUS_STAMP_COLUMN not in df.columns:
+        return None
+    st = df.drop_duplicates(STATUS_STAMP_COLUMN).dropna(subset=[STATUS_STAMP_COLUMN])
+    if st.empty:
+        return None
+    return st[STATUS_STAMP_COLUMN].to_numpy(float) * 1e-6, st[VOLTAGE_COLUMN].to_numpy(float)
+
+
+def load_real_log(path, treatment: str = REUSE_TIMESTAMP, dt: float = CONTROL_PERIOD_S) -> LoggedMotion:
+    """Load a REAL flight log onto a uniform control-rate grid for the forward model.
+    実機フライトログを一様な制御周期グリッドに載せて順モデルへ渡す。
+
+    Real logs have jittered IMU stamps and rows that REUSE the previous IMU sample
+    (same timestamp, same gyro, new duty; 2-4 % of rows in flight_test, 9-16 % in the
+    hover windows). `treatment` decides what to do with them:
+      "timestamp": every distinct stamp is one sample (the last row of its group); the
+          duty of the other rows of the group is dropped (what flipcheck.py did).
+      "spread":    all rows keep their duty; the m rows of a group that shares a stamp are
+          placed evenly over the stall that precedes the stamp, gyro is one sample at the
+          stamp, duty is zero-order-held on the grid.
+      "raw":      rows are assumed uniformly spaced at `dt`; stale gyro is kept as logged.
+    Voltage is the 1 Hz status reading linearly interpolated onto the grid.
+    "timestamp" は同一時刻の行を 1 点に畳む (最後の行、他行の duty は捨てる)。
+    "spread" は全行の duty を残し、同一時刻の行を停滞区間に等間隔で並べ直す。
+    "raw" は行を等間隔と見なし、古い gyro もそのまま使う。電圧は 1 Hz 値の線形補間。
+    """
+    from .loader import load_aligned
+
+    if treatment not in REUSE_TREATMENTS:
+        raise ValueError(f"treatment must be one of {REUSE_TREATMENTS}")
+    df = load_aligned(path)
+    df = df[df[_DUTY_COLUMNS].notna().all(axis=1)].reset_index(drop=True)
+    stamp = df["timestamp_us"].to_numpy(float) * 1e-6
+    duty_rows = df[_DUTY_COLUMNS].to_numpy(float)
+    gyro_rows = df[_GYRO_COLUMNS].to_numpy(float)
+    status = _status_voltage(df)
+
+    if treatment == REUSE_RAW:
+        t_grid = stamp[0] + dt * np.arange(len(stamp))
+        duty, gyro = duty_rows, gyro_rows
+    else:
+        last_of_group = np.r_[np.diff(stamp) != 0.0, True]
+        t_unique, gyro_unique = stamp[last_of_group], gyro_rows[last_of_group]
+        t_grid = np.arange(t_unique[0], t_unique[-1], dt)
+        if treatment == REUSE_TIMESTAMP:
+            row_time, duty_src = t_unique, duty_rows[last_of_group]
+        else:
+            row_time = _spread_row_times(stamp)
+            duty_src = duty_rows
+        index = np.clip(np.searchsorted(row_time, t_grid, side="right") - 1, 0, len(row_time) - 1)
+        duty = duty_src[index]
+        gyro = np.stack([np.interp(t_grid, t_unique, gyro_unique[:, a]) for a in range(3)], axis=1)
+    voltage = None if status is None else np.interp(t_grid, status[0], status[1])
+    return LoggedMotion(t_s=t_grid, dt=dt, duty=duty, gyro=gyro, voltage=voltage)
+
+
+def _spread_row_times(stamp: np.ndarray) -> np.ndarray:
+    """Times for rows that share a stamp: the m rows of a group end at the stamp and are
+    spaced evenly back over the interval since the previous distinct stamp (never more
+    than `CONTROL_PERIOD_S` apart).
+    同一時刻の行の時刻: m 行を、直前の別時刻から当該時刻までの区間に等間隔で並べる
+    (行間は制御周期以下)。"""
+    row_time = stamp.copy()
+    n = len(stamp)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and stamp[j + 1] == stamp[i]:
+            j += 1
+        count = j - i + 1
+        if count > 1 and i > 0:
+            gap = stamp[i] - stamp[i - 1]
+            step = min(gap / count, CONTROL_PERIOD_S)
+            row_time[i:j + 1] = stamp[i] - step * np.arange(count - 1, -1, -1)
+        i = j + 1
+    return row_time
 
 
 def predict_torque_trace(

@@ -84,6 +84,16 @@ def test_unit_duty_difference_signs():
     assert tau[0] < 0.0 and tau[1] > 0.0
 
 
+def test_spread_row_times_places_repeated_stamps_over_the_stall():
+    # A 5 ms stall followed by two rows with the same stamp: the two rows are spread
+    # over the stall (one control period apart), the stamp itself is kept for the last.
+    # 5 ms の停滞のあと同一時刻の 2 行: 2 行を停滞区間に 1 制御周期間隔で並べ、
+    # 最後の行は元の時刻を保つ。
+    stamp_s = np.array([0.0, 0.0025, 0.0075, 0.0075, 0.0100])
+    row_time = fm._spread_row_times(stamp_s)
+    assert np.allclose(row_time, [0.0, 0.0025, 0.0050, 0.0075, 0.0100])
+
+
 def _run_scenario(name: str, duration_us: int, extra: list, tmp_path: Path) -> Path:
     if not _SILS_BINARY.exists():
         pytest.skip("SILS not built (run: sf sils build)")
