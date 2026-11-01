@@ -72,6 +72,19 @@ def test_held_duty_settles_at_steady_state_speed():
     assert trace.omega[-1] == pytest.approx(omega_ss, rel=1e-4)
 
 
+def test_motor_delay_shifts_the_duty_by_whole_substeps():
+    # plant.cpp:577-585: the ODE sees the duty commanded delay_n_ substeps earlier, the
+    # ring buffer being primed with the first duty. 10 ms = 40 substeps = 4 rows.
+    # ODE に入る duty は delay_n_ substep 前の指令値 (リングバッファは最初の duty で初期化)。
+    rng = np.random.default_rng(1)
+    duty = 0.4 + 0.2 * rng.random((60, 4))
+    volt = np.full(60, 3.7)
+    delayed = fm.simulate_motors(duty, CONTROL_PERIOD_S, volt, motor_delay_ms=10.0, pwm_bits=None)
+    shifted = np.vstack([np.repeat(duty[:1], 4, axis=0), duty[:-4]])
+    reference = fm.simulate_motors(shifted, CONTROL_PERIOD_S, volt, pwm_bits=None)
+    assert np.allclose(delayed.omega, reference.omega)
+
+
 def test_unit_duty_difference_signs():
     # More duty on the front-right motor (index 0): the right side and the nose go up,
     # i.e. roll torque about FRD x is NEGATIVE (x positive = right wing down) and pitch

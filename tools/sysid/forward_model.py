@@ -238,6 +238,7 @@ def simulate_motors(
     pre_elapsed_s: float = 0.0,
     pwm_bits: Optional[int] = PWM_RESOLUTION_BITS,
     charge_float32: bool = True,
+    motor_delay_ms: float = 0.0,
 ) -> MotorTrace:
     """Integrate the four motor ODEs exactly like plant.cpp substep().
     plant.cpp substep() と同じ手順で 4 モータの ODE を積分する。
@@ -266,6 +267,12 @@ def simulate_motors(
             刻みが avionics のみの消費量より大きく、待機中の消費が 0 に丸められる。
             SoC=0.95 の OCV 段差の時刻が秒単位でずれ、その前後で推力が約1.5%変わる。
             False なら倍精度 (実電池の挙動)。
+        motor_delay_ms: duty-path transport delay of the plant (plant.cpp:577-585,
+            `--motor-delay`): the duty reaching the motor ODE is the one commanded
+            round(delay/h) substeps earlier; before the first row it is the first duty
+            (the ring buffer is primed with it, plant.cpp:166). 0 = off.
+            プラントの duty 経路の輸送遅れ (`--motor-delay`)。ODE に入る duty は
+            round(遅れ/h) substep 前の指令値で、最初の行より前は最初の duty (plant.cpp:166)。
         battery_initial_frac / pre_elapsed_s: battery model start; the avionics
             draw during `pre_elapsed_s` before the first row is Coulomb-counted.
             電池モデルの初期条件。最初の行より前の avionics 電流による消費も数える。
@@ -282,6 +289,12 @@ def simulate_motors(
     if abs(per_row * substep_s - dt) > 1e-9:
         raise ValueError(f"dt={dt} is not an integer multiple of substep {substep_s}")
     duty_sub = np.repeat(duty, per_row, axis=0)
+    delay_substeps = int(round(motor_delay_ms * 1e-3 / substep_s)) if motor_delay_ms > 0.0 else 0
+    if delay_substeps > 0:
+        # Ring buffer of delay_n_ substeps, primed with the first duty.
+        # delay_n_ substep のリングバッファ (最初の duty で初期化)。
+        lead = np.repeat(duty_sub[:1], delay_substeps, axis=0)
+        duty_sub = np.concatenate([lead, duty_sub[:-delay_substeps]], axis=0)
     rout_sub = rout_ohm(duty_sub, const)
     n_sub = duty_sub.shape[0]
 
@@ -518,6 +531,7 @@ def predict_torque_trace(
     voltage_mode="battery",
     const: PlantConstants = DEFAULT_CONSTANTS,
     pwm_bits: Optional[int] = PWM_RESOLUTION_BITS,
+    motor_delay_ms: float = 0.0,
 ):
     """Run the motor simulation once; returns (trace, torque_substeps (M,3)).
     Reuse it for many delays through `accel_from_trace`.
@@ -538,6 +552,7 @@ def predict_torque_trace(
     trace = simulate_motors(
         motion.duty, motion.dt, volt, const,
         pre_elapsed_s=float(motion.t_s[0]), pwm_bits=pwm_bits,
+        motor_delay_ms=motor_delay_ms,
     )
     return trace, body_torque(trace, const)
 
