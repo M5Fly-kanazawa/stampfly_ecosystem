@@ -21,8 +21,8 @@ Subcommands:
              (the automated form of the manual A/B loop in release-workflow.md; CI
              entry point for sils-regression.yml)
   milestone  build → run → video → gate in one shot (the /sils-milestone skill)
-  sysid-gate Model-match gate: fit SILS rate-loop (b,T,L) vs real-hardware sysid
-             (simulation-policy.md §4; distinct from the "gate" milestone check)
+  sysid-gate Model-match check: forward model of the plant vs SILS truth and vs real
+             flip/hover logs (simulation-policy.md §5; distinct from the "gate" milestone check)
   fly        Real-time keyboard-piloted SILS flight (P6 stage 1)
   compare    Side-by-side ESKF vs complementary video (P4/P6)
   gui        Launch the SILS Web GUI (scenarios, graphs, 3D playback)
@@ -620,36 +620,37 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--seed", type=int, default=12345, help="noise RNG seed (determinism)")
     p.set_defaults(func=run_milestone)
 
-    # Model-match gate (docs/architecture/simulation-policy.md §4, backlog #0): run
-    # simulator/sils/scenarios/sysid_gate.scn with the 400Hz rate-loop recorder on,
-    # fit (b,T,L) per axis with the SAME code used on real-hardware logs
-    # (tools/log_analyzer/rate_sysid.py), and compare against the real-hardware
-    # reference (analysis/reports/rate_sysid_reference/reference.json). Named
-    # "sysid-gate", NOT "gate" — that name is already the milestone bundle
-    # verdict check (run_gate above); the two are unrelated concepts.
-    # モデル一致の合否判定（simulation-policy.md §4、backlog #0）: sysid_gate.scn を
-    # 400Hzレートループ記録付きで実行し、実機ログに使ったのと同一コード（rate_sysid.py）
-    # で軸別 (b,T,L) をフィットして実機基準値と比較する。"gate" ではなく "sysid-gate" と
-    # 命名 — "gate" は既にマイルストーン束バンドル判定（上の run_gate）で使用済みの
+    # Model-match check (docs/architecture/simulation-policy.md §5, backlog #0/#21): run
+    # simulator/sils/scenarios/sysid_gate.scn, check that the Python forward model
+    # (tools/sysid/forward_model.py) reproduces the plant's own truth, then judge the same
+    # model against the reference real flip/hover logs (analysis/datasets/flightlog/
+    # forward_check.yaml). Named "sysid-gate", NOT "gate" — that name is already the
+    # milestone bundle verdict check (run_gate above); the two are unrelated concepts.
+    # モデル一致の合否判定（simulation-policy.md §5、バックログ #0・#21）: sysid_gate.scn を実行し、
+    # Python 順モデルがプラント自身の真値を再現することを確認したうえで、同じモデルを実機の
+    # 宙返り・ホバー基準ログ（forward_check.yaml）に対して判定する。"gate" ではなく
+    # "sysid-gate" と命名 — "gate" は既にマイルストーン束バンドル判定（run_gate）で使用済みの
     # 別概念のため。
     p = sub.add_parser("sysid-gate",
-                       help="Model-match gate: fit SILS rate-loop (b,T,L) vs real-hardware "
-                            "sysid (simulation-policy.md §4)")
+                       help="Model-match check: forward model of the plant vs SILS truth and "
+                            "vs real flip/hover logs (simulation-policy.md §5)")
     p.add_argument("--motor-delay", type=float, default=None, metavar="MS",
                    help="motor transport delay in ms, passed through to the scenario run "
-                        "(see `sf sils scenario --motor-delay`). Default OFF (0 ms).")
+                        "(see `sf sils scenario --motor-delay`) and applied in the forward "
+                        "model of the self-consistency check. The real-log check is not "
+                        "affected. Default OFF (0 ms).")
     p.add_argument("--noise", choices=NOISE_LEVELS, default="off",
-                   help="sensor noise level on the emulator Plant (default off — a clean "
-                        "excitation run is what the real-hardware sysid pipeline assumes)")
+                   help="sensor noise level of the self-consistency run (default off)")
     p.add_argument("--seed", type=int, default=12345, help="noise RNG seed (determinism)")
-    p.add_argument("--duration", type=int, default=44_000_000,
-                   help="sim duration in microseconds (default 44s, matches sysid_gate.scn)")
+    p.add_argument("--duration", type=int, default=None,
+                   help="sim duration in microseconds of the self-consistency run "
+                        "(default: duration_us in forward_check.yaml, 44 s)")
     p.add_argument("--param", action="append", dest="params", metavar="NAME=VALUE",
-                   help="override a firmware param for this run only (repeatable, e.g. "
-                        "--param rate.roll.kp=0.5e-3). Same mechanism as "
+                   help="override a firmware param for the self-consistency run only "
+                        "(repeatable, e.g. --param rate.roll.kp=0.5e-3). Same mechanism as "
                         "`sf sils scenario --param` — see its help for details.")
     p.add_argument("--report", default=None,
-                   help="write the gate verdict + per-axis fit JSON here")
+                   help="write the verdict + all metrics as JSON here")
     p.set_defaults(func=run_sysid_gate)
 
     parser.set_defaults(func=lambda a: (parser.print_help(), 0)[1])
@@ -2630,98 +2631,94 @@ def run_milestone(args: argparse.Namespace) -> int:
 
 
 # =============================================================================
-# Model-match gate (docs/architecture/simulation-policy.md §4, backlog #0)
+# Model-match check (docs/architecture/simulation-policy.md §5, backlog #0/#21)
 # モデル一致の合否判定
 # =============================================================================
-
-# Pass criteria (simulation-policy.md §4): b within ±50%, L_total=T+L within ±20%.
-# T/L individually are NOT judged (their split is degenerate in some fits — see
-# analysis/reports/rate_sysid_reference/README.md); shown for reference only.
-# 合格基準: b は±50%、L_total=T+L は±20%。T・L個別はフィットで退化しうるため
-# 判定に使わない（参考表示のみ）。
-SYSID_GATE_B_TOL = 0.50
-SYSID_GATE_LTOTAL_TOL = 0.20
-
-
-def _rate_backend():
-    """Import tools/log_analyzer/rate_sysid.py — the SAME identification code the
-    real-hardware `sf sysid rate-fit` command uses (Code Identity: the gate's
-    verdict comes from running identical code, not a reimplementation).
-    実機の `sf sysid rate-fit` と同一の同定コードをインポートする（Code Identity:
-    この判定は再実装ではなく同一コードの実行に由来する）。"""
-    import sys as _sys
-    backend = paths.root() / "tools" / "log_analyzer"
-    if str(backend) not in _sys.path:
-        _sys.path.insert(0, str(backend))
-    import rate_sysid
-    return rate_sysid
+# Forward-model check: the logged 4-motor duty is run through the plant's own motor and
+# torque equations (tools/sysid/forward_model.py) and the predicted body angular
+# acceleration is compared with the real vehicle's. Windows, thresholds and treatments
+# live in analysis/datasets/flightlog/forward_check.yaml; the maths in
+# tools/sysid/forward_check.py. This handler only runs the scenario and prints.
+# 順モデル照合: ログの 4 モータ duty をプラント自身のモータ・トルク式に通して機体の角加速度を
+# 予測し、実機と比べる。窓・閾値・扱いは forward_check.yaml、計算は forward_check.py にあり、
+# このハンドラはシナリオ実行と表示だけを行う。
 
 
-def _reference_path() -> Path:
-    return paths.root() / "analysis" / "reports" / "rate_sysid_reference" / "reference.json"
+def _forward_check_modules():
+    """Import tools/sysid/forward_check.py (tools/ is a package root next to lib/).
+    tools/sysid/forward_check.py をインポートする。"""
+    root = str(paths.root())
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from tools.sysid import forward_check
+    return forward_check
+
+
+def _print_self_consistency(rows: list, cfg: dict) -> None:
+    print(f"  {'axis':6s} {'rms[rad/s2]':>12s} {'residual':>9s} {'scale':>7s}  verdict "
+          f"(criterion: residual < {cfg['residual_max']:g}, |scale-1| < {cfg['scale_tolerance']:g})")
+    for r in rows:
+        if r["residual"] is None:
+            print(f"  {r['axis']:6s} {r['rms']:12.3f} {'-':>9s} {'-':>7s}  not excited (not judged)")
+        else:
+            print(f"  {r['axis']:6s} {r['rms']:12.3f} {r['residual'] * 100:8.2f}% {r['scale']:7.4f}  {r['status']}")
+
+
+def _print_real_log_table(rows: list) -> None:
+    print(f"  {'log':44s} {'axis':6s} {'metric':20s} {'value':>9s}  {'criterion':>10s}  verdict")
+    for r in rows:
+        unit = f" {r.unit}" if r.unit else ""
+        print(f"  {r.log:44s} {r.axis:6s} {r.name:20s} {r.value:9.3f}{unit:3s} {r.criterion:>10s}  "
+              f"{r.status}  ({r.detail})")
 
 
 def run_sysid_gate(args: argparse.Namespace) -> int:
-    """Run sysid_gate.scn (writing a StampFly flight-log v1 bundle via
-    SILS_EMU_FLIGHTLOG, same as every other scenario), fit (b,T,L) per axis
-    with rate_sysid.py's fit_from_df() on the bundle's aligned DataFrame
-    (tools/sysid/loader.load_aligned() — the SAME entry point real-hardware
-    `sf sysid rate-fit` uses), and compare against the real-hardware
-    reference. sysid_gate.scn を実行し（他の全シナリオと同じ SILS_EMU_FLIGHTLOG
-    でフライトログ一式を書く）、一式の整列済み DataFrame
-    （tools/sysid/loader.load_aligned() — 実機の `sf sysid rate-fit` と同じ
-    入口）に rate_sysid.py の fit_from_df() で軸別 (b,T,L) をフィットし、
-    実機基準値と比較する。"""
-    scn = _sils_dir() / "scenarios" / "sysid_gate.scn"
+    """Forward-model check of the SILS plant's propulsion model.
+    SILS プラントの推進系モデルの順モデル照合。
+
+    (a) Self-consistency: run sysid_gate.scn in SILS and check that the Python forward
+        model, fed the LOGGED duty, reproduces the plant's own truth.csv angular
+        acceleration — proves the Python model still equals the C++ plant.
+    (b) Real-log check: run the same model on the reference flip/hover logs of
+        analysis/datasets/flightlog/forward_check.yaml and judge the roll-axis criteria.
+    (a) 自己無矛盾性: sysid_gate.scn を SILS で回し、ログされた duty から Python 順モデルが
+        予測した角加速度がプラント自身の真値 (truth.csv) に一致することを確認する
+        (Python モデルが C++ プラントと同一であることの証明)。
+    (b) 実機ログ照合: forward_check.yaml の基準ログ (宙返り・ホバー) に同じモデルを適用し、
+        ロール軸の基準で合否判定する。
+    """
+    fc = _forward_check_modules()
+    spec_path = fc.default_criteria_path(paths.root())
+    if not spec_path.exists():
+        console.error(f"criteria file missing: {spec_path}"); return 1
+    spec = fc.load_spec(spec_path)
+    cfg = spec["self_consistency"]
+    scn = _sils_dir() / "scenarios" / cfg["scenario"]
     if not scn.exists():
         console.error(f"scenario not found: {scn}"); return 1
-    reference_path = _reference_path()
-    if not reference_path.exists():
-        console.error(f"reference missing: {reference_path} — run "
-                      "analysis/reports/rate_sysid_reference/make_reference.py first")
-        return 1
+    motor_delay = getattr(args, "motor_delay", None) or 0.0
 
     # Bundle dir matches what run_scenario derives on its own
-    # (_sils_dir()/viz/out_scn_<stem>) — computed here only to locate
-    # results.json after the run (run_scenario creates the directory itself).
-    # バンドルディレクトリは run_scenario が自前で導出するのと同じ場所
-    # （_sils_dir()/viz/out_scn_<stem>）— run 後に results.json を見つけるため
-    # だけにここで計算する（ディレクトリ自体は run_scenario が作る）。
+    # (_sils_dir()/viz/out_scn_<stem>) — used only to find results.json after the run.
+    # バンドルディレクトリは run_scenario が導出する場所と同じ（run 後に results.json を探すため）。
     bundle = _sils_dir() / "viz" / f"out_scn_{scn.stem}"
-
-    # Drive the same run_scenario() path every other scenario uses (bundle layout,
-    # flight-log recording, console capture, .expect check, injection guardrail) —
-    # no extra env needed now that every scenario records a flight-log bundle.
-    # Constructing the Namespace by hand (rather than argparse) keeps this
-    # independent of the `scenario` subcommand's own flags.
-    # 他の全シナリオと同じ run_scenario() 経路（バンドル構造・フライトログ記録・
-    # コンソール捕捉・.expect チェック・注入ガードレール）を通す — 全シナリオが
-    # フライトログ一式を記録するようになったため追加の env は不要。
     scenario_ns = argparse.Namespace(
         scenario=str(scn), target="vehicle", expect=None,
-        duration=getattr(args, "duration", 44_000_000),
+        duration=getattr(args, "duration", None) or cfg["duration_us"],
         noise=getattr(args, "noise", "off"), seed=getattr(args, "seed", 12345),
         video=False, ground_effect=None, turbulence=None,
         motor_delay=getattr(args, "motor_delay", None), unpaired=False,
         params=getattr(args, "params", None),
     )
-    run_scenario(scenario_ns)   # its own PASS/FAIL print already happened; see below for gating
+    run_scenario(scenario_ns)   # its own PASS/FAIL print already happened
 
-    # Gate the FIT on a real crash (process exit code / no bundle), NOT on
-    # run_scenario's full .expect verdict. At nonzero --motor-delay the duty_max
-    # check in sysid_gate.expect is EXPECTED to trip (gains were tuned on the
-    # no-delay plant — the whole point of this measurement is to see how far L_total
-    # moves before a retune, per simulation-policy.md backlog #1/#2 sequencing) —
-    # that must not block the identification fit itself.
-    # フィットの可否は「本当のクラッシュ」（プロセス終了コード／一式欠落）で判定し、
-    # run_scenario の完全な .expect 判定では止めない。--motor-delay>0 では
-    # sysid_gate.expect の duty_max チェックが意図的に作動しうる（ゲインは無遅延
-    # プラントでチューニング済み — L_total がリチューン前にどれだけ動くかを見るのが
-    # 本計測の目的そのもの）— これで同定フィット自体を止めてはならない。
+    # Only a real crash or a missing bundle stops the check; the scenario's .expect
+    # verdict is informational (at nonzero --motor-delay its duty_max check may trip on
+    # gains tuned for the no-delay plant, which does not affect the forward model).
+    # 本当のクラッシュ／一式欠落だけで止める。.expect の判定は参考 (--motor-delay>0 では
+    # 無遅延プラント用ゲインのため duty_max が作動しうるが、順モデルの検査には影響しない)。
     results_path = bundle / "results.json"
-    scenario_pass = None
-    exit_code = None
-    zip_path = None
+    scenario_pass = exit_code = zip_path = None
     if results_path.exists():
         bundle_results = json.loads(results_path.read_text())
         scenario_pass = bundle_results.get("pass")
@@ -2729,82 +2726,51 @@ def run_sysid_gate(args: argparse.Namespace) -> int:
         flightlog = bundle_results.get("flightlog")
         zip_path = Path(flightlog) if flightlog else None
     if exit_code not in (0, None):
-        console.error(f"emu_vehicle exited {exit_code} — a real crash, aborting fit "
+        console.error(f"emu_vehicle exited {exit_code} — a real crash, aborting "
                       f"(see {bundle / 'console.log'})")
         return 1
     if zip_path is None or not zip_path.exists():
         console.error(f"no flight-log bundle recorded for {scn.name} — is emu_vehicle wired "
-                      "for SILS_EMU_FLIGHTLOG "
-                      "(simulator/sils/devices/emu_flightlog_vehicle.cpp)?")
+                      "for SILS_EMU_FLIGHTLOG (simulator/sils/devices/emu_flightlog_vehicle.cpp)?")
         return 1
-    with zipfile.ZipFile(zip_path) as zf:
-        if "gains.json" not in zf.namelist():
-            console.error(f"no gains.json inside {zip_path}"); return 1
-        gains_all = json.loads(zf.read("gains.json").decode("utf-8"))
     if scenario_pass is False:
-        console.warning(f"sysid_gate.expect did NOT fully pass (see {bundle / 'console.log'}) — "
-                        "proceeding with the identification fit anyway; this is expected at "
-                        "nonzero --motor-delay (duty saturates on untuned gains)")
+        console.warning(f"{scn.stem}.expect did NOT fully pass (see {bundle / 'console.log'}) — "
+                        "continuing; the forward-model check does not depend on it")
 
-    reference = json.loads(reference_path.read_text())
-    rs = _rate_backend()
+    console.info("(a) Self-consistency: Python forward model vs the SILS plant's truth "
+                 f"(simulation-policy.md §5; motor_delay={motor_delay:g} ms)")
+    sc_rows = fc.self_consistency(zip_path, spec, motor_delay_ms=motor_delay)
+    _print_self_consistency(sc_rows, cfg)
+    sc_ok = fc.self_consistency_pass(sc_rows)
 
-    tools_dir = str(paths.root() / "tools")
-    sys.path.insert(0, tools_dir)
-    try:
-        from sysid.loader import load_aligned
-        df = load_aligned(zip_path)
-    finally:
-        if tools_dir in sys.path:
-            sys.path.remove(tools_dir)
+    console.info("(b) Real-log check: R_out forward model vs reference flights "
+                 f"({spec_path.relative_to(paths.root())}; judged axis: {spec['judged_axis']}, "
+                 "other axes: reference only)")
+    if motor_delay:
+        console.info("    note: --motor-delay applies to (a) only; the real-log model is the "
+                     "plant's default propulsion model without extra delay")
+    real_rows = fc.evaluate_reference_logs(spec_path)
+    _print_real_log_table(real_rows)
+    real_ok = fc.overall_pass(real_rows)
 
-    console.info("Model-match gate (simulation-policy.md §4): SILS plant vs real-hardware sysid "
-                 f"(motor_delay={getattr(args, 'motor_delay', None)} ms)")
-    header = (f"  {'axis':6s} {'b_sils':>10s} {'b_ref':>10s} {'b_err%':>8s}  "
-              f"{'Ltot_sils':>9s} {'Ltot_ref':>9s} {'Ltot_err%':>10s}  "
-              f"{'T[ms]':>6s} {'L[ms]':>6s} {'coh':>5s}  verdict")
-    print(header)
-    rows = []
-    all_pass = True
-    for axis in ("roll", "pitch", "yaw"):
-        fit = rs.fit_from_df(df, axis, gains=gains_all[axis])
-        l_total_s = fit["T"] + fit["L"]
-        ref = reference["axes"][axis]
-        b_err = (fit["b"] - ref["b"]) / ref["b"]
-        lt_err = (l_total_s - ref["L_total_s"]) / ref["L_total_s"]
-        b_ok = abs(b_err) <= SYSID_GATE_B_TOL
-        lt_ok = abs(lt_err) <= SYSID_GATE_LTOTAL_TOL
-        axis_pass = bool(b_ok and lt_ok)
-        all_pass = all_pass and axis_pass
-        row = {
-            "axis": axis,
-            "b_sils": fit["b"], "b_ref": ref["b"], "b_err_pct": b_err * 100.0, "b_pass": b_ok,
-            "L_total_sils_ms": l_total_s * 1e3, "L_total_ref_ms": ref["L_total_s"] * 1e3,
-            "L_total_err_pct": lt_err * 100.0, "L_total_pass": lt_ok,
-            "T_ms": fit["T"] * 1e3, "L_ms": fit["L"] * 1e3,
-            "coherence_mean": fit["coherence_mean"], "pass": axis_pass,
-        }
-        rows.append(row)
-        verdict = "PASS" if axis_pass else "FAIL"
-        print(f"  {axis:6s} {fit['b']:10.0f} {ref['b']:10.0f} {b_err * 100.0:7.1f}%  "
-              f"{l_total_s * 1e3:7.2f}ms {ref['L_total_s'] * 1e3:7.2f}ms {lt_err * 100.0:9.1f}%  "
-              f"{fit['T'] * 1e3:6.2f} {fit['L'] * 1e3:6.2f} {fit['coherence_mean']:.2f}  {verdict}")
-
+    all_pass = sc_ok and real_ok
+    print(f"  self-consistency: {'PASS' if sc_ok else 'FAIL'};  real-log criteria: "
+          f"{'PASS' if real_ok else 'FAIL'}")
     if all_pass:
-        console.success("model-match gate: PASS (all axes within tolerance)")
+        console.success("model-match check: PASS (self-consistency and all roll criteria)")
     else:
-        console.error("model-match gate: FAIL (see per-axis table above)")
+        console.error("model-match check: FAIL (see the tables above)")
 
     if getattr(args, "report", None):
         report = {
             "pass": all_pass,
-            "tolerances": {"b_rel": SYSID_GATE_B_TOL, "L_total_rel": SYSID_GATE_LTOTAL_TOL},
-            "reference": str(reference_path),
-            "motor_delay_ms": getattr(args, "motor_delay", None),
+            "criteria_file": str(spec_path),
+            "motor_delay_ms": motor_delay,
             "noise": getattr(args, "noise", "off"),
             "bundle": str(zip_path),
-            "scenario_pass": scenario_pass,   # sysid_gate.expect verdict (informational — see gating note above)
-            "axes": rows,
+            "scenario_pass": scenario_pass,   # sysid_gate.expect verdict (informational)
+            "self_consistency": {"pass": sc_ok, "axes": sc_rows},
+            "real_logs": {"pass": real_ok, "metrics": [vars(r) for r in real_rows]},
         }
         Path(args.report).write_text(json.dumps(report, indent=2) + "\n")
         console.info(f"report written: {args.report}")

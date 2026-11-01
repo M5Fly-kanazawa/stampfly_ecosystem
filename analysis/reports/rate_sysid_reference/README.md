@@ -1,5 +1,8 @@
 # rate_sysid_reference — SILモデル一致の合否判定の実機基準値
 
+> **状態（2026-11-01）:** `sf sils sysid-gate` はこの基準値を使わなくなった。モデル一致の合否判定は、記録した Duty を SILS と同じ推進系モデルに通して実機ジャイロと比べる順モデル照合に置き換えた（`docs/architecture/simulation-policy.md` 5章、`analysis/datasets/flightlog/forward_check.yaml`）。本ディレクトリは 2026-06 の実機レート同定 $(b, T, L)$ の記録として残す。以下の記述（旧名 SIL を含む）は当時のもの。
+> *Status (2026-11-01): `sf sils sysid-gate` no longer reads this reference; the model-match check is now the forward-model check (simulation-policy.md chapter 5). Kept as the record of the 2026-06 rate identification.*
+
 `docs/architecture/simulation-policy.md` §4「モデル一致の合否判定」が使う、実機同定の基準値。
 
 ## 出所

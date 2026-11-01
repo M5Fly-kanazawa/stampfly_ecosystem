@@ -1,0 +1,61 @@
+# forward_check.yaml - reference logs, analysis windows and pass criteria of
+# `sf sils sysid-gate` (forward-model check, simulation-policy.md section 5, backlog #0/#21).
+# forward_check.yaml - `sf sils sysid-gate` の基準ログ・解析窓・合格基準
+# （順モデル照合、simulation-policy.md 5章、バックログ #0・#21）。
+#
+# Why here / 置き場所の理由:
+#   The windows are properties of the logs, so they live next to the logs; CI already
+#   watches analysis/datasets/**. The thresholds were decided by the owner on 2026-11-01
+#   on the basis of analysis/notes/forward_model_check_20261101.md chapter 6.
+#   窓はログ固有の性質なのでログの隣に置く（CI は analysis/datasets/** を監視済み）。
+#   閾値は 2026-11-01 にオーナーが analysis/notes/forward_model_check_20261101.md 6章を
+#   踏まえて決めた。
+#
+# Times are seconds from the first row of the log (after the reused-IMU-row treatment).
+# 時刻はログ先頭行からの秒数 (同一時刻 IMU 行の処理後)。
+
+treatment: timestamp        # reused-IMU-row treatment (forward_model.REUSE_*) / 同一時刻行の扱い
+voltage_mode: log           # logged 1 Hz INA3221 voltage / ログの 1 Hz 電圧
+flip_smoother: {window: 9, order: 2}   # Savitzky-Golay, same as flipcheck.py / flipcheck.py と同じ平滑化
+flip_delay_search_ms: {min: 0, max: 40, step: 1}
+hover_psd: {nperseg: 256, window: hann}   # Welch / Welch 法
+hover_band_hz: [5.0, 10.0]
+
+reference_logs:
+  - file: vehicle_roll_flip_20261002T184904.sflog.zip      # former name: flip_test1 / 旧名 flip_test1
+    flip_windows: {roll: [15.85, 16.25]}
+    hover_window: [5.5, 15.5]
+  - file: vehicle_roll_flip_20261002T205207.sflog.zip      # former name: flip_test2 / 旧名 flip_test2
+    flip_windows: {roll: [6.66, 7.10], pitch: [6.95, 7.45]}   # pitch window: reference only / ピッチは参考
+    hover_window: [4.4, 6.4]
+
+# Judged on the roll axis; pitch is reported as reference only (not judged).
+# ロール軸で判定する。ピッチは参考表示のみ (判定しない)。
+judged_axis: roll
+
+criteria:
+  flip_nofit_residual:
+    max: 0.5
+    why: "R_out gives 0.29-0.31, the old D*V model 0.97-1.04 (report ch.6); 0.5 sits between them / R_out 0.29-0.31、旧 D*V 0.97-1.04 の中間"
+  flip_best_delay_ms:
+    max: 8.0
+    why: "R_out 3-4 ms, old D*V 14-17 ms; 8 ms sits between them / R_out 3-4 ms、旧 14-17 ms の中間"
+  hover_gain:
+    min: 0.6
+    max: 1.4
+    why: "5-10 Hz |S_pm|/S_pp: R_out 0.78-0.84, old 0.36-0.38; 1 is ideal, 0.6 excludes the old model / R_out 0.78-0.84、旧 0.36-0.38。0.6 で旧を除く"
+  hover_delay_ms:
+    max: 8.0
+    why: "5-10 Hz delay: R_out 4.2-4.4 ms, old 14.4 ms / R_out 4.2-4.4 ms、旧 14.4 ms"
+
+# Self-consistency of the Python forward model against the SILS plant's own truth
+# (same method and tolerances as tools/sysid/test_forward_model.py).
+# Python 順モデルが SILS プラント自身の真値と一致することの確認
+# (方法・許容値は test_forward_model.py と同じ)。
+self_consistency:
+  scenario: sysid_gate.scn
+  duration_us: 44000000
+  residual_max: 0.03        # relative rms residual per axis, airborne rows (measured 0.00-0.02 %, margin ~10x+) / 実測 0.00-0.02 %、余裕 10 倍超
+  scale_tolerance: 0.01     # |least-squares scale - 1|
+  excited_min_rms: 1.0      # rad/s^2: axes below this are not judged / これ未満の軸は判定しない
+  settle_s: 1.0

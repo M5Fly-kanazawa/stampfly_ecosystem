@@ -247,6 +247,22 @@ jobs:
         # FAIL 時もどのシナリオが壊れたか表示される。
         run: sf sils regression --json-out simulator/sils/viz/sils_regression_results.json
 
+      - name: Model-match check (forward model vs SILS truth and real flip logs)
+        # `sf sils sysid-gate` (simulation-policy.md section 5, backlog #0/#21) runs
+        # sysid_gate.scn, checks that the Python forward model of the plant equals the
+        # SILS plant's own truth, then judges the same model against the two real roll-flip
+        # flights published in analysis/datasets/flightlog/ (windows and thresholds in
+        # forward_check.yaml there). Exits non-zero when any roll criterion fails, so a
+        # propulsion-model change that moves the plant away from the real vehicle turns
+        # the job red. ~15 s after the build above.
+        # `sf sils sysid-gate`（simulation-policy.md 5章、バックログ #0・#21）は
+        # sysid_gate.scn を実行し、プラントの Python 順モデルが SILS プラント自身の真値と
+        # 一致することを確認したうえで、analysis/datasets/flightlog/ に置いた実機のロール宙返り
+        # 2 本（窓と閾値は同ディレクトリの forward_check.yaml）に同じモデルを当てて判定する。
+        # ロールの基準が 1 つでも不合格なら非 0 で終了するので、プラントを実機から遠ざける
+        # 推進系モデルの変更でジョブが赤くなる。上のビルド後で約 15 秒。
+        run: sf sils sysid-gate
+
       - name: Verify the sf app L1 entry point (embedded template in SILS)
         # `sf app new` clones the default embedded template
         # (examples/11_app_controller) into firmware/apps/ci_app, and `sf app sils`
