@@ -204,7 +204,6 @@ SILS 側へ同じ手順を適用して実機と並べる（同じ操作を SILS 
 | 実機ヨー軸の照合 | 未確認（ホバー窓・宙返り窓とも未実施） |
 | D 条件の 10 Hz 以上で \|H\| > 1 になる原因 | 未確認（健全度の階段状更新の影響と推測） |
 | 地面効果・接触・モータ遅れ・スルー制限・乱流トルクの予測への影響 | モジュールに未実装。実機窓は空中のみ |
-| GitHub への push | 実施できなかった（トークン無効、`gh auth login` が必要）。コミットはローカルのブランチ `feat/forward-model-check` にある |
 
 ## 8. 再現手順
 
@@ -319,7 +318,7 @@ Applying the same procedure to a SILS flight of the same manoeuvre and comparing
 
 ## 7. Unverified items and limits
 
-Cause of the 1-substep alignment offset; cause of the 3–5 % residual against the gyro derivative; existence and size of the real disturbance torques; cause of the 0.8 flip scale; which reused-row treatment is closest to the true timing; real yaw axis; cause of |H| > 1 above 10 Hz in case D; effects of ground effect, contact, motor delay, slew limit and turbulence torque (not implemented). The branch could not be pushed (GitHub token invalid; `gh auth login` needed); commits are local on `feat/forward-model-check`.
+Cause of the 1-substep alignment offset; cause of the 3–5 % residual against the gyro derivative; existence and size of the real disturbance torques; cause of the 0.8 flip scale; which reused-row treatment is closest to the true timing; real yaw axis; cause of |H| > 1 above 10 Hz in case D; effects of ground effect, contact, motor delay, slew limit and turbulence torque (not implemented).
 
 ## 8. Reproduction
 
