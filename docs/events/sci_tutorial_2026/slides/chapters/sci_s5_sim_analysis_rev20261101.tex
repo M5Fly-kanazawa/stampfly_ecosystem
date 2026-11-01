@@ -1,0 +1,619 @@
+% ==============================================================================
+% sci_s5_sim_analysis.tex — SCI/SICE tutorial Session 5: simulator & analysis
+% tools, advanced topics, Q&A (15:30-16:30)
+% SCI/SICE チュートリアル セッション5: シミュレータ・解析ツールの活用と
+% 発展的テーマの紹介と質疑（15:30-16:30）
+% ==============================================================================
+
+% Fallback so this chapter still builds standalone (make chapter NAME=sci_s5_sim_analysis)
+% before chapters/sci_intro.tex has run. In the full deck sci_intro defines the
+% real \scisessionmap first, so this no-ops there.
+\providecommand{\scisessionmap}[1]{}
+
+% ------------------------------------------------------------------
+\begin{frame}{開発サイクルの地図と今の位置（セッション5）}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \resizebox{\columnwidth}{!}{\scisessionmap{5}}
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \small
+      セッション4で飛ばした結果を，本セッションではシミュレータと解析ツールで
+      裏付ける。「実験」の次にくる「解析」と「教育」のフェーズにあたる。
+
+      \vspace{0.5em}
+
+      \begin{block}{本日の最後に扱うもの}
+        \footnotesize
+        SILS の仕組みと使い方 $\to$ SILS 実習 $\to$ 解析ツールと教育教材 $\to$
+        研究・発展テーマ $\to$ 質疑
+      \end{block}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{飛ばさずに検証し、1 機から先へ広げる}
+  \begin{enumerate}
+    \item SILS は実機のファームを無改変で PC 上で動かし，ファームの開発と
+          制御系の実装を机上である程度完了させるための仕組みである
+    \item 参加者が実装した推定器・制御器は，L1 Topic API 経由で
+          既存の実装と差し替えられる
+    \item 実習 5/8 で書いた PID コードは，実機を飛ばす前に SILS で
+          検証してから持ち帰れる（本セッション後半で実習）
+  \end{enumerate}
+
+  \vspace{0.5em}
+
+  \begin{alertblock}{本セッションの立ち位置}
+    \small
+    セッション4までは1機の StampFly を飛ばす話だった。ここからは，飛ばさずに
+    検証する方法と，1機から先の広がりを扱う
+  \end{alertblock}
+\end{frame}
+
+
+
+% ------------------------------------------------------------------
+\begin{frame}{SILS: 実機のファームをそのまま PC で動かす}
+  \begin{block}{Code Identity と Parameter Identity}\small
+    SILS（Software-in-the-Loop Simulation: 実ファームをホスト PC 上で
+    物理シミュレーションと閉ループ実行する検証手法）は，
+    MuJoCo（非線形6自由度の物理エンジン）と\textbf{実ファーム C++ そのもの}を，
+    実機と同じソース・同じパラメータで動かす
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{itemize}\small
+    \item 状態機械・推定器・フェイルセーフを含むシステム全体の検証ベンチ
+    \item 推定器を ESKF から相補フィルタに差し替えても，ベンチは無改変で
+          同じ検証ができる（アルゴリズムの中身に依存しない設計）
+    \item シナリオファイル（\code{.scn}）と合格基準（\code{.expect}）の組で自動判定する。
+          \code{sf sils regression} でまとめて実行できる
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{モデル一致の合否判定}
+  \begin{block}{実機ログの入力で機体モデルを動かす（\code{sf sils sysid-gate}）}\footnotesize
+    実機の飛行ログに残る 400\,Hz のモータ duty と電池電圧を，SILS と同じモータ・推力のモデル
+    （2026-10 のベンチ計測に基づく）に通して角加速度を予測し，ジャイロの微分（実測の角加速度）と比べる。
+    基準ログは実機のロール宙返り 2 本（宙返りの区間とホバーの区間を使う）
+  \end{block}
+
+  \vspace{0.2em}
+
+  \begin{table}
+    \centering\scriptsize
+    \begin{tabular}{llccc}
+      \hline
+      \textbf{区間} & \textbf{指標} & \textbf{合格条件} & \textbf{現行モデル} & \textbf{旧モデル} \\
+      \hline
+      宙返り & 予測とのずれ（残差） & $<0.5$ & 0.29--0.31 & 0.97--1.04 \\
+      宙返り & 予測に足す遅れ & $<8$\,ms & 3--4\,ms & 14--17\,ms \\
+      ホバー & 5--10\,Hz の利得 $|H|$ & 0.6--1.4 & 0.78--0.84 & 0.36--0.38 \\
+      ホバー & 5--10\,Hz の遅れ & $<8$\,ms & 4.2--4.4\,ms & 14.4\,ms \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\scriptsize 残差 $=\mathrm{rms}(\alpha_\mathrm{meas}-\alpha_\mathrm{pred})/\mathrm{rms}(\alpha_\mathrm{meas})$，$H$: 予測から実測への周波数応答。
+  旧モデル: モータ電圧 $=$ duty $\times$ 電池電圧。判定はロール軸。SILS 自身のログでは真値との残差 3\% 未満を確かめる}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{VPython と Genesis}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{lp{0.40\linewidth}p{0.40\linewidth}}
+      \hline
+      & \textbf{特徴} & \textbf{位置づけ} \\
+      \hline
+      VPython & 軽量。Python で書いた 6 自由度モデル・センサモデル・ブラウザ 3D 表示 &
+        シミュレータの作り方を学ぶ練習用。制御則は Python 実装で，実習コードは入らない \\
+      Genesis & 高精度物理エンジン，2000\,Hz 物理演算 &
+        強化学習向けの選択肢。標準インストールに含まれず \code{sf setup genesis} で追加（GPU 必須）。今日は使わない \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
+sf sim run vpython
+sf sim run genesis
+  \end{sflisting}
+
+  {\footnotesize AtomS3 + Atom JoyStick を USB HID モードで使い，実機と同じ操縦感で
+  シミュレータを飛ばせる。自分の実習コードの動作確認は SILS（\code{sf lesson sils}）で行う}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{sf sils コマンド一覧}
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{ll}
+      \hline
+      \textbf{サブコマンド} & \textbf{機能} \\
+      \hline
+      \code{build}      & SILS ホストベンチをビルド \\
+      \code{run}         & 閉ループを実行しバンドルを書き出す \\
+      \code{scenario}    & \code{.scn} シナリオを実行し合否判定 \\
+      \code{regression}  & 全 \code{.scn/.expect} を実行し，CI で合否判定する \\
+      \code{gate}        & マイルストーンバンドルの合否確認 \\
+      \code{sysid-gate}  & 実機ログとのモデル一致の合否判定（2 ページ前） \\
+      \code{gui}         & ブラウザ GUI（次ページ） \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize ESP-IDF は関与しない。firmware ソースをシステム GCC で
+  素の CMake から直接コンパイルし，ヘッドレスで実行する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{sf sils gui}
+  \begin{block}{ブラウザだけで完結する SILS 実験環境}\small
+    シナリオ作成・パラメータ編集・実行・グラフ化・飛行アニメーションを
+    すべて画面で行える
+  \end{block}
+
+  \vspace{0.3em}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{起動}
+sf sils build
+sf sils gui
+  \end{sflisting}
+
+  \begin{itemize}\small
+    \item イベント（rc/wind/fault/handle など）を表で組んでシナリオを作る
+    \item PID ゲインや ESKF 設定など 54 項目をブラウザで編集，
+          変更した項目だけが反映される（再ビルド不要）
+    \item three.js によるライブ 3D と Plotly のグラフが時刻カーソルで同期
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{.scn と .expect の書き方\later}
+  {\scriptsize \textbf{.scn は入力の台本，.expect は合格条件。}どちらも UTF-8 のテキストで，
+  同じ名前で \code{simulator/sils/scenarios/} に置く。GUI は .scn を保存できるが .expect を作る画面は無い（手書き）。
+  .expect が無ければ終了コードだけで判定}
+
+  \vspace{-0.2em}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\tiny]{my\_roll\_step.scn（時刻は ms）}
+# t  ch  thr  roll pitch yaw  arm hold rate
+  0  rc  2048 2048 2048 2048  0   4000 50   # calib
+  +  rc  2048 2048 2048 2048  1   500  50   # ARM
+  +  rc  3243 2048 2048 2048  1   2000 50   # takeoff
+  +  rc  3176 2600 2048 2048  1   1000 50   # roll +8deg
+  +  rc  3176 2048 2048 2048  1   1500 50   # settle
+      \end{sflisting}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+      \begin{sflisting}[basicstyle=\ttfamily\tiny]{my\_roll\_step.expect（in は秒）}
+exit 0
+log_contains any "Takeoff complete"
+metric tilt_max > 8.0 in 6.5 7.5
+metric tilt_max < 6.0 in 8.7 9.0
+metric duty_max < 0.9 in 6.5 9.0
+      \end{sflisting}
+    \end{column}
+  \end{columns}
+
+  \vspace{-0.3em}
+  {\scriptsize \code{sf sils scenario simulator/sils/scenarios/my\_roll\_step.scn --target vehicle} で
+  PASS/FAIL と実測値（\code{tilt\_max=11.1}）が出る。しきい値は先に .expect 無しで動かし，実測に余裕を持たせて決める。
+  \code{+} は直前イベントの終了直後，rc の列は 12 bit 生値（中立 2048）。
+  全文法と手順: \code{simulator/sils/docs/scenario\_tutorial.md}}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{実習 8 (2/2): 自分の PID を SILS で飛ばす}
+  \vspace{0.15em}
+  {\small 見るだけ ｜ \textcolor{sfblue}{\textbf{一緒に打つ}} ｜ 帰宅後に再現}
+
+  \vspace{0.2em}
+
+  \begin{enumerate}\footnotesize\setlength{\itemsep}{0pt}
+    \item Session 4 の実習 8 (1/2) で書いた自分のコードのまま（切り替え不要）。書き切れなかった人は解答に切り替える
+    \item \code{sf lesson sils} を実行し，合否判定を確認する
+  \end{enumerate}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
+sf lesson sils
+  \end{sflisting}
+
+  \vspace{-2.5mm}
+
+  {\scriptsize 解答で試す場合は先に \code{sf lesson switch sci2026:8 --solution} を打つ。
+  合格基準（\code{.expect}）: 離陸（真値高度 $>0.1$\,m）と傾き $15^\circ$ 未満
+  （発散しない）。実測 alt\_max $\approx 0.64$\,m，tilt\_max $0^\circ$，判定 PASS。
+  \warn{注:} 実習コードの SILS は \code{sf lesson sils} を使う（\code{sf sils gui} は vehicle 本体向け）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{デモ: シミュレータを動かす}
+  \begin{exampleblock}{デモの見方}\footnotesize
+    \textbf{見るだけ}: 3D 上での挙動とグラフの対応を確認するだけで要点はつかめる。
+    \textbf{一緒に打つ}: 手元でも \code{sf sim run vpython} を起動してみる。
+    \textbf{帰宅後に再現}: 本日は見るだけにして，後日ジョイスティックで操縦する
+  \end{exampleblock}
+
+  \vspace{0.5em}
+
+  \begin{block}{手順}\footnotesize
+    \begin{enumerate}
+      \item \code{sf sim run vpython} でブラウザ3D操縦（内蔵の Python 制御則で飛ぶ。実習コードは入らない）
+      \item \code{sf sils gui} でシナリオを1本実行し，判定結果（PASS/FAIL）を確認（実ファームがそのまま動く）
+      \item 同じシナリオでパラメータを変え，挙動の変化を見る
+    \end{enumerate}
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{デモの期待結果: SILS シナリオ実行}
+  \begin{center}
+    \includegraphics[width=\textwidth, height=0.68\textheight, keepaspectratio]{../fallback/S5_attitude_rate.png}
+  \end{center}
+
+  \vspace{0.3em}
+
+  {\footnotesize \code{stab\_flight.scn}（vehicle）の姿勢角と角速度。12 項目の合否判定をすべて満たす}
+  % Web版のみ: 静止グラフの代わりにSILS実行動画（MuJoCo 3D + 状態グラフ）を見せる
+  % @web: video=../fallback/S5_stab_flight.mp4 caption=STABILIZE 飛行（MuJoCo 3D + 状態グラフ）
+  % @web: layout=replace
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{解析ツール: sf log analyze / viz}
+  \begin{block}{取得したテレメトリをそのまま解析する}\small
+    \code{sf log wifi} で取得したフライトログ一式（\code{.sflog.zip}：信号ごとの CSV をまとめた zip）を，
+    追加スクリプトなしで解析・可視化できる
+  \end{block}
+
+  \vspace{0.5em}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
+sf log viz
+sf log analyze
+  \end{sflisting}
+
+  {\footnotesize 詳しい手順は \code{docs/guides/flight-log-viz.md}。取得 $\to$ 可視化 $\to$
+  解析の流れはセッション4のシステム同定と同じログを使い回せる}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{センサノイズの評価: Allan 分散\later}
+  \begin{block}{Allan 分散でわかること}\small
+    静止センサの出力から Allan 偏差（Allan deviation）を計算すると，
+    ホワイトノイズと長時間のバイアス不安定性を分離して評価できる。
+    ESKF の Q/R（プロセス／観測ノイズ共分散）チューニングの基礎データになる
+  \end{block}
+
+  \vspace{0.2em}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
+sf log wifi -d 60 -o static_noise.sflog.zip   # 機体を静止させて60秒取得
+sf sysid noise static_noise.sflog.zip --sensor gyro --static-only --plot
+  \end{sflisting}
+
+  \vspace{-1.5mm}
+
+  {\footnotesize \code{--sensor} は \code{gyro/accel/baro/tof/all} を選べるが，
+  \code{sf log wifi} が保存する一式の CSV は gyro/accel のみ（baro/tof は現行ファームでは対象外。
+  \code{sf log capture} は旧ファーム vehicle\_old 専用）。
+  トリム調整には \code{sf trim analyze} がある}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Author's 2nd-round review: the single "L1 Topic API" frame was too
+% abrupt. Expanded into 3 \later frames so participants can read this at
+% home: (a) what the Topic API is (real topic names from topics.hpp, real
+% read functions from sf_api.hpp), (b) how to plug in your own estimator/
+% controller (real IEstimator/IController methods, real swap mechanism),
+% (c) a pointer to the example program. Accuracy note (checked against the
+% headers directly): sf::api::* (sf_api.hpp, M2d scope) is READ-ONLY today
+% — thin wrappers around Topic<T>::latest(). There is no publish-side
+% entry point exposed to learners yet (actuator control / state requests
+% are explicitly out of scope in the header's own comment). So frame (a)
+% describes Topic<T> publish/latest as the underlying Pub-Sub mechanism
+% used BETWEEN firmware components, and sf::api::* as the read-only subset
+% exposed to L1. Frame (b) describes the actual swap path found in the
+% task sources (imu_task.cpp's createEstimator() factory keyed on the
+% estimator.type param; control_task.cpp's single static PidController
+% instance for the controller side, since no controller factory exists
+% yet).
+% 著者の第2ラウンドレビュー: 「L1 Topic API」1枚は説明が急すぎた。3枚の
+% \later フレームに拡張し，受講者が後で読めるようにした: (a) Topic API とは
+% 何か（topics.hppの実トピック名，sf_api.hppの実読み取り関数），(b) 自分の
+% 推定器・制御器を載せる方法（実際のIEstimator/IControllerメソッド，実際の
+% 差替え機構），(c) サンプルプログラムへの導線。正確性の注記（ヘッダを直接
+% 確認済み）: sf::api::*（sf_api.hpp, M2dスコープ）は現状「読み取り専用」—
+% Topic<T>::latest() の薄いラッパーに過ぎない。学習者向けのpublish側の入口は
+% まだ無い（アクチュエータ制御・状態要求はヘッダ自身のコメントで明示的に
+% 対象外）。そこで(a)ではファームコンポーネント間で使われる本来のPub-Sub機構
+% としてTopic<T>のpublish/latestを説明し，sf::api::*はL1に公開された読み取り
+% 専用の部分集合と位置づける。(b)ではタスクソースで実際に見つかった差替え
+% 経路を説明する（推定器はimu_task.cppのcreateEstimator()ファクトリが
+% estimator.typeパラメータで分岐；制御器はcontrol_task.cppの単一static
+% PidControllerインスタンスを直接差し替える — 制御器側にはまだファクトリが
+% 無いため）。
+% ------------------------------------------------------------------
+% Where to start: the lesson flow (switch/edit/build/flash) told
+% participants exactly where to write; `sf app` gives the same four
+% steps for one's own project (instructor request, 2026-09-07).
+% どこから始めるか: 実習は switch/edit/build/flash で書く場所が明確だった。
+% 研究利用でも同じ 4 手順を `sf app` で提供する（講師の指摘、2026-09-07）。
+\begin{frame}[fragile]{研究利用の入口 (1/4): 自分のコードはどこに書くか}
+  \begin{block}{実習と同じ 4 手順で自分のプロジェクトを持つ}\footnotesize
+    例題を複製した \code{firmware/apps/<名前>/} が自分の場所。\code{main/learner\_controller.cpp} に
+    制御則を書き，実習の \code{switch $\to$ edit $\to$ build $\to$ flash} と同じ順で動かす
+  \end{block}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{コマンド}
+sf app new my_ctrl        # 例題 10_custom_controller を複製
+sf app edit my_ctrl       # learner_controller.cpp が開く
+sf app build my_ctrl
+sf app flash my_ctrl -m
+  \end{sflisting}
+
+  {\scriptsize センサ値・推定値を読む研究なら \code{--from 09\_topic\_api\_hello}（姿勢トピックを購読して表示する例題）。
+  \code{sf app list} で例題一覧。(2/4)〜(4/4) は，このプロジェクトの中で何が読めて何を差し替えられるかの説明}
+\end{frame}
+
+\begin{frame}{研究利用の入口 (2/4): Topic API とは\later}
+  \begin{block}{Pub-Sub（発行/購読型のメッセージ配信）}\footnotesize
+    \code{Topic<T>}（\code{sf\_core}）がコンポーネント間を疎結合につなぐ。
+    発行側は \code{publish(data)}，購読側は \code{latest()} で最新値を読む
+  \end{block}
+
+  \vspace{0.2em}
+
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{ll}
+      \hline
+      \textbf{トピック（\code{sf::}名前空間）} & \textbf{内容} \\
+      \hline
+      \code{sensor\_imu}       & IMU 生データ（400\,Hz） \\
+      \code{estimate\_state}   & 推定した姿勢・位置・速度 \\
+      \code{command\_setpoint} & パイロット/API の目標値 \\
+      \code{control\_output}   & 推力・トルク指令 \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\scriptsize 学習者向け読み取り関数（\code{sf::api::*}，\code{sf\_api.hpp}）:
+  \code{imu\_latest()}/\code{estimate\_latest()}/\code{command\_latest()} など。
+  \code{Topic<T>::latest()} をラップした\warn{読み取り専用}の入口（書き込み側は未公開）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{研究利用の入口 (3/4): 推定器・制御器を載せる\later}
+  \begin{block}{\code{IEstimator}/\code{IController} を実装する}\footnotesize
+    既存の ESKF・PID と同じインターフェース（\code{sf\_estimator}/\code{sf\_controller}）
+    を実装すれば差し替えられる
+  \end{block}
+
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{ll}
+      \hline
+      \textbf{インターフェース} & \textbf{主なメソッド} \\
+      \hline
+      \code{IEstimator}  & \code{predict()}, \code{update*()}, \code{getState()}, \code{reset()} \\
+      \code{IController} & \code{compute()}, \code{reset()}, \code{onModeChange()} \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\scriptsize \textbf{差替え手順:} 推定器は \code{estimator.type} パラメータで選ぶ
+  （\code{imu\_task.cpp} の \code{createEstimator()} を拡張して自作を足す）。制御器は
+  現状 PID の単一実装のみのため，\code{control\_task.cpp} の \code{static PidController
+  controller;} を自分のクラスに置き換える（コントローラ側にはまだファクトリが無い）}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}[fragile]{研究利用の入口 (4/4): サンプルプログラム\later}
+  \begin{block}{\code{firmware/vehicle/examples/09\_topic\_api\_hello}}\footnotesize
+    姿勢トピックを購読し，roll/pitch/yaw を 10\,Hz でシリアル表示する最小例
+  \end{block}
+
+  \begin{sflisting}[basicstyle=\ttfamily\scriptsize]{抜粋（イメージ）}
+sf::StateEstimate est = sf::api::estimate_latest();
+auto rpy = sf::math::Quat(est.attitude[0], est.attitude[1],
+                           est.attitude[2], est.attitude[3]).to_euler();
+printf("roll=%.1f pitch=%.1f yaw=%.1f\n",
+       rpy.x*180/M_PI, rpy.y*180/M_PI, rpy.z*180/M_PI);
+  \end{sflisting}
+
+  {\scriptsize 自分の複製で試す: \code{sf app new my\_hello --from 09\_topic\_api\_hello} $\to$ \code{sf app edit/build/flash my\_hello}\\[0pt]
+  \warn{帰宅後に再現:} \code{firmware/vehicle/examples/09\_topic\_api\_hello}（リポジトリ直下から。
+  \code{04\_read\_imu} 等と同じく単独ビルド可能）を手元で試す}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{再現性の3原則\later}
+  \vspace{0.3em}
+
+  {\small セッション1で見た開発の3原則を，再現性の観点から振り返る}
+
+  \vspace{0.3em}
+
+  \begin{table}
+    \centering\footnotesize
+    \begin{tabular}{lp{80mm}}
+      \hline
+      \textbf{原則} & \textbf{内容} \\
+      \hline
+      Code Identity & SILS は実ファームと同じソースをそのままコンパイルして動く \\
+      Parameter Identity & 同じパラメータで動かす \\
+      Model Fidelity & 実機飛行後にモデルをログで較正する（後追いの精度向上） \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  \vspace{0.5em}
+
+  {\small パラメータは \code{param set}/\code{param save} で NVS に保存する。
+  自作の推定器・制御器を試すときも，この3原則があるから「SILS で通った」が
+  実機の挙動を意味する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{発展テーマ: AI と強化学習\later}
+  \begin{itemize}\small
+    \item \textbf{AI コーディングエージェントの活用}: 制御則の実装・デバッグや
+          シミュレーションログの解析を，AI コーディングエージェントを補助に
+          進める流れが広がりつつある。StampFly のような小型・低リスクな
+          実験プラットフォームは，その検証サイクルを高速に回す題材になりうる
+    \item \textbf{強化学習と Sim-to-Real}: シミュレータ上で学習した制御方策を
+          実機に転移する流れを教材化できれば，古典制御から学習型制御へ
+          カリキュラムの射程が広がる。機体が小型・軽量で墜落時のリスクが
+          小さいことは Sim-to-Real の実機検証に向く
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{発展テーマ: 制御・推定・自律飛行\later}
+  \begin{itemize}\small
+    \item \textbf{MPC・適応制御}: 今日扱った PID の先にある発展的な制御手法
+    \item \textbf{ESKF・オートチューン}: 15状態 ESKF の実装，
+          セッション4の rate-fit/rate-tune と同じ設計を機体内で行う \code{sf\_autotune}
+    \item \textbf{高度・位置ループ}: レート/姿勢カスケードの外側に
+          ALT\_HOLD/POS\_HOLD が乗る。外乱オブザーバ（\code{altitude.dob.fc}）も
+          パラメータで opt-in できる
+    \item \textbf{Tello 互換 SDK と ROS 2}: Python SDK（\code{lib/stampfly}）と
+          \code{sf takeoff} などの Tello 風コマンド（\code{sf takeoff/land/hover/jump} …）
+          で自律飛行の入口を用意している。ROS 2 との連携も発展的なテーマの一つである
+  \end{itemize}
+\end{frame}
+
+% ------------------------------------------------------------------
+% Right card padded down to match the left card's bottom (left has a
+% 4-item bulleted list and a 2-line title, right is short)
+% 右カードを左カードの下端に合わせて伸ばす（左は4項目の箇条書き＋2行タイトルで長い）
+\newlength{\communityCardH}\setlength{\communityCardH}{4.35cm}
+\begin{frame}{教育・研究での再利用\later}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{block}{自分の授業・研究室で使うには}\footnotesize
+        \begin{itemize}
+          \setlength{\itemsep}{1pt}
+          \item \code{lesson\_manifest.yaml} の \code{courses:} に実習順序を
+                追加できる（本チュートリアルの \code{sci2026} も同じ仕組み）
+          \item 本スライド一式は LaTeX（Beamer）ソースごと公開されている
+          \item SILS で実機なしの演習・採点も一部自動化できる
+        \end{itemize}
+      \end{block}
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \begin{exampleblock}{コミュニティへ}\footnotesize
+        \cardbody{\communityCardH}{%
+        質問・不具合報告・開発への協力はリポジトリの Issue で受け付けている\\[4pt]
+        \url{https://github.com/M5Fly-kanazawa/stampfly_ecosystem}}
+      \end{exampleblock}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{理論とコードの対応表\later}
+  \begin{table}
+    \centering\scriptsize
+    \renewcommand{\arraystretch}{0.85}
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{35mm}>{\raggedright\arraybackslash}p{58mm}>{\raggedright\arraybackslash}p{35mm}}
+      \hline
+      \textbf{概念} & \textbf{実装場所} & \textbf{コマンド} \\
+      \hline
+      SILS（実ファーム＋MuJoCo）  & \code{simulator/\allowbreak sils/}                         & \code{sf sils scenario} \\
+      VPython シミュレータ        & \code{simulator/\allowbreak vpython/}                      & \code{sf sim run vpython} \\
+      Genesis シミュレータ        & \code{simulator/\allowbreak genesis/}                      & \code{sf sim run genesis} \\
+      物理パラメータの基準ファイル  & \code{control/\allowbreak models/\allowbreak stampfly\_physical.yaml} & \code{sf params check} \\
+      同定とモデル一致の合否判定   & \code{tools/\allowbreak sysid/}, \code{tools/\allowbreak log\_analyzer/} & \code{sf sysid fit} / \code{sf sils sysid-gate} \\
+      推定インターフェース         & \code{sf\_estimator} / \code{sf\_estimator\_\allowbreak eskf} & --- \\
+      制御インターフェース         & \code{sf\_controller} / \code{sf\_controller\_\allowbreak pid} & --- \\
+      \hline
+    \end{tabular}
+  \end{table}
+
+  {\footnotesize 3 つのシミュレータは同じ物理パラメータの基準ファイル（\code{stampfly\_physical.yaml}）を参照し、\code{sf params check} で手動コピーの食い違いを検出する}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{復習パス}
+  \begin{table}
+    \centering\footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{>{\raggedright\arraybackslash}p{32mm}>{\raggedright\arraybackslash}p{35mm}>{\raggedright\arraybackslash}p{60mm}}
+      \hline
+      \textbf{コマンド} & \textbf{扱う内容} & \textbf{文書} \\
+      \hline
+      \code{sf sim run vpython}  & VPython シミュレータ    & \code{simulator/\allowbreak README.md} \\
+      \code{sf sils gui}         & SILS ブラウザ実験環境   & \code{simulator/\allowbreak sils/\allowbreak gui/\allowbreak README.md} \\
+      \code{sf log viz}          & ログ可視化              & \code{docs/\allowbreak guides/\allowbreak flight-log-viz.md} \\
+      ---                        & シミュレーション方針     & \code{docs/\allowbreak architecture/\allowbreak simulation-policy.md} \\
+      \hline
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{質疑: 想定質問と回答 (1/2)}
+  \scriptsize
+  \begin{block}{Q1. モデル一致の判定で Yaw 軸だけ精度が悪化するのはなぜか}
+    ヨーだけ反トルク（角加速度に比例）が抗力トルクに重畳し，伝達関数に物理的な
+    零点（LHP・位相リード，$\tau_z\approx45$\,ms）を持つ。零点は励振帯域より低く，
+    トルク権限もロール/ピッチの約1/4しかなく，3パラメータ同定では零点を分離できず
+    精度が落ちる（コヒーレンス0.44）。対策はヨーの合否判定を分離し，κ実測＋
+    4パラメータ化で基準を再導出すること。
+  \end{block}
+
+  \begin{block}{Q2. 自作の制御器を載せるとき，安全機構はどこまで自分で書く必要があるか}
+    状態機械（ARM/DISARM・モード遷移），通信途絶/低電圧の検知とLANDING移行，
+    ミキサー出力（duty）の最終クランプは，どの制御器でもファームウェア側が担う。
+    自作側は \texttt{IController} 契約——\texttt{reset()}/\texttt{onModeChange()}
+    の実装，400\,Hz周期内の非ブロッキングな \texttt{compute()}，出力の妥当範囲
+    維持——を守ればよい。
+  \end{block}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{質疑: 想定質問と回答 (2/2)}
+  \footnotesize
+  \begin{block}{Q3. ROS 2 と連携するにはどこから手を付ければよいか}
+    リポジトリの \texttt{ros/} には ROS 2 ブリッジが既にあるが，これは旧世代
+    ファーム（vehicle\_old）のWebSocketテレメトリ・独自UDP制御プロトコル向けで，
+    現行ファーム（vehicle）のUDPテレメトリ・Tello式コマンドAPIとは互換性がない。
+    現実的な入口は，PC側で現行のUDPテレメトリ（\texttt{sf log wifi} と同じ形式）を
+    購読し，Tello風コマンドを送る rclpy ノードを新規に書くこと（ファーム改修は不要）。
+  \end{block}
+
+  \vspace{1.5em}
+
+  {\small 質疑の時間は本セッション末の15分。時間内に扱いきれなかった質問は，
+  リポジトリの Issue で受け付けている}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{チェックポイント}
+  \begin{alertblock}{確認事項}\small
+    \begin{itemize}\setlength{\itemsep}{1pt}
+      \item[$\square$] SILS・VPython・Genesis の役割の違いと，SILS の仕組みを説明できる
+      \item[$\square$] \code{sf sils gui} でのシナリオ実行とパラメータ編集の流れを見た
+            （または手元で試した）
+      \item[$\square$] L1 Topic API で自分の推定器・制御器を差し替える方法を理解した
+            （詳しくは「研究利用の入口 (1/4)〜(4/4)」）
+      \item[$\square$] 解析ツールの入口を把握した
+    \end{itemize}
+  \end{alertblock}
+
+  \vspace{0.2em}
+
+  \begin{block}{本日はこれで終了}
+    資料・録画は公開されている。持ち帰り資料（付録）で復習を続けられる
+  \end{block}
+\end{frame}

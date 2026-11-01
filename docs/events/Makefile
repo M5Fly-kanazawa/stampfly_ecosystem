@@ -17,6 +17,7 @@
 #   make dxh            — DXH high-school-teacher workshop deck
 #   make dxh-docswell   — DXH deck, Docswell upload variant (no QR codes)
 #   make sci             — SCI/SICE tutorial course deck
+#   make sci-rev         — SCI deck, 2026-11-01 revision (use this for future runs)
 #   make sci-core        — SCI/SICE tutorial core (要点版) deck
 #   make sci-docswell    — SCI deck, Docswell upload variant (no QR codes)
 #   make sci-html         — Prototype HTML slide viewer for the SCI deck
@@ -26,11 +27,13 @@
 #   make sci-web          — Native HTML slide deck for the SCI tutorial, parsed
 #                           directly from the Beamer .tex sources (tools/slides/
 #                           beamer_to_html.py, into sci_tutorial_2026/web/)
+#   make sci-rev-web      — Same as sci-web, for the 2026-11-01 revised deck (into
+#                           sci_tutorial_2026/web/index_rev20261101.html)
 #   make chapter NAME=<x> — Single chapter, searched across all events'
 #                           chapters/ directories: make chapter NAME=led_control
 #   make clean           — Remove build artifacts
 
-.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-core sci-docswell sci-html dxh-html workshop-html sci-web chapter clean
+.PHONY: all tikz slides workshop dxh dxh-docswell sci sci-rev sci-core sci-docswell sci-html dxh-html workshop-html sci-web sci-rev-web chapter clean
 
 # ---------------------------------------------------------------------------
 # Shared TikZ diagrams
@@ -130,7 +133,10 @@ SCI_DIR          := sci_tutorial_2026/slides
 SCI_TEX          := sci_tutorial.tex
 SCI_PDF          := sci_tutorial.pdf
 SCI_DOCSWELL_PDF := sci_tutorial_docswell.pdf
-SCI_CHAPTERS     := $(wildcard $(SCI_DIR)/chapters/*.tex)
+# Revised-deck chapter copies are excluded so the original deck does not depend on them
+# 改訂版の章コピーは除外し、元のスライドが改訂版に依存しないようにする
+SCI_REV_CHAPTERS := $(wildcard $(SCI_DIR)/chapters/*_rev20261101.tex)
+SCI_CHAPTERS     := $(filter-out $(SCI_REV_CHAPTERS),$(wildcard $(SCI_DIR)/chapters/*.tex))
 
 sci: $(SCI_DIR)/$(SCI_PDF)
 
@@ -141,6 +147,13 @@ sci-core: $(SCI_DIR)/sci_tutorial_core.pdf
 
 $(SCI_DIR)/sci_tutorial_core.pdf: $(SCI_DIR)/sci_tutorial_core.tex _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(wildcard $(SCI_DIR)/chapters/core_*.tex) $(SHARED_ASSETS)
 	cd $(SCI_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode sci_tutorial_core.tex && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode sci_tutorial_core.tex
+
+# 2026-11-01 revision of the SCI deck (two passes for TOC/references)
+# SCI スライドの 2026-11-01 改訂版（目次・参照解決のため 2 回実行）
+sci-rev: $(SCI_DIR)/sci_tutorial_rev20261101.pdf
+
+$(SCI_DIR)/sci_tutorial_rev20261101.pdf: $(SCI_DIR)/sci_tutorial_rev20261101.tex _shared/beamer/preamble.tex _shared/beamer/stampfly_slides.sty $(SCI_CHAPTERS) $(SCI_REV_CHAPTERS) $(SHARED_ASSETS)
+	cd $(SCI_DIR) && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode sci_tutorial_rev20261101.tex && $(SHARED_BEAMER_TEXINPUTS) lualatex -interaction=nonstopmode sci_tutorial_rev20261101.tex
 
 sci-docswell: $(SCI_DIR)/$(SCI_DOCSWELL_PDF)
 
@@ -203,6 +216,14 @@ sci-web:
 	python3 $(BEAMER_TO_HTML) --sci-dir sci_tutorial_2026 --tikz-dir $(TIKZ_DIR) \
 		--images-dir $(IMAGES_DIR) --build-tikz
 
+# Revised 2026-11-01 deck. It shares web/assets with the 2026-09-10 deck, so run
+# `make sci-web` first if the assets are missing.
+# 2026-11-01 改訂版。web/assets は 2026-09-10 の版と共有するため、素材が
+# 無いときは先に `make sci-web` を実行する。
+sci-rev-web:
+	python3 $(BEAMER_TO_HTML) --sci-dir sci_tutorial_2026 --master sci_tutorial_rev20261101.tex \
+		--out sci_tutorial_2026/web/index_rev20261101.html --tikz-dir $(TIKZ_DIR) --images-dir $(IMAGES_DIR)
+
 # ---------------------------------------------------------------------------
 # Single chapter build (for fast iteration)
 # Usage: make chapter NAME=led_control
@@ -230,7 +251,7 @@ endif
 # All
 # ---------------------------------------------------------------------------
 
-all: tikz slides dxh dxh-docswell sci sci-docswell
+all: tikz slides dxh dxh-docswell sci sci-rev sci-docswell
 
 # ---------------------------------------------------------------------------
 # Clean

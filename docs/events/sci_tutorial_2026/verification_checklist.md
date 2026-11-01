@@ -2,6 +2,8 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
+> **スライドの版（2026-11-01）:** 次回以降の講習は改訂版 `slides/sci_tutorial_rev20261101.pdf` を使う。
+
 > 現行の実習ファームは 2026-07-18 に vehicle のコンポーネント基盤上へ再構築された
 > （`firmware/vehicle/docs/workshop_migration.md` §8）。この再構築以降、実機ベンチ・飛行レッスンの
 > 実機検証は行われていない。本チェックリストは、9/10 のチュートリアル本番前に
@@ -12,12 +14,12 @@
 ## 1. ベンチ確認（机上で実施。モータ回転中は手を近づけない）
 
 - [ ] `sf doctor` を実行 → エラーなく完了すること
-- [ ] `sf build vehicle` → `sf flash vehicle -m` → 標準起動音（C5→E5→G5）・LED 白→緑常灯・モニタに起動ログ、まで到達すること（実習 1 と同じ手順）
+- [ ] `sf build vehicle` → `sf flash vehicle -m` → 標準起動音（C5→E5→G5）・LED は未ペアなら青の速い点滅（ペアリング待ち）、ペア済みなら緑・モニタに起動ログ、まで到達すること（実習 1 と同じ手順）
 - [ ] 書き込み直後のモニタ CLI で `param reset` → `param set wifi.mode 1` → `param set wifi.channel N` → `param save` → `reboot` が通り、再起動後に `param get wifi.channel` が N を返すこと（実習 1 (2/2) と同じ手順）
-- [ ] コントローラのペアリング: LCD パネルボタンを押しながら電源投入 → 機体ボタンを 3 秒以上押し続けてビープで離す（5 秒以上でシステムリセット）→ コントローラ画面の一覧から機体（MAC下4桁。`mac` コマンドで確認）を選んでボタンで確定 → 機体LEDが緑常灯になる
+- [ ] コントローラのペアリング: コントローラの M5 ボタン（LCD パネル）を押しながら電源投入（画面に `=== PAIRING ===`）→ 未ペアの機体は自動でペアリング待ち（LED 青の速い点滅）、ペア済みの機体は本体ボタンを 3 秒以上押し続けてビープで離してペアリング待ちにする → コントローラ画面の一覧から機体（MAC下4桁。`mac` コマンドで確認）を右スティックで選んで M5 ボタンで確定 → 機体LEDが緑になる
 - [ ] 以降の `sf lesson` 書き込みでは起動音が授業チャイムに変わること（実習ファーム共通の識別音。vehicle の標準起動音 C5→E5→G5 とは異なる。`sf flash vehicle` に戻すと標準音に戻る）
-- [ ] `sf lesson switch sci2026:3 --solution` → `sf lesson build` → `sf lesson flash` → 机上でモータが回転すること（duty を上げるとゆっくり回転数が上がる。異常時は即 DISARM）
-- [ ] `sf lesson switch sci2026:4 --solution` → コントローラのスティックを倒すと `rc_roll()`/`rc_pitch()` 等の値がシリアル出力で追従すること
+- [ ] `sf lesson switch sci2026:3 --solution` → `sf lesson build` → `sf lesson flash` → 机上でモータが回転すること（duty を上げるとゆっくり回転数が上がる。異常時は即 DISARM）。**ARM 前の設定:** コントローラの左ボタン（高度モード）を OFF（ALT/POS にしない）、右ボタン（制御モード）を STABILIZE か ACRO にしておく（ALT/POS では ARM で自動離陸に入り、ボタンで DISARM できない）。
+- [ ] `sf lesson switch sci2026:4 --solution` → コントローラのスティックを倒すと `rc_roll()`/`rc_pitch()` 等の値がシリアル出力で追従すること。**ARM 前の設定:** コントローラの左ボタン（高度モード）を OFF（ALT/POS にしない）、右ボタン（制御モード）を STABILIZE か ACRO にしておく（ALT/POS では ARM で自動離陸に入り、ボタンで DISARM できない）。
 - [ ] USB 接続中は本体ボタン ARM が拒否されること（安全仕様）
 - [ ] USB を抜きバッテリ駆動 → 本体ボタンで ARM → DISARM が機能すること
 - [ ] `sf lesson switch sci2026:2 --solution` → Teleplot でジャイロ・加速度値が手で傾けると変化すること
@@ -28,8 +30,8 @@
 
 ## 2. 飛行確認（低スロットルから開始。異常時は即 DISARM）
 
-- [ ] `sf lesson switch sci2026:5 --solution` → 離陸しホバリングが安定すること（実習5 の $K_p=0.5$ 設定）
-- [ ] `sf lesson switch sci2026:8 --solution` → PID 化した状態で離陸し，P のみと比べて定常偏差が減ること
+- [ ] `sf lesson switch sci2026:5 --solution` → 離陸しホバリングが安定すること（実習5 の Roll/Pitch $K_p=0.5$、Yaw $K_p=2.0$ 設定）
+- [ ] `sf lesson switch sci2026:8 --solution` → PID 化した状態で離陸し，P のみと比べて，一定の外乱（重心のずれ・推力差）によるずれが小さくなること
 - [ ] `sf lesson switch sci2026:9 --solution` → Teleplot で `cf_roll`（相補フィルタ）と `eskf_roll` がおおむね一致すること
 
 **NG時の代替:** 特定の実習のみ飛行が不安定な場合，その実習のデモは事前取得済み動画（§5）に切り替え，他の実習は実演を続ける。全実習で不安定な場合，S4 全体を動画中心の進行に切り替える。
@@ -39,7 +41,7 @@
 - [ ] 実習7 の手順（`ws::set_rate_target()` を呼ぶ実習コード）でログを取得 → `sf sysid fit flight.csv --plot` が実行でき，Roll/Pitch の $K$ が実習6 の理論値（$K_{roll}=102$, $K_{pitch}=70$）に近い値で出ること（$\tau_m$ は励振の強さに強く依存し，理論値0.02sの数倍にズレることが実測で確認済み — これ単独では NG 扱いしない。$K$ が理論値と大きく食い違う場合のみ NG とする）
 - [ ] 同じログで `sf sysid rate-fit flight.csv --axis roll` が実行でき，$(b, L, T)$ が妥当な値（$L$ が数ms〜十数ms程度）で出ること
 
-**NG時の代替:** （$K$ の）同定が収束しない場合，事前取得済みの参照ログ（`analysis/reports/rate_sysid_reference/` 等）を使ったデモに切り替え，当日ログでの実演は「一緒に打つ」ではなく「見るだけ」にする。
+**NG時の代替:** （$K$ の）同定が収束しない場合，本節のリハーサルで取得して保存しておいたログを使ったデモに切り替え，当日ログでの実演は「一緒に打つ」ではなく「見るだけ」にする。
 
 ## 4. 本番ファームでのデモ確認
 
@@ -64,6 +66,8 @@
 
 <a id="english"></a>
 
+> **Slide version (2026-11-01):** future runs use the revised deck `slides/sci_tutorial_rev20261101.pdf`.
+
 ## 1. Overview
 
 > The current lesson firmware was rebuilt onto the vehicle component base on
@@ -78,12 +82,12 @@
 ## 1. Bench Check (on a table; keep hands clear of the spinning motors)
 
 - [ ] `sf doctor` completes with no errors
-- [ ] `sf build vehicle` -> `sf flash vehicle -m` -> reaches the standard boot chime (C5-E5-G5), LED white then steady green, and the boot log in the monitor (same steps as Exercise 1)
+- [ ] `sf build vehicle` -> `sf flash vehicle -m` -> reaches the standard boot chime (C5-E5-G5), LED shows a fast blue blink if the vehicle is not paired yet (waiting for pairing) and green if it is paired, and the boot log in the monitor (same steps as Exercise 1)
 - [ ] In the monitor CLI right after flashing, `param reset` -> `param set wifi.mode 1` -> `param set wifi.channel N` -> `param save` -> `reboot` succeeds, and `param get wifi.channel` returns N after the reboot (same steps as Exercise 1 (2/2))
-- [ ] Controller pairing: hold the LCD panel button while powering on the controller, then hold the vehicle button for 3 s or more and release at the beep (5 s or more triggers a system reset), then pick the vehicle (last 4 hex digits of its MAC, check with the `mac` command) from the controller's on-screen list and confirm -> the vehicle's LED turns solid green
+- [ ] Controller pairing: hold the M5 button (LCD panel) while powering on the controller (`=== PAIRING ===` appears); an unpaired vehicle enters pairing wait automatically (fast blue blink), and an already-paired vehicle is put into pairing wait by holding its body button for 3 s or more and releasing at the beep; then pick the vehicle (last 4 hex digits of its MAC, check with the `mac` command) from the controller's on-screen list with the right stick and confirm with the M5 button -> the vehicle's LED turns green
 - [ ] Subsequent `sf lesson` flashes switch the boot sound to the school chime (the lesson firmware's common identity sound, distinct from the vehicle's standard C5-E5-G5 chime; `sf flash vehicle` restores the standard sound)
-- [ ] `sf lesson switch sci2026:3 --solution` -> `sf lesson build` -> `sf lesson flash` -> motors spin on the table (speed rises gradually with duty; DISARM immediately if anything looks wrong)
-- [ ] `sf lesson switch sci2026:4 --solution` -> `rc_roll()`/`rc_pitch()` etc. track the controller sticks in the serial output
+- [ ] `sf lesson switch sci2026:3 --solution` -> `sf lesson build` -> `sf lesson flash` -> motors spin on the table (speed rises gradually with duty; DISARM immediately if anything looks wrong). **Before ARM:** set the controller's left button (altitude mode) to OFF (not ALT/POS) and its right button (control mode) to STABILIZE or ACRO (with ALT/POS selected, ARM enters auto-takeoff and the button can no longer DISARM).
+- [ ] `sf lesson switch sci2026:4 --solution` -> `rc_roll()`/`rc_pitch()` etc. track the controller sticks in the serial output. **Before ARM:** set the controller's left button (altitude mode) to OFF (not ALT/POS) and its right button (control mode) to STABILIZE or ACRO (with ALT/POS selected, ARM enters auto-takeoff and the button can no longer DISARM).
 - [ ] Button ARM is rejected while USB is connected (safety behavior)
 - [ ] Unplug USB, run on battery -> button ARM and DISARM both work
 - [ ] `sf lesson switch sci2026:2 --solution` -> gyro/accel values change in Teleplot as you tilt the vehicle by hand
@@ -94,8 +98,8 @@
 
 ## 2. Flight Check (start at low throttle; DISARM immediately if anything looks wrong)
 
-- [ ] `sf lesson switch sci2026:5 --solution` -> takes off and hovers stably (Exercise 5's $K_p=0.5$)
-- [ ] `sf lesson switch sci2026:8 --solution` -> takes off with PID enabled, steady-state error visibly smaller than P-only
+- [ ] `sf lesson switch sci2026:5 --solution` -> takes off and hovers stably (Exercise 5's Roll/Pitch $K_p=0.5$, Yaw $K_p=2.0$)
+- [ ] `sf lesson switch sci2026:8 --solution` -> takes off with PID enabled, the offset caused by a constant disturbance (CG offset, thrust mismatch) visibly smaller than with P-only
 - [ ] `sf lesson switch sci2026:9 --solution` -> `cf_roll` (complementary filter) and `eskf_roll` broadly agree in Teleplot
 
 **Fallback:** if only one exercise flies unstably, switch that exercise's demo to the pre-recorded video (§5) and keep flying the others live. If all exercises are unstable, run S4 primarily from video.
@@ -105,7 +109,7 @@
 - [ ] Using Exercise 7's procedure (student code calling `ws::set_rate_target()`), `sf sysid fit flight.csv --plot` runs and returns roll/pitch $K$ close to the Exercise 6 theoretical values ($K_{roll}=102$, $K_{pitch}=70$) ($\tau_m$ is far more excitation-sensitive and has been observed several times the 0.02s theoretical value on real flights -- don't treat that alone as NG; only a large $K$ mismatch is)
 - [ ] The same log works with `sf sysid rate-fit flight.csv --axis roll`, returning a plausible $(b, L, T)$ ($L$ on the order of single-digit to low-double-digit ms)
 
-**Fallback:** if ($K$) identification does not converge, demo with a pre-captured reference log (e.g. under `analysis/reports/rate_sysid_reference/`) and present the day's own log as "watch only" rather than live.
+**Fallback:** if ($K$) identification does not converge, demo with the log captured and saved during this section's rehearsal and present the day's own log as "watch only" rather than live.
 
 ## 4. Production-Firmware Demo Check
 

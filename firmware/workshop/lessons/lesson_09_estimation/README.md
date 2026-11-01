@@ -60,9 +60,13 @@ angle = alpha * (angle + gyro * dt) + (1 - alpha) * accel_angle
 
 ### Accelerometer Angles / 加速度からの角度計算
 ```cpp
-accel_roll  = atan2f(ay, az);     // Roll from gravity
-accel_pitch = atan2f(-ax, az);    // Pitch from gravity
+accel_roll  = atan2f(-ay, -az);                       // Roll from gravity
+accel_pitch = atan2f(ax, sqrtf(ay * ay + az * az));   // Pitch from gravity
 ```
+
+At rest the accelerometer reads $[a_x, a_y, a_z] = [g\sin\theta,\ -g\sin\phi\cos\theta,\ -g\cos\phi\cos\theta]$ in the body frame (FRD), so a level craft gives $a_z \approx -9.81$ m/s². Hence the minus signs: $\phi = \mathrm{atan2}(-a_y, -a_z)$, $\theta = \mathrm{atan2}(a_x, \sqrt{a_y^2 + a_z^2})$ (same as `solution.cpp`).
+
+静止時の加速度の測定値は機体座標（FRD）で $[a_x, a_y, a_z] = [g\sin\theta,\ -g\sin\phi\cos\theta,\ -g\cos\phi\cos\theta]$ となり、水平なら $a_z \approx -9.81$ m/s²。そのため負号が付き、$\phi = \mathrm{atan2}(-a_y, -a_z)$、$\theta = \mathrm{atan2}(a_x, \sqrt{a_y^2 + a_z^2})$ となる（`solution.cpp` と同じ）。
 
 These are valid only when the drone is **not accelerating** (static or constant velocity).
 

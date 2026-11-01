@@ -2,6 +2,8 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
+> **スライドの版（2026-11-01）:** 次回以降の講習は改訂版 `slides/sci_tutorial_rev20261101.pdf` を使う。
+
 ## 1. 概要
 
 ### このドキュメントについて
@@ -66,7 +68,7 @@ param save
 reboot
 ```
 
-続けてコントローラとペアリングする（コントローラの LCD パネルボタンを押しながら電源投入 → 機体のボタンを 3 秒以上押し続けビープで離す → コントローラ画面の一覧から自分の機体〈MAC下4桁。`mac` コマンドで確認しラベルを貼っておく〉を選んでボタンで確定。5 秒以上押し続けるとシステムリセット）。PC側: WiFi設定でSSID `StampFly-XXYY` に接続（パスワードは既定 `stampfly`）。接続の確認は `sf telemetry`（IP指定不要、既定192.168.10.1で待ち受け）。
+続けてコントローラとペアリングする（コントローラの M5 ボタン（LCD パネル）を押しながら電源投入 → 未ペアの機体は自動でペアリング待ち（LED 青の速い点滅）、ペア済みの機体だけ本体ボタンを 3 秒以上押し続けビープで離す → コントローラ画面の一覧から自分の機体〈MAC下4桁。`mac` コマンドで確認しラベルを貼っておく〉を右スティックで選び M5 ボタンで確定 → 機体の LED が緑になる）。PC側: WiFi設定でSSID `StampFly-XXYY` に接続（パスワードは既定 `stampfly`）。接続の確認は `sf telemetry`（IP指定不要、既定192.168.10.1で待ち受け）。
 
 ```
 sf telemetry
@@ -146,6 +148,8 @@ sf telemetry
 
 <a id="english"></a>
 
+> **Slide version (2026-11-01):** future runs use the revised deck `slides/sci_tutorial_rev20261101.pdf`.
+
 ## 1. Overview
 
 ### About This Document
@@ -210,7 +214,7 @@ param save
 reboot
 ```
 
-Then pair the controller (hold the controller's LCD panel button while powering on, then hold the vehicle button for 3 s or more and release at the beep, then pick your own vehicle — last 4 hex digits of its MAC, check it with the `mac` command and stick a label on the vehicle — from the controller's on-screen list and confirm; holding 5 s or more triggers a system reset). PC side: join SSID `StampFly-XXYY` in WiFi settings (default password `stampfly`). Connectivity check: `sf telemetry` (no `--ip` needed; listens on the default 192.168.10.1).
+Then pair the controller (hold the controller's M5 button (LCD panel) while powering on; an unpaired vehicle enters pairing wait automatically (fast blue blink), and only an already-paired vehicle needs its body button held for 3 s or more and released at the beep; then pick your own vehicle — last 4 hex digits of its MAC, check it with the `mac` command and stick a label on the vehicle — from the controller's on-screen list with the right stick and confirm with the M5 button; the vehicle's LED turns green). PC side: join SSID `StampFly-XXYY` in WiFi settings (default password `stampfly`). Connectivity check: `sf telemetry` (no `--ip` needed; listens on the default 192.168.10.1).
 
 ```
 sf telemetry

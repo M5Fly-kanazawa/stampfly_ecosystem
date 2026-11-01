@@ -308,7 +308,7 @@ Stream の電文定義も `protocol/spec/` には無く、
 | `protocol/spec/flight_log.yaml` | v1 のストリーム・列名・型・単位・レート・由来パケット・各ツールの必須列。**基準ファイル** |
 | 生成物 | `lib/sflog/schema.py`（列定数）、`docs/reference/flight-log-format.md`（列表）。生成スクリプト `protocol/tools/gen_flight_log.py`、`--check` で生成物の鮮度を CI で検査 |
 | `protocol/spec/data_stream.yaml` | 現行 UDP Data Stream 電文（`data_stream_wire.hpp` の内容）を仕様に収録。`websocket.yaml` と `TelemetryWSPacket` は「撤去済み」と注記して凍結（別作業でもよい） |
-| CI | 現状の CI（`.github/workflows/sils-regression.yml`）は `tools/` や `lib/` の pytest を回していない。同ワークフローに pytest の工程を足し、(1) `lib/sflog` の単体テスト、(2) 基準一式（実機 1 本・SILS 1 本、`analysis/datasets/flightlog/` に置く）が `sf log check` を通る、(3) 全読み込み側コマンドが基準一式を読める、(4) `sf sysid fit --selftest` と参照同定値（`analysis/reports/rate_sysid_reference/`）が変わらない、を検査する |
+| CI | 現状の CI（`.github/workflows/sils-regression.yml`）は `tools/` や `lib/` の pytest を回していない。同ワークフローに pytest の工程を足し、(1) `lib/sflog` の単体テスト、(2) 基準一式（実機 1 本・SILS 1 本、`analysis/datasets/flightlog/` に置く）が `sf log check` を通る、(3) 全読み込み側コマンドが基準一式を読める、(4) `sf sysid fit --selftest` と参照同定値（`analysis/reports/rate_sysid_reference/`。2026-11-01 に削除、タグ `archive/2026-11-01`）が変わらない、を検査する |
 
 ## 4. 決定事項の記録
 

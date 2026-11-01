@@ -11,6 +11,12 @@ Usage / 使い方:
     python3 beamer_to_html.py --sci-dir sci_tutorial_2026 \
         --tikz-dir _shared/tikz --images-dir _shared/images --build-tikz
 
+    # Revised deck (shares web/assets with the original) / 改訂版（素材は共有）
+    python3 beamer_to_html.py --sci-dir sci_tutorial_2026 \
+        --master sci_tutorial_rev20261101.tex \
+        --out sci_tutorial_2026/web/index_rev20261101.html \
+        --tikz-dir _shared/tikz --images-dir _shared/images
+
 Only the Python standard library is used (stdlib only, no pip install).
 標準ライブラリのみを使用する（pip install 不要）。
 """
@@ -1237,7 +1243,11 @@ def parse_chapter_frames(path: Path) -> list[Frame]:
     raw_text = path.read_text(encoding="utf-8")
     store: list[RawBlock] = []
     extracted = extract_verbatim_blocks(raw_text, store)
-    chapter_stem = path.stem
+    # A revised chapter (name_rev20261101) shares inline-TikZ SVGs with its original,
+    # so strip the _rev<date> suffix from the figure-name stem.
+    # 改訂版の章（名前_rev20261101）は元の章とインライン TikZ の SVG を共有するため、
+    # 図名の基になる章名から _rev<日付> を除く。
+    chapter_stem = re.sub(r"_rev\d{8}$", "", path.stem)
     frames = []
     pos = 0
     begin_tag, end_tag = "\\begin{frame}", "\\end{frame}"
@@ -1443,9 +1453,11 @@ def make_divider_slide(num: str, title_raw: str, time_raw: str) -> Slide:
     )
 
 
-def build_slides(sci_dir: Path) -> list[Slide]:
+def build_slides(sci_dir: Path, master: str = "sci_tutorial.tex") -> list[Slide]:
+    """Build the slide list from the Beamer master file `master` (a file name
+    inside <sci-dir>/slides/). 改訂版などマスターファイル名（slides/ 内）を指定できる。"""
     slides_dir = sci_dir / "slides"
-    fields, items = parse_master_sequence(slides_dir / "sci_tutorial.tex")
+    fields, items = parse_master_sequence(slides_dir / master)
     slides = [make_title_slide(fields)]
     session_label = "オープニング"
     footer_label = "オープニング"
@@ -1823,7 +1835,10 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--images-dir", default="_shared/images", type=Path,
                     help="Shared images directory.")
     p.add_argument("--out", default=None, type=Path,
-                    help="Output index.html path (default: <sci-dir>/web/index.html).")
+                    help="Output HTML path (default: <sci-dir>/web/index.html).")
+    p.add_argument("--master", default="sci_tutorial.tex", type=str,
+                    help="Beamer master file name inside <sci-dir>/slides/ "
+                         "(default: sci_tutorial.tex; e.g. sci_tutorial_rev20261101.tex).")
     p.add_argument("--build-tikz", action="store_true",
                     help="Compile TikZ figures to SVG (requires lualatex + pdftocairo).")
     p.add_argument("--scratch-dir", default=None, type=Path,
@@ -1867,7 +1882,7 @@ def main() -> int:
     web_dir = sci_dir / "web"
     out_path = args.out or (web_dir / "index.html")
 
-    slides = build_slides(sci_dir)
+    slides = build_slides(sci_dir, args.master)
     tikz_report: list[str] = []
     if args.build_tikz:
         tikz_names = set(re.findall(r'assets/tikz/([^."]+)\.svg',
