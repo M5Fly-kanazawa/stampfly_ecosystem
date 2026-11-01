@@ -70,10 +70,6 @@ build/
 # ====================
 analysis/reports/*
 !analysis/reports/.gitignore
-# 2026-06 real-hardware rate identification reference (used by sf sils sysid-gate until
-# 2026-11-01; kept as a record) — keep in the repo
-# 2026-06 の実機レート同定の基準値（2026-11-01 まで sf sils sysid-gate が使用、記録として残す）— リポジトリに含める
-!analysis/reports/rate_sysid_reference/
 
 # ====================
 # Logs

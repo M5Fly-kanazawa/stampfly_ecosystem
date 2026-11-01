@@ -296,7 +296,7 @@ analysis/
 ├── scripts/     # 再現性重視の解析処理・指標算出（案件別のサブディレクトリを持つ）
 ├── datasets/    # 小規模なサンプルログ（flightlog/, sysid/, motor_sweep_*/）
 ├── notes/       # 調査ノート
-└── reports/     # 生成された図・結果。原則 git 管理しない（例外: rate_sysid_reference/）。以前の out/ は統合
+└── reports/     # 生成された図・結果。git 管理しない。以前の out/ は統合
 ```
 
 ---

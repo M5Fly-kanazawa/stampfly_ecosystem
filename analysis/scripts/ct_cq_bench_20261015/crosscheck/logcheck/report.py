@@ -131,7 +131,7 @@ for key in ('motor_sweep_bench','ground_spin_stab'):
 P('Note: at duty 0.05-0.10 the net current is 20-70 mA while the status current resolution is ~8 mA after x10 (current_ma has ~0.8 mA steps), so single-sample ratios are noisy there; and the sweep has only the 0.10 level.\n')
 # ---- Test 3
 P('## 4. Test 3: small-signal rate-loop identification (kp mode)\n')
-P('b [1/s^2 x torque normalised as in rate_sysid], T, L in ms, T+L, mean coherence over the fit band 0.8-30 Hz, and the standard deviation of rate_ref and of the gyro over the fitted span (excitation). Note the T/L split is degenerate (T often collapses to 0, as already documented in analysis/reports/rate_sysid_reference/README.md); T+L is the quantity to compare. Reference (2026-06-14 logs, README): roll T+L 14.1-14.7 ms, pitch 16.2-18.3 ms, yaw 10.6-11.0 ms.\n')
+P('b [1/s^2 x torque normalised as in rate_sysid], T, L in ms, T+L, mean coherence over the fit band 0.8-30 Hz, and the standard deviation of rate_ref and of the gyro over the fitted span (excitation). Note the T/L split is degenerate (T often collapses to 0, as already documented in analysis/reports/rate_sysid_reference/README.md, removed 2026-11-01, tag archive/2026-11-01); T+L is the quantity to compare. Reference (2026-06-14 logs, README): roll T+L 14.1-14.7 ms, pitch 16.2-18.3 ms, yaw 10.6-11.0 ms.\n')
 for axis in ('roll','pitch','yaw'):
     P(f'### {axis}\n')
     P('| log | gains kp/ti/td | span | mode | b | T ms | L ms | T+L ms | coh | rate_ref std rad/s | gyro std rad/s | n |')

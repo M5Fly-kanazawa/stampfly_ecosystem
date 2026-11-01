@@ -1,6 +1,11 @@
 # sysid_gate.scn — model-match gate excitation: roll/pitch/yaw rate-loop chirps
 #                  モデル一致の合否判定の励振: roll/pitch/yaw のレートループチャープ
 #
+# Note (2026-11-01): kept as the record of the 2026-10 cross-check. sf sils sysid-gate no longer
+# fits (b, T, L), and analysis/reports/rate_sysid_reference/ was removed (tag archive/2026-11-01).
+# 注記（2026-11-01）: 2026-10 の照合の記録として残す。sf sils sysid-gate は (b, T, L) のフィットを
+# 行わなくなり、analysis/reports/rate_sysid_reference/ は削除した（タグ archive/2026-11-01）。
+#
 # Chain: API takeoff (POS_HOLD hover) → three sequential rate-loop identification
 # chirps (roll, then pitch, then yaw — same "sysid <axis> chirp 10 4" verb as
 # sysid_rate.scn, one axis at a time so each axis's excitation is isolated) →

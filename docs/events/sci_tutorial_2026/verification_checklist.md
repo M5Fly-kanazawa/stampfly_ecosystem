@@ -39,7 +39,7 @@
 - [ ] 実習7 の手順（`ws::set_rate_target()` を呼ぶ実習コード）でログを取得 → `sf sysid fit flight.csv --plot` が実行でき，Roll/Pitch の $K$ が実習6 の理論値（$K_{roll}=102$, $K_{pitch}=70$）に近い値で出ること（$\tau_m$ は励振の強さに強く依存し，理論値0.02sの数倍にズレることが実測で確認済み — これ単独では NG 扱いしない。$K$ が理論値と大きく食い違う場合のみ NG とする）
 - [ ] 同じログで `sf sysid rate-fit flight.csv --axis roll` が実行でき，$(b, L, T)$ が妥当な値（$L$ が数ms〜十数ms程度）で出ること
 
-**NG時の代替:** （$K$ の）同定が収束しない場合，事前取得済みの参照ログ（`analysis/reports/rate_sysid_reference/` 等）を使ったデモに切り替え，当日ログでの実演は「一緒に打つ」ではなく「見るだけ」にする。
+**NG時の代替:** （$K$ の）同定が収束しない場合，本節のリハーサルで取得して保存しておいたログを使ったデモに切り替え，当日ログでの実演は「一緒に打つ」ではなく「見るだけ」にする。
 
 ## 4. 本番ファームでのデモ確認
 
@@ -105,7 +105,7 @@
 - [ ] Using Exercise 7's procedure (student code calling `ws::set_rate_target()`), `sf sysid fit flight.csv --plot` runs and returns roll/pitch $K$ close to the Exercise 6 theoretical values ($K_{roll}=102$, $K_{pitch}=70$) ($\tau_m$ is far more excitation-sensitive and has been observed several times the 0.02s theoretical value on real flights -- don't treat that alone as NG; only a large $K$ mismatch is)
 - [ ] The same log works with `sf sysid rate-fit flight.csv --axis roll`, returning a plausible $(b, L, T)$ ($L$ on the order of single-digit to low-double-digit ms)
 
-**Fallback:** if ($K$) identification does not converge, demo with a pre-captured reference log (e.g. under `analysis/reports/rate_sysid_reference/`) and present the day's own log as "watch only" rather than live.
+**Fallback:** if ($K$) identification does not converge, demo with the log captured and saved during this section's rehearsal and present the day's own log as "watch only" rather than live.
 
 ## 4. Production-Firmware Demo Check
 
