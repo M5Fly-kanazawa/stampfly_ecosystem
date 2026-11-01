@@ -376,6 +376,17 @@ git diff --cached
 - チーム開発時の引き継ぎ情報
 - CI/CDパイプラインのトリガー情報
 
+## PR（プルリクエスト）を作るかどうかの基準
+
+2026-11-01 にリポジトリのオーナーが決めた。PR とは、変更をブランチに置いて main への取り込みを申請し、GitHub の自動検査と了承を経てから統合する手順のこと。
+
+| 変更の種類 | やり方 |
+|---|---|
+| main のままでは誤動作するバグの修正（ファーム・SILS・ツールが誤った動作をするのを直すもの） | ブランチを作って PR にする。GitHub の自動検査が通り、オーナーが了承してから統合する |
+| それ以外（新機能、ツールや判定の作り直し、文書、解析、試験の追加や基準値の調整、リファクタリングなど） | 経緯（背景・理由・確かめた結果・Next steps）をコミットメッセージにきちんと書き、main に直接コミットして push する |
+
+main への push でも、ファーム・SILS・ツールなど対象のパスを変えていれば SILS の再確認試験（`.github/workflows/sils-regression.yml`）が走るので、直接 push した変更も事後に GitHub で検査される。結果は push 後に確かめる。
+
 ---
 
 <a id="english"></a>
@@ -500,3 +511,16 @@ Next steps:
 2. **Review diff before committing** (`git diff --cached`)
 3. **Write for future readers** (Will you understand this in 3 months?)
 4. **Use Next steps for continuity** (Session resumption, handoff, CI/CD triggers)
+
+---
+
+## When to Open a Pull Request
+
+Decided by the repository owner on 2026-11-01.
+
+| Kind of change | How |
+|---|---|
+| Fix of a bug that makes main malfunction (firmware, SILS or a tool behaving wrongly) | Branch and pull request; merge after GitHub CI passes and the owner approves |
+| Everything else (new features, rebuilt tools or checks, documents, analysis, added tests or retuned thresholds, refactoring) | Commit directly to main with a message that fully explains the background, reasons, checks and Next steps, then push |
+
+A push to main also runs the SILS regression workflow when it touches the watched paths (firmware, SILS, tools, ...), so directly pushed changes are still checked on GitHub afterwards; check the result after pushing.
