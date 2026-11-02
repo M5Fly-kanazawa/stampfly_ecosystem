@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-**状態**: 検討の続き（2026-10-30）。C_T・C_Q だけの差し替えは採用見送り。駆動回路の平均モデル（$R_\text{out}$）は宙返りと電流の照合で支持された。電池電圧への依存の食い違いは、2026-11-02 のベンチ（$R_\text{out}$ は電池電圧によらず、一定の電圧降下 $V_b$ を加える）と実測の回転数の表で解消し、全機の推力を 10/15 の 1 モータの 4 倍とすると飛行のホバーと ±3 % で合う（6 章）。作成 2026-10-30、最終更新 2026-11-02。
+**状態**: 検討の続き（2026-10-30）。C_T・C_Q だけの差し替えは採用見送り。駆動回路の平均モデル（$R_\text{out}$）は宙返りと電流の照合で支持された。電池電圧への依存の食い違いは、2026-11-02 のベンチ（$R_\text{out}$ は電池電圧によらず、一定の電圧降下 $V_b$ を加える）とベンチで実測した回転数の表で解消し、全機の推力を 10/15 の 1 モータの 4 倍とすると飛行のホバーと ±3 % で合う（6 章）。作成 2026-10-30、最終更新 2026-11-02。
 
 ## 1. 目的と結論
 
@@ -97,7 +97,7 @@
 | V1 $C_T$, $C_Q$ のみ | 0.880 | 3682 | 17.3 | 1.136 | 59.5 |
 | V2 ベンチ一式（$K_e$, $R$, $Q_f=K_e\cdot0.044$, $C_Q$ に $K_e\cdot2.9\times10^{-9}$ を含める, $J=1.54\times10^{-8}$） | 0.941 | 3561 | 18.4 | 1.116 | 60.3 |
 
-   $\eta$ の補正は推力にだけ掛かるため、現状のプラントのヨー権限はファームの想定の 1.40 倍になっている。ベンチの 1 モータがホバー推力に達するのは Duty×$V_{DD}$ = 2.39 V で、ファームの 2.58 V より小さい。つまり飛行に合わせ込んだファームの曲線は、ベンチより約 8 % 多い推力能力を要求している（原因は未特定。質量、機体の空力干渉、4 モータ時の電池電圧低下が候補）。**2026-11-02 追記:** この差は、電圧の違う条件（ベンチ 4.2〜4.4 V、飛行 3.6〜4.1 V）を Duty × 電圧が一定とみなして比べたことによると考える。実測の回転数の表を使うと、4 × 10/15 の推力はホバーの重さと ±3 % で合う（6 章「全機の推力とホバーの釣り合い」）。
+   $\eta$ の補正は推力にだけ掛かるため、現状のプラントのヨー権限はファームの想定の 1.40 倍になっている。ベンチの 1 モータがホバー推力に達するのは Duty×$V_{DD}$ = 2.39 V で、ファームの 2.58 V より小さい。つまり飛行に合わせ込んだファームの曲線は、ベンチより約 8 % 多い推力能力を要求している（原因は未特定。質量、機体の空力干渉、4 モータ時の電池電圧低下が候補）。**2026-11-02 追記:** この差は、電圧の違う条件（ベンチ 4.2〜4.4 V、飛行 3.6〜4.1 V）を Duty × 電圧が一定とみなして比べたことによると考える。ベンチで実測した回転数の表を使うと、4 × 10/15 の推力はホバーの重さと ±3 % で合う（6 章「全機の推力とホバーの釣り合い」）。
 
 ## 4. SILS での検討
 
@@ -224,7 +224,7 @@ $$\bar I_m=\frac{V_\text{BAT}-K_e\,\omega}{R_\text{out}(D,\,C_C)},\qquad J\frac{
 - 残差は、予測と実測の差の二乗平均平方根を、実測の二乗平均平方根で割った値。2 本の宙返りで同じ結果になった。
 - $R_\text{out}$ モデルは、記録と通信の遅れ程度（3〜4 ms）の追加だけで合う。現行モデルは、効きを半分にして 13〜17 ms 遅らせないと合わない。宙返り用の補正（`torque_authority` 0.6、遅れ 6 ms、Duty の変化率制限）が埋めていたのは、この差と読める。
 - 同じログのホバリング部分でも、追加の遅れは $R_\text{out}$ モデル 4〜8 ms、現行モデル 10〜15 ms。大信号と小信号で遅れが違って見えていた件（SILS 方針のバックログ #17(c)）は、$R_\text{out}$ モデルなら同じ小さい遅れで説明できる。
-- 倍率 0.79〜0.80 のうち、1 に届かない分の候補は次のとおり。(1) 宙返り中の電池電圧の低下（ログされる電圧は 1 Hz だけで、宙返りの数百 ms の間の低下は見えない）。(2) ホバリングの釣り合いから求めた $\eta$ 0.94〜0.95（機体質量 0.037 kg で計算。2 本吊り法の測定時の質量は 0.0364 kg。論文の表の $R_\text{out}$ による値で、実測の回転数の表では 0.97〜1.01 になる。下の「全機の推力とホバーの釣り合い」）。(3) そのほかのモデル誤差。慣性モーメントは 2 本吊り法（二本の糸で吊ってねじり振動の周期を測る方法）の実測で、記録は `control/models/stampfly_physical.yaml` にある。記録から計算すると $I_{xx}$ = 9.19e-6 kg·m² で、採用値 9.16e-6 との差は 0.3 % と小さく、ここでは主な候補ではない。
+- 倍率 0.79〜0.80 のうち、1 に届かない分の候補は次のとおり。(1) 宙返り中の電池電圧の低下（ログされる電圧は 1 Hz だけで、宙返りの数百 ms の間の低下は見えない）。(2) ホバリングの釣り合いから求めた $\eta$ 0.94〜0.95（機体質量 0.037 kg で計算。2 本吊り法の測定時の質量は 0.0364 kg。論文の表の $R_\text{out}$ による値で、ベンチで実測した回転数の表では 0.97〜1.01 になる。下の「全機の推力とホバーの釣り合い」）。(3) そのほかのモデル誤差。慣性モーメントは 2 本吊り法（二本の糸で吊ってねじり振動の周期を測る方法）の実測で、記録は `control/models/stampfly_physical.yaml` にある。記録から計算すると $I_{xx}$ = 9.19e-6 kg·m² で、採用値 9.16e-6 との差は 0.3 % と小さく、ここでは主な候補ではない。
 
 ### 電池電流
 
@@ -248,7 +248,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 - 3 分間のホバリングでは電圧の低下と時間の経過が重なり、巻線の温度上昇と分けられない。ただ温度上昇は $R_\text{out}$ モデルと同じ向きに効くので、差し引くと $R_\text{out}$ モデルとの差はかえって広がる。
 - これは、開発者らの論文の前提「$R_\text{out}$ は電池電圧によらない」と食い違う、実機ログで初めての結果である。10/15 のベンチは電池電圧 4.17〜4.38 V だけで、この前提を確かめた範囲は狭い。
 - 影響: $R_\text{out}$ の表から推力 → Duty の変換を作ると（論文 5.3 節の提案）、電池が減るにつれてホバリングの見込みが数 % ずれるおそれがある。ファームへの採用は、電池電圧への依存を確かめる実験の後にする（実験の方針は 8 章）。論文の改訂でも「電圧によらないことは 4.2〜4.4 V で確かめた」と範囲を書いておく価値がある。
-- **2026-11-02 追記:** 11/02 の長時間放電のベンチ（負荷時の電池電圧 4.27 → 3.63 V、冷えた状態どうし）で、$R_\text{out}$ の変化は 0〜−1.1 % で、電池電圧によらないと確かめた。ただし、どの Duty でも一定の電圧降下 $V_b \approx 0.11$ V（ブラシの接触に相当）を加えた式 $\bar I_m = (V_{DD} - K_e\omega - V_b)/R_\text{out}(D)$ が合う。ここで見た食い違いは、論文の表の $R_\text{out}$（D0.3〜0.7 で実測より約 10 % 小さい）と $V_b$ を入れない計算によるもので、実測の回転数の表を使うと小さい（下の「全機の推力とホバーの釣り合い」）。
+- **2026-11-02 追記:** 11/02 の長時間放電のベンチ（負荷時の電池電圧 4.27 → 3.63 V、冷えた状態どうし）で、$R_\text{out}$ の変化は 0〜−1.1 % で、電池電圧によらないと確かめた。ただし、どの Duty でも一定の電圧降下 $V_b \approx 0.11$ V（ブラシの接触に相当）を加えた式 $\bar I_m = (V_{DD} - K_e\omega - V_b)/R_\text{out}(D)$ が合う。ここで見た食い違いは、論文の表の $R_\text{out}$（D0.3〜0.7 で実測より約 10 % 小さい）と $V_b$ を入れない計算によるもので、ベンチで実測した回転数の表を使うと小さい（下の「全機の推力とホバーの釣り合い」）。
 
 ### ベンチで実測した $R_\text{out}$
 
@@ -292,7 +292,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 - 10/15 の推力の 4 倍は、ホバーの重さと ±3 % 以内で合う。飛行中のプロペラどうし・機体との干渉で、推力を 5 % 以上失っている様子はない。$\omega$ を使わない道は、$\omega$ を通した 11/02 の値（表 B で 0.966）と 1.5 % で一致した。
 - $\omega$ の表は 11/02 のベンチ（プロペラの下にプローブがあり、同じ $\omega$ でトルクが 1〜4 % 大きかった条件）の値なので、$\omega$ を 0.5〜1.5 % 低く見ている可能性がある。質量の幅（2.7 %）と合わせると、この照合では 10/15 と 11/02 の推力（3.9 % の差）を区別できない。10/15 を採る理由は 2 章の注意のとおり。
 - 運転ごとの比の中央値は 0.88（7/18 06:42）〜1.07（6/29）で、モデルの不確かさより大きい。個体ごとの違い（重さ・モータ・プロペラ）が候補。11/02 の 4 モータ同時のベンチでも、M1 より 4〜8 % 遅く回るモータがあった（電源電圧のスペクトルの線）。
-- 1 回の飛行の中での比の電圧への傾きは、表 B で −0.44〜+0.13 /V（電圧の幅が 0.15 V 以上の 10 本のうち 7 本は +0.02〜+0.13 /V で、0.5 V で 1〜7 %）、表 A で −0.42〜+0.21 /V。電圧の低下とモータの温まり（$K_e$ が数分で 2〜4 % 下がる）が重なる。上の「ホバリング Duty と電池電圧」で見た、論文の表の $R_\text{out}$ による予測との食い違いは、実測の表では残らない。
+- 1 回の飛行の中での比の電圧への傾きは、表 B で −0.44〜+0.13 /V（電圧の幅が 0.15 V 以上の 10 本のうち 7 本は +0.02〜+0.13 /V で、0.5 V で 1〜7 %）、表 A で −0.42〜+0.21 /V。電圧の低下とモータの温まり（$K_e$ が数分で 2〜4 % 下がる）が重なる。上の「ホバリング Duty と電池電圧」で見た、論文の表の $R_\text{out}$ による予測との食い違いは、ベンチで実測した表では残らない。
 
 #### ホバー Duty の比較
 
@@ -320,10 +320,10 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 | 宙返りの角加速度 | 合わない（効き半分＋遅れ 15 ms が必要） | 合う（遅れ 3〜4 ms のみ） | できた |
 | 飛行中の電池電流 | 1 割ずれる | 5〜6 % 以内 | できた |
 | 小信号の同定（遅れ・ゲイン） | — | — | できない（振動ノイズで両方同じ形になる） |
-| ホバリング Duty の電圧依存 | 傾き 0 の予測より強い | 予測より弱い | 論文の表のままでは食い違う。2026-11-02 の実験で $R_\text{out}$ は電池電圧によらないと確認し、$V_b$ を加えた実測の表では残らない |
-| ホバーの釣り合い（全機 = 10/15 の 1 モータの 4 倍、2026-11-02） | — | 実測の表で ±3 % 以内 | 10/15 と 11/02 の推力は区別できない |
+| ホバリング Duty の電圧依存 | 傾き 0 の予測より強い | 予測より弱い | 論文の表のままでは食い違う。2026-11-02 の実験で $R_\text{out}$ は電池電圧によらないと確認し、$V_b$ を加えたベンチで実測した表では残らない |
+| ホバーの釣り合い（全機 = 10/15 の 1 モータの 4 倍、2026-11-02） | — | ベンチで実測した表で ±3 % 以内 | 10/15 と 11/02 の推力は区別できない |
 
-動特性は、電流を使わない宙返りの照合で、ベンチと論文の式が実機でも成り立つと確かめられた。電流の照合も同じ結論を支える。電池電圧への静的な依存だけは論文の前提と食い違っており、ファームの変換に使う前に実験で確かめる必要がある。**2026-11-02 追記:** 実験で確かめた。$R_\text{out}$ は電池電圧によらず、食い違いは論文の表の $R_\text{out}$ と $V_b$ の扱いによるものだった。実測の表を使うと、ホバーの釣り合いは ±3 % 以内で合う。
+動特性は、電流を使わない宙返りの照合で、ベンチと論文の式が実機でも成り立つと確かめられた。電流の照合も同じ結論を支える。電池電圧への静的な依存だけは論文の前提と食い違っており、ファームの変換に使う前に実験で確かめる必要がある。**2026-11-02 追記:** 実験で確かめた。$R_\text{out}$ は電池電圧によらず、食い違いは論文の表の $R_\text{out}$ と $V_b$ の扱いによるものだった。ベンチで実測した表を使うと、ホバーの釣り合いは ±3 % 以内で合う。
 
 ## 7. 見つかった解析ツールの不具合
 
@@ -377,7 +377,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 
 # Should the bench-measured propeller constants (C_T / C_Q) replace the SILS and firmware values? (measured 2026-10-15, studied 2026-10-30)
 
-**Status**: study continued (2026-10-30). Swapping only C_T and C_Q (drive unchanged) is not taken. The averaged drive-circuit model ($R_\text{out}$) is supported by the flip and current cross-checks. The battery-voltage conflict is resolved by the 2026-11-02 bench ($R_\text{out}$ does not depend on the battery voltage, with a constant drop $V_b$ added) and the measured rotor-speed map; with the vehicle thrust taken as four times the 10/15 single-motor thrust, flight hover balances within ±3 % (chapter 6). Created 2026-10-30, last updated 2026-11-02.
+**Status**: study continued (2026-10-30). Swapping only C_T and C_Q (drive unchanged) is not taken. The averaged drive-circuit model ($R_\text{out}$) is supported by the flip and current cross-checks. The battery-voltage conflict is resolved by the 2026-11-02 bench ($R_\text{out}$ does not depend on the battery voltage, with a constant drop $V_b$ added) and the bench-measured rotor-speed map; with the vehicle thrust taken as four times the 10/15 single-motor thrust, flight hover balances within ±3 % (chapter 6). Created 2026-10-30, last updated 2026-11-02.
 
 ## 1. Purpose and conclusion
 
@@ -472,7 +472,7 @@ Reproduce: `python3 -I analysis/scripts/ct_cq_bench_20261015/bench_vs_models.py 
 | V1 $C_T$, $C_Q$ only | 0.880 | 3682 | 17.3 | 1.136 | 59.5 |
 | V2 full bench set ($K_e$, $R$, $Q_f=K_e\cdot0.044$, $C_Q$ including $K_e\cdot2.9\times10^{-9}$, $J=1.54\times10^{-8}$) | 0.941 | 3561 | 18.4 | 1.116 | 60.3 |
 
-   The $\eta$ compensator applies to thrust only, so today the plant's yaw authority is 1.40 times what the firmware assumes. The bench motor reaches hover thrust at Duty×$V_{DD}$ = 2.39 V against the firmware's 2.58 V: the flight-anchored firmware needs about 8 % more thrust capability than the bench shows (cause not identified; candidates are mass, airframe interference and battery voltage drop under 4 motors). **Added 2026-11-02:** this gap is taken to come from comparing different voltages (bench 4.2-4.4 V, flight 3.6-4.1 V) as if Duty × voltage were constant. With the measured rotor-speed map, four times the 10/15 thrust balances the hover weight within ±3 % (chapter 6, "Vehicle thrust and hover balance").
+   The $\eta$ compensator applies to thrust only, so today the plant's yaw authority is 1.40 times what the firmware assumes. The bench motor reaches hover thrust at Duty×$V_{DD}$ = 2.39 V against the firmware's 2.58 V: the flight-anchored firmware needs about 8 % more thrust capability than the bench shows (cause not identified; candidates are mass, airframe interference and battery voltage drop under 4 motors). **Added 2026-11-02:** this gap is taken to come from comparing different voltages (bench 4.2-4.4 V, flight 3.6-4.1 V) as if Duty × voltage were constant. With the bench-measured rotor-speed map, four times the 10/15 thrust balances the hover weight within ±3 % (chapter 6, "Vehicle thrust and hover balance").
 
 ## 4. SILS study
 
@@ -599,7 +599,7 @@ The recorded 400 Hz Duty and battery voltage were passed through each model to p
 - The residual is the RMS of (prediction − measurement) divided by the RMS of the measurement. Both flips give the same result.
 - The $R_\text{out}$ model matches with only the delay of recording and communication (3 to 4 ms) added. The current model needs its effectiveness halved and 13 to 17 ms of delay. The flip-specific compensation (`torque_authority` 0.6, 6 ms delay, Duty rate limit) can be read as having filled exactly this gap.
 - In the hover parts of the same logs, the extra delay is 4 to 8 ms for the $R_\text{out}$ model and 10 to 15 ms for the current model. The earlier puzzle that large and small signals showed different delays (simulation-policy backlog #17(c)) is explained by the $R_\text{out}$ model with the same small delay.
-- Candidates for the part of the scale 0.79 to 0.80 that falls short of 1: (1) battery-voltage sag during the flip (the logged voltage is only 1 Hz, so a sag over the few hundred ms of the flip is invisible); (2) the hover-balance $\eta$ of 0.94 to 0.95 (computed with a mass of 0.037 kg; the mass at the bifilar measurement was 0.0364 kg; this uses the paper's $R_\text{out}$ table, and the measured rotor-speed map gives 0.97 to 1.01, see "Vehicle thrust and hover balance" below); (3) other model error. The moment of inertia is the bifilar measurement (hanging by two strings and measuring the torsional period), whose record is in `control/models/stampfly_physical.yaml`. The record gives $I_{xx}$ = 9.19e-6 kg·m², 0.3 % from the adopted 9.16e-6, so it is not a main candidate here.
+- Candidates for the part of the scale 0.79 to 0.80 that falls short of 1: (1) battery-voltage sag during the flip (the logged voltage is only 1 Hz, so a sag over the few hundred ms of the flip is invisible); (2) the hover-balance $\eta$ of 0.94 to 0.95 (computed with a mass of 0.037 kg; the mass at the bifilar measurement was 0.0364 kg; this uses the paper's $R_\text{out}$ table, and the bench-measured rotor-speed map gives 0.97 to 1.01, see "Vehicle thrust and hover balance" below); (3) other model error. The moment of inertia is the bifilar measurement (hanging by two strings and measuring the torsional period), whose record is in `control/models/stampfly_physical.yaml`. The record gives $I_{xx}$ = 9.19e-6 kg·m², 0.3 % from the adopted 9.16e-6, so it is not a main candidate here.
 
 ### Battery current
 
@@ -623,7 +623,7 @@ In the $R_\text{out}$ model, the Duty needed to hover rises steeply as the batte
 - Over three minutes of hover, voltage sag and elapsed time are confounded with winding temperature rise. The temperature rise acts in the same direction as the $R_\text{out}$ model, so removing it widens the difference from the $R_\text{out}$ model.
 - This is the first result from flight logs that conflicts with the paper's premise "$R_\text{out}$ does not depend on the battery voltage". The 10/15 bench covered only 4.17 to 4.38 V, so the range over which the premise was checked is narrow.
 - Implication: if a thrust-to-Duty conversion is built from the $R_\text{out}$ table (the paper's section 5.3 proposal), the hover estimate may drift by a few percent as the battery drains. Adopting it in the firmware comes after the experiment on the battery-voltage dependence (policy in chapter 8). It is also worth stating in the paper's revision that independence of voltage was checked only over 4.2 to 4.4 V.
-- **Added 2026-11-02:** the long-discharge bench of 11/02 (loaded battery voltage 4.27 → 3.63 V, cold laps compared) changed $R_\text{out}$ by 0 to −1.1 %, so it does not depend on the battery voltage. A constant drop $V_b \approx 0.11$ V at every Duty (the size of a brush-contact drop) must be added: $\bar I_m = (V_{DD} - K_e\omega - V_b)/R_\text{out}(D)$. The conflict seen here came from the paper's $R_\text{out}$ table (about 10 % below the measurement at D0.3-0.7) and the missing $V_b$; with the measured rotor-speed map it is small (see "Vehicle thrust and hover balance" below).
+- **Added 2026-11-02:** the long-discharge bench of 11/02 (loaded battery voltage 4.27 → 3.63 V, cold laps compared) changed $R_\text{out}$ by 0 to −1.1 %, so it does not depend on the battery voltage. A constant drop $V_b \approx 0.11$ V at every Duty (the size of a brush-contact drop) must be added: $\bar I_m = (V_{DD} - K_e\omega - V_b)/R_\text{out}(D)$. The conflict seen here came from the paper's $R_\text{out}$ table (about 10 % below the measurement at D0.3-0.7) and the missing $V_b$; with the bench-measured rotor-speed map it is small (see "Vehicle thrust and hover balance" below).
 
 ### R_out measured on the bench
 
@@ -667,7 +667,7 @@ On 2026-11-02 the vehicle thrust was taken as four times the 10/15 single-motor 
 - Four times the 10/15 thrust balances the hover weight within ±3 %. There is no sign of a 5 % or larger thrust loss to rotor-rotor or airframe interference in flight. The omega-free route agrees within 1.5 % with the 11/02 value through omega (0.966 with map B).
 - The omega map comes from the 11/02 bench (probes under the propeller; 1-4 % more torque at the same omega), so omega may read 0.5 to 1.5 % low. Together with the mass range (2.7 %), this check cannot tell the 10/15 thrust from the 11/02 thrust (3.9 % apart). The reason for taking 10/15 is given in the chapter 2 caveat.
 - Per-log median ratios range from 0.88 (7/18 06:42) to 1.07 (6/29), more than the model uncertainty. Unit-to-unit differences (mass, motors, propellers) are candidates. On the 11/02 four-motor bench, too, some motor ran 4 to 8 % slower than M1 (lines in the supply-voltage spectrum).
-- Within one flight, the slope of the ratio against voltage is −0.44 to +0.13 /V with map B (7 of the 10 logs with a voltage span of 0.15 V or more give +0.02 to +0.13 /V, i.e. 1 to 7 % over 0.5 V) and −0.42 to +0.21 /V with map A. Voltage sag and motor warming ($K_e$ drops 2-4 % within minutes) overlap. The conflict with the prediction from the paper's $R_\text{out}$ table ("Hover Duty and battery voltage" above) does not remain with the measured map.
+- Within one flight, the slope of the ratio against voltage is −0.44 to +0.13 /V with map B (7 of the 10 logs with a voltage span of 0.15 V or more give +0.02 to +0.13 /V, i.e. 1 to 7 % over 0.5 V) and −0.42 to +0.21 /V with map A. Voltage sag and motor warming ($K_e$ drops 2-4 % within minutes) overlap. The conflict with the prediction from the paper's $R_\text{out}$ table ("Hover Duty and battery voltage" above) does not remain with the bench-measured map.
 
 #### Hover duty compared
 
@@ -695,10 +695,10 @@ The same check seen as duty (`hover_duty_by_voltage` in `test4.json`). For each 
 | Flip angular acceleration | does not match (needs half effectiveness + 15 ms delay) | matches (only 3 to 4 ms delay) | yes |
 | In-flight battery current | off by about 10 % | within 5 to 6 % | yes |
 | Small-signal identification (delay, gain) | — | — | no (vibration noise gives both the same form) |
-| Voltage dependence of hover Duty | stronger than the slope-0 prediction | weaker than predicted | conflicts with the paper's table; the 2026-11-02 experiment showed $R_\text{out}$ does not depend on the battery voltage, and with $V_b$ added the measured map leaves no conflict |
-| Hover balance (vehicle = 4 × the 10/15 single motor, 2026-11-02) | — | within ±3 % with the measured map | cannot tell the 10/15 and 11/02 thrusts apart |
+| Voltage dependence of hover Duty | stronger than the slope-0 prediction | weaker than predicted | conflicts with the paper's table; the 2026-11-02 experiment showed $R_\text{out}$ does not depend on the battery voltage, and with $V_b$ added the bench-measured map leaves no conflict |
+| Hover balance (vehicle = 4 × the 10/15 single motor, 2026-11-02) | — | within ±3 % with the bench-measured map | cannot tell the 10/15 and 11/02 thrusts apart |
 
-The dynamics were confirmed to hold on the real aircraft, with the bench and paper equations, by the flip comparison, which does not use current. The current cross-check supports the same conclusion. Only the static dependence on battery voltage conflicts with the paper's premise, and it must be checked by experiment before it is used in the firmware conversion. **Added 2026-11-02:** checked by experiment. $R_\text{out}$ does not depend on the battery voltage; the conflict came from the paper's $R_\text{out}$ table and the missing $V_b$. With the measured map, hover balances within ±3 %.
+The dynamics were confirmed to hold on the real aircraft, with the bench and paper equations, by the flip comparison, which does not use current. The current cross-check supports the same conclusion. Only the static dependence on battery voltage conflicts with the paper's premise, and it must be checked by experiment before it is used in the firmware conversion. **Added 2026-11-02:** checked by experiment. $R_\text{out}$ does not depend on the battery voltage; the conflict came from the paper's $R_\text{out}$ table and the missing $V_b$. With the bench-measured map, hover balances within ±3 %.
 
 ## 7. Analysis-tool defect found
 
