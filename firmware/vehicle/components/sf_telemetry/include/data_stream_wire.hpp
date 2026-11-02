@@ -64,6 +64,7 @@ inline constexpr uint8_t kPktFlow      = 0x43;
 inline constexpr uint8_t kPktTofBottom = 0x44;
 inline constexpr uint8_t kPktBaro      = 0x45;
 inline constexpr uint8_t kPktMag       = 0x46;
+inline constexpr uint8_t kPktTofFront  = 0x47;  // forward ToF, same layout as WireTof (optional sensor)
 inline constexpr uint8_t kPktCtrlRef   = 0x48;  // outer-loop refs + duty (50Hz entry)
 // NOTE: 0x49 is NOT free -- tools/log_analyzer/udp_capture.py already reserves
 // it as PKT_ESKF_PDIAG (64B ESKF P-diagonal, unimplemented by any firmware

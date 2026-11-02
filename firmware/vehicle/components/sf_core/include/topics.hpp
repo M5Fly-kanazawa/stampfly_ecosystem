@@ -37,6 +37,7 @@ void topics_init();
 
 extern Topic<ImuData,         RingBuffer, 8>  sensor_imu;
 extern Topic<TofData,         Queue, 2>       sensor_tof;
+extern Topic<TofData,         Queue, 2>       sensor_tof_front;  // forward-facing ToF (optional sensor, log only) / 前方 ToF（任意センサ・ログ専用）
 extern Topic<FlowData,        Queue, 2>       sensor_flow;
 extern Topic<MagData,         Queue, 2>       sensor_mag;
 extern Topic<BaroData,        Queue, 2>       sensor_baro;

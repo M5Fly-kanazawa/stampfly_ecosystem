@@ -36,6 +36,7 @@ namespace sf {
 
 Topic<ImuData,         RingBuffer, 8>  sensor_imu;
 Topic<TofData,         Queue, 2>       sensor_tof;
+Topic<TofData,         Queue, 2>       sensor_tof_front;
 Topic<FlowData,        Queue, 2>       sensor_flow;
 Topic<MagData,         Queue, 2>       sensor_mag;
 Topic<BaroData,        Queue, 2>       sensor_baro;
@@ -74,6 +75,7 @@ void topics_init()
 {
     sensor_imu.init();
     sensor_tof.init();
+    sensor_tof_front.init();
     sensor_flow.init();
     sensor_mag.init();
     sensor_baro.init();

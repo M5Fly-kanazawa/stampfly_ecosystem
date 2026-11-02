@@ -96,6 +96,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 |---|---------|---------|--------|------|-----------|-----------|------|----|
 | 1 | `sensor_imu` | `ImuData` | RingBuffer | 8 | ImuTask | ImuTask 内 estimator | 400Hz | IMU 加速度+ジャイロ（生 SPI 読み取り後の変換済み） |
 | 2 | `sensor_tof` | `TofData` | Queue | 2 | TofTask | ImuTask::processAsyncSensors | 30Hz | ToF 距離（底面） |
+| 2 | `sensor_tof_front` | `TofData` | Queue | 2 | TofTask | ImuTask::processAsyncSensors（SensorSnapshot へミラーのみ・融合しない） | 30Hz | ToF 距離（前方・任意センサ・ログ専用。テレメトリ 0x47） |
 | 3 | `sensor_flow` | `FlowData` | Queue | 2 | FlowTask | ImuTask::processAsyncSensors | 100Hz | OptFlow 速度 |
 | 4 | `sensor_mag` | `MagData` | Queue | 2 | MagTask | ImuTask::processAsyncSensors | 25Hz | 地磁気 |
 | 5 | `sensor_baro` | `BaroData` | Queue | 2 | BaroTask | ImuTask::processAsyncSensors | 50Hz | 気圧・高度 |

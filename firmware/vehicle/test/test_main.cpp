@@ -988,7 +988,7 @@ TEST(wire_unified_worst_case_fits)
     constexpr size_t kControl     = kEntryHeader + sizeof(WireControl);
     constexpr size_t kCtrlRef     = kEntryHeader + sizeof(WireCtrlRef);
     constexpr size_t kFlow        = (kEntryHeader + sizeof(WireFlow)) * 2;   // 2 per packet at 100 Hz
-    constexpr size_t kTof         = kEntryHeader + sizeof(WireTof);
+    constexpr size_t kTof         = (kEntryHeader + sizeof(WireTof)) * 2;   // bottom + front
     constexpr size_t kBaro        = kEntryHeader + sizeof(WireBaro);
     constexpr size_t kMag         = kEntryHeader + sizeof(WireMag);
     constexpr size_t kChecksum    = 1;

@@ -289,6 +289,18 @@ static void processAsyncSensors()
         snap_dirty = true;
     }
 
+    // Front ToF is log-only (not fused): drain the queue and mirror it for the Data Stream.
+    // Stays at timestamp 0 when the optional sensor is absent.
+    // 前方 ToF はログ専用（融合しない）: キューを排出して Data Stream 用にミラーする。
+    // 任意センサが無い場合は timestamp 0 のまま。
+    sf::TofData tof_front;
+    while (sf::sensor_tof_front.read(tof_front)) {
+        snap.tof_front_distance  = tof_front.distance;
+        snap.tof_front_status    = tof_front.status;
+        snap.tof_front_timestamp = tof_front.timestamp;
+        snap_dirty = true;
+    }
+
     sf::FlowData flow;
     while (sf::sensor_flow.read(flow)) {
         g_estimator->updateFlow(flow);

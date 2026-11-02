@@ -411,6 +411,18 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
         tof.status       = snap.tof_status;
         countDrop(builder.addEntry(datastream::kPktTofBottom, &tof, sizeof(tof)));
     }
+    // Front ToF (0x47): same wire layout as the bottom entry. Absent sensor keeps
+    // timestamp 0 == last_tof_front_ts_, so no entry is emitted.
+    // 前方 ToF (0x47): 底面と同じ電文構造。センサ無しなら timestamp 0 のままで
+    // last_tof_front_ts_ と等しく、エントリは出ない。
+    if (snap.tof_front_timestamp != last_tof_front_ts_) {
+        last_tof_front_ts_ = snap.tof_front_timestamp;
+        datastream::WireTof tof_front = {};
+        tof_front.timestamp_us = snap.tof_front_timestamp;
+        tof_front.distance     = snap.tof_front_distance;
+        tof_front.status       = snap.tof_front_status;
+        countDrop(builder.addEntry(datastream::kPktTofFront, &tof_front, sizeof(tof_front)));
+    }
     if (snap.baro_timestamp != last_baro_ts_) {
         last_baro_ts_ = snap.baro_timestamp;
         datastream::WireBaro baro = {};

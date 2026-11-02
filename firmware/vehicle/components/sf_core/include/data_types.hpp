@@ -103,6 +103,8 @@ struct SensorSnapshot {
     int16_t  flow_dx;         // Optical flow dx [counts] / フロー dx
     int16_t  flow_dy;         // Optical flow dy [counts] / フロー dy
     uint8_t  flow_squal;      // Flow surface quality     / フロー品質
+    float    tof_front_distance;   // Front ToF distance [m]   / 前方 ToF 距離
+    uint8_t  tof_front_status;     // Front ToF status code    / 前方 ToF ステータス
     // Per-sensor sample timestamps (the producing sensor's own stamp). The Data
     // Stream uses a CHANGE in these to detect "new sample" per sensor — the
     // shared snapshot timestamp below cannot tell which sensor updated.
@@ -113,6 +115,7 @@ struct SensorSnapshot {
     uint32_t baro_timestamp;  // [us] last baro sample  / 最終 baro サンプル時刻
     uint32_t tof_timestamp;   // [us] last ToF sample   / 最終 ToF サンプル時刻
     uint32_t flow_timestamp;  // [us] last flow sample  / 最終 flow サンプル時刻
+    uint32_t tof_front_timestamp;  // [us] last front-ToF sample (0 = sensor absent) / 最終前方 ToF サンプル時刻（0 = センサ無し）
     uint32_t timestamp;       // [us] snapshot publish time / スナップショット発行時刻
 };
 

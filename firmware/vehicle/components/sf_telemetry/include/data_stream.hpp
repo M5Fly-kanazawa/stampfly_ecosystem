@@ -93,6 +93,7 @@ private:
     // Last-seen per-sensor stamps (new-sample detection for low-rate entries).
     // 低レートエントリの新サンプル検出用の最終時刻。
     uint32_t last_tof_ts_  = 0;
+    uint32_t last_tof_front_ts_ = 0;
     uint32_t last_baro_ts_ = 0;
     uint32_t last_mag_ts_  = 0;
 
