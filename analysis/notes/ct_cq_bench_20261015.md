@@ -313,6 +313,29 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 - 1 回の飛行の中（電圧の幅 0.3 V 以上の 4 本）では、飛行 −0.16〜−0.24 /V、表 B −0.23〜−0.26 /V で、飛行のほうがやや緩い。ベンチでは、同じ Duty・電圧での回転数の差は冷えた周と温まった周で ±0.6 % 以内なので、モータの温まりでは説明しきれない。原因は未特定。
 - 2026-11-02 の 4 モータ同時を缶の上で秤で測った値では、37 g を支える Duty は A4M で 0.726（記録電圧で約 3.88 V）、B4M で 0.764（約 3.69 V）だった。同じ電圧の飛行（0.64、0.69）より 0.07〜0.09 大きく、飛行のホバー Duty での秤の読みは約 34 g（重さより 6〜8 % 小さい）。この測定を全機の推力として使わない判断（2 章の注意）と合う。
 
+#### 1 モータと 4 モータ同時の回転数（オンの間の電圧）
+
+4 つのモータは同じタイマで同時にオンになる。オンの間は 4 つ分のパルス電流（2026-11-02 で 4.1〜5.0 A）が電池と配線を流れ、M1 の $V_{DD}$ は平均より余計に下がる（ベンチのリポジトリの `tools/vdd_on_time.py`、`data/2026-11-02_steps.csv` の列 `VDD_on_V`・`VDD_off_V`）。
+
+| | 平均 − オンの間の $V_{DD}$（中央値） | オフ − オンの $V_{DD}$ |
+|---|---|---|
+| 1 モータ（電池 2） | 31 mV | 101〜127 mV |
+| 4 モータ同時（電池 3） | 83 mV | 203〜303 mV |
+
+4 モータの M1 の回転数を、1 モータの表（同じ Duty・同じ $V_{DD}$）と比べた。1 モータで測った電圧の範囲の中の段だけを使う（外挿しない）。
+
+| 表を引く電圧 | 範囲内の段 | 差の平均 | rms |
+|---|---|---|---|
+| 平均の $V_{DD}$ | 27 / 42 | −0.97 % | 1.24 % |
+| オンの間の $V_{DD}$ | 21 / 42 | +0.09 % | 0.68 % |
+
+（1 モータの表そのものの当てはめの rms は 0.71 %）
+
+- 同じモータは、同じ Duty とオンの間の同じ電圧なら、4 モータ同時でも同じ回転数で回る。表 A と表 B の差（低い電圧で最大 2 %）は、この落ち込みでほぼ説明できる。C4M で −2 % に見えたのは、主に 1 モータの表の電圧範囲（3.63 V 以上）より下への外挿による。
+- 記録電圧（CLI）とオンの間の $V_{DD}$ の差は、4 モータ同時で 73〜170 mV。Duty と記録電圧で表すと $\Delta V = 781 - 118\,V_\text{CLI} - 324\,D$ [mV]（残差 rms 12 mV。この電池 1 本だけの値）。パルス電流あたりでは 15〜39 mΩ で、電池が減るほど大きい。
+- 飛行中の機体は、オンの間の $V_{DD}$ を直接は測れない。電池電圧を測る INA3221 は 1 回 1.1 ms の変換を 64 回平均しており（3 チャネル分で約 0.4 秒）、PWM の 1 周期 6.7 µs より桁違いに長い。
+- 飛行ログに 1 モータの表を当てるなら、上の差で記録電圧をオンの間の $V_{DD}$ に直すのが筋になる。そうすると予測は表 A に近づくが、飛行の電圧依存はむしろ表 B と合っていた。この関係は未整理（電池ごとの内部抵抗の違いが候補。未確認）。
+
 ### 判定
 
 | 照合 | 現行モデル | $R_\text{out}$ モデル | 判別できたか |
@@ -687,6 +710,29 @@ The same check seen as duty (`hover_duty_by_voltage` in `test4.json`). For each 
 - The slope of duty against logged voltage (all windows) is −0.242 /V in flight, against −0.24 (map B), −0.26 (11/02 thrust directly) and −0.29 /V (map A). Treating Duty × voltage as constant (the firmware conversion) gives −0.168 /V, too weak a voltage dependence.
 - Within one flight (the 4 logs with a voltage span of 0.3 V or more) the flight slope is −0.16 to −0.24 /V against −0.23 to −0.26 /V for map B, slightly weaker in flight. On the bench, cold and warm laps differ by no more than ±0.6 % in speed at the same duty and voltage, so motor warming does not explain it; the cause is open.
 - The 2026-11-02 four-motor measurement on the can put the duty for 37 g at 0.726 for A4M (logged voltage about 3.88 V) and 0.764 for B4M (about 3.69 V), 0.07 to 0.09 above flight at the same voltage (0.64, 0.69); at the flight hover duty the scale read about 34 g (6 to 8 % below the weight). This agrees with not using that measurement as the vehicle thrust (chapter 2 caveat).
+
+#### One motor against four at once (on-time voltage)
+
+All four motors switch on together on the same timer. During the on-time the pulse current of four motors (4.1 to 5.0 A on 2026-11-02) flows through the battery and the wiring, and M1's $V_{DD}$ dips further below its mean (bench repository `tools/vdd_on_time.py`; columns `VDD_on_V` and `VDD_off_V` of `data/2026-11-02_steps.csv`).
+
+| | Mean − on-time $V_{DD}$ (median) | Off − on $V_{DD}$ |
+|---|---|---|
+| One motor (battery 2) | 31 mV | 101-127 mV |
+| Four motors at once (battery 3) | 83 mV | 203-303 mV |
+
+The four-motor M1 speed was compared with the one-motor map (same Duty, same $V_{DD}$), using only steps inside the voltage range measured with one motor (no extrapolation).
+
+| Voltage the map is read with | Steps inside | Mean difference | rms |
+|---|---|---|---|
+| Mean $V_{DD}$ | 27 / 42 | −0.97 % | 1.24 % |
+| On-time $V_{DD}$ | 21 / 42 | +0.09 % | 0.68 % |
+
+(The one-motor map's own fit has an rms of 0.71 %.)
+
+- The same motor runs at the same speed with four motors at once as with one, given the same Duty and the same on-time voltage. The difference between maps A and B (up to 2 % at low voltage) is almost fully explained by this dip. The −2 % seen for C4M came mainly from extrapolating below the one-motor voltage range (3.63 V and up).
+- The difference between the logged voltage (CLI) and the on-time $V_{DD}$ is 73 to 170 mV with four motors; in Duty and logged voltage, $\Delta V = 781 - 118\,V_\text{CLI} - 324\,D$ [mV] (residual rms 12 mV; one battery only). Per unit pulse current it is 15 to 39 mΩ, larger as the battery drains.
+- In flight the vehicle cannot measure the on-time $V_{DD}$ directly: the INA3221 that measures the battery voltage averages 64 conversions of 1.1 ms (about 0.4 s for three channels), orders of magnitude longer than the 6.7 µs PWM period.
+- Applying the one-motor map to flight logs properly means converting the logged voltage to the on-time $V_{DD}$ with the difference above. That moves the prediction toward map A, while the flight voltage dependence matched map B better. This is not yet sorted out (battery-to-battery internal resistance is a candidate; not checked).
 
 ### Verdict
 
