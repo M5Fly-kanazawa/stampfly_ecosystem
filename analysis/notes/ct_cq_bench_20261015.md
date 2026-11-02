@@ -336,6 +336,23 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 - 飛行中の機体は、オンの間の $V_{DD}$ を直接は測れない。電池電圧を測る INA3221 は 1 回 1.1 ms の変換を 64 回平均しており（3 チャネル分で約 0.4 秒）、PWM の 1 周期 6.7 µs より桁違いに長い。
 - 飛行ログに 1 モータの表を当てるなら、上の差で記録電圧をオンの間の $V_{DD}$ に直すのが筋になる。そうすると予測は表 A に近づくが、飛行の電圧依存はむしろ表 B と合っていた。この関係は未整理（電池ごとの内部抵抗の違いが候補。未確認）。
 
+#### ベンチに基づく推力 → Duty の換算で、指令推力は電圧によらず平らになるか
+
+ファームの制御は推力 [N] とトルク [N·m] を出し、最後に `thrustToDuty`（`actuator.cpp`）で Duty に換算する。今の換算は Duty = （モータ曲線の電圧）÷ 電池電圧で、Duty × 電圧が一定の形。電圧の分の不足は、速度ループの補正とホバー推力の学習（`hover.thrust_corr`）が補う。定常ホバーの Duty と電圧は物理で決まるので、ある換算がそれを出すのに要る指令推力は、その換算の順モデルを記録された Duty で評価した値になる（今のファームは記録された指令値）。`crosscheck/logcheck/test5.py`、結果は `crosscheck/results/test5.json`。
+
+| 換算 | 1 回の飛行の中の傾き（10 本を合わせた値） | 全区間の傾き | 運転ごとの中央値 |
+|---|---|---|---|
+| 今のファーム（記録された指令推力） | −0.105 ± 0.020 /V | −0.147 /V | 0.95〜1.21 |
+| ベンチ・表 B | +0.050 ± 0.019 /V | +0.006 /V | 0.90〜1.09 |
+| ベンチ・表 B（オンの間の電圧で補正） | +0.042 ± 0.019 /V | −0.004 /V | 0.88〜1.07 |
+| ベンチ・表 A | +0.120 ± 0.020 /V | +0.073 /V | 0.88〜1.07 |
+
+（要る指令推力 ÷ 重さ 37 g の、記録電圧に対する傾き）
+
+- 今のファームでは、電圧が 0.5 V 下がると要る指令推力が約 5 % 増える。表 B の換算なら、1 回の飛行の中で約 2.5 % 減る（逆向き、大きさは約半分）。飛行をまたぐとほぼ 0 になる。指令推力の水準も重さの近くに来るので、学習値は 1 付近に収まる見込み。
+- 1 回の飛行の中の実際の Duty の傾きは −0.218 ± 0.011 /V で、今の換算（−0.168 /V）とベンチ（約 −0.24 /V）の間にある。ベンチのほうが少し強い理由は未特定（ベンチでは温まった周のほうが回転数がわずかに低く、温まりでは説明できない。飛行の中では時間と電圧が一緒に変わる）。
+- 次は SILS で確かめる。換算を替え、プラントをその逆にそろえて、電池が減るホバーでの高度のずれと学習値、再確認試験を比べる。
+
 ### 判定
 
 | 照合 | 現行モデル | $R_\text{out}$ モデル | 判別できたか |
@@ -734,6 +751,23 @@ The four-motor M1 speed was compared with the one-motor map (same Duty, same $V_
 - The difference between the logged voltage (CLI) and the on-time $V_{DD}$ is 73 to 170 mV with four motors; in Duty and logged voltage, $\Delta V = 781 - 118\,V_\text{CLI} - 324\,D$ [mV] (residual rms 12 mV; one battery only). Per unit pulse current it is 15 to 39 mΩ, larger as the battery drains.
 - In flight the vehicle cannot measure the on-time $V_{DD}$ directly: the INA3221 that measures the battery voltage averages 64 conversions of 1.1 ms (about 0.4 s for three channels), orders of magnitude longer than the 6.7 µs PWM period.
 - Applying the one-motor map to flight logs properly means converting the logged voltage to the on-time $V_{DD}$ with the difference above. That moves the prediction toward map A, while the flight voltage dependence matched map B better. This is not yet sorted out (battery-to-battery internal resistance is a candidate; not checked).
+
+#### Does a bench-based thrust-to-duty conversion make the commanded thrust flat in voltage?
+
+The firmware controller outputs thrust [N] and torques [N·m] and converts them to duty last, in `thrustToDuty` (`actuator.cpp`). Today the conversion is duty = (motor-curve voltage) / battery voltage, i.e. Duty × voltage constant; the shortfall with voltage is made up by the velocity-loop correction and the hover-thrust learner (`hover.thrust_corr`). In steady hover the duties and the voltage are set by physics, so the commanded thrust a conversion would need is its forward model evaluated at the logged duties (for the current firmware, the logged command). `crosscheck/logcheck/test5.py`; results in `crosscheck/results/test5.json`.
+
+| Conversion | Slope within one flight (10 flights pooled) | Slope across all windows | Per-log medians |
+|---|---|---|---|
+| Current firmware (logged command) | −0.105 ± 0.020 /V | −0.147 /V | 0.95-1.21 |
+| Bench, map B | +0.050 ± 0.019 /V | +0.006 /V | 0.90-1.09 |
+| Bench, map B on the on-time voltage | +0.042 ± 0.019 /V | −0.004 /V | 0.88-1.07 |
+| Bench, map A | +0.120 ± 0.020 /V | +0.073 /V | 0.88-1.07 |
+
+(Slope of the required commanded thrust / weight (37 g) against the logged voltage)
+
+- With the current firmware the required commanded thrust rises by about 5 % as the voltage drops by 0.5 V. With the map-B conversion it falls by about 2.5 % within one flight (opposite sign, about half the size) and is close to zero across flights. The command level also comes near the weight, so the learned value should settle near 1.
+- The actual duty slope within one flight is −0.218 ± 0.011 /V, between the current conversion (−0.168 /V) and the bench (about −0.24 /V). Why the bench is slightly stronger is open (on the bench warm laps run slightly slower, so warming does not explain it; in flight time and voltage change together).
+- Next is a SILS check: change the conversion, keep the plant its inverse, and compare the altitude drift, the learned value and the regression scenarios in a hover with a draining battery.
 
 ### Verdict
 
