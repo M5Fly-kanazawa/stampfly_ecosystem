@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-**状態**: 検討の続き（2026-10-30）。C_T・C_Q だけの差し替えは採用見送り。駆動回路の平均モデル（$R_\text{out}$）は宙返りと電流の照合で支持され、電池電圧への依存だけが論文の前提と食い違う。作成 2026-10-30、最終更新 2026-10-30。
+**状態**: 検討の続き（2026-10-30）。C_T・C_Q だけの差し替えは採用見送り。駆動回路の平均モデル（$R_\text{out}$）は宙返りと電流の照合で支持され、電池電圧への依存だけが論文の前提と食い違う。作成 2026-10-30、最終更新 2026-11-02。
 
 ## 1. 目的と結論
 
@@ -42,6 +42,8 @@
 | $J$（プロペラ込み） | $1.54\times10^{-8}$ kg·m² | ロータ慣性 |
 | 無負荷電流 $I_0$ | $0.044+2.9\times10^{-9}\,\omega^2$ A | 回転数に依存する損失分を含む |
 | ステップごとの $C_T$ | Duty 0.1 で $6.3\times10^{-9}$ → Duty 0.9 で $7.8\times10^{-9}$ | Duty が大きいほど増える |
+
+**注意（2026-11-02 追記）**: 推力は、プローブと USB のケーブルを秤のトレイと机の両方にテープで固定した状態で測った。2026-11-02 のベンチで、この留め方では秤の読みが場合によっては数 g 以上変わることが分かった（トレイの上だけで固定すれば ±0.1 g）。$C_T$ は、留め方を直して測り直すまで暫定とする。回転中の一定のずれ 0.41 g を入れて当てはめると $C_T$ は $7.88\times10^{-9}$ になり（残差は半分）、Duty とともに増えるステップごとの $C_T$ も、向きはこのずれと合う。$K_e$・$R$・$C_Q$・$J$・$I_0$ は秤を使わないので、この影響を受けない。
 
 **注意**: このデータの電池電流は「ファームの読み値の 10 倍」であり、独立した電流計測ではない（電流検出抵抗の誤設定をコミット d685c9fd で修正した。それ以前は 1/10 の値を報告していた）。
 
@@ -332,7 +334,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 
 # Should the bench-measured propeller constants (C_T / C_Q) replace the SILS and firmware values? (measured 2026-10-15, studied 2026-10-30)
 
-**Status**: study continued (2026-10-30). Swapping only C_T and C_Q (drive unchanged) is not taken. The averaged drive-circuit model ($R_\text{out}$) is supported by the flip and current cross-checks; only its battery-voltage dependence conflicts with the paper's premise. Created 2026-10-30, last updated 2026-10-30.
+**Status**: study continued (2026-10-30). Swapping only C_T and C_Q (drive unchanged) is not taken. The averaged drive-circuit model ($R_\text{out}$) is supported by the flip and current cross-checks; only its battery-voltage dependence conflicts with the paper's premise. Created 2026-10-30, last updated 2026-11-02.
 
 ## 1. Purpose and conclusion
 
@@ -372,6 +374,8 @@ Should the propulsion constants measured on a single-motor bench on 2026-10-15 r
 | $J$ (with propeller) | $1.54\times10^{-8}$ kg·m² | Rotor inertia |
 | No-load current $I_0$ | $0.044+2.9\times10^{-9}\,\omega^2$ A | Includes a speed-dependent loss term |
 | Per-step $C_T$ | $6.3\times10^{-9}$ at Duty 0.1 to $7.8\times10^{-9}$ at Duty 0.9 | Rises with Duty |
+
+**Caveat (added 2026-11-02)**: thrust was measured with the probe and USB cables taped to both the scale tray and the table. The 2026-11-02 bench showed that this routing can shift the scale reading by several grams or more (±0.1 g when taped to the tray only). Treat $C_T$ as provisional until it is re-measured with the corrected routing. A fit with a constant 0.41 g offset while spinning gives $C_T = 7.88\times10^{-9}$ (half the residual), and the per-step $C_T$ that rises with Duty agrees in direction with such an offset. $K_e$, $R$, $C_Q$, $J$ and $I_0$ do not use the scale and are not affected.
 
 **Caveat**: the battery current in this data is the firmware reading multiplied by 10, not an independent current measurement (the shunt-resistor setting was fixed in commit d685c9fd; before it the current was reported at 1/10).
 
