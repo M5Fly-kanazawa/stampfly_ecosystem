@@ -310,7 +310,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 
 - 時間で重み付けした平均の差（飛行 − ベンチ）は −1.9〜+2.8 %（道と質量による）。運転ごとの中央値は ±0.05 ほどばらつく（別の個体）。
 - 記録電圧に対する Duty の傾き（全区間）は、飛行 −0.242 /V に対し、表 B −0.24、11/02 の推力を直接 −0.26、表 A −0.29 /V。Duty × 電圧を一定とする想定（ファームの換算）では −0.168 /V で、電圧依存が緩すぎる。
-- 1 回の飛行の中（電圧の幅 0.3 V 以上の 4 本）では、飛行 −0.16〜−0.24 /V、表 B −0.23〜−0.26 /V で、飛行のほうがやや緩い。飛行中にモータが温まり $K_e$ が下がる（同じ Duty で回転数が上がる）ことが、電圧の低下と打ち消し合っていると考える（未確認）。
+- 1 回の飛行の中（電圧の幅 0.3 V 以上の 4 本）では、飛行 −0.16〜−0.24 /V、表 B −0.23〜−0.26 /V で、飛行のほうがやや緩い。ベンチでは、同じ Duty・電圧での回転数の差は冷えた周と温まった周で ±0.6 % 以内なので、モータの温まりでは説明しきれない。原因は未特定。
 - 2026-11-02 の 4 モータ同時を缶の上で秤で測った値では、37 g を支える Duty は A4M で 0.726（記録電圧で約 3.88 V）、B4M で 0.764（約 3.69 V）だった。同じ電圧の飛行（0.64、0.69）より 0.07〜0.09 大きく、飛行のホバー Duty での秤の読みは約 34 g（重さより 6〜8 % 小さい）。この測定を全機の推力として使わない判断（2 章の注意）と合う。
 
 ### 判定
@@ -685,7 +685,7 @@ The same check seen as duty (`hover_duty_by_voltage` in `test4.json`). For each 
 
 - The time-weighted mean difference (flight − bench) is −1.9 to +2.8 % depending on the route and the mass. Per-log medians scatter by about ±0.05 (different individual vehicles).
 - The slope of duty against logged voltage (all windows) is −0.242 /V in flight, against −0.24 (map B), −0.26 (11/02 thrust directly) and −0.29 /V (map A). Treating Duty × voltage as constant (the firmware conversion) gives −0.168 /V, too weak a voltage dependence.
-- Within one flight (the 4 logs with a voltage span of 0.3 V or more) the flight slope is −0.16 to −0.24 /V against −0.23 to −0.26 /V for map B, slightly weaker in flight. Motor warming in flight ($K_e$ drops, so the same duty gives a higher speed) is taken to offset part of the voltage sag (not checked).
+- Within one flight (the 4 logs with a voltage span of 0.3 V or more) the flight slope is −0.16 to −0.24 /V against −0.23 to −0.26 /V for map B, slightly weaker in flight. On the bench, cold and warm laps differ by no more than ±0.6 % in speed at the same duty and voltage, so motor warming does not explain it; the cause is open.
 - The 2026-11-02 four-motor measurement on the can put the duty for 37 g at 0.726 for A4M (logged voltage about 3.88 V) and 0.764 for B4M (about 3.69 V), 0.07 to 0.09 above flight at the same voltage (0.64, 0.69); at the flight hover duty the scale read about 34 g (6 to 8 % below the weight). This agrees with not using that measurement as the vehicle thrust (chapter 2 caveat).
 
 ### Verdict
