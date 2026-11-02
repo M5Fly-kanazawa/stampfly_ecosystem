@@ -294,6 +294,25 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 - 運転ごとの比の中央値は 0.88（7/18 06:42）〜1.07（6/29）で、モデルの不確かさより大きい。個体ごとの違い（重さ・モータ・プロペラ）が候補。11/02 の 4 モータ同時のベンチでも、M1 より 4〜8 % 遅く回るモータがあった（電源電圧のスペクトルの線）。
 - 1 回の飛行の中での比の電圧への傾きは、表 B で −0.44〜+0.13 /V（電圧の幅が 0.15 V 以上の 10 本のうち 7 本は +0.02〜+0.13 /V で、0.5 V で 1〜7 %）、表 A で −0.42〜+0.21 /V。電圧の低下とモータの温まり（$K_e$ が数分で 2〜4 % 下がる）が重なる。上の「ホバリング Duty と電池電圧」で見た、論文の表の $R_\text{out}$ による予測との食い違いは、実測の表では残らない。
 
+#### ホバー Duty の比較
+
+同じ照合を Duty で見た（`test4.json` の `hover_duty_by_voltage`）。記録電圧 0.1 V ごとに、飛行のホバー Duty（4 モータの平均の中央値）と、ベンチから求めた「重さ 36〜37 g を支える Duty」（4 モータ同じ Duty）を並べる。
+
+| 記録電圧 | 飛行（区間数・運転数） | 表 A と 10/15 の式 | 表 B と 10/15 の式 | 11/02 の推力を直接 |
+|---|---|---|---|---|
+| 3.5 V | 0.731（8・1） | 0.746〜0.763 | 0.716〜0.733 | 0.739〜0.756 |
+| 3.6 V | 0.705（11・3） | 0.713〜0.729 | 0.690〜0.706 | 0.709〜0.726 |
+| 3.7 V | 0.690（23・8） | 0.686〜0.702 | 0.668〜0.684 | 0.685〜0.701 |
+| 3.8 V | 0.662（19・6） | 0.651〜0.666 | 0.638〜0.654 | 0.652〜0.668 |
+| 3.9 V | 0.636（25・11） | 0.626〜0.640 | 0.616〜0.631 | 0.629〜0.644 |
+| 4.0 V | 0.616（37・9） | 0.602〜0.615 | 0.595〜0.609 | 0.607〜0.622 |
+| 4.1 V | 0.599（11・8） | 0.588〜0.601 | 0.582〜0.597 | 0.595〜0.609 |
+
+- 時間で重み付けした平均の差（飛行 − ベンチ）は −1.9〜+2.8 %（道と質量による）。運転ごとの中央値は ±0.05 ほどばらつく（別の個体）。
+- 記録電圧に対する Duty の傾き（全区間）は、飛行 −0.242 /V に対し、表 B −0.24、11/02 の推力を直接 −0.26、表 A −0.29 /V。Duty × 電圧を一定とする想定（ファームの換算）では −0.168 /V で、電圧依存が緩すぎる。
+- 1 回の飛行の中（電圧の幅 0.3 V 以上の 4 本）では、飛行 −0.16〜−0.24 /V、表 B −0.23〜−0.26 /V で、飛行のほうがやや緩い。飛行中にモータが温まり $K_e$ が下がる（同じ Duty で回転数が上がる）ことが、電圧の低下と打ち消し合っていると考える（未確認）。
+- 2026-11-02 の 4 モータ同時を缶の上で秤で測った値では、37 g を支える Duty は A4M で 0.726（記録電圧で約 3.88 V）、B4M で 0.764（約 3.69 V）だった。同じ電圧の飛行（0.64、0.69）より 0.07〜0.09 大きく、飛行のホバー Duty での秤の読みは約 34 g（重さより 6〜8 % 小さい）。この測定を全機の推力として使わない判断（2 章の注意）と合う。
+
 ### 判定
 
 | 照合 | 現行モデル | $R_\text{out}$ モデル | 判別できたか |
@@ -649,6 +668,25 @@ On 2026-11-02 the vehicle thrust was taken as four times the 10/15 single-motor 
 - The omega map comes from the 11/02 bench (probes under the propeller; 1-4 % more torque at the same omega), so omega may read 0.5 to 1.5 % low. Together with the mass range (2.7 %), this check cannot tell the 10/15 thrust from the 11/02 thrust (3.9 % apart). The reason for taking 10/15 is given in the chapter 2 caveat.
 - Per-log median ratios range from 0.88 (7/18 06:42) to 1.07 (6/29), more than the model uncertainty. Unit-to-unit differences (mass, motors, propellers) are candidates. On the 11/02 four-motor bench, too, some motor ran 4 to 8 % slower than M1 (lines in the supply-voltage spectrum).
 - Within one flight, the slope of the ratio against voltage is −0.44 to +0.13 /V with map B (7 of the 10 logs with a voltage span of 0.15 V or more give +0.02 to +0.13 /V, i.e. 1 to 7 % over 0.5 V) and −0.42 to +0.21 /V with map A. Voltage sag and motor warming ($K_e$ drops 2-4 % within minutes) overlap. The conflict with the prediction from the paper's $R_\text{out}$ table ("Hover Duty and battery voltage" above) does not remain with the measured map.
+
+#### Hover duty compared
+
+The same check seen as duty (`hover_duty_by_voltage` in `test4.json`). For each 0.1 V of logged voltage, the flight hover duty (median of the four-motor mean) is set against the duty the bench says carries 36 to 37 g (the same duty on all four motors).
+
+| Logged voltage | Flight (windows, logs) | Map A with the 10/15 curve | Map B with the 10/15 curve | 11/02 thrust directly |
+|---|---|---|---|---|
+| 3.5 V | 0.731 (8, 1) | 0.746-0.763 | 0.716-0.733 | 0.739-0.756 |
+| 3.6 V | 0.705 (11, 3) | 0.713-0.729 | 0.690-0.706 | 0.709-0.726 |
+| 3.7 V | 0.690 (23, 8) | 0.686-0.702 | 0.668-0.684 | 0.685-0.701 |
+| 3.8 V | 0.662 (19, 6) | 0.651-0.666 | 0.638-0.654 | 0.652-0.668 |
+| 3.9 V | 0.636 (25, 11) | 0.626-0.640 | 0.616-0.631 | 0.629-0.644 |
+| 4.0 V | 0.616 (37, 9) | 0.602-0.615 | 0.595-0.609 | 0.607-0.622 |
+| 4.1 V | 0.599 (11, 8) | 0.588-0.601 | 0.582-0.597 | 0.595-0.609 |
+
+- The time-weighted mean difference (flight − bench) is −1.9 to +2.8 % depending on the route and the mass. Per-log medians scatter by about ±0.05 (different individual vehicles).
+- The slope of duty against logged voltage (all windows) is −0.242 /V in flight, against −0.24 (map B), −0.26 (11/02 thrust directly) and −0.29 /V (map A). Treating Duty × voltage as constant (the firmware conversion) gives −0.168 /V, too weak a voltage dependence.
+- Within one flight (the 4 logs with a voltage span of 0.3 V or more) the flight slope is −0.16 to −0.24 /V against −0.23 to −0.26 /V for map B, slightly weaker in flight. Motor warming in flight ($K_e$ drops, so the same duty gives a higher speed) is taken to offset part of the voltage sag (not checked).
+- The 2026-11-02 four-motor measurement on the can put the duty for 37 g at 0.726 for A4M (logged voltage about 3.88 V) and 0.764 for B4M (about 3.69 V), 0.07 to 0.09 above flight at the same voltage (0.64, 0.69); at the flight hover duty the scale read about 34 g (6 to 8 % below the weight). This agrees with not using that measurement as the vehicle thrust (chapter 2 caveat).
 
 ### Verdict
 
