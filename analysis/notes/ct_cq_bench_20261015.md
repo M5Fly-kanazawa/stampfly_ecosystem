@@ -43,7 +43,7 @@
 | 無負荷電流 $I_0$ | $0.044+2.9\times10^{-9}\,\omega^2$ A | 回転数に依存する損失分を含む |
 | ステップごとの $C_T$ | Duty 0.1 で $6.3\times10^{-9}$ → Duty 0.9 で $7.8\times10^{-9}$ | Duty が大きいほど増える |
 
-**注意（2026-11-02 追記）**: 推力は、プローブと USB のケーブルを秤のトレイと机の両方にテープで固定した状態で測った。2026-11-02 のベンチで、この留め方では秤の読みが場合によっては数 g 以上変わることが分かった（トレイの上だけで固定すれば ±0.1 g）。$C_T$ は、留め方を直して測り直すまで暫定とする。回転中の一定のずれ 0.41 g を入れて当てはめると $C_T$ は $7.88\times10^{-9}$ になり（残差は半分）、Duty とともに増えるステップごとの $C_T$ も、向きはこのずれと合う。$K_e$・$R$・$C_Q$・$J$・$I_0$ は秤を使わないので、この影響を受けない。
+**注意（2026-11-02 追記）**: 2026-11-02 夜に同じプロペラで測り直すと、$C_T$ は原点を通る当てはめで $7.27\times10^{-9}$ だった（各 Duty で上の値より 2〜5 % 小さい。原因は未特定）。$C_Q$ は $3.33\times10^{-11}$ で一致した。段ごとの $C_T$ が Duty とともに大きくなる傾向（$6.2\times10^{-9}$ → $7.4\times10^{-9}$）は、2 日とも同じだった。ケーブルを秤のトレイと机の両方にテープで固定する留め方は、秤のゼロを −3 g 前後ずらすだけで、推力の読みは変えないことを同じ夜に確かめた。同じ日に一度ここへ書いた「留め方で $C_T$ がずれた可能性」は誤りだった（その日の推力のずれは、秤のマイナス表示の読み落としが原因）。$K_e$・$R$・$C_Q$・$J$・$I_0$ は秤を使わない。
 
 **注意**: このデータの電池電流は「ファームの読み値の 10 倍」であり、独立した電流計測ではない（電流検出抵抗の誤設定をコミット d685c9fd で修正した。それ以前は 1/10 の値を報告していた）。
 
@@ -375,7 +375,7 @@ Should the propulsion constants measured on a single-motor bench on 2026-10-15 r
 | No-load current $I_0$ | $0.044+2.9\times10^{-9}\,\omega^2$ A | Includes a speed-dependent loss term |
 | Per-step $C_T$ | $6.3\times10^{-9}$ at Duty 0.1 to $7.8\times10^{-9}$ at Duty 0.9 | Rises with Duty |
 
-**Caveat (added 2026-11-02)**: thrust was measured with the probe and USB cables taped to both the scale tray and the table. The 2026-11-02 bench showed that this routing can shift the scale reading by several grams or more (±0.1 g when taped to the tray only). Treat $C_T$ as provisional until it is re-measured with the corrected routing. A fit with a constant 0.41 g offset while spinning gives $C_T = 7.88\times10^{-9}$ (half the residual), and the per-step $C_T$ that rises with Duty agrees in direction with such an offset. $K_e$, $R$, $C_Q$, $J$ and $I_0$ do not use the scale and are not affected.
+**Caveat (added 2026-11-02)**: a redo with the same propeller on the evening of 2026-11-02 gave $C_T = 7.27\times10^{-9}$ through the origin (2-5 % below the value above at every duty; cause not yet found) and $C_Q = 3.33\times10^{-11}$ (agrees). The per-step $C_T$ rising with Duty ($6.2\times10^{-9}$ to $7.4\times10^{-9}$) was the same on both days. Taping the cables to both the scale tray and the table only shifts the scale zero by about -3 g and does not change the thrust readings (checked the same evening). An earlier note of the same day here blaming the cable routing was wrong (that day's thrust offsets came from reading negative scale values without their minus sign). $K_e$, $R$, $C_Q$, $J$ and $I_0$ do not use the scale.
 
 **Caveat**: the battery current in this data is the firmware reading multiplied by 10, not an independent current measurement (the shunt-resistor setting was fixed in commit d685c9fd; before it the current was reported at 1/10).
 
