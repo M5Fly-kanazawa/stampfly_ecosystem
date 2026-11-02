@@ -1081,7 +1081,7 @@ function addPreset(name) {{
         ['accel_x', 'accel_y', 'accel_z'].forEach(k => addSignalToPlot(p5, k, k));
     }} else if (name === 'sensors') {{
         const p1 = addPlot();
-        ['tof_bottom', 'baro_altitude'].forEach(k => addSignalToPlot(p1, k, k));
+        ['tof_bottom', 'tof_front', 'baro_altitude'].forEach(k => addSignalToPlot(p1, k, k));
         const p2 = addPlot();
         ['flow_x', 'flow_y'].forEach(k => addSignalToPlot(p2, k, k));
         const p3 = addPlot();
