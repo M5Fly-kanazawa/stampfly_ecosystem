@@ -113,7 +113,7 @@ Topic<DataType, BufferPolicy, BufferSize>  topic_name;
 | 15 | `estimator_command` | `EstimatorCommand` | Queue | 4 | StateManager callbacks | ImuTask | event | 推定器 reset / 位置速度reset / bias freeze / recalibrate 指令（onEnter/onExit 集約） |
 | 16 | `controller_command` | `ControllerCommand` | Queue | 4 | StateManager callbacks | ControlTask | event | 制御器 reset 指令（onEnter/onExit 集約） |
 | 17 | `notify_command` | `NotifyCommand` | Queue | 8 | StateManager / Failsafe | NotifyTask | event | LED/ブザー通知指令（arm/disarm 音等。配線は Phase 6） |
-| 18 | `sensor_health` | `SensorHealth` | Latest | 1 | sf_board | TelemetryTask, FailsafeTask | 1Hz | センサ presence / 鮮度（R15。publish 配線は Phase 6） |
+| 18 | `sensor_health` | `SensorHealth` | Latest | 1 | sf_board | TelemetryTask, FailsafeTask | 1Hz | センサ presence / 鮮度（R15。publish 配線は Phase 6）。ビット順 = `SensorId`: bit0 IMU, 1 Mag, 2 Baro, 3 下向き ToF, 4 Flow, 5 Power, 6 前方 ToF（任意。未検出なら 0） |
 | 19 | `pairing_state` | `PairingStatus` | Latest | 1 | StateTask (StateManager) | CommTask, NotifyTask | event | 現在の PairingState（NotPaired/Pairing/Paired）。comm が送出制御、notify が LED/ブザー表示 |
 | 20 | `pairing_complete` | `PairingComplete` | Latest | 1 | CommTask (ESP-NOW recv / NVS load) | StateTask | event | comm の現在のバインド状態（bound + 学習/復元した送信機 MAC）。起動時の NVS 復元と Pairing 成立の両方を運ぶ |
 | 21 | `sensor_snapshot` | `SensorSnapshot` | Latest | 1 | ImuTask (processAsyncSensors) | CLI (`sensor`), Telemetry | 400Hz | mag/baro/tof/flow の最新生値ミラー（SPSC キューを奪わず監視できるよう ImuTask が複製）|

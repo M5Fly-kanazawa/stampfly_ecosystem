@@ -75,12 +75,12 @@ sf::SensorHealth buildSensorHealth(uint32_t now_us)
 
     // (published bit, last-publish [us], present). The IMU is Critical and always
     // present once running; its timestamp comes from its RingBuffer topic, whose
-    // latest() does NOT consume (safe to read here). The 5 Optional sensors use the
+    // latest() does NOT consume (safe to read here). The 6 Optional sensors use the
     // BSP last-update registry (set_sensor_update) because their Queue-policy topics
     // are consumed by the fusion task — a second reader would steal data (R5).
     // （発行ビット, 最終 publish 時刻 [us], present）。IMU は Critical で起動中は常在。
     // タイムスタンプは RingBuffer トピックから取得し、その latest() は消費しない
-    // (ここで読んで安全)。Optional な5センサは BSP の last-update レジストリ
+    // (ここで読んで安全)。Optional な6センサは BSP の last-update レジストリ
     // (set_sensor_update) を使う — Queue 方式トピックは融合タスクが消費するため、
     // 2番目の読者がデータを奪う (R5)。
     const struct { SensorId id; uint32_t ts; bool present; } entries[] = {
@@ -90,6 +90,9 @@ sf::SensorHealth buildSensorHealth(uint32_t now_us)
         {SensorId::Tof,   board::sensor_last_update_us(BoardId::BottomToF), board::sensor_present(BoardId::BottomToF)},
         {SensorId::Flow,  board::sensor_last_update_us(BoardId::Flow),     board::sensor_present(BoardId::Flow)},
         {SensorId::Power, board::sensor_last_update_us(BoardId::Power),    board::sensor_present(BoardId::Power)},
+        // Forward ToF is optional: not detected -> present=false -> bit stays 0 in both masks.
+        // 前方 ToF は任意センサ: 未検出なら present=false → 両マスクとも bit は 0 のまま。
+        {SensorId::TofFront, board::sensor_last_update_us(BoardId::FrontToF), board::sensor_present(BoardId::FrontToF)},
     };
 
     sf::SensorHealth health{};
@@ -219,7 +222,7 @@ void PowerTask(void* pvParameters)
             // One-shot bring-up log: the first snapshot where every present sensor is
             // fresh (healthy_mask == present_mask, non-empty). This is the "all sensors
             // up" indicator — early boot snapshots are sparse because the sensor tasks
-            // are still initialising. bit order = SensorId: Imu,Mag,Baro,Tof,Flow,Power.
+            // are still initialising. bit order = SensorId: Imu,Mag,Baro,Tof,Flow,Power,TofFront.
             // ブリングアップ単発ログ: present な全センサが鮮度OKになった最初のスナップショット
             // （healthy_mask == present_mask かつ非ゼロ）。「全センサ起動」の指標 — 起動直後の
             // スナップショットはセンサタスク初期化中で疎。ビット順 = SensorId。

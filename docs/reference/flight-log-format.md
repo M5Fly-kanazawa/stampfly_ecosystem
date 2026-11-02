@@ -299,7 +299,7 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `voltage` | float | V | バッテリ電圧。 |
 | `current_ma` | float | mA | バッテリ電流。StatusPacket v3 (57B) 以降のみ送信。旧ファーム （v1/v2）を読んだ場合はこの列が空欄になる。2026-10-30 の修正 （シャント抵抗値 0.1 Ω → 0.01 Ω）より前のファームで記録した ログの値は、真の電池電流の 1/10 である。 |
 | `flight_state` | int | enum | 飛行状態（FlightState、起動シーケンス〜飛行〜着陸）。 |
-| `sensor_health` | int | bitmask | センサ健全性のビットマスク。 |
+| `sensor_health` | int | bitmask | センサ健全性（鮮度OK）のビットマスク。bit0 = IMU, bit1 = 地磁気, bit2 = 気圧, bit3 = 下向き ToF, bit4 = オプティカルフロー, bit5 = 電源モニタ, bit6 = 前方 ToF（任意センサ。非搭載・未検出なら常に 0。旧ログには bit6 がなく 0 と読める）。 |
 | `eskf_status` | int | bitmask | ESKF 状態のビットマスク。bit0 = 推定器初期化済み。 |
 | `reset_reason` | int | enum | 起動時リセット理由（esp_reset_reason()）。1=POWERON, 3=SW, 4=PANIC, 5=INT_WDT, 6=TASK_WDT, 9=BROWNOUT 等。 |
 | `pid_roll_kp` | float | unitless (gain) | ロールレート PID の比例ゲイン（時刻付きで記録することで飛行中の 自動チューニングによる変更を追える）。 |
@@ -680,7 +680,7 @@ Source: Status (0x4F) / Nominal rate: 1 Hz / Required: no
 | `voltage` | float | V | Battery voltage. |
 | `current_ma` | float | mA | Battery current. Sent only by StatusPacket v3 (57B) and later; empty when the source firmware only sent v1/v2. Logs recorded by firmware before the 2026-10-30 fix (shunt resistor 0.1 ohm -> 0.01 ohm) contain 1/10 of the true battery current. |
 | `flight_state` | int | enum | Flight state (FlightState enum: boot sequence, flight, landing, ...). |
-| `sensor_health` | int | bitmask | Sensor health bitmask. |
+| `sensor_health` | int | bitmask | Sensor health (fresh-data) bitmask. bit0 = IMU, bit1 = magnetometer, bit2 = barometer, bit3 = bottom ToF, bit4 = optical flow, bit5 = power monitor, bit6 = front ToF (optional; always 0 when absent or not detected; older logs have no bit6 and read as 0). |
 | `eskf_status` | int | bitmask | ESKF status bitmask. bit0 = estimator initialized. |
 | `reset_reason` | int | enum | Boot-time reset reason from esp_reset_reason(). E.g. 1=POWERON, 3=SW, 4=PANIC, 5=INT_WDT, 6=TASK_WDT, 9=BROWNOUT. |
 | `pid_roll_kp` | float | unitless (gain) | Roll-rate PID proportional gain (timestamped so an in-flight autotune/gain change over the flight can be traced). |

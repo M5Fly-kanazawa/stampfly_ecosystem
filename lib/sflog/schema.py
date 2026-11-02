@@ -1115,8 +1115,16 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                   {   'name': 'sensor_health',
                       'type': 'int',
                       'unit': 'bitmask',
-                      'description_ja': 'センサ健全性のビットマスク。',
-                      'description_en': 'Sensor health bitmask.'},
+                      'description_ja': 'センサ健全性（鮮度OK）のビットマスク。bit0 = IMU, bit1 = 地磁気, '
+                                        'bit2 = 気圧, bit3 = 下向き ToF, bit4 = オプティカルフロー, '
+                                        'bit5 = 電源モニタ, bit6 = 前方 ToF（任意センサ。非搭載・未検出なら常に '
+                                        '0。旧ログには bit6 がなく 0 と読める）。',
+                      'description_en': 'Sensor health (fresh-data) bitmask. bit0 = '
+                                        'IMU, bit1 = magnetometer, bit2 = barometer, '
+                                        'bit3 = bottom ToF, bit4 = optical flow, bit5 '
+                                        '= power monitor, bit6 = front ToF (optional; '
+                                        'always 0 when absent or not detected; older '
+                                        'logs have no bit6 and read as 0).'},
                   {   'name': 'eskf_status',
                       'type': 'int',
                       'unit': 'bitmask',

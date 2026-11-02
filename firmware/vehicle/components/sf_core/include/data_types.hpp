@@ -892,7 +892,11 @@ struct MotorTest {
 
 /// Sensor identity index for SensorHealth bitmasks / SensorHealth ビットマスク用の識別
 enum class SensorId : uint8_t {
-    Imu = 0, Mag = 1, Baro = 2, Tof = 3, Flow = 4, Power = 5, Count = 6,
+    // Bit numbers 0-5 are fixed (existing logs); TofFront = bit 6 is optional
+    // (present only when the forward ToF is detected).
+    // ビット番号 0〜5 は固定（既存ログ互換）。TofFront = bit6 は任意センサ
+    // （前方 ToF を検出したときのみ present）。
+    Imu = 0, Mag = 1, Baro = 2, Tof = 3, Flow = 4, Power = 5, TofFront = 6, Count = 7,
 };
 
 /// Sensor health — presence + freshness per sensor for failsafe/telemetry monitoring
