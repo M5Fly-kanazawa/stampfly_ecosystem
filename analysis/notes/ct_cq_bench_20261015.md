@@ -386,6 +386,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 | 宙返りの倍率 $s \approx 0.8$ | 6 章に挙げた候補（宙返り中の電池電圧の低下、$\eta$、そのほかのモデル誤差）の切り分け |
 | 修正後のファームの電流表示 | 実機で `sensor power` を確認する（シャント修正 d685c9fd の動作確認） |
 | SILS に入れる $R_\text{out}$ | ベンチの実測値を基準にし、その表で $\eta$ がほぼ 1 になるかを飛行ログのホバリングの釣り合いで確かめる（6 章） |
+| 4 つの PWM の位相をずらす（今後の計画、2026-11-03） | 4 つのモータは同じタイマで同時にオンになり、オンの間の電圧が平均より余計に下がる（6 章「1 モータと 4 モータ同時の回転数」）。LEDC の hpoint でオンのタイミングをずらすと、パルス電流が重ならず、落ち込みと電池の負担が減る見込み。ベンチで、ずらす前と後のオンの間の $V_{DD}$・回転数・電池電流の波形と雑音を比べてから、ファームに入れるか決める |
 
 ### 再現手順
 
@@ -784,6 +785,7 @@ Refitting the same recorded data leaves $T$ and $L$ unchanged, which confirms th
 | Flip scale $s \approx 0.8$ | Separate the candidates listed in chapter 6 (battery-voltage sag during the flip, $\eta$, other model error) |
 | Current display of the fixed firmware | Check `sensor power` on hardware (verification of the shunt fix d685c9fd) |
 | $R_\text{out}$ in the SILS | Use the bench measurement as the reference and check with the flight-log hover balance whether $\eta$ then comes out near 1 (chapter 6) |
+| Staggering the four PWM phases (future plan, 2026-11-03) | The four motors switch on together on the same timer, so the on-time voltage dips further below the mean (chapter 6, "One motor against four at once"). Shifting the on-times with the LEDC hpoint should keep the pulse currents from overlapping and reduce the dip and the battery stress. Compare the on-time $V_{DD}$, rotor speed, battery-current waveform and noise on the bench before and after, then decide whether the firmware takes it |
 
 ### Reproduction
 
