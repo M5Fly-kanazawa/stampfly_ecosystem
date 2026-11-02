@@ -23,6 +23,7 @@
 | `logcheck/test1.py`（`test12.py` はその前身） | ホバリング Duty と電池電圧の関係（傾き、予測との比較） | `test1.json` | 6 章「ホバリング Duty と電池電圧」 |
 | `logcheck/test2.py` | 電池電流の比（実測 ÷ 各モデル） | `test2.json` | 6 章「電池電流」の表 |
 | `logcheck/test3.py` | 飛行ログでのレート同定（遅れの合計・ゲイン） | `test3.json` | 6 章「同定手順の較正」の末尾 |
+| `logcheck/test4.py` | ホバーの推力の釣り合い（全機 = 10/15 の 1 モータの推力の 4 倍）。ベンチのリポジトリの `data/2026-10-15/summary.json` と `data/2026-11-02_steps.csv` を読む（場所は環境変数 `SF_BENCH`、既定はリポジトリと並んだ `stampfly-motor-autotest/data`） | `test4.json`, `test4_windows.csv` | 6 章「全機の推力とホバーの釣り合い」 |
 | `logcheck/report.py` | 上の JSON から詳細報告（Markdown）を作る | `logcheck_report.md`（今回は同梱せず） | — |
 | `flipcheck/flipcheck.py` | 宙返りの角加速度を各モデルで予測し、倍率 $s$・追加の遅れを当てはめる | `flipcheck_results.json` | 6 章「宙返り」の表 |
 | `flip_overlay.py` | 宙返りの実測と予測の重ね描き用データ | `flip_overlay.json` | 6 章「宙返り」の図（図そのものは同梱せず） |
@@ -59,6 +60,7 @@ Scripts and results behind the numbers of chapter 6 (cross-check against flight 
 | `logcheck/test1.py` (`test12.py` is its predecessor) | Hover Duty vs battery voltage (slope, comparison with predictions) | `test1.json` | chapter 6, "Hover Duty and battery voltage" |
 | `logcheck/test2.py` | Battery-current ratios (measured / each model) | `test2.json` | chapter 6, "Battery current" table |
 | `logcheck/test3.py` | Rate identification on flight logs (total delay, gain) | `test3.json` | chapter 6, end of "Calibration of the identification procedure" |
+| `logcheck/test4.py` | Hover thrust balance (vehicle = 4 × the 10/15 single-motor thrust). Reads `data/2026-10-15/summary.json` and `data/2026-11-02_steps.csv` of the bench repository (location from the environment variable `SF_BENCH`; default `stampfly-motor-autotest/data` next to this repository) | `test4.json`, `test4_windows.csv` | chapter 6, "Vehicle thrust and hover balance" |
 | `logcheck/report.py` | Builds a detailed Markdown report from the JSON above | `logcheck_report.md` (not included) | none |
 | `flipcheck/flipcheck.py` | Predicts flip angular acceleration with each model and fits the scale $s$ and extra delay | `flipcheck_results.json` | chapter 6, "Flips" table |
 | `flip_overlay.py` | Data for the measured/predicted flip overlay | `flip_overlay.json` | chapter 6, "Flips" figure (figure itself not included) |

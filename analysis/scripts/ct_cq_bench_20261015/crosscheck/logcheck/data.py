@@ -1,6 +1,6 @@
 import sys, os, json, numpy as np
-sys.path[:0]=[os.path.join(REPO,'tools'),os.path.join(REPO,'lib'),os.path.join(REPO,'tools','log_analyzer')]
 from common import load as load_jsonl, REPO, LOGS_DIR, RESULTS
+sys.path[:0]=[os.path.join(REPO,'tools'),os.path.join(REPO,'lib'),os.path.join(REPO,'tools','log_analyzer')]
 from sysid.loader import load_aligned
 OUT=RESULTS
 JSONL=["20260614T201629","20260614T214537","20260627T020137","20260627T164611","20260627T165713","20260629T145526",
