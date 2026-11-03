@@ -1,0 +1,1 @@
+float32 C++ path: 8736 points, max |duty error| = 1.729e-06 at D=1.00 V=3.60; max relative thrust error = 6.039e-07
