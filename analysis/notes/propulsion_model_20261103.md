@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-**状態**: 基礎資料（2026-11-03 作成）。推進系のモデルを刷新し、ファームの推力の換算と制御設計、SILS のプラントを作り直す作業（別ブランチで行う予定）の出発点として、2026-11-02〜03 の実験で分かったことを整理する。物理パラメータの基準ファイル（`control/models/stampfly_physical.yaml`）と SILS 方針のバックログは、この文書では変えていない。同じ内容の図入りの HTML 版: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ （閲覧には共有が要る）。2026-11-03 更新: 未決だった 3 点を決めた（10 章「決めたこと」）。
+**状態**: 基礎資料（2026-11-03 作成）。推進系のモデルを刷新し、ファームの推力の換算と制御設計、SILS のプラントを作り直す作業（別ブランチで行う予定）の出発点として、2026-11-02〜03 の実験で分かったことを整理する。物理パラメータの基準ファイル（`control/models/stampfly_physical.yaml`）と SILS 方針のバックログは、この文書では変えていない。同じ内容の図入りの HTML 版: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ （閲覧には共有が要る）。2026-11-03 更新: 未決だった 3 点を決めた（10 章「決めたこと」）。9 章の照合の幅の扱いを直した（合否の幅はデータを見てから決める）。
 
 ## 1. 概要
 
@@ -442,7 +442,7 @@ $$F = F_\text{ref}\left(\frac{\omega}{\omega_\text{ref}}\right)^{n},\qquad \omeg
 | Duty の範囲 | 長時間放電は 0.50〜0.80 だけ（0.9 は夜の 2 段のみ） | 0.85〜0.95 を足す |
 | 4 モータの回転数 | M1 しか測っていない | 録音か、M2〜M4 のドレインにオシロを当てる |
 | 飛行ログのファームの世代 | 13 本は 2026-08-22 の換算の変更（モータ曲線を 1.12 倍、`hover.thrust_corr` の既定 1.12 → 1.00）より前。6/18 に `hover.thrust_corr` がパラメータになり、7/04 にホバー推力の学習、7/18 に高度の外乱オブザーバが既定で入った。Duty を使う結果は影響を受けないが、記録された指令推力の水準は世代で違う | 飛行ログごとにファームのコミットを記録する |
-| 照合の幅 | 「±3 %」は結果を見た後に付けた | 合否の幅は照合の前に決める |
+| 照合の幅 | 「±3 %」は結果を見た後に付けた幅 | 合否の幅は実験の前には決めず、データを見てから決める。前に決めた幅は予想どおりの結果にしか使えず、予想外の結果に対応できないことがある（2026-11-03 実験者） |
 
 ## 10. モデル刷新への引き継ぎ（意見）
 
@@ -547,7 +547,7 @@ Duty 0.85〜0.95 の範囲、モータごとの回転数（録音か各ドレイ
 
 <a id="english"></a>
 
-**Status**: Basic reference (written 2026-11-03). It collects what the experiments of 2026-11-02 to 11-03 showed, as the starting point for the work (planned on a separate branch) of renewing the propulsion model, redoing the firmware's thrust conversion and control design, and rebuilding the SILS plant. This document does not change the reference file of physical parameters (`control/models/stampfly_physical.yaml`) or the SILS policy backlog. An HTML version with charts: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ (sharing is needed to view it). Updated 2026-11-03: the three open points are decided (chapter 10, "Decided").
+**Status**: Basic reference (written 2026-11-03). It collects what the experiments of 2026-11-02 to 11-03 showed, as the starting point for the work (planned on a separate branch) of renewing the propulsion model, redoing the firmware's thrust conversion and control design, and rebuilding the SILS plant. This document does not change the reference file of physical parameters (`control/models/stampfly_physical.yaml`) or the SILS policy backlog. An HTML version with charts: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ (sharing is needed to view it). Updated 2026-11-03: the three open points are decided (chapter 10, "Decided"). The handling of the check width in chapter 9 is corrected (the pass width is decided after seeing the data).
 
 ## 1. Overview
 
@@ -987,7 +987,7 @@ Regression tests (45 scenarios): as is, 41 pass, 3 known failures, 1 out of scop
 | Duty range | The long discharge covers only 0.50 to 0.80 (0.9 only in two steps at night) | Add 0.85 to 0.95 |
 | Rotor speed of four motors | Only M1 was measured | Use audio, or put the oscilloscope on the drains of M2 to M4 |
 | Firmware generation of flight logs | 13 logs predate the conversion change of 2026-08-22 (motor curve 1.12 times, default of `hover.thrust_corr` 1.12 → 1.00). `hover.thrust_corr` became a parameter on 6/18, hover thrust learning was added on 7/04, and the altitude disturbance observer became default on 7/18. Results that use Duty are not affected, but the level of the logged commanded thrust differs by generation | Record the firmware commit for each flight log |
-| Width of the check | The "±3 %" was set after seeing the result | Decide the pass width before the check |
+| Width of the check | The "±3 %" is a width set after seeing the result | Do not fix the pass width before the experiment; decide it after seeing the data. A width fixed in advance works only for an expected result and may not handle an unexpected one (experimenter, 2026-11-03) |
 
 ## 10. Hand-over to the model redesign (opinion)
 
