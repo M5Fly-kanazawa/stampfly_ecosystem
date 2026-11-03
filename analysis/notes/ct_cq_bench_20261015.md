@@ -248,7 +248,7 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 - 3 分間のホバリングでは電圧の低下と時間の経過が重なり、巻線の温度上昇と分けられない。ただ温度上昇は $R_\text{out}$ モデルと同じ向きに効くので、差し引くと $R_\text{out}$ モデルとの差はかえって広がる。
 - これは、開発者らの論文の前提「$R_\text{out}$ は電池電圧によらない」と食い違う、実機ログで初めての結果である。10/15 のベンチは電池電圧 4.17〜4.38 V だけで、この前提を確かめた範囲は狭い。
 - 影響: $R_\text{out}$ の表から推力 → Duty の変換を作ると（論文 5.3 節の提案）、電池が減るにつれてホバリングの見込みが数 % ずれるおそれがある。ファームへの採用は、電池電圧への依存を確かめる実験の後にする（実験の方針は 8 章）。論文の改訂でも「電圧によらないことは 4.2〜4.4 V で確かめた」と範囲を書いておく価値がある。
-- **2026-11-02 追記:** 11/02 の長時間放電のベンチ（負荷時の電池電圧 4.27 → 3.63 V、冷えた状態どうし）で、$R_\text{out}$ の変化は 0〜−1.1 % で、電池電圧によらないと確かめた。ただし、どの Duty でも一定の電圧降下 $V_b \approx 0.11$ V（ブラシの接触に相当）を加えた式 $\bar I_m = (V_{DD} - K_e\omega - V_b)/R_\text{out}(D)$ が合う。ここで見た食い違いは、論文の表の $R_\text{out}$（D0.3〜0.7 で実測より約 10 % 小さい）と $V_b$ を入れない計算によるもので、ベンチで実測した回転数の表を使うと小さい（下の「全機の推力とホバーの釣り合い」）。
+- **2026-11-02 追記:** 11/02 の長時間放電のベンチ（負荷時の電池電圧 4.27 → 3.63 V、冷えた状態どうし）で、$R_\text{out}$ の変化は 0〜−1.3 %（冷えた周全体の回帰で 1 V あたり +1.6 ± 0.4 %）で、電池電圧への依存は小さいと確かめた。ただし、どの Duty でも一定の電圧降下 $V_b \approx 0.11$ V（ブラシの接触に相当）を加えた式 $\bar I_m = (V_{DD} - K_e\omega - V_b)/R_\text{out}(D)$ が合う。ここで見た食い違いは、論文の表の $R_\text{out}$（D0.3〜0.7 で実測より約 10 % 小さい）と $V_b$ を入れない計算によるもので、ベンチで実測した回転数の表を使うと小さい（下の「全機の推力とホバーの釣り合い」）。
 
 ### ベンチで実測した $R_\text{out}$
 
@@ -340,14 +340,14 @@ $R_\text{out}$ モデルでは、電池電圧が下がるとホバリングに�
 
 ファームの制御は推力 [N] とトルク [N·m] を出し、最後に `thrustToDuty`（`actuator.cpp`）で Duty に換算する。今の換算は Duty = （モータ曲線の電圧）÷ 電池電圧で、Duty × 電圧が一定の形。電圧の分の不足は、速度ループの補正とホバー推力の学習（`hover.thrust_corr`）が補う。定常ホバーの Duty と電圧は物理で決まるので、ある換算がそれを出すのに要る指令推力は、その換算の順モデルを記録された Duty で評価した値になる（今のファームは記録された指令値）。`crosscheck/logcheck/test5.py`、結果は `crosscheck/results/test5.json`。
 
-| 換算 | 1 回の飛行の中の傾き（10 本を合わせた値） | 全区間の傾き | 運転ごとの中央値 |
+| 換算 | 1 回の飛行の中の傾き（14 本の各平均を引いて合わせた値） | 全区間の傾き | 運転ごとの中央値 |
 |---|---|---|---|
-| 今のファーム（記録された指令推力） | −0.105 ± 0.020 /V | −0.147 /V | 0.95〜1.21 |
+| 記録された指令推力（その日のファーム。13 本は 2026-08-22 の換算の変更より前） | −0.105 ± 0.020 /V | −0.147 /V | 0.95〜1.21 |
 | ベンチ・表 B | +0.050 ± 0.019 /V | +0.006 /V | 0.90〜1.09 |
 | ベンチ・表 B（オンの間の電圧で補正） | +0.042 ± 0.019 /V | −0.004 /V | 0.88〜1.07 |
 | ベンチ・表 A | +0.120 ± 0.020 /V | +0.073 /V | 0.88〜1.07 |
 
-（要る指令推力 ÷ 重さ 37 g の、記録電圧に対する傾き）
+（要る指令推力 ÷ 重さ 37 g の、記録電圧に対する傾き。± は 5 秒区間を独立とみなした誤差で、実際より小さい。まとめは `analysis/notes/propulsion_model_20261103.md`）
 
 - 今のファームでは、電圧が 0.5 V 下がると要る指令推力が約 5 % 増える。表 B の換算なら、1 回の飛行の中で約 2.5 % 減る（逆向き、大きさは約半分）。飛行をまたぐとほぼ 0 になる。指令推力の水準も重さの近くに来るので、学習値は 1 付近に収まる見込み。
 - 1 回の飛行の中の実際の Duty の傾きは −0.218 ± 0.011 /V で、今の換算（−0.168 /V）とベンチ（約 −0.24 /V）の間にある。ベンチのほうが少し強い理由は未特定（ベンチでは温まった周のほうが回転数がわずかに低く、温まりでは説明できない。飛行の中では時間と電圧が一緒に変わる）。
@@ -664,7 +664,7 @@ In the $R_\text{out}$ model, the Duty needed to hover rises steeply as the batte
 - Over three minutes of hover, voltage sag and elapsed time are confounded with winding temperature rise. The temperature rise acts in the same direction as the $R_\text{out}$ model, so removing it widens the difference from the $R_\text{out}$ model.
 - This is the first result from flight logs that conflicts with the paper's premise "$R_\text{out}$ does not depend on the battery voltage". The 10/15 bench covered only 4.17 to 4.38 V, so the range over which the premise was checked is narrow.
 - Implication: if a thrust-to-Duty conversion is built from the $R_\text{out}$ table (the paper's section 5.3 proposal), the hover estimate may drift by a few percent as the battery drains. Adopting it in the firmware comes after the experiment on the battery-voltage dependence (policy in chapter 8). It is also worth stating in the paper's revision that independence of voltage was checked only over 4.2 to 4.4 V.
-- **Added 2026-11-02:** the long-discharge bench of 11/02 (loaded battery voltage 4.27 → 3.63 V, cold laps compared) changed $R_\text{out}$ by 0 to −1.1 %, so it does not depend on the battery voltage. A constant drop $V_b \approx 0.11$ V at every Duty (the size of a brush-contact drop) must be added: $\bar I_m = (V_{DD} - K_e\omega - V_b)/R_\text{out}(D)$. The conflict seen here came from the paper's $R_\text{out}$ table (about 10 % below the measurement at D0.3-0.7) and the missing $V_b$; with the bench-measured rotor-speed map it is small (see "Vehicle thrust and hover balance" below).
+- **Added 2026-11-02:** the long-discharge bench of 11/02 (loaded battery voltage 4.27 → 3.63 V, cold laps compared) changed $R_\text{out}$ by 0 to −1.3 % (+1.6 ± 0.4 % per V in a regression over all cold laps), so its battery-voltage dependence is small. A constant drop $V_b \approx 0.11$ V at every Duty (the size of a brush-contact drop) must be added: $\bar I_m = (V_{DD} - K_e\omega - V_b)/R_\text{out}(D)$. The conflict seen here came from the paper's $R_\text{out}$ table (about 10 % below the measurement at D0.3-0.7) and the missing $V_b$; with the bench-measured rotor-speed map it is small (see "Vehicle thrust and hover balance" below).
 
 ### R_out measured on the bench
 
@@ -756,14 +756,14 @@ The four-motor M1 speed was compared with the one-motor map (same Duty, same $V_
 
 The firmware controller outputs thrust [N] and torques [N·m] and converts them to duty last, in `thrustToDuty` (`actuator.cpp`). Today the conversion is duty = (motor-curve voltage) / battery voltage, i.e. Duty × voltage constant; the shortfall with voltage is made up by the velocity-loop correction and the hover-thrust learner (`hover.thrust_corr`). In steady hover the duties and the voltage are set by physics, so the commanded thrust a conversion would need is its forward model evaluated at the logged duties (for the current firmware, the logged command). `crosscheck/logcheck/test5.py`; results in `crosscheck/results/test5.json`.
 
-| Conversion | Slope within one flight (10 flights pooled) | Slope across all windows | Per-log medians |
+| Conversion | Slope within one flight (14 logs, each flight's mean removed) | Slope across all windows | Per-log medians |
 |---|---|---|---|
-| Current firmware (logged command) | −0.105 ± 0.020 /V | −0.147 /V | 0.95-1.21 |
+| Logged command (firmware of the day; 13 logs predate the 2026-08-22 conversion change) | −0.105 ± 0.020 /V | −0.147 /V | 0.95-1.21 |
 | Bench, map B | +0.050 ± 0.019 /V | +0.006 /V | 0.90-1.09 |
 | Bench, map B on the on-time voltage | +0.042 ± 0.019 /V | −0.004 /V | 0.88-1.07 |
 | Bench, map A | +0.120 ± 0.020 /V | +0.073 /V | 0.88-1.07 |
 
-(Slope of the required commanded thrust / weight (37 g) against the logged voltage)
+(Slope of the required commanded thrust / weight (37 g) against the logged voltage. The ± treats 5-s windows as independent and is too small. Summary in `analysis/notes/propulsion_model_20261103.md`)
 
 - With the current firmware the required commanded thrust rises by about 5 % as the voltage drops by 0.5 V. With the map-B conversion it falls by about 2.5 % within one flight (opposite sign, about half the size) and is close to zero across flights. The command level also comes near the weight, so the learned value should settle near 1.
 - The actual duty slope within one flight is −0.218 ± 0.011 /V, between the current conversion (−0.168 /V) and the bench (about −0.24 /V). Why the bench is slightly stronger is open (on the bench warm laps run slightly slower, so warming does not explain it; in flight time and voltage change together).
