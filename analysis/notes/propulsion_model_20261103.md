@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-**状態**: 基礎資料（2026-11-03 作成）。推進系のモデルを刷新し、ファームの推力の換算と制御設計、SILS のプラントを作り直す作業（別ブランチで行う予定）の出発点として、2026-11-02〜03 の実験で分かったことを整理する。物理パラメータの基準ファイル（`control/models/stampfly_physical.yaml`）と SILS 方針のバックログは、この文書では変えていない。同じ内容の図入りの HTML 版: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ （閲覧には共有が要る）。2026-11-03 更新: 未決だった 3 点を決めた（10 章「決めたこと」）。9 章の照合の幅の扱いを直した（合否の幅はデータを見てから決める）。
+**状態**: 基礎資料（2026-11-03 作成）。推進系のモデルを刷新し、ファームの推力の換算と制御設計、SILS のプラントを作り直す作業（別ブランチで行う予定）の出発点として、2026-11-02〜03 の実験で分かったことを整理する。物理パラメータの基準ファイル（`control/models/stampfly_physical.yaml`）と SILS 方針のバックログは、この文書では変えていない。同じ内容の図入りの HTML 版: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ （閲覧には共有が要る）。2026-11-03 更新: 未決だった 3 点を決めた（10 章「決めたこと」）。9 章の照合の幅の扱いを直した（合否の幅はデータを見てから決める）。重さの記述を直した（開発者が量ってあり 36〜38 g）。
 
 ## 1. 概要
 
@@ -27,7 +27,7 @@ StampFly の推進系（モータ・駆動回路・プロペラ）について�
 | 4 モータ同時 | 4 つのモータは同時にオンになり、オンの間の電圧が平均より余計に下がる。1 モータで測った電圧の範囲の中では、オンの間の電圧で比べると回転数の差は 0 ± 0.3 % | 事実 |
 | 推力 | $F/\omega^2$ は一定でない。$F = k\,\omega^{n}$（$n$ = 2.13〜2.15、当てはめ方による）が 2 日とも合う。11/02 夜の推力は 10/15 の 0.958〜0.961 倍で、回転数によらない | 事実 |
 | 採る値 | 10/15 の推力を基準とし、全機の推力はその 4 倍とする。11/02 の 4 モータ同時の推力は使わない | 実験者の判断 |
-| 飛行との照合 | 4 × 10/15 の推力 ÷ 重さ（見積もり 36〜37 g）は 0.981〜1.034。10/15 と 11/02 の推力はこの照合では区別できない | 事実 |
+| 飛行との照合 | 4 × 10/15 の推力 ÷ 重さ（36 g と 37 g で計算。量った重さは 36〜38 g）は 0.981〜1.034。10/15 と 11/02 の推力はこの照合では区別できない | 事実 |
 | ホバー Duty の電圧依存 | 飛行 −0.21〜−0.26 /V（1 回の飛行の中／全区間）、ベンチ −0.24〜−0.29 /V、今のファームの換算（Duty × 電圧が一定）−0.168 /V | 事実 |
 | 今のファームの換算 | 電圧依存が緩すぎ、その分を高度制御と推力の学習が補っている（記録された指令推力が電圧の低下とともに増える） | 事実・推論（中〜強） |
 | SILS | 換算をプラントの正確な逆にすると、SILS の中では電圧による高度のずれと離陸の行き過ぎが消える（作りの上で当然の部分を含む）。ループの効きは 1.3〜2.0 倍になる | 事実 |
@@ -97,7 +97,7 @@ StampFly の推進系（モータ・駆動回路・プロペラ）について�
 | 量 | 内容 |
 |---|---|
 | 推力 | 1 モータの推力 [N または g]。全機の推力は 4 モータの和 |
-| 重さ | 機体の重さ。開発者の見積もりで 36〜37 g（量ってはいない）。このレポートの照合は 37 g と 36 g の両方で計算した |
+| 重さ | 機体の重さ。開発者が量ってあり 36〜38 g（2026-11-03 開発者の確認。初版は「量っていない見積もり 36〜37 g」と書いていた）。このレポートの照合は 37 g と 36 g の両方で計算した |
 
 ## 3. 実験とデータ
 
@@ -433,7 +433,7 @@ $$F = F_\text{ref}\left(\frac{\omega}{\omega_\text{ref}}\right)^{n},\qquad \omeg
 | 項目 | 起きたこと | 次からの対応 |
 |---|---|---|
 | 秤のマイナス表示 | 記号を読まず、負の値を正と読んだ | `read_scale.py` で記号を判定。画角を変えたら記号の位置を決め直す |
-| 重さ | 飛行した機体の重さを量っていない（見積もり 36〜37 g） | 機体ごとに量る |
+| 重さ | 初版では量っていないと書いたが、開発者が量ってあり 36〜38 g だった（2026-11-03 確認） | 機体ごとの値を記録に残す |
 | 室温 | 10/15・11/02 とも記録していない | 運転の前後に記録する |
 | 既知のおもり | 10/15 は確認していない | 毎回、測定の前後に確かめる |
 | 録音 | 11/02 はどの運転でも録っていない | `SF_MIC_NAME` を設定し `--audio` を付ける（4 つのモータの回転数を音で分けられる） |
@@ -470,11 +470,11 @@ $$F = F_\text{ref}\left(\frac{\omega}{\omega_\text{ref}}\right)^{n},\qquad \omeg
 | $C_Q$ | $3.38\times10^{-11}$ | 10/15（11/02 夜は 3.33e-11） |
 | $J$ | $1.54\times10^{-8}$ kg·m² | 10/15（11/02 夜は 1.47〜1.53e-8） |
 | 記録電圧 → オンの間の $V_{DD}$ | $\Delta V = R_\text{path} I + R_\text{src} I (1-D)/D$、4 モータで $R_\text{path}$ 2 mΩ・$R_\text{src} = 37 + 95\,(4.2 - V_\text{CLI})$ mΩ | 電池 3 の 1 本だけ。1 モータ（電池 2）は 26 mΩ・72 mΩ。同じ 4 モータのデータに当てはめた式 $781 - 118\,V_\text{CLI} - 324\,D$ mV は残差 12 mV だが、1 モータや別の電池には使えない |
-| 重さ | 36〜37 g | 見積もり |
+| 重さ | 36〜38 g | 開発者が量った値（照合の計算は 36 g と 37 g） |
 
 ### すでに決めたこと（実験者の判断）
 
-10/15 の推力を基準、全機は 4 倍。11/02 の 4 モータ同時の推力は使わない。重さは 36〜37 g と見積もる。
+10/15 の推力を基準、全機は 4 倍。11/02 の 4 モータ同時の推力は使わない。重さは 36〜38 g（開発者が量った値）。
 
 ### 決めたこと（2026-11-03、実験者の判断）
 
@@ -547,7 +547,7 @@ Duty 0.85〜0.95 の範囲、モータごとの回転数（録音か各ドレイ
 
 <a id="english"></a>
 
-**Status**: Basic reference (written 2026-11-03). It collects what the experiments of 2026-11-02 to 11-03 showed, as the starting point for the work (planned on a separate branch) of renewing the propulsion model, redoing the firmware's thrust conversion and control design, and rebuilding the SILS plant. This document does not change the reference file of physical parameters (`control/models/stampfly_physical.yaml`) or the SILS policy backlog. An HTML version with charts: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ (sharing is needed to view it). Updated 2026-11-03: the three open points are decided (chapter 10, "Decided"). The handling of the check width in chapter 9 is corrected (the pass width is decided after seeing the data).
+**Status**: Basic reference (written 2026-11-03). It collects what the experiments of 2026-11-02 to 11-03 showed, as the starting point for the work (planned on a separate branch) of renewing the propulsion model, redoing the firmware's thrust conversion and control design, and rebuilding the SILS plant. This document does not change the reference file of physical parameters (`control/models/stampfly_physical.yaml`) or the SILS policy backlog. An HTML version with charts: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ (sharing is needed to view it). Updated 2026-11-03: the three open points are decided (chapter 10, "Decided"). The handling of the check width in chapter 9 is corrected (the pass width is decided after seeing the data). The weight is corrected (weighed by the developer, 36 to 38 g).
 
 ## 1. Overview
 
@@ -572,7 +572,7 @@ This report summarizes the propulsion system of the StampFly (motor, drive circu
 | Four motors together | The four motors switch on at the same time, and the on-time voltage drops more than the mean voltage. Within the voltage range measured with one motor, the speed difference is 0 ± 0.3 % when compared at the on-time voltage | Fact |
 | Thrust | $F/\omega^2$ is not constant. $F = k\,\omega^{n}$ ($n$ = 2.13 to 2.15, depending on the fitting method) fits on both days. The thrust of the 11/02 night is 0.958 to 0.961 times that of 10/15, independent of rotor speed | Fact |
 | Values to adopt | Use the 10/15 thrust as the reference, and take the thrust of the whole vehicle as 4 times it. Do not use the 11/02 four-motor thrust | Experimenter's decision |
-| Cross-check against flight | 4 × the 10/15 thrust ÷ weight (estimated 36 to 37 g) is 0.981 to 1.034. This check cannot tell the 10/15 and 11/02 thrust apart | Fact |
+| Cross-check against flight | 4 × the 10/15 thrust ÷ weight (calculated for 36 g and 37 g; the weighed value is 36 to 38 g) is 0.981 to 1.034. This check cannot tell the 10/15 and 11/02 thrust apart | Fact |
 | Voltage dependence of hover Duty | Flight −0.21 to −0.26 /V (within one flight / all segments), bench −0.24 to −0.29 /V, current firmware conversion (Duty × voltage constant) −0.168 /V | Fact |
 | Current firmware conversion | Its voltage dependence is too weak, and the altitude control and the thrust learning make up the difference (the logged commanded thrust rises as the voltage drops) | Fact and inference (medium to strong) |
 | SILS | If the conversion is made the exact inverse of the plant, the voltage-dependent altitude offset and the takeoff overshoot disappear inside the SILS (partly by construction). The loop gain effect becomes 1.3 to 2.0 times | Fact |
@@ -642,7 +642,7 @@ For the runs from the afternoon on (the comparison of four loads on 11/02 and R1
 | Quantity | Content |
 |---|---|
 | Thrust | Thrust of one motor [N or g]. The thrust of the whole vehicle is the sum of the four motors |
-| Weight | Weight of the vehicle. The developer's estimate is 36 to 37 g (not weighed). The checks in this report were calculated for both 37 g and 36 g |
+| Weight | Weight of the vehicle. The developer has weighed it: 36 to 38 g (confirmed by the developer on 2026-11-03; the first version said "not weighed, estimate 36 to 37 g"). The checks in this report were calculated for both 37 g and 36 g |
 
 ## 3. Experiments and data
 
@@ -978,7 +978,7 @@ Regression tests (45 scenarios): as is, 41 pass, 3 known failures, 1 out of scop
 | Item | What happened | What to do from now on |
 |---|---|---|
 | Minus sign on the scale | The sign was not read, and negative values were read as positive | Judge the sign with `read_scale.py`. Set the sign position again when the camera view changes |
-| Weight | The flown vehicle was not weighed (estimate 36 to 37 g) | Weigh each vehicle |
+| Weight | The first version said the vehicle was not weighed; the developer had weighed it, 36 to 38 g (confirmed 2026-11-03) | Keep the value for each vehicle in the record |
 | Room temperature | Not recorded on 10/15 or 11/02 | Record before and after a run |
 | Known weight | Not checked on 10/15 | Check before and after every measurement |
 | Audio recording | Not recorded in any run on 11/02 | Set `SF_MIC_NAME` and add `--audio` (the rotor speeds of the four motors can be separated by sound) |
@@ -1015,11 +1015,11 @@ Regression tests (45 scenarios): as is, 41 pass, 3 known failures, 1 out of scop
 | $C_Q$ | $3.38\times10^{-11}$ | 10/15 (3.33e-11 on the 11/02 night) |
 | $J$ | $1.54\times10^{-8}$ kg·m² | 10/15 (1.47 to 1.53e-8 on the 11/02 night) |
 | Logged voltage → on-time $V_{DD}$ | $\Delta V = R_\text{path} I + R_\text{src} I (1-D)/D$; for four motors $R_\text{path}$ 2 mΩ, $R_\text{src} = 37 + 95\,(4.2 - V_\text{CLI})$ mΩ | One battery only (battery 3). One motor (battery 2): 26 mΩ and 72 mΩ. The fitted formula $781 - 118\,V_\text{CLI} - 324\,D$ mV on the same four-motor data has a residual of 12 mV, but cannot be used for one motor or another battery |
-| Weight | 36 to 37 g | Estimate |
+| Weight | 36 to 38 g | Weighed by the developer (the checks were calculated for 36 g and 37 g) |
 
 ### Already decided (experimenter's decision)
 
-Use the 10/15 thrust as the reference, and 4 times it for the whole vehicle. Do not use the 11/02 four-motor thrust. The weight is estimated as 36 to 37 g.
+Use the 10/15 thrust as the reference, and 4 times it for the whole vehicle. Do not use the 11/02 four-motor thrust. The weight is 36 to 38 g (weighed by the developer).
 
 ### Decided (2026-11-03, experimenter's decision)
 
