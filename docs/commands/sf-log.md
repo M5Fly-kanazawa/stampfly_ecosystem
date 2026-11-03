@@ -339,6 +339,10 @@ sf log analyze --health --batch
 sf log video logs/flight_20260911T121243.sflog.zip
 ```
 
+見本（2026-06-27 の POS_HOLD のホバーの始めの 30 秒。1280×720 に縮めた版、2 MB）: [sf_log_video_sample.mp4](../assets/sf_log_video_sample.mp4)
+
+<video src="../assets/sf_log_video_sample.mp4" controls width="640"></video>
+
 | 項目 | 内容 |
 |------|------|
 | ログの指定 | `.sflog.zip`、一式のフォルダ、UDP の `.jsonl`。省略時は `logs/` の最新 |
@@ -696,6 +700,10 @@ Renders a log as an mp4: a 3D StampFly flies the logged path on the left 70 %, a
 ```bash
 sf log video logs/flight_20260911T121243.sflog.zip
 ```
+
+Sample (the first 30 s of a POS_HOLD hover on 2026-06-27, scaled down to 1280×720, 2 MB): [sf_log_video_sample.mp4](../assets/sf_log_video_sample.mp4)
+
+<video src="../assets/sf_log_video_sample.mp4" controls width="640"></video>
 
 | Item | Description |
 |------|-------------|
