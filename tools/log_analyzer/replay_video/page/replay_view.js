@@ -394,7 +394,7 @@ function stepState(k) {
   }
   const p = posToScene(k, 0);
   const follow = OPT.view !== 'top';
-  const alt = Math.max(0.05, p.y * 0.6 + 0.0);
+  const alt = p.y >= 0 ? Math.max(0.05, p.y * 0.6) : p.y;   // follow below the floor too / 床の下も追う
   const goal = follow ? [p.x, alt, p.z] : [spE, 0.18, -spN];
   const kk = rig.init ? 1 - Math.exp(-dt / CAM_TAU_S) : 1;
   rig.tx += (goal[0] - rig.tx) * kk; rig.ty += (goal[1] - rig.ty) * kk; rig.tz += (goal[2] - rig.tz) * kk;
@@ -425,8 +425,9 @@ function poseFrame(k) {
   applySpin(main);
   const base = posToScene(k, 0);
   shadow.position.set(base.x, 0.0008, base.z);
-  const stalkH = Math.max(0.001, base.y);
-  stalk.scale.set(1, stalkH, 1); stalk.position.set(base.x, stalkH / 2, base.z);
+  // stalk between the floor and the vehicle, also below the floor / 床と機体を結ぶ線（床の下でも）
+  const stalkH = Math.max(0.001, Math.abs(base.y));
+  stalk.scale.set(1, stalkH, 1); stalk.position.set(base.x, base.y / 2, base.z);
   // small views / 小画面
   const yaw = yawOf(qRaw);
   for (const v of Object.values(views)) {
@@ -557,7 +558,10 @@ async function boot() {
   const box = new THREE.Box3();
   for (const name of PART_NAMES) { partGeometry[name].computeBoundingBox(); box.union(partGeometry[name].boundingBox); }
   halfH = (box.max.y - box.min.y) / 2 * 0.001;           // STL Y = body up, mm -> m
-  floorH = Math.min(0, ...D.h);
+  // The floor is fixed at h = 0 (the estimator's ground). A negative estimate is drawn below
+  // the floor on purpose, so an estimation fault shows up in the video.
+  // 床は h = 0（推定の地面）に固定する。推定がマイナスなら機体を床の下に描く（推定の異常が動画で見えるように）。
+  floorH = 0;
   spN = D.setpoint.ned[0]; spE = D.setpoint.ned[1];
   let ext = 0; for (const p of D.pos) ext = Math.max(ext, Math.abs(p[0] - spN), Math.abs(p[1] - spE));
   extent = clamp(Math.ceil((ext + 0.12) / 0.1) * 0.1, 0.5, 3.0);
