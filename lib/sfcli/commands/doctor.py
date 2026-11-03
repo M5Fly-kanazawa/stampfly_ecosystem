@@ -642,6 +642,36 @@ def _check_plot_backend(warnings: list, fix: bool) -> None:
         console.print(f"    {hint}")
 
 
+def _check_video_tools(warnings: list) -> None:
+    """Informational check for `sf log video`: Chrome (draws the 3D frames)
+    and ffmpeg (encodes the mp4). A missing tool is a warning, not a failure.
+    `sf log video` 用の情報チェック: Chrome（3D の各コマを描く）と ffmpeg
+    （mp4 に符号化する）。無くても失敗ではなく警告にとどめる。"""
+    sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
+    try:
+        from replay_video import record
+    except ImportError as e:  # noqa: BLE001
+        console.warning(f"  video tools: could not load ({e})")
+        return
+    finally:
+        sys.path.pop(0)
+
+    chrome = record.find_chrome()
+    if chrome:
+        console.success(f"  Chrome: {chrome}")
+    else:
+        warnings.append("Chrome not found (needed by `sf log video`)")
+        console.warning("  Chrome: NOT FOUND (needed by `sf log video`)")
+        console.print("    Install Chrome, or set CHROME_PATH to the browser executable.")
+    ffmpeg = record.find_ffmpeg()
+    if ffmpeg:
+        console.success(f"  ffmpeg: {ffmpeg}")
+    else:
+        warnings.append("ffmpeg not found (needed by `sf log video`)")
+        console.warning("  ffmpeg: NOT FOUND (needed by `sf log video`)")
+        console.print("    macOS: brew install ffmpeg / Windows: winget install Gyan.FFmpeg / Linux: sudo apt install ffmpeg")
+
+
 def _check_dedicated_root(root: str, warnings: list) -> None:
     """Confirm the dedicated environment's root directory (SF_HOME)
     still exists on disk.
@@ -951,6 +981,12 @@ def run(args: argparse.Namespace) -> int:
     console.print()
     console.info("Checking plot window support (matplotlib)...")
     _check_plot_backend(warnings, args.fix)
+
+    # Check the tools of `sf log video` (Chrome, ffmpeg; optional, WARN-only)
+    # `sf log video` の道具（Chrome, ffmpeg。任意、警告のみ）の確認
+    console.print()
+    console.info("Checking video tools (sf log video)...")
+    _check_video_tools(warnings)
 
     # Check hidapi native library (for joystick / simulator)
     # hidapiネイティブライブラリの確認（ジョイスティック／シミュレータ用）

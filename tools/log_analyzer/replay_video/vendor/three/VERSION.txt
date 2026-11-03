@@ -1,0 +1,4 @@
+three.js r160 (MIT, upstream files unmodified)
+three.module.js
+examples/jsm/loaders/STLLoader.js
+LICENSE (full MIT license text)

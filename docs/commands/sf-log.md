@@ -28,6 +28,7 @@ JSON レコードを並べたテキスト形式）は、一式から必要なと
 | `convert` | 旧 `.jsonl` → 一式、または 一式 → 派生の整列/JSONL CSV |
 | `viz` | 一式を可視化（各信号を原レートのまま描画） |
 | `analyze` | 一式を解析（ジャイロ統計・PSD・チューニング所見。`--health` でモータ健全性診断） |
+| `video` | ログを、3D の機体が記録どおりに飛ぶ mp4 にする（Chrome と ffmpeg が必要） |
 
 ## 3. sf log wifi
 
@@ -330,6 +331,24 @@ sf log wifi -d 30
 sf log analyze --health --batch
 ```
 
+## 11. sf log video
+
+ログを mp4 にします。左 70% に 3D の StampFly が記録どおりに飛ぶ様子、右 30% に数値・正面/側面/上面の姿勢図・モータ Duty と電池電圧の棒グラフを描きます。位置と姿勢は機体の推定値（ESKF）です。Google Chrome（または Chromium / Edge）と ffmpeg が必要です（`sf doctor` で確認できます）。
+
+```bash
+sf log video logs/flight_20260911T121243.sflog.zip
+```
+
+| 項目 | 内容 |
+|------|------|
+| ログの指定 | `.sflog.zip`、一式のフォルダ、UDP の `.jsonl`。省略時は `logs/` の最新 |
+| 出力先 | 既定は `logs/videos/<ログ名>_3d.mp4`（`--time-range S E` のときは `<ログ名>_3d_<S>-<E>s.mp4`）。既存のファイルは上書きせず `_2`, `_3` … を付ける。`--force` で上書き。`--out FILE` で名前を指定 |
+| 範囲 | 既定は推力のある最長区間の前後 1 秒。`--time-range S E` は先頭サンプルからの秒 |
+| 見た目 | `--view oblique/top/side`、`--tilt-gain`（傾きの強調、既定 3）、`--vehicle-scale`（機体の拡大、既定 2）、`--zoom`、`--size 1920x1080/1280x720` |
+| その他 | `--speed`（再生速度）、`--fps`、`--frames-dir DIR`（mp4 の代わりに JPEG 連番）、`--swiftshader`（Chrome のソフトウェア描画） |
+
+電池電圧は status の記録値（約 1 秒ごと）を次の記録まで保持して表示します。低電圧の目盛り 3.4 V はファームの既定値（`safety.battery.low_v`）で、ログには記録されません。
+
 ---
 
 <a id="english"></a>
@@ -363,6 +382,7 @@ newest bundle in `logs/` when none is given. A bundle name's extension may be om
 | `convert` | Convert a legacy `.jsonl` to a bundle, or a bundle to a derived aligned/JSONL CSV |
 | `viz` | Visualize a bundle (every stream plotted at its own native rate) |
 | `analyze` | Analyze a bundle (gyro statistics/PSD, tuning insights; `--health` for motor-health diagnosis) |
+| `video` | Render a log as an mp4 in which a 3D vehicle flies the logged path (needs Chrome and ffmpeg) |
 
 ## 3. sf log wifi
 
@@ -668,3 +688,21 @@ sf log wifi -d 30
 ```bash
 sf log analyze --health --batch
 ```
+
+## 11. sf log video
+
+Renders a log as an mp4: a 3D StampFly flies the logged path on the left 70 %, and the right 30 % shows numbers, front / side / top attitude views and bars for the motor duties and the battery voltage. Position and attitude are the vehicle's own estimate (ESKF). Needs Google Chrome (or Chromium / Edge) and ffmpeg (`sf doctor` checks both).
+
+```bash
+sf log video logs/flight_20260911T121243.sflog.zip
+```
+
+| Item | Description |
+|------|-------------|
+| Log | `.sflog.zip`, a bundle folder or a UDP `.jsonl`; newest in `logs/` if omitted |
+| Output | Default `logs/videos/<log name>_3d.mp4` (`<log name>_3d_<S>-<E>s.mp4` with `--time-range S E`). An existing file is never overwritten (`_2`, `_3`, ... is appended); `--force` overwrites; `--out FILE` sets the name |
+| Range | Default: the longest stretch with thrust, padded by 1 s each side. `--time-range S E` is seconds from the first sample |
+| Look | `--view oblique/top/side`, `--tilt-gain` (tilt exaggeration, default 3), `--vehicle-scale` (default 2), `--zoom`, `--size 1920x1080/1280x720` |
+| Other | `--speed`, `--fps`, `--frames-dir DIR` (JPEG frames instead of an mp4), `--swiftshader` (Chrome software rendering) |
+
+The battery voltage is the logged status value (about once a second), held until the next sample. The 3.4 V low-voltage mark is the firmware default (`safety.battery.low_v`); the log does not record it.

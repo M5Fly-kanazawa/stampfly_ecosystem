@@ -1,0 +1,75 @@
+<!doctype html>
+<!--
+  sf log video - replay page (loaded by record.py in headless Chrome).
+  sf log video の再生ページ（record.py がヘッドレス Chrome で開く）。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>StampFly 飛行ログの再生</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="replay_view.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js",
+               "three/addons/": "./vendor/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<!-- Main view overlays (left 70 %) / 主画面の文字（左 70 %） -->
+<div id="hud-tl" class="hud"></div>
+<div id="hud-bl" class="hud"></div>
+<div id="hud-tr" class="hud"><div id="hud-tr-1"></div><div id="hud-tr-1b"></div><div id="hud-tr-2"></div></div>
+<div id="hud-br" class="hud"></div>
+
+<!-- Right column (30 %) / 右の列（30 %） -->
+<div id="side">
+  <section id="numbers" class="panel">
+    <div class="panel-title">数値</div>
+    <table id="num-table">
+      <tr><th>時刻</th><td id="n-time"></td><td class="unit">s</td></tr>
+      <tr><th>高度 h</th><td id="n-h"></td><td class="unit">m</td></tr>
+      <tr><th>位置　北 N</th><td id="n-north"></td><td class="unit">m</td></tr>
+      <tr><th>位置　東 E</th><td id="n-east"></td><td class="unit">m</td></tr>
+      <tr><th id="n-dist-label">目標からの距離</th><td id="n-dist"></td><td class="unit">cm</td></tr>
+      <tr><th>ロール</th><td id="n-roll"></td><td class="unit">deg</td></tr>
+      <tr><th>ピッチ</th><td id="n-pitch"></td><td class="unit">deg</td></tr>
+      <tr><th>ヨー</th><td id="n-yaw"></td><td class="unit">deg</td></tr>
+      <tr><th>モード</th><td id="n-mode" colspan="2" class="text"></td></tr>
+      <tr><th>飛行状態</th><td id="n-state" colspan="2" class="text"></td></tr>
+      <tr><th>電池電圧</th><td id="n-volt"></td><td class="unit">V</td></tr>
+      <tr><th>Duty 前</th><td id="n-duty-front" colspan="2" class="text"></td></tr>
+      <tr><th>Duty 後</th><td id="n-duty-rear" colspan="2" class="text"></td></tr>
+    </table>
+  </section>
+
+  <section id="views" class="panel transparent">
+    <div class="view"><div class="view-head"><span>正面（前から）</span><span class="tiltnote"></span></div>
+      <div class="view-box" id="view-front"></div></div>
+    <div class="view"><div class="view-head"><span>側面（右から）</span><span class="tiltnote"></span></div>
+      <div class="view-box" id="view-side"></div></div>
+    <div class="view"><div class="view-head"><span>上面（上から）</span><span class="tiltnote"></span></div>
+      <div class="view-box" id="view-top"><span class="view-north">北</span></div></div>
+  </section>
+
+  <section id="bars" class="panel">
+    <div class="panel-title">モータ出力 Duty（0〜1）<span class="legend"><i></i>4つの平均</span></div>
+    <div id="bars-body">
+      <div id="bar-grid"></div>
+      <div id="volt-box">
+        <div id="volt-val"></div>
+        <div id="volt-track">
+          <div id="volt-fill"></div>
+          <div id="volt-low" class="volt-mark"><span>低電圧 3.4 V</span></div>
+          <div id="volt-start" class="volt-mark"></div>
+        </div>
+        <div id="volt-cap">記録電圧（約 1 秒ごと）</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="replay_view.js"></script>
+</body>
+</html>

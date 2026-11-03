@@ -12,7 +12,7 @@
 | ディレクトリ | sf コマンド／ツール | 補足 |
 |---|---|---|
 | `calibration/` | `sf cal` | センサキャリブレーション |
-| `log_analyzer/` | `sf log`（capture / wifi / convert / analyze / viz） | UDP 取得の `udp_capture.py` を含む |
+| `log_analyzer/` | `sf log`（capture / wifi / convert / analyze / viz / video） | UDP 取得の `udp_capture.py` を含む。`replay_video/` は `sf log video`（3D 動画。Chrome と ffmpeg を外部プログラムとして使い、出力は既定で `logs/videos/`）|
 | `params_audit/` | `sf params check` / `generate` | 物理パラメータ（C_T/C_Q/κ/慣性 等）の整合検査・生成 |
 | `sysid/` | `sf sysid` | 同定・自動チューニング |
 | `flasher_gui/` | `sf flasher` | GUI 書き込み。書き込み処理の本体は `lib/sfcli/commands/flash.py` |
@@ -51,7 +51,7 @@ commands; standalone scripts meant to be run on their own are not added here.
 | Directory | sf command / tool | Notes |
 |---|---|---|
 | `calibration/` | `sf cal` | Sensor calibration |
-| `log_analyzer/` | `sf log` (capture / wifi / convert / analyze / viz) | Includes `udp_capture.py` for UDP capture |
+| `log_analyzer/` | `sf log` (capture / wifi / convert / analyze / viz / video) | Includes `udp_capture.py` for UDP capture. `replay_video/` is `sf log video` (3D video; uses Chrome and ffmpeg as external programs; output goes to `logs/videos/` by default) |
 | `params_audit/` | `sf params check` / `generate` | Checks/generates consistency of physical parameters (C_T/C_Q/κ/inertia, etc.) |
 | `sysid/` | `sf sysid` | System identification and auto-tuning |
 | `flasher_gui/` | `sf flasher` | GUI flashing. The flashing logic itself lives in `lib/sfcli/commands/flash.py` |

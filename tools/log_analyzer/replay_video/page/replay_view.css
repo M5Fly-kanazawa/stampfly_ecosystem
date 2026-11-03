@@ -1,0 +1,84 @@
+/* sf log video page style. All sizes use --u = (page height / 1080) so the
+   1920x1080 and 1280x720 layouts are the same picture.
+   sf log video のページ書式。寸法は --u = 画面の高さ/1080 で揃え、
+   1920x1080 と 1280x720 が同じ絵になるようにする。 */
+:root {
+  --u: 1px;
+  --board: #25302b;
+  --panel: #1b2420;
+  --panel-edge: #36443d;
+  --text: #f2efe6;
+  --dim: #aab5ad;
+  --cyan: #8fd3f4;
+  --yellow: #ecdf7a;
+  --pink: #f4a6a6;
+  --mono: "SF Mono", "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+  --sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans CJK JP", "Yu Gothic", "Meiryo", sans-serif;
+}
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--board);
+  color: var(--text); font-family: var(--sans); }
+#gl { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; display: block; }
+
+.hud { position: fixed; pointer-events: none; text-shadow: 0 0 calc(6 * var(--u)) #000a; }
+#hud-tl { left: calc(36 * var(--u)); top: calc(28 * var(--u)); font-size: calc(40 * var(--u)); font-weight: 700;
+  font-variant-numeric: tabular-nums; white-space: pre; }
+#hud-bl { left: calc(36 * var(--u)); bottom: calc(26 * var(--u)); font-size: calc(30 * var(--u)); color: var(--dim); white-space: pre; }
+#hud-tr { right: calc(0.3 * 100vw + 30 * var(--u)); top: calc(30 * var(--u)); text-align: right; }
+#hud-tr-1, #hud-tr-1b { font-size: calc(24 * var(--u)); font-weight: 600; }
+#hud-tr-2 { font-size: calc(22 * var(--u)); color: var(--dim); margin-top: calc(6 * var(--u)); }
+#hud-br { right: calc(0.3 * 100vw + 30 * var(--u)); bottom: calc(20 * var(--u)); font-size: calc(18 * var(--u)); color: var(--dim); opacity: .8; }
+
+#side { position: fixed; left: 70vw; top: 0; width: 30vw; height: 100vh; box-sizing: border-box;
+  padding: calc(12 * var(--u)) calc(16 * var(--u)); }
+.panel { box-sizing: border-box; background: var(--panel); border: calc(1.5 * var(--u)) solid var(--panel-edge);
+  border-radius: calc(10 * var(--u)); padding: calc(10 * var(--u)) calc(16 * var(--u)); }
+.panel.transparent { background: none; border: none; padding: 0; }
+.panel-title { font-size: calc(22 * var(--u)); color: var(--dim); margin-bottom: calc(4 * var(--u)); display: flex;
+  justify-content: space-between; align-items: baseline; }
+.legend { font-size: calc(18 * var(--u)); }
+.legend i { display: inline-block; width: calc(26 * var(--u)); height: calc(3 * var(--u)); background: var(--yellow);
+  margin-right: calc(8 * var(--u)); vertical-align: middle; }
+
+#numbers { height: calc(432 * var(--u)); }
+#num-table { width: 100%; border-collapse: collapse; font-size: calc(21 * var(--u)); line-height: 1.1; }
+#num-table th { text-align: left; font-weight: 400; color: var(--dim); padding: calc(2 * var(--u)) 0; white-space: nowrap; }
+#num-table td { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+#num-table td.unit { width: calc(54 * var(--u)); color: var(--dim); font-family: var(--sans); font-weight: 400;
+  font-size: calc(20 * var(--u)); padding-left: calc(8 * var(--u)); text-align: left; }
+#num-table td.text { font-family: var(--sans); font-size: calc(21 * var(--u)); }
+#n-duty-front, #n-duty-rear { font-family: var(--mono); font-size: calc(20 * var(--u)); white-space: pre; }
+
+#views { margin-top: calc(12 * var(--u)); display: flex; justify-content: space-between; }
+.view { width: calc(176 * var(--u)); }
+.view-head { display: flex; flex-direction: column; height: calc(46 * var(--u)); line-height: 1.15;
+  font-size: calc(19 * var(--u)); color: var(--text); white-space: nowrap; }
+.tiltnote { font-size: calc(17 * var(--u)); color: var(--yellow); }
+.view-box { position: relative; width: calc(176 * var(--u)); height: calc(176 * var(--u)); box-sizing: border-box;
+  border: calc(1.5 * var(--u)) solid var(--panel-edge); border-radius: calc(6 * var(--u)); }
+.view-north { position: absolute; left: 50%; top: calc(3 * var(--u)); transform: translateX(-50%);
+  font-size: calc(18 * var(--u)); color: var(--dim); }
+
+#bars { margin-top: calc(12 * var(--u)); height: calc(352 * var(--u)); }
+#bars-body { display: flex; gap: calc(14 * var(--u)); height: calc(290 * var(--u)); }
+#bar-grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: calc(6 * var(--u)) calc(10 * var(--u));
+  }
+.bar-cell { display: flex; align-items: stretch; gap: calc(12 * var(--u)); }
+.bar-track { position: relative; width: calc(46 * var(--u)); background: #101613; border: calc(1.5 * var(--u)) solid var(--panel-edge);
+  box-sizing: border-box; margin: calc(4 * var(--u)) 0; }
+.bar-fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--cyan); }
+.bar-mean { position: absolute; left: calc(-6 * var(--u)); right: calc(-6 * var(--u)); height: calc(3 * var(--u)); background: var(--yellow); }
+.bar-text { display: flex; flex-direction: column; justify-content: center; line-height: 1.25; }
+.bar-name { font-size: calc(28 * var(--u)); font-weight: 700; }
+.bar-dir { font-size: calc(15 * var(--u)); white-space: nowrap; color: var(--dim); }
+.bar-val { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: calc(26 * var(--u)); font-weight: 600; }
+
+/* battery voltage bar (scale 3.3-4.2 V) / 電池電圧の棒（目盛り 3.3〜4.2 V） */
+#volt-box { width: calc(160 * var(--u)); display: flex; flex-direction: column; align-items: flex-start; }
+#volt-val { align-self: stretch; text-align: left; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: calc(30 * var(--u)); font-weight: 700; height: calc(36 * var(--u)); }
+#volt-track { position: relative; width: calc(46 * var(--u)); flex: 1; background: #101613; border: calc(1.5 * var(--u)) solid var(--panel-edge); box-sizing: border-box; }
+#volt-fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--cyan); }
+.volt-mark { position: absolute; left: calc(-6 * var(--u)); right: calc(-6 * var(--u)); height: calc(3 * var(--u)); }
+#volt-low { background: var(--pink); }
+#volt-low span { position: absolute; left: calc(60 * var(--u)); top: calc(-12 * var(--u)); width: calc(90 * var(--u)); font-size: calc(15 * var(--u)); color: var(--pink); white-space: nowrap; }
+#volt-start { background: var(--text); height: calc(2 * var(--u)); left: calc(4 * var(--u)); right: calc(4 * var(--u)); opacity: .9; }
+#volt-cap { font-size: calc(14 * var(--u)); color: var(--dim); margin-top: calc(6 * var(--u)); white-space: nowrap; }
