@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-**状態**: 基礎資料（2026-11-03 作成）。推進系のモデルを刷新し、ファームの推力の換算と制御設計、SILS のプラントを作り直す作業（別ブランチで行う予定）の出発点として、2026-11-02〜03 の実験で分かったことを整理する。物理パラメータの基準ファイル（`control/models/stampfly_physical.yaml`）と SILS 方針のバックログは、この文書では変えていない。
+**状態**: 基礎資料（2026-11-03 作成）。推進系のモデルを刷新し、ファームの推力の換算と制御設計、SILS のプラントを作り直す作業（別ブランチで行う予定）の出発点として、2026-11-02〜03 の実験で分かったことを整理する。物理パラメータの基準ファイル（`control/models/stampfly_physical.yaml`）と SILS 方針のバックログは、この文書では変えていない。同じ内容の図入りの HTML 版: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ （閲覧には共有が要る）。
 
 ## 1. 概要
 
@@ -533,7 +533,7 @@ Duty 0.85〜0.95 の範囲、モータごとの回転数（録音か各ドレイ
 
 <a id="english"></a>
 
-**Status**: Basic reference (written 2026-11-03). It collects what the experiments of 2026-11-02 to 11-03 showed, as the starting point for the work (planned on a separate branch) of renewing the propulsion model, redoing the firmware's thrust conversion and control design, and rebuilding the SILS plant. This document does not change the reference file of physical parameters (`control/models/stampfly_physical.yaml`) or the SILS policy backlog.
+**Status**: Basic reference (written 2026-11-03). It collects what the experiments of 2026-11-02 to 11-03 showed, as the starting point for the work (planned on a separate branch) of renewing the propulsion model, redoing the firmware's thrust conversion and control design, and rebuilding the SILS plant. This document does not change the reference file of physical parameters (`control/models/stampfly_physical.yaml`) or the SILS policy backlog. An HTML version with charts: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ (sharing is needed to view it).
 
 ## 1. Overview
 
