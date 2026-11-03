@@ -333,7 +333,7 @@ sf log analyze --health --batch
 
 ## 11. sf log video
 
-ログを mp4 にします。左 70% に 3D の StampFly が記録どおりに飛ぶ様子、右 30% に数値・正面/側面/上面の姿勢図・モータ Duty と電池電圧の棒グラフを描きます。位置と姿勢は機体の推定値（ESKF）です。Google Chrome（または Chromium / Edge）と ffmpeg が必要です（`sf doctor` で確認できます）。
+ログを mp4 にします。左 70% に 3D の StampFly が記録どおりに飛ぶ様子、右 30% に数値・姿勢の 3 つの図（ロールは後ろから・ピッチは左から・ヨーは上から）・モータ Duty と電池電圧の棒グラフを描きます。位置と姿勢は機体の推定値（ESKF）です。Google Chrome（または Chromium / Edge）と ffmpeg が必要です（`sf doctor` で確認できます）。
 
 ```bash
 sf log video logs/flight_20260911T121243.sflog.zip
@@ -691,7 +691,7 @@ sf log analyze --health --batch
 
 ## 11. sf log video
 
-Renders a log as an mp4: a 3D StampFly flies the logged path on the left 70 %, and the right 30 % shows numbers, front / side / top attitude views and bars for the motor duties and the battery voltage. Position and attitude are the vehicle's own estimate (ESKF). Needs Google Chrome (or Chromium / Edge) and ffmpeg (`sf doctor` checks both).
+Renders a log as an mp4: a 3D StampFly flies the logged path on the left 70 %, and the right 30 % shows numbers, three attitude views (roll seen from behind, pitch from the left, yaw from above) and bars for the motor duties and the battery voltage. Position and attitude are the vehicle's own estimate (ESKF). Needs Google Chrome (or Chromium / Edge) and ffmpeg (`sf doctor` checks both).
 
 ```bash
 sf log video logs/flight_20260911T121243.sflog.zip

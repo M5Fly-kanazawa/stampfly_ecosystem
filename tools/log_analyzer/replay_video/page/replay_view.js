@@ -34,7 +34,7 @@ document.documentElement.style.setProperty('--u', (H / 1080) + 'px');
 
 const COL = { board: 0x25302b, panel: 0x161d19, chalk: 0xf2efe6, yellow: 0xecdf7a, cyan: 0x8fd3f4 };
 const FOV_DEG = 36, CAM_TAU_S = 0.5, OBLIQUE_ELEV_DEG = 33;
-const TRAIL_RADIUS = 0.0045, TRAIL_MIN_ALPHA = 0.18, TRAIL_FADE_S = 12, TRAIL_MAX_POINTS = 2500;
+const TRAIL_RADIUS = 0.00225, TRAIL_MIN_ALPHA = 0.18, TRAIL_FADE_S = 12, TRAIL_MAX_POINTS = 2500;
 const SPIN_IDLE = 3, SPIN_GAIN = 60;               // rad per video second / 動画の1秒あたりのラジアン
 const VIEW_HALF = 0.06;                             // half size of the small views [m] / 小画面の半幅 [m]
 const VOLT_MIN = 3.3, VOLT_MAX = 4.2, VOLT_LOW = 3.4, VOLT_CAUTION = 3.6;
@@ -291,8 +291,10 @@ function buildShadowAndStalk() {
 }
 
 // Trail: a thin 5-sided tube through the (decimated) positions; the colour fades
-// toward the background with age, recoloured every frame.
+// toward the background with age, recoloured every frame. It is drawn first and
+// writes no depth, so the vehicle is always drawn over it.
 // 軌跡: 間引いた位置を通る細い 5 角形の管。古いほど背景色へ薄れる（毎コマ色を付け直す）。
+// 最初に描き、奥行きを書き込まないので、機体はいつも軌跡の上に描かれる。
 function buildTrail() {
   const stride = Math.max(1, Math.ceil(D.t.length / TRAIL_MAX_POINTS)), SIDES = 5;
   const frames = []; for (let i = 0; i < D.t.length; i += stride) frames.push(i);
@@ -320,7 +322,8 @@ function buildTrail() {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pos.length), 3));
   geo.setIndex(idx);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, depthWrite: false }));
+  mesh.renderOrder = -1;   // behind the vehicle / 機体より後ろ
   mesh.frustumCulled = false; scene.add(mesh);
   trail = { mesh, frames, SIDES };
 }
@@ -340,10 +343,15 @@ function updateTrail(k) {
 }
 
 // Small views: one vehicle clone per view (own layer), orthographic cameras, reference line, heading arrow.
+// Each view looks from the negative side of a body axis toward its positive side: roll from
+// behind (-X to +X), pitch from the left (-Y to +Y), yaw from above (-Z to +Z, FRD).
+// Scene axes: +X east, +Y up, -Z north; with the heading removed the nose points north.
 // 小画面: 画面ごとに機体のクローンを 1 機（専用レイヤー）、正射影カメラ、水平の基準線、機首の矢印。
+// 各画面は機体軸の負の側から正の向きに見る: ロールは後ろから（-X → +X）、ピッチは左から
+// （-Y → +Y）、ヨーは上から（-Z → +Z、FRD）。シーンの軸は +X 東・+Y 上・-Z 北で、機首の向きを除くと機首は北を向く。
 const VIEW_DEFS = {
-  front: { layer: L_VIEW.front, el: 'view-front', pos: [0, 0, -1], up: [0, 1, 0], heading: true },
-  side: { layer: L_VIEW.side, el: 'view-side', pos: [1, 0, 0], up: [0, 1, 0], heading: true },
+  front: { layer: L_VIEW.front, el: 'view-front', pos: [0, 0, 1], up: [0, 1, 0], heading: true },   // from behind / 後ろから
+  side: { layer: L_VIEW.side, el: 'view-side', pos: [-1, 0, 0], up: [0, 1, 0], heading: true },    // from the left / 左から
   top: { layer: L_VIEW.top, el: 'view-top', pos: [0, 1, 0], up: [0, 0, -1], heading: false },
 };
 function buildViews() {
