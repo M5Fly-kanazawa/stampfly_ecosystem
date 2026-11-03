@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-**状態**: 基礎資料（2026-11-03 作成）。推進系のモデルを刷新し、ファームの推力の換算と制御設計、SILS のプラントを作り直す作業（別ブランチで行う予定）の出発点として、2026-11-02〜03 の実験で分かったことを整理する。物理パラメータの基準ファイル（`control/models/stampfly_physical.yaml`）と SILS 方針のバックログは、この文書では変えていない。同じ内容の図入りの HTML 版: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ （閲覧には共有が要る）。
+**状態**: 基礎資料（2026-11-03 作成）。推進系のモデルを刷新し、ファームの推力の換算と制御設計、SILS のプラントを作り直す作業（別ブランチで行う予定）の出発点として、2026-11-02〜03 の実験で分かったことを整理する。物理パラメータの基準ファイル（`control/models/stampfly_physical.yaml`）と SILS 方針のバックログは、この文書では変えていない。同じ内容の図入りの HTML 版: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ （閲覧には共有が要る）。2026-11-03 更新: 未決だった 3 点を決めた（10 章「決めたこと」）。
 
 ## 1. 概要
 
@@ -202,6 +202,15 @@ $$\bar I_m = \frac{V_{DD} - K_e\,\omega - V_b}{R_\text{out}(D)}$$
 - レビューでの再計算（冷えた周だけ・4 項の式）では、範囲の中で −0.21 ± 0.15 %（21 段）、範囲の外で −0.87 %（B4M の 2 周目と C4M）。
 - 推論（強さ：中〜強）: 1 モータで測った電圧の範囲の中では、同じモータは、同じ Duty とオンの間の同じ電圧なら、同時に回すモータの数によらず同じ回転数で回る。範囲の外（オンの間の $V_{DD}$ 3.61 V 未満）は確かめていない。温まった周で 0.5〜0.9 % 下がることもあるので、範囲の外の −0.9 % が温まりや負荷の違いである可能性は除けない。
 - 記録電圧とオンの間の $V_{DD}$ の差（4 モータ同時）は、段ごとに 73〜170 mV。$\Delta V = 781 - 118\,V_\text{CLI} - 324\,D$ [mV]（残差 rms 12 mV、電池 3 の 1 本だけの値）。パルス電流あたりでは 15〜39 mΩ で、電池が減るほど大きい。
+- 同じ差を、物理の形 $\Delta V = R_\text{path}\,I + R_\text{src}\,I\,(1-D)/D$（$I$ は電池の総電流の平均、$D$ は Duty）で当てはめ直した（2026-11-03、切片なし。計算は筆者、独立の確認なし）。第 1 項は電流センサとモータの駆動回路の間の配線の降下、第 2 項はオンの間だけ流れるパルス電流が電池と配線の抵抗に作る、平均より余計な落ち込みを表す。
+
+| データ | $R_\text{path}$ | $R_\text{src}$ | 残差 rms |
+|---|---|---|---|
+| 1 モータ（電池 2、差 33〜67 mV） | 26 mΩ | 72 mΩ | 4 mV |
+| 4 モータ（電池 3）、$R_\text{src}$ 一定 | 10 mΩ | 61 mΩ | 25 mV |
+| 4 モータ（電池 3）、$R_\text{src}$ が電池の減りとともに増える形 | 2 mΩ | $37 + 95\,(4.2 - V_\text{CLI})$ mΩ | 13 mV |
+
+- 推論（強さ：中）: 別の電池・別のモータの数で $R_\text{src}$ が 60〜70 mΩ 程度とそろい、1 つの形で 1 モータと 4 モータを表せる。4 モータのデータは電池 1 本だけで、電池ごとの差は分からない。切片を置いていないので、$V_{DD}$ の読みの基準のずれ（9 章）は $R_\text{path}$ に混ざる。
 - 飛行中の機体はオンの間の $V_{DD}$ を直接は測れない。INA3221 は 1 回 1.1 ms の変換を 64 回平均しており（3 チャネル分で約 0.4 秒）、PWM の 1 周期 6.7 µs より桁違いに長い。
 - 電源電圧のスペクトルには、1 モータの運転では出ない線があった（電池 3 の 42 段のうち 15 段。M1 の 0.92〜0.97 倍、1 段だけ 1.04 倍）。M1 より 3〜8 % 遅いモータがある（何台かは不明）。M2〜M4 の回転数は測っていない。
 
@@ -441,8 +450,8 @@ $$F = F_\text{ref}\left(\frac{\omega}{\omega_\text{ref}}\right)^{n},\qquad \omeg
 
 | 要素 | 内容 | 使える範囲・根拠 |
 |---|---|---|
-| 駆動回路 | $\bar I_m = (V_\text{on} - K_e\omega - V_b)/R_\text{out}(D)$。$R_\text{out}$ は 0.02 刻みの実測でなめらかな表にする | D 0.50〜0.80・$V_{DD}$ 3.63〜4.27 V（4 章）。$V_b$ は推論で、基準の確認が要る |
-| 電源 | 電池の開回路電圧と内部抵抗。4 モータ同時のパルス電流による、オンの間の電圧の落ち込み | 4 章。11/02 の長時間放電のデータで決められるが、まだ解析していない（SILS 方針 `docs/architecture/simulation-policy.md` 8 章のバックログ #19） |
+| 駆動回路 | $\bar I_m = (V_\text{on} - K_e\omega - V_b)/R_\text{out}(D)$。$R_\text{out}$ は 0.02 刻みの実測でなめらかな表にする | D 0.50〜0.80・$V_{DD}$ 3.63〜4.27 V（4 章）。$V_b$ は式に項を置き、はじめは 0（決めたこと 3） |
+| 電源 | 電池の開回路電圧と内部抵抗。4 モータ同時のパルス電流による、オンの間の電圧の落ち込み $\Delta V = R_\text{path} I + R_\text{src} I (1-D)/D$（決めたこと 1） | 4 章。11/02 の長時間放電のデータで決められるが、まだ解析していない（SILS 方針 `docs/architecture/simulation-policy.md` 8 章のバックログ #19） |
 | 推力 | $F = F_\text{ref}(\omega/\omega_\text{ref})^n$、10/15 の値、全機は 4 倍 | $\omega$ 1200〜4700 rad/s（5 章・6 章） |
 | トルク | $C_Q$ と、一定の摩擦トルクを含む無負荷の損失 | 5 章 |
 | 温度 | $K_e$ は温まると下がるが、同じ Duty・電圧での回転数への影響は ±0.6 % 以内 | D 0.50〜0.80 で確かめた範囲では、入れなくてよい |
@@ -455,27 +464,32 @@ $$F = F_\text{ref}\left(\frac{\omega}{\omega_\text{ref}}\right)^{n},\qquad \omeg
 | $K_e$ | $5.90\times10^{-4}$／$5.76\times10^{-4}$／$5.54\times10^{-4}$ V·s/rad | 10/15 のスピンダウン／11/02 のプロペラなしのスピンダウン／11/02 夜の段の中。どれを使っても同じ Duty・電圧での回転数の再現は ±1.2 % |
 | 巻線抵抗 $R$ | 0.594 Ω | 10/15 |
 | $R_\text{out}(D)$ | 4 章の表（2 通り） | D 0.50〜0.80。外は SILS の表（10/15 の 0.1 刻み） |
-| $V_b$ | 0.11 V | 4 つの負荷の比較（推論）。周ごとに 0.06〜0.18 V |
+| $V_b$ | はじめは 0。候補 0.11 V | 4 つの負荷の比較（推論）。周ごとに 0.06〜0.18 V。$V_{DD}$ の基準を確かめてから値を入れる |
 | $I_0$ | $0.044 + 2.9\times10^{-9}\,\omega^2$ A | 10/15。一定の摩擦トルクの形に直す必要あり |
 | 推力 | $F_\text{ref} = 0.0916$ N、$\omega_\text{ref} = 3500$ rad/s、$n$ = 2.13〜2.15 | 10/15、$\omega$ 1200〜4700 rad/s |
 | $C_Q$ | $3.38\times10^{-11}$ | 10/15（11/02 夜は 3.33e-11） |
 | $J$ | $1.54\times10^{-8}$ kg·m² | 10/15（11/02 夜は 1.47〜1.53e-8） |
-| 記録電圧 → オンの間の $V_{DD}$（4 モータ） | $\Delta V = 781 - 118\,V_\text{CLI} - 324\,D$ mV | 電池 3 の 1 本だけ |
+| 記録電圧 → オンの間の $V_{DD}$ | $\Delta V = R_\text{path} I + R_\text{src} I (1-D)/D$、4 モータで $R_\text{path}$ 2 mΩ・$R_\text{src} = 37 + 95\,(4.2 - V_\text{CLI})$ mΩ | 電池 3 の 1 本だけ。1 モータ（電池 2）は 26 mΩ・72 mΩ。同じ 4 モータのデータに当てはめた式 $781 - 118\,V_\text{CLI} - 324\,D$ mV は残差 12 mV だが、1 モータや別の電池には使えない |
 | 重さ | 36〜37 g | 見積もり |
 
 ### すでに決めたこと（実験者の判断）
 
 10/15 の推力を基準、全機は 4 倍。11/02 の 4 モータ同時の推力は使わない。重さは 36〜37 g と見積もる。
 
-### 決めること
+### 決めたこと（2026-11-03、実験者の判断）
 
-- ファームがどの電圧を使って換算するか（記録電圧から落ち込みを推定するか、PWM の位相をずらして落ち込みを減らすか）。
-- 推力の式の形（べき乗か $a\omega^2 + b\omega$ か）と、$n$ の当てはめ方。
-- $R_\text{out}$ の表の式（$V_b$ を入れるか）。
+| 項目 | 決定 | 内容 |
+|---|---|---|
+| 1. ファームが換算に使う電圧 | 物理の形で落ち込みを推定する | $V_\text{on} = V_\text{CLI} - \Delta V$、$\Delta V = R_\text{path} I + R_\text{src} I (1-D)/D$（$I$ は INA3221 の電池電流）。定数は 11/02 の値（4 章）を初期値とし、ファームと SILS の電池モデルに同じ式を入れる。別の電池で 4 モータ同時のベンチを 1〜2 本取り、電池ごとの差を確かめる |
+| 2. 推力の式の形 | べき乗 | $F = F_\text{ref}(\omega/\omega_\text{ref})^n$、$\omega_\text{ref}$ = 3500 rad/s、$F_\text{ref}$ = 0.0916 N、$n$ = 2.13（10/15、推力の残差で当てはめ）。SILS の補正係数 $\eta$ は使わない。反トルクは $C_Q\omega^2$ と摩擦の損失の形のままとし、摩擦の当てはめ直しのときに見直す |
+| 3. $V_b$ | 式に項を置き、はじめは 0 | 確認の後に値を入れ、$R_\text{out}$ の表を同じデータから組で作り直す。表はどちらにしても $V_\text{on}$ で作り直す。ホバーの範囲では、入れるかどうかの差は推力で 1 % 未満の見込み（筆者の概算、未確認） |
+
+- 4 つの PWM の位相をずらして落ち込みを減らす方法は、試しとして後で行う（ファームの切り替え機能とベンチの試験が要る）。
+- べき乗の式の計算（モータごとに `powf` 1 回）の処理時間は、ブランチの最初に実機で測る（見込みは 4 回で十数 µs、2.5 ms の制御周期の 1 % 未満。未確認）。
 
 ### まだ要る測定
 
-Duty 0.85〜0.95 の範囲、モータごとの回転数（録音か各ドレイン）、プロペラの下の物の有無の比較、毎回の室温と既知のおもり、機体の重さ、4 つの PWM の位相をずらす試験（解析メモ `analysis/notes/ct_cq_bench_20261015.md` 8 章の計画）、午後・夜の $V_{DD}$ の基準の確認、電池の開回路電圧と内部抵抗の解析。
+Duty 0.85〜0.95 の範囲、モータごとの回転数（録音か各ドレイン）、プロペラの下の物の有無の比較、毎回の室温と既知のおもり、機体の重さ、4 つの PWM の位相をずらす試験（解析メモ `analysis/notes/ct_cq_bench_20261015.md` 8 章の計画）、午後・夜の $V_{DD}$ の基準の確認、電池の開回路電圧と内部抵抗の解析、別の電池での 4 モータ同時の運転（1〜2 本）、軸を止めた $V_b$ の直接の測定（プロペラなし・$\omega$ = 0・低い Duty で電圧と電流の直線の切片を見る）。
 
 ### 制御への影響
 
@@ -494,7 +508,7 @@ Duty 0.85〜0.95 の範囲、モータごとの回転数（録音か各ドレイ
 
 各段階で、次へ進む前に確かめることを括弧に書く。
 
-1. モデルの基準ファイル（`stampfly_physical.yaml`）に新しいモデルの定数と式を入れる（`sf params check` が通る）。
+1. モデルの基準ファイル（`stampfly_physical.yaml`）に新しいモデルの定数と式を入れる。あわせて、午後・夜の $V_{DD}$ を記録電圧で補正し直して $V_b$ の値を決め、$R_\text{out}$ の表を $V_\text{on}$ で作り直す。実機で換算全体の処理時間を測る（`sf params check` が通る）。
 2. SILS のプラントを新しいモデルに替える。Genesis・VPython も同じ基準へ（バックログ #18）（ベンチの段ごとの表を SILS で再現する）。
 3. ファームの推力 → Duty の換算を、同じモデルの逆にする（逆変換の誤差を確かめる）。
 4. 姿勢・高度の制御を新しいモデルで設計し直す（SILS で安定余裕、Duty の飽和、宙返り、離陸を確かめる）。
@@ -533,7 +547,7 @@ Duty 0.85〜0.95 の範囲、モータごとの回転数（録音か各ドレイ
 
 <a id="english"></a>
 
-**Status**: Basic reference (written 2026-11-03). It collects what the experiments of 2026-11-02 to 11-03 showed, as the starting point for the work (planned on a separate branch) of renewing the propulsion model, redoing the firmware's thrust conversion and control design, and rebuilding the SILS plant. This document does not change the reference file of physical parameters (`control/models/stampfly_physical.yaml`) or the SILS policy backlog. An HTML version with charts: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ (sharing is needed to view it).
+**Status**: Basic reference (written 2026-11-03). It collects what the experiments of 2026-11-02 to 11-03 showed, as the starting point for the work (planned on a separate branch) of renewing the propulsion model, redoing the firmware's thrust conversion and control design, and rebuilding the SILS plant. This document does not change the reference file of physical parameters (`control/models/stampfly_physical.yaml`) or the SILS policy backlog. An HTML version with charts: https://claude.ai/artifact/MhqcHBYiR48yuygWQDnvCJ (sharing is needed to view it). Updated 2026-11-03: the three open points are decided (chapter 10, "Decided").
 
 ## 1. Overview
 
@@ -733,6 +747,15 @@ Fact: The four motors switch on at the same time from the same timer. While on, 
 - In the recalculation in the review (cold laps only, four-term formula), the result is −0.21 ± 0.15 % inside the range (21 steps) and −0.87 % outside it (lap 2 of B4M and C4M).
 - Inference (strength: medium to strong): Within the voltage range measured with one motor, the same motor turns at the same speed at the same Duty and the same on-time voltage, regardless of how many motors run together. Outside the range (on-time $V_{DD}$ below 3.61 V) it is not checked. Warm laps can also be 0.5 to 0.9 % lower, so we cannot exclude that the −0.9 % outside the range is due to warming or a different load.
 - The difference between logged voltage and on-time $V_{DD}$ (four motors together) is 73 to 170 mV per step. $\Delta V = 781 - 118\,V_\text{CLI} - 324\,D$ [mV] (residual rms 12 mV, value for battery 3 only). Per pulse current it is 15 to 39 mΩ, and it is larger as the battery runs down.
+- The same difference was refitted with the physical form $\Delta V = R_\text{path}\,I + R_\text{src}\,I\,(1-D)/D$ ($I$ is the mean total battery current, $D$ the Duty) (2026-11-03, no intercept; computed by the author, not independently checked). The first term is the wiring drop between the current sensor and the motor drive circuit; the second is the extra drop below the mean that the pulse current, flowing only during the on-time, makes across the battery and wiring resistance.
+
+| Data | $R_\text{path}$ | $R_\text{src}$ | Residual rms |
+|---|---|---|---|
+| One motor (battery 2, difference 33 to 67 mV) | 26 mΩ | 72 mΩ | 4 mV |
+| Four motors (battery 3), constant $R_\text{src}$ | 10 mΩ | 61 mΩ | 25 mV |
+| Four motors (battery 3), $R_\text{src}$ growing as the battery runs down | 2 mΩ | $37 + 95\,(4.2 - V_\text{CLI})$ mΩ | 13 mV |
+
+- Inference (strength: medium): with a different battery and a different number of motors, $R_\text{src}$ agrees at about 60 to 70 mΩ, so one form describes one motor and four motors. The four-motor data come from one battery only, and the difference between batteries is not known. As there is no intercept, the shift of the $V_{DD}$ reading reference (chapter 9) is mixed into $R_\text{path}$.
 - A vehicle in flight cannot measure the on-time $V_{DD}$ directly. The INA3221 averages 64 conversions of 1.1 ms each (about 0.4 s for three channels), which is orders of magnitude longer than one PWM period of 6.7 µs.
 - The spectrum of the supply voltage had lines that do not appear in one-motor runs (15 of the 42 steps of battery 3; 0.92 to 0.97 times the M1 line, and 1.04 times in one step). Some motor (the number is unknown) is 3 to 8 % slower than M1. The rotor speeds of M2 to M4 were not measured.
 
@@ -972,8 +995,8 @@ Regression tests (45 scenarios): as is, 41 pass, 3 known failures, 1 out of scop
 
 | Element | Content | Range of use and basis |
 |---|---|---|
-| Drive circuit | $\bar I_m = (V_\text{on} - K_e\omega - V_b)/R_\text{out}(D)$. Make $R_\text{out}$ a smooth table from the measurement in steps of 0.02 | D 0.50 to 0.80, $V_{DD}$ 3.63 to 4.27 V (chapter 4). $V_b$ is an inference and needs the check of the reference |
-| Power supply | Open-circuit voltage and internal resistance of the battery. The drop of the on-time voltage due to the pulse current of four motors together | Chapter 4. It can be determined from the 11/02 long-discharge data, but has not been analyzed yet (backlog #19 in chapter 8 of the SILS policy `docs/architecture/simulation-policy.md`) |
+| Drive circuit | $\bar I_m = (V_\text{on} - K_e\omega - V_b)/R_\text{out}(D)$. Make $R_\text{out}$ a smooth table from the measurement in steps of 0.02 | D 0.50 to 0.80, $V_{DD}$ 3.63 to 4.27 V (chapter 4). $V_b$ is kept as a term in the formula, starting at 0 (decision 3) |
+| Power supply | Open-circuit voltage and internal resistance of the battery. The drop of the on-time voltage due to the pulse current of four motors together, $\Delta V = R_\text{path} I + R_\text{src} I (1-D)/D$ (decision 1) | Chapter 4. It can be determined from the 11/02 long-discharge data, but has not been analyzed yet (backlog #19 in chapter 8 of the SILS policy `docs/architecture/simulation-policy.md`) |
 | Thrust | $F = F_\text{ref}(\omega/\omega_\text{ref})^n$, the 10/15 values, 4 times for the whole vehicle | $\omega$ 1200 to 4700 rad/s (chapters 5 and 6) |
 | Torque | $C_Q$, and the no-load loss including a constant friction torque | Chapter 5 |
 | Temperature | $K_e$ falls when warm, but the effect on rotor speed at the same Duty and voltage is within ±0.6 % | Within the range checked at D 0.50 to 0.80, it need not be included |
@@ -986,27 +1009,32 @@ Regression tests (45 scenarios): as is, 41 pass, 3 known failures, 1 out of scop
 | $K_e$ | $5.90\times10^{-4}$ / $5.76\times10^{-4}$ / $5.54\times10^{-4}$ V·s/rad | 10/15 spin-down / 11/02 spin-down without propeller / inside the steps of the 11/02 night. Whichever is used, the reproduction of rotor speed at the same Duty and voltage is within ±1.2 % |
 | Winding resistance $R$ | 0.594 Ω | 10/15 |
 | $R_\text{out}(D)$ | Table in chapter 4 (two versions) | D 0.50 to 0.80. Outside it, the SILS table (10/15, steps of 0.1) |
-| $V_b$ | 0.11 V | Comparison of four loads (inference). 0.06 to 0.18 V between laps |
+| $V_b$ | 0 at first. Candidate 0.11 V | Comparison of four loads (inference). 0.06 to 0.18 V between laps. Set the value after checking the $V_{DD}$ reference |
 | $I_0$ | $0.044 + 2.9\times10^{-9}\,\omega^2$ A | 10/15. Needs to be rewritten in the form of a constant friction torque |
 | Thrust | $F_\text{ref} = 0.0916$ N, $\omega_\text{ref} = 3500$ rad/s, $n$ = 2.13 to 2.15 | 10/15, $\omega$ 1200 to 4700 rad/s |
 | $C_Q$ | $3.38\times10^{-11}$ | 10/15 (3.33e-11 on the 11/02 night) |
 | $J$ | $1.54\times10^{-8}$ kg·m² | 10/15 (1.47 to 1.53e-8 on the 11/02 night) |
-| Logged voltage → on-time $V_{DD}$ (four motors) | $\Delta V = 781 - 118\,V_\text{CLI} - 324\,D$ mV | One battery only (battery 3) |
+| Logged voltage → on-time $V_{DD}$ | $\Delta V = R_\text{path} I + R_\text{src} I (1-D)/D$; for four motors $R_\text{path}$ 2 mΩ, $R_\text{src} = 37 + 95\,(4.2 - V_\text{CLI})$ mΩ | One battery only (battery 3). One motor (battery 2): 26 mΩ and 72 mΩ. The fitted formula $781 - 118\,V_\text{CLI} - 324\,D$ mV on the same four-motor data has a residual of 12 mV, but cannot be used for one motor or another battery |
 | Weight | 36 to 37 g | Estimate |
 
 ### Already decided (experimenter's decision)
 
 Use the 10/15 thrust as the reference, and 4 times it for the whole vehicle. Do not use the 11/02 four-motor thrust. The weight is estimated as 36 to 37 g.
 
-### To be decided
+### Decided (2026-11-03, experimenter's decision)
 
-- Which voltage the firmware uses for the conversion (estimate the drop from the logged voltage, or shift the PWM phases to reduce the drop).
-- The form of the thrust formula (power law or $a\omega^2 + b\omega$) and the fitting method of $n$.
-- The formula of the $R_\text{out}$ table (whether to include $V_b$).
+| Item | Decision | Content |
+|---|---|---|
+| 1. Voltage the firmware uses for the conversion | Estimate the drop with the physical form | $V_\text{on} = V_\text{CLI} - \Delta V$, $\Delta V = R_\text{path} I + R_\text{src} I (1-D)/D$ ($I$ is the INA3221 battery current). The 11/02 values (chapter 4) are the initial constants; the same formula goes into the firmware and the SILS battery model. Take one or two more four-motor bench runs with other batteries to see the difference between batteries |
+| 2. Form of the thrust formula | Power law | $F = F_\text{ref}(\omega/\omega_\text{ref})^n$, $\omega_\text{ref}$ = 3500 rad/s, $F_\text{ref}$ = 0.0916 N, $n$ = 2.13 (10/15, fitted on the thrust residual). The SILS correction factor $\eta$ is not used. The reaction torque keeps the form $C_Q\omega^2$ plus friction loss, to be reviewed when the friction is refitted |
+| 3. $V_b$ | Keep the term in the formula, starting at 0 | Set the value after the check, and remake the $R_\text{out}$ table as a pair from the same data. The table is remade with $V_\text{on}$ in either case. In the hover range, including it or not changes the thrust by less than 1 % (author's rough estimate, not checked) |
+
+- Shifting the phases of the four PWMs to reduce the drop will be tried later (it needs a switch in the firmware and a bench test).
+- The processing time of the power law (one `powf` per motor) is measured on the real vehicle at the start of the branch (expected: a dozen µs or so for four calls, below 1 % of the 2.5 ms control period; not checked).
 
 ### Measurements still needed
 
-The range of Duty 0.85 to 0.95, rotor speed per motor (audio or each drain), the comparison with and without objects below the propeller, room temperature and a known weight every time, the weight of the vehicle, the test that shifts the phases of the four PWMs (the plan in chapter 8 of the analysis note `analysis/notes/ct_cq_bench_20261015.md`), the check of the afternoon and night $V_{DD}$ reference, and the analysis of the battery's open-circuit voltage and internal resistance.
+The range of Duty 0.85 to 0.95, rotor speed per motor (audio or each drain), the comparison with and without objects below the propeller, room temperature and a known weight every time, the weight of the vehicle, the test that shifts the phases of the four PWMs (the plan in chapter 8 of the analysis note `analysis/notes/ct_cq_bench_20261015.md`), the check of the afternoon and night $V_{DD}$ reference, the analysis of the battery's open-circuit voltage and internal resistance, four-motor runs with other batteries (one or two), and a direct measurement of $V_b$ with the shaft held (no propeller, $\omega$ = 0, low Duty; the intercept of the voltage-current line).
 
 ### Effect on control
 
@@ -1025,7 +1053,7 @@ The range of Duty 0.85 to 0.95, rotor speed per motor (audio or each drain), the
 
 At each stage, what to check before going on is written in parentheses.
 
-1. Put the constants and formulas of the new model into the model's reference file (`stampfly_physical.yaml`) (`sf params check` passes).
+1. Put the constants and formulas of the new model into the model's reference file (`stampfly_physical.yaml`). Along with it, correct the afternoon and night $V_{DD}$ with the logged voltage to set the value of $V_b$, remake the $R_\text{out}$ table with $V_\text{on}$, and measure the processing time of the whole conversion on the real vehicle (`sf params check` passes).
 2. Replace the SILS plant with the new model. Bring Genesis and VPython to the same reference (backlog #18) (reproduce the bench table per step in the SILS).
 3. Make the firmware's thrust → Duty conversion the inverse of the same model (check the error of the inverse).
 4. Redesign the attitude and altitude control with the new model (check the stability margin, Duty saturation, flip, and takeoff in the SILS).
