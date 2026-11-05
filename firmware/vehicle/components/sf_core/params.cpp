@@ -746,6 +746,7 @@ namespace param_vars {
     float safety_gyro_dps    = 800.0f;
     float safety_comm_timeout = 500.0f;
     float safety_low_v       = 3.4f;
+    float safety_critical_v  = 3.0f;
     float safety_usb_v       = 3.3f;
     // Tilt consistency monitor (detailed_design §3 注10). PROVISIONAL defaults: basis is
     // the single real log vehicle_hover_20260908T121243 (1.0 s LPF mismatch: pre-spin ground
@@ -1007,8 +1008,9 @@ static const ParamEntry table[] = {
     {"safety.impact.accel_g",  ParamType::FLOAT, &safety_accel_g,     3.0f,   1.0f,   10.0f,   nullptr},
     {"safety.impact.gyro_dps", ParamType::FLOAT, &safety_gyro_dps,    800.0f, 100.0f, 2000.0f, nullptr},
     {"safety.comm.timeout_ms", ParamType::FLOAT, &safety_comm_timeout, 500.0f, 100.0f, 5000.0f, nullptr},
-    {"safety.battery.low_v",   ParamType::FLOAT, &safety_low_v,       3.4f,   3.0f,   4.2f,    nullptr},
-    {"safety.battery.usb_v",   ParamType::FLOAT, &safety_usb_v,       3.3f,   2.5f,   3.5f,    nullptr},
+    {"safety.battery.low_v",      ParamType::FLOAT, &safety_low_v,       3.4f,   2.8f,   4.2f,    nullptr},
+    {"safety.battery.critical_v", ParamType::FLOAT, &safety_critical_v,  3.0f,   2.5f,   3.5f,    nullptr},
+    {"safety.battery.usb_v",      ParamType::FLOAT, &safety_usb_v,       3.3f,   2.5f,   3.5f,    nullptr},
     // Tilt consistency monitor — PROVISIONAL defaults (see param_vars comment). Read at boot.
     // 傾き整合モニタ — 暫定の既定値（param_vars のコメント参照）。起動時に読む。
     {"safety.tilt_check.max_deg",   ParamType::FLOAT, &safety_tilt_max_deg,   10.0f, 3.0f,  45.0f, nullptr},
