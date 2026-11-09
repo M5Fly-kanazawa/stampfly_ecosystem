@@ -6,7 +6,7 @@
 # Spec under test (detailed_design.md §3.1, ToF-silent rows, ACRO/STABILIZE):
 #  1. The state machine does NOT go to LANDING: the craft stays in FLYING and the pilot keeps the
 #     throttle (it climbs, hovers and descends under the pilot's stick).
-#  2. The warning is given (log "NO forced landing, fly on"; LED orange fast blink and the tone
+#  2. The warning is given (log "NO forced landing, fly on"; LED yellow fast blink and the tone
 #     are driven from the same level, not observable in SILS).
 #  3. A switch to POS_HOLD while silent is REFUSED (the craft would fly on an altitude nobody sees):
 #     the mode stays STABILIZE.
@@ -17,7 +17,7 @@
 # 検証する仕様（detailed_design.md §3.1、ToF 出力停止の行、ACRO/STABILIZE）:
 #  1. 状態機械は LANDING に入らない: 機体は FLYING のままで、パイロットがスロットルを握り続ける
 #     （パイロットのスティックどおりに上昇・ホバー・降下する）。
-#  2. 警告が出る（ログ "NO forced landing, fly on"。LED のオレンジ高速点滅と音は同じレベルから駆動
+#  2. 警告が出る（ログ "NO forced landing, fly on"。LED の黄の高速点滅と音は同じレベルから駆動
 #     されるが、SILS では観測できない）。
 #  3. 出力停止中の POS_HOLD への切り替えは拒否される（誰も見られない高度で飛ぶことになる）: モードは
 #     STABILIZE のまま。

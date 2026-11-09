@@ -172,6 +172,24 @@ public:
         return velocity_up_;
     }
 
+    /// Set the velocity to the ESKF's at once, when the ESKF has just taken a ToF sample again after a silence episode in flight (the
+    /// estimator re-acquired the altitude, its vertical state is free and it knows the climb rate). The integral of a long episode carries the
+    /// whole accelerometer offset error (SILS scenario ceiling_brake_stale_velocity: offset -0.4 m/s^2, 3.7 m/s after 15 s on a craft that was not climbing), and rule 2
+    /// would wait kVerticalVelocityHandoffSettleS before it follows the ESKF; for that time every reader of the integral (the ceiling brake, the
+    /// blind descent) would see a stale value. The integral error restarts at zero. The rise is not touched.
+    /// ESKF が飛行中の ToF 出力停止のエピソードの後で ToF サンプルを再び取り込んだとき（推定器は高度を取り込み直し、鉛直状態は自由で、上昇率を知っている）、
+    /// 速度を ESKF の値へ一度に合わせる。長いエピソードの積分は加速度オフセットの誤差を丸ごと持つ（SILS のシナリオ ceiling_brake_stale_velocity: オフセット −0.4 m/s^2、
+    /// 上昇していない機体で 15 s 後に 3.7 m/s）。規則 2 は ESKF に従うまで kVerticalVelocityHandoffSettleS 待つので、その間、積分を読む側
+    /// （天井ブレーキ、ToF なしの降下）は古い値を見る。積分の誤差は 0 から数え直す。上昇量には触れない。
+    /// @param eskf_velocity_up ESKF vertical velocity, up positive [m/s]  ESKF の鉛直速度（上が正）[m/s]
+    void alignToEskf(float eskf_velocity_up)
+    {
+        velocity_up_    = clampVelocity(eskf_velocity_up);
+        since_reset_s_  = 0.0f;
+        contact_streak_ = 0;
+        contact_        = false;
+    }
+
     /// Pull the integral toward an external velocity measurement (the barometer, next stage):
     /// velocity += gain * (measured - velocity), only while the integral runs (rule 3). The ESKF and
     /// the ground rule own the value otherwise.
@@ -190,9 +208,14 @@ public:
     float velocityUp() const { return velocity_up_; }                  ///< Current value [m/s], up positive / 現在値
     /// Estimated rise since the craft last rested on the ground [m]: the integral of the velocity
     /// (0 at rest, so it starts at the take-off). Used by the ToF health tracker to tell "the craft has left
-    /// the floor" from "the craft is still in the sensor's dead zone" (tof_health_tracker.hpp).
+    /// the floor" from "the craft is still in the sensor's dead zone" (tof_health_tracker.hpp), and to open the
+    /// support-thrust window (blind_landing.hpp). It is an accelerometer integral, so an offset error makes it drift on the floor: both
+    /// readers use it only in the direction in which an error is harmless (the health tracker counts invalid samples EARLIER, the window
+    /// opens EARLIER and its support thrust can only come out LOWER), never as a gate of a safety decision.
     /// 機体が地上に最後に静止してからの上昇量の推定 [m]: 速度の積分（静止中は 0 なので離陸から始まる）。
-    /// ToF 健全性トラッカーが「機体は床を離れた」と「まだセンサの不感帯にいる」を区別するのに使う。
+    /// ToF 健全性トラッカーが「機体は床を離れた」と「まだセンサの不感帯にいる」を区別するのと、支持推力の窓を開くのに使う。加速度計の
+    /// 積分なので、オフセット誤差で床の上でもずれる: どちらの使い手も、誤っても害の無い向きにだけ使う（健全性トラッカーは無効サンプルを「早く」
+    /// 数え、窓は「早く」開き、支持推力は「低く」しか出ない）。安全判断の門には使わない。
     float riseM() const { return rise_m_; }
     /// Time the value has been an integral since its last reset (rule 1 at rest, or rule 2 following the ESKF) [s]. The
     /// error of the integral grows with it (offset error x time), so the PI of the descent without a ToF trusts the

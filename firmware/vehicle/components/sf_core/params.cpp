@@ -814,6 +814,17 @@ static void notifyEstimatorReload()
          static_cast<uint32_t>(esp_timer_get_time()), 0});
 }
 
+/// For the parameters of the touchdown without a ToF: ImuTask reads both (the touchdown detector of TakeoffLandingMgr, reloaded on
+/// EstimatorCmd::ReloadParams) and the controller reads the impact threshold too (the contact rule of its vertical velocity estimator,
+/// loadBlindDescentParams()). A change reaches both tasks at once.
+/// ToF なしの接地のパラメータ用: ImuTask は両方を読み（TakeoffLandingMgr の接地検出器。EstimatorCmd::ReloadParams で再読込される）、
+/// 制御器も衝撃の閾値を読む（鉛直速度の推定器の接触の規則、loadBlindDescentParams()）。変更は両方のタスクに同時に届く。
+static void notifyEstimatorAndControllerReload()
+{
+    notifyEstimatorReload();
+    notifyControllerReload();
+}
+
 /// Parameter table — the single source of truth (SSOT). Each row binds a name to
 /// a param_vars variable with its default/min/max/callback. To add a parameter,
 /// add a variable to param_vars (above) and a row here.
@@ -1036,12 +1047,12 @@ static const ParamEntry table[] = {
     // ToF 出力停止中の接地（ToF なしの着陸）の衝撃の閾値 [G]（候補値）: 接地は、これを超える衝撃のあとの静止
     // （blind_touchdown.hpp）。最大の 10 G にすると衝撃を見ないので、ToF なしの着陸は時間切れで終わる —
     // tof_silent_hover_timed シナリオが使う。
-    {"safety.blind_touchdown.accel_g", ParamType::FLOAT, &safety_blind_touchdown_g, limits::kBlindTouchdownAccelG, 1.05f, 10.0f, nullptr},
+    {"safety.blind_touchdown.accel_g", ParamType::FLOAT, &safety_blind_touchdown_g, limits::kBlindTouchdownAccelG, 1.05f, 10.0f, &notifyEstimatorAndControllerReload},
     // Time [s] the floor must hold the craft up for the second touchdown path (thrust below 0.7 x the support thrust and |accel| near 1 g, no impact
     // needed). 100 s (max) switches the path off: with 10 G above too, the descent without a ToF ends only by its time limit (tof_silent_hover_timed).
     // 2 つ目の接地経路（推力が支持推力の 0.7 倍未満で |加速度| が 1 g の近く。衝撃は不要）で、床が機体を支えていなければならない時間 [s]。
     // 最大の 100 s でこの経路は働かない: 上の 10 G と合わせると、ToF なしの降下は時間切れでしか終わらない（tof_silent_hover_timed）。
-    {"safety.blind_touchdown.floor_s", ParamType::FLOAT, &safety_blind_floor_s, limits::kBlindFloorS, 0.1f, 100.0f, nullptr},
+    {"safety.blind_touchdown.floor_s", ParamType::FLOAT, &safety_blind_floor_s, limits::kBlindFloorS, 0.1f, 100.0f, &notifyEstimatorAndControllerReload},
     // Blind descent (ToF silent): target speed [m/s, down], P gain [1/(m/s), x hover thrust], integral
     // time [s] of the velocity loop (CANDIDATES; SILS sweeps them by parameter).
     // ToF なしの降下: 速度ループの目標速度 [m/s、下向き]・P ゲイン [1/(m/s)、hover 推力に対する割合]・積分時間 [s]

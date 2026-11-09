@@ -1,0 +1,19 @@
+# weak_spool_alt_offset.expect — a craft that cannot lift ends the auto-takeoff by a ToF-silent LANDING on the floor, and the motors stop (8th pass, D1)
+# 浮けない機体の自動離陸は、床の上での ToF なしの LANDING で終わり、モータは止まる（8 回目、D1）
+# Variant of weak_spool_alt with an accelerometer offset: the same expectations.
+# weak_spool_alt に加速度計のオフセットを足した変種: 期待値は同じ。
+#
+# On the floor all the time (alt < 5 cm): the ToF-silence episode, TAKEOFF -> LANDING, "Touchdown detected" (the floor holds the craft), LANDING -> IDLE_GROUND. No takeoff completion, no abort.
+# ずっと床の上（高度 5 cm 未満）: ToF 出力停止のエピソード、TAKEOFF → LANDING、"Touchdown detected"（床が機体を支える）、LANDING → IDLE_GROUND。離陸の完了も中止も無い。
+exit 0
+log_contains any "Auto-takeoff engaged"
+log_contains any "Downward ToF silence episode"
+log_contains any "Transition: TAKEOFF → LANDING"
+log_contains any "Touchdown detected (the floor holds the craft up"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_absent any "Auto-takeoff complete"
+log_absent any "Auto-takeoff aborted"
+order "Auto-takeoff engaged" "Transition: TAKEOFF → LANDING"
+order "Transition: TAKEOFF → LANDING" "Touchdown detected (the floor holds the craft up"
+order "Touchdown detected (the floor holds the craft up" "Transition: LANDING → IDLE_GROUND"
+metric alt_max < 0.05 in 5.0 16.0

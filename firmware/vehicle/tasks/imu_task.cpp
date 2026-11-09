@@ -45,6 +45,7 @@
 #include "failsafe.hpp"     // ImuAnomalyDetector (400Hz impact/gyro checks)
 #include "failsafe_status_guard.hpp"   // reader-side guard: a stale failsafe_status reads as ToF silent
 #include "tof_health_tracker.hpp"       // has the estimator re-acquired the downward ToF?
+#include "takeoff_policy.hpp"           // TakeoffFloorWatch: the positive evidence that an auto-takeoff is still on the floor
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
 #include "params.hpp"
@@ -138,6 +139,7 @@ static bool g_tof_vertical = true;
 /// 推定器は下向き ToF を取り込み直したか？ ToF サンプルごと（と毎周期の時計）で更新し、事実は
 /// tof_health に出す。判定（failsafe_status.tof_silent）は Failsafe が出す。
 static sf::ToFHealthTracker g_tof_health;
+static sf::TakeoffFloorWatch g_takeoff_floor_watch;   // the healthy ToF shows the craft on the floor, not rising (published as tof_health.floor_stays) / 健全な ToF が、機体は床の上で読みが増えないと示す（tof_health.floor_stays として発行）
 
 /// This task's guard on failsafe_status (a status nobody refreshes reads as "ToF silent") and the
 /// guarded value of the current IMU cycle (refreshed by refreshToFSilenceInputs()).
@@ -395,6 +397,11 @@ static void feedToFHealth(const sf::TofData& tof)
     facts.rise_m             = sf::controller_status.latest().vertical_rise_m;
     facts.takeoff_elapsed_us = takeoffElapsedUs(state, facts.now_us);
     g_tof_health.onSample(tof.timestamp, facts);
+    if (facts.phase == sf::ToFFlightPhase::Takeoff) {   // the positive floor evidence is a TAKEOFF fact / 床の積極的な証拠は TAKEOFF の事実
+        g_takeoff_floor_watch.onSample(facts.now_us, !g_failsafe.tof_silent, tof.valid, tof.distance);
+    } else {
+        g_takeoff_floor_watch.reset();
+    }
 }
 
 /// Publish the tracker's facts on tof_health (Failsafe reads them). / トラッカーの事実を tof_health に
@@ -405,6 +412,7 @@ static void publishToFHealth()
     health.altitude_reliable = g_tof_health.altitudeReliable();
     health.invalid_stuck     = g_tof_health.invalidStuck();
     health.timestamp         = static_cast<uint32_t>(esp_timer_get_time());
+    health.floor_stays       = g_takeoff_floor_watch.stays(health.timestamp, !g_failsafe.tof_silent);
     sf::tof_health.publish(health);
 }
 
@@ -874,6 +882,32 @@ static void reseedCalibration()
     ESP_LOGI(TAG, "Calibration re-seeded after estimator reset");
 }
 
+/// Execute EstimatorCmd::InflateCov: map the semantic CovScope (carried in cmd.arg) to the estimator's state-bit mask, then inflate.
+/// State bit layout (StateIdx): pos 0-2, vel 3-5, att 6-8, bg 9-11, ba 12-14. Keeps state_task free of estimator-internal indices.
+/// EstimatorCmd::InflateCov を実行する: 意味的な CovScope（cmd.arg）を推定器の状態ビットマスクに変換して膨張。状態ビット配置
+/// （StateIdx）: 位置0-2, 速度3-5, 姿勢6-8, ジャイロbias9-11, 加速度bias12-14。state_task を推定器内部インデックスから切り離す。
+static void inflateEstimatorCovariance(const sf::EstimatorCommand& cmd)
+{
+    uint16_t mask = 0x7FFF;   // CovScope::All
+    switch (static_cast<sf::CovScope>(cmd.arg)) {
+    case sf::CovScope::PosVel:     mask = 0x003F; break;  // pos+vel
+    case sf::CovScope::PosVelBias: mask = 0x7E3F; break;  // pos+vel+bias (keep att)
+    case sf::CovScope::Attitude:   mask = 0x01C0; break;  // attitude only
+    case sf::CovScope::All:        mask = 0x7FFF; break;  // all 15
+    }
+    g_estimator->inflateCovariance(mask);
+    ESP_LOGI(TAG, "Estimator covariance inflated (scope=%u mask=0x%04X)",
+             static_cast<unsigned>(cmd.arg), static_cast<unsigned>(mask));
+}
+
+/// Live tuning: re-read eskf.* in THIS task's context (the params callback only publishes the verb — no cross-task touching), and the touchdown thresholds too.
+/// ライブチューニング: 本タスクの文脈で eskf.* を読み直す（params コールバックは verb を発行するだけ — タスク跨ぎで触らない）。接地の閾値も読み直す。
+static void reloadEstimatorParams()
+{
+    g_estimator->reloadParams();
+    g_takeoff_landing.reloadConfig(readTakeoffLandingConfig());
+}
+
 /// Consume estimator commands published by the StateManager transition callbacks
 /// (architecture §4). This is the estimator-side endpoint of the reset consolidation:
 /// the state machine decides WHEN to reset; ImuTask (which owns the estimator) decides
@@ -903,35 +937,14 @@ static void processEstimatorCommands()
         case sf::EstimatorCmd::UnfreezeBias:
             g_estimator->unfreezeBias();
             break;
-        case sf::EstimatorCmd::InflateCov: {
-            // Map the semantic CovScope (carried in cmd.arg) to the estimator's state-bit
-            // mask, then inflate. State bit layout (StateIdx): pos 0-2, vel 3-5, att 6-8,
-            // bg 9-11, ba 12-14. Keeps state_task free of estimator-internal indices.
-            // 意味的な CovScope（cmd.arg）を推定器の状態ビットマスクに変換して膨張。状態ビット
-            // 配置（StateIdx）: 位置0-2, 速度3-5, 姿勢6-8, ジャイロbias9-11, 加速度bias12-14。
-            // state_task を推定器内部インデックスから切り離す。
-            uint16_t mask = 0x7FFF;   // CovScope::All
-            switch (static_cast<sf::CovScope>(cmd.arg)) {
-            case sf::CovScope::PosVel:     mask = 0x003F; break;  // pos+vel
-            case sf::CovScope::PosVelBias: mask = 0x7E3F; break;  // pos+vel+bias (keep att)
-            case sf::CovScope::Attitude:   mask = 0x01C0; break;  // attitude only
-            case sf::CovScope::All:        mask = 0x7FFF; break;  // all 15
-            }
-            g_estimator->inflateCovariance(mask);
-            ESP_LOGI(TAG, "Estimator covariance inflated (scope=%u mask=0x%04X)",
-                     static_cast<unsigned>(cmd.arg), static_cast<unsigned>(mask));
+        case sf::EstimatorCmd::InflateCov:
+            inflateEstimatorCovariance(cmd);
             break;
-        }
         case sf::EstimatorCmd::Recalibrate:
             startBootCalibration();
             break;
         case sf::EstimatorCmd::ReloadParams:
-            // Live tuning: re-read eskf.* in THIS task's context (the params
-            // callback only publishes the verb — no cross-task touching).
-            // ライブチューニング: 本タスクの文脈で eskf.* を読み直す（params
-            // コールバックは verb を発行するだけ — タスク跨ぎで触らない）。
-            g_estimator->reloadParams();
-            g_takeoff_landing.reloadConfig(readTakeoffLandingConfig());   // the touchdown thresholds too / 接地の閾値も
+            reloadEstimatorParams();
             break;
         case sf::EstimatorCmd::HoldAttitudeCorrection:
         case sf::EstimatorCmd::ResumeAttitudeCorrection:

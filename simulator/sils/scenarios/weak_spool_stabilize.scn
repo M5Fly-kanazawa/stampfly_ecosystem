@@ -1,0 +1,33 @@
+# weak_spool_stabilize.scn — STABILIZE, weak motors (health 0.9): the ToF reads invalid on the floor, so the pilot's TAKEOFF becomes FLYING on the floor
+#                            STABILIZE、弱いモータ（健全度 0.9）: ToF は床の上で無効を返すので、パイロットの TAKEOFF は床の上で FLYING になる
+#
+# Motor health 0.9 and a throttle above the takeoff threshold but below the hover thrust (raw 3100): the craft enters TAKEOFF and stays on the floor for 3.5 s, with the
+# ToF below its minimum range (invalid samples only). The 6th/7th passes tried to keep such a craft in TAKEOFF with an accelerometer-based "has left the floor" evidence;
+# the independent reviews of the 7th pass showed that evidence cannot tell a slow lift from a craft the floor holds, and the 8th pass (decision D2) withdrew it.
+# Spec under test (detailed_design.md §3.1, TAKEOFF -> FLYING manual row; operation_manual.md):
+#  1. The invalid samples are counted after 2 s + 0.15 s of TAKEOFF (the time limit of the tracker, the ToF-invalid rule): a ToF-silence episode.
+#  2. The episode sets the ground-contact flag to "airborne" (nothing proves ground contact) and the manual TAKEOFF becomes FLYING, on the floor: ACCEPTED, the pilot
+#     holds the throttle ("Takeoff complete -> FLYING/STABILIZE" can show on the floor).
+#  3. STABILIZE never lands by itself: "NO forced landing, fly on". When the pilot raises the throttle the craft lifts.
+#
+# モータの健全度 0.9、スロットルは離陸の閾値より上でホバー推力より下（生値 3100）: 機体は TAKEOFF に入り、床の上に 3.5 s いる。ToF は最小レンジ未満（無効サンプルだけ）。
+# 6・7 回目は、加速度計に基づく「床を離れた」証拠で、そのような機体を TAKEOFF に留めようとした。7 回目の独立レビュー 2 本は、その証拠がゆっくり浮く機体と床が支えている機体を
+# 区別できないことを示し、8 回目（判断 D2）は取り下げた。検証する仕様（detailed_design.md §3.1 の TAKEOFF → FLYING（手動）の行、operation_manual.md）:
+#  1. 無効サンプルは TAKEOFF の 2 s + 0.15 s の後に数えられる（トラッカーの時間の上限。ToF 無効の規則）: ToF 出力停止のエピソード。
+#  2. エピソードは接地フラグを「空中」にし（接地を示す証拠が無いので）、手動の TAKEOFF は床の上で FLYING になる: 許容する。スロットルはパイロットが握っている
+#     （"Takeoff complete -> FLYING/STABILIZE" が床の上で出うる）。
+#  3. STABILIZE は自分では着陸しない: "NO forced landing, fly on"。パイロットがスロットルを上げれば浮く。
+#
+# Run: sf sils scenario simulator/sils/scenarios/weak_spool_stabilize.scn --target vehicle --duration 13000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    fault 0 0.9
+   0    fault 1 0.9
+   0    fault 2 0.9
+   0    fault 3 0.9
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  1     1000      50                       # B: ARM (4.0 s), STABILIZE
+   +    rc         3100  2048   2048    2048  1     3500      50                       # C: throttle above the takeoff threshold, below the hover (5.0-8.5 s): TAKEOFF on the floor
+   +    rc         3400  2048   2048    2048  1     800       50                       # D: enough to lift (8.5-9.3 s)
+   +    rc         3150  2048   2048    2048  1     1000      50                       # E: ... (9.3-10.3 s)
+   +    rc         2048  2048   2048    2048  1     2500      50                       # F: throttle off: the craft comes down

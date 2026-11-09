@@ -203,6 +203,25 @@ TEST(estimator_rise_is_zero_at_rest_and_the_integral_of_the_velocity_in_the_air)
     ASSERT_TRUE(e.riseM() == 0.0f);
 }
 
+TEST(estimator_align_to_the_eskf_drops_the_integral_of_the_episode)
+{
+    // After a long episode without a ToF the integral carries the offset error (here 0.4 m/s^2 for 10 s = 4 m/s on a craft that does not climb). When the ESKF takes the
+    // ToF again, the velocity is set to the ESKF's at once (the age of the integral restarts); the rise is not touched.
+    // ToF なしの長いエピソードの後、積分はオフセット誤差を持つ（ここでは 0.4 m/s^2 を 10 s で、上昇していない機体に 4 m/s）。ESKF が ToF を再び
+    // 取り込んだら、速度は ESKF の値へ一度に合わせ（積分の年齢は数え直し）、上昇量には触れない。
+    sf::VerticalVelocityEstimator e;
+    e.reset();
+    veRun(e, 0.5f, kG, true, false, 0.0f);
+    veRun(e, 1.0f, kG + 2.0f, false, false, 0.0f);          // the take-off / 離陸
+    veRun(e, 10.0f, kG + 0.4f, false, false, 0.0f);         // the episode: the offset error integrates / エピソード: オフセット誤差が積分される
+    ASSERT_TRUE(e.velocityUp() > 3.0f);
+    const float rise = e.riseM();
+    e.alignToEskf(0.05f);
+    ASSERT_NEAR(e.velocityUp(), 0.05f, 1e-6f);
+    ASSERT_TRUE(e.sinceResetS() == 0.0f);
+    ASSERT_NEAR(e.riseM(), rise, 1e-6f);
+}
+
 TEST(estimator_time_since_reset_counts_the_integral_only)
 {
     // The age of the integral: 0 at rest on the ground (rule 1) and while the ESKF is followed (rule 2); it grows only
@@ -885,23 +904,31 @@ TEST(support_without_a_window_is_the_lowered_estimate)
     sf::SupportThrustFilter none;
     none.reset();
     ASSERT_NEAR(sf::blindLandingStartThrust(none, hover_estimate), cap, 1e-6f);
-    // Left the floor, hover window still short, thrust above the cap: capped. And a thrust below the cap is kept (it is lower).
-    // 床を離れたがホバーの窓がまだ短く、推力が上限より高い: 上限。上限より低い推力はそのまま。
+    // Left the floor, hover window still short: the early estimate is used AS IT IS, the lowered estimate does not cut it (6th pass: the cut made
+    // the ceiling 0.63-0.71 x the thrust that holds the craft in the real logs). It is bounded above by the same sanity bound as the calibrated value.
+    // 床を離れたがホバーの窓がまだ短い: 早い推定を「そのまま」使い、低くした見積もりでは切らない（6 回目: 切ると、実機ログで上限が機体を支える
+    // 推力の 0.63〜0.71 倍になった）。上は較正した値と同じ、異常値に備えた上限で抑える。
     sf::SupportThrustFilter young;
     young.reset();
-    sfRun(young, 0.5f * lim::kSupportWindowS, 0.60f, 0.9f * kG, 0.2f);   // reading far below the thrust: the early estimate is above the cap / 読みが推力よりずっと低い: 早い推定は上限より上
+    sfRun(young, 0.5f * lim::kSupportWindowS, 0.60f, 0.9f * kG, 0.2f);   // reading far below the thrust: the early estimate is above the sanity bound / 読みが推力よりずっと低い: 早い推定は異常値の上限より上
     ASSERT_TRUE(young.leftFloor() && !young.calibrated());
-    ASSERT_NEAR(sf::blindLandingStartThrust(young, hover_estimate), cap, 1e-6f);
-    // The early estimate from a climb (quotient x 0.85) is used when it is below the cap: a take-off at +0.2 g with the thrust 1.2x the hover
-    // and the delivered thrust concave (the reading only 1.1 g): the quotient is 9 % high, the derated value 0.85 x 1.09 = 0.93 of the hover.
-    // 上限より低ければ、上昇からの早い推定（商 × 0.85）を使う: +0.2 g の離陸で推力がホバーの 1.2 倍、出る推力が上に凸（読みは 1.1 g だけ）:
-    // 商は 9 % 高く、補正後の値はホバーの 0.85 × 1.09 = 0.93 倍。
+    ASSERT_NEAR(sf::blindLandingStartThrust(young, hover_estimate), lim::kBlindCalibratedMaxFrac * hover_estimate, 1e-6f);
+    sf::SupportThrustFilter modest;
+    modest.reset();
+    sfRun(modest, 0.5f * lim::kSupportWindowS, 0.50f, 1.0f * kG, 0.2f);   // quotient 0.50 N: above the cap 0.30 N, below the sanity bound 0.60 N / 商 0.50 N: 上限 0.30 N より上、異常値の上限 0.60 N より下
+    ASSERT_TRUE(modest.leftFloor() && !modest.calibrated());
+    ASSERT_NEAR(sf::blindLandingStartThrust(modest, hover_estimate), lim::kSupportClimbDerate * 0.50f, 1e-4f);
+    ASSERT_TRUE(sf::blindLandingStartThrust(modest, hover_estimate) > cap);
+    // The early estimate from a climb (quotient x kSupportClimbDerate): a take-off at +0.2 g with the thrust 1.2x the hover
+    // and the delivered thrust concave (the reading only 1.1 g): the quotient is 9 % high, the derated value 0.92 x 1.09 = 1.00 of the hover.
+    // 上昇からの早い推定（商 × kSupportClimbDerate）: +0.2 g の離陸で推力がホバーの 1.2 倍、出る推力が上に凸（読みは 1.1 g だけ）:
+    // 商は 9 % 高く、補正後の値はホバーの 0.92 × 1.09 = 1.00 倍。
     sf::SupportThrustFilter climb;
     climb.reset();
     sfRun(climb, 0.4f, 1.2f * kStart, 1.1f * kG, 0.3f);
     ASSERT_TRUE(climb.leftFloor() && !climb.calibrated());
     ASSERT_NEAR(sf::blindLandingStartThrust(climb, 1.5f * kStart), lim::kSupportClimbDerate * 1.2f * kStart / 1.1f, 2e-3f);
-    ASSERT_TRUE(sf::blindThrustCeiling(sf::blindLandingStartThrust(climb, 1.5f * kStart)) < kStart);
+    ASSERT_TRUE(sf::blindThrustCeiling(sf::blindLandingStartThrust(climb, 1.5f * kStart)) < kStart);   // the ceiling (0.95 x support) stays below the weight / 上限（支持推力の 0.95 倍）は重さを下回る
     sf::SupportThrustFilter too_soon;   // fewer than kSupportClimbMinS of airborne samples: the lowered estimate / 空中のサンプルが kSupportClimbMinS 未満: 低くした見積もり
     too_soon.reset();
     sfRun(too_soon, 0.5f * lim::kSupportClimbMinS, 1.2f * kStart, 1.1f * kG, 0.3f);
@@ -929,6 +956,31 @@ TEST(a_thrust_ceiling_from_the_lowered_estimate_cannot_climb_unless_the_estimate
     }
     const float high = kStart * 1.42f;
     ASSERT_TRUE(sf::blindThrustCeiling(sf::blindLandingStartThrust(none, high)) > kStart);
+}
+
+TEST(an_early_estimate_gives_a_ceiling_between_85_percent_and_the_weight)
+{
+    // Before the calibration, the ceiling is 0.95 x kSupportClimbDerate x (the quotient thrust x g / reading). A climb whose delivered
+    // thrust is linear in the command (the real logs: quotient 0.98-1.03 x the weight) gives at least 0.85 x the weight; a climb whose delivered
+    // thrust is concave (SILS: the reading only 1.1 g for 1.2 x the thrust, quotient 1.09 x the weight) stays below the weight. The hover estimate
+    // (here 45 % too high) does not matter: the lowered estimate no longer cuts the early estimate.
+    // 較正の前の上限は 0.95 × kSupportClimbDerate × （商 = 推力 × g ÷ 読み）。出る推力が指令に比例する上昇（実機ログ: 商は重さの 0.98〜1.03 倍）では
+    // 重さの 0.85 倍以上になり、出る推力が上に凸の上昇（SILS: 推力 1.2 倍で読みは 1.1 g だけ、商は重さの 1.09 倍）でも重さを下回る。
+    // ホバー推力の見積もり（ここでは 45 % 高い）は関係しない: 低くした見積もりはもう早い推定を切らない。
+    const float high_estimate = 1.45f * kStart;
+    for (float quotient : {0.98f, 1.0f, 1.03f}) {
+        sf::SupportThrustFilter linear;
+        linear.reset();
+        sfRun(linear, 0.4f, 1.2f * kStart * quotient, 1.2f * kG, 0.3f);   // reading 1.2 g for a thrust 1.2 x quotient x weight / 推力が重さの 1.2 × 商 倍のとき読みは 1.2 g
+        ASSERT_TRUE(linear.leftFloor() && !linear.calibrated());
+        const float ceiling = sf::blindThrustCeiling(sf::blindLandingStartThrust(linear, high_estimate));
+        ASSERT_TRUE(ceiling >= 0.85f * kStart && ceiling < kStart);
+    }
+    sf::SupportThrustFilter concave;
+    concave.reset();
+    sfRun(concave, 0.4f, 1.2f * kStart, 1.1f * kG, 0.3f);
+    const float concave_ceiling = sf::blindThrustCeiling(sf::blindLandingStartThrust(concave, high_estimate));
+    ASSERT_TRUE(concave_ceiling >= 0.85f * kStart && concave_ceiling < kStart);
 }
 
 TEST(reading_limit_is_below_free_fall_and_hover)
@@ -987,6 +1039,7 @@ int main()
     run_estimator_barometer_interface_acts_only_while_integrating();
     run_estimator_value_is_limited();
     run_estimator_rise_is_zero_at_rest_and_the_integral_of_the_velocity_in_the_air();
+    run_estimator_align_to_the_eskf_drops_the_integral_of_the_episode();
     run_estimator_time_since_reset_counts_the_integral_only();
     run_loop_thrust_never_exceeds_the_ceiling_below_the_weight();
     run_loop_lands_gently_for_a_support_thrust_error_up_to_the_margin();
@@ -1014,6 +1067,7 @@ int main()
     run_support_is_bounded_against_a_bad_reading();
     run_support_without_a_window_is_the_lowered_estimate();
     run_a_thrust_ceiling_from_the_lowered_estimate_cannot_climb_unless_the_estimate_is_40_percent_high();
+    run_an_early_estimate_gives_a_ceiling_between_85_percent_and_the_weight();
     run_reading_limit_is_below_free_fall_and_hover();
     run_upward_specific_force_level_and_tilted();
     run_upward_specific_force_inverted_and_zero();

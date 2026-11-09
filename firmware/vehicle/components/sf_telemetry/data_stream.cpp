@@ -265,10 +265,10 @@ void DataStream::countDrop(bool added)
 }
 
 // -----------------------------------------------------------------------------
-// appendEntries — 50Hz control entries + low-rate sensor entries (on change).
-// appendEntries — 50Hz の制御エントリ＋低レートセンサエントリ（更新時のみ）。
+// append400HzEntries — 400Hz entries of the batch that system identification needs (duty, pre-mixer output).
+// append400HzEntries — バッチの 400Hz エントリのうち、同定に要るもの（duty、ミキサー手前の出力）。
 // -----------------------------------------------------------------------------
-void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
+void DataStream::append400HzEntries(datastream::UnifiedPacketBuilder& builder)
 {
     // 400Hz motor duty — the actual PLANT INPUT the mixer sent this control
     // cycle (all 8 samples of the batch, paired by index with the
@@ -313,7 +313,14 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
     }
     countDrop(builder.addEntry(datastream::kPktCtrlOutput400, ctrl_output400,
                                sizeof(ctrl_output400)));
+}
 
+// -----------------------------------------------------------------------------
+// appendFlightPhase400Entry — 400Hz flight state + flip phase entry.
+// appendFlightPhase400Entry — 400Hz の飛行状態＋フリップのフェーズのエントリ。
+// -----------------------------------------------------------------------------
+void DataStream::appendFlightPhase400Entry(datastream::UnifiedPacketBuilder& builder)
+{
     // 400Hz flight state + flip phase/result/angle (8 samples, index-paired like
     // duty400). Placed after the system-identification entries so a full packet
     // drops it before them (see countDrop()).
@@ -329,7 +336,14 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
     }
     countDrop(builder.addEntry(datastream::kPktFlightPhase400, phase400,
                                sizeof(phase400)));
+}
 
+// -----------------------------------------------------------------------------
+// appendFlightFlagsEntry — 50Hz flags entry.
+// appendFlightFlagsEntry — 50Hz のフラグエントリ。
+// -----------------------------------------------------------------------------
+void DataStream::appendFlightFlagsEntry(datastream::UnifiedPacketBuilder& builder)
+{
     // 50Hz flags: pilot buttons, flip readiness, pre-arm block reason, attitude verdicts.
     // The controller-derived facts (flip_ready/flip_block_reason) keep the last value
     // ControlTask published: controller_status is not republished while disarmed, so read
@@ -352,9 +366,14 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
     flags.flip_block_reason = flag_ctrl.flip_block_reason;
     flags.arm_block         = flag_mode.arm_block;
     countDrop(builder.addEntry(datastream::kPktFlightFlags, &flags, sizeof(flags)));
+}
 
-    appendToFSilenceEntry(builder);
-
+// -----------------------------------------------------------------------------
+// appendPilotAndReferenceEntries — pilot input, control references and the flow samples.
+// appendPilotAndReferenceEntries — パイロット入力、制御目標、フローのサンプル。
+// -----------------------------------------------------------------------------
+void DataStream::appendPilotAndReferenceEntries(datastream::UnifiedPacketBuilder& builder)
+{
     // Pilot input (50Hz cadence — one per packet, like the old vehicle).
     // パイロット入力（50Hz — 旧 vehicle と同じくパケットあたり 1 件）。
     const CommandSetpoint setpoint = command_setpoint.latest();
@@ -402,7 +421,30 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
         flow.quality      = flow_sample.squal;
         countDrop(builder.addEntry(datastream::kPktFlow, &flow, sizeof(flow)));
     }
+}
 
+// -----------------------------------------------------------------------------
+// appendEntries — 50Hz control entries + low-rate sensor entries (on change).
+// appendEntries — 50Hz の制御エントリ＋低レートセンサエントリ（更新時のみ）。
+// The order is the order in the packet: the entries that identification needs come first, so a full packet drops the last ones (countDrop()).
+// 順序はパケット内の順序: 同定に要るエントリを先に置き、パケットが満杯のときは後ろから落ちる（countDrop()）。
+// -----------------------------------------------------------------------------
+void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
+{
+    append400HzEntries(builder);
+    appendFlightPhase400Entry(builder);
+    appendFlightFlagsEntry(builder);
+    appendToFSilenceEntry(builder);
+    appendPilotAndReferenceEntries(builder);
+    appendAbsoluteSensorEntries(builder);
+}
+
+// -----------------------------------------------------------------------------
+// appendAbsoluteSensorEntries — low-rate ABSOLUTE sensors (bottom/front ToF, barometer, magnetometer), on change.
+// appendAbsoluteSensorEntries — 低レートの「絶対量」センサ（底面・前方 ToF、気圧計、磁気センサ）。更新時のみ。
+// -----------------------------------------------------------------------------
+void DataStream::appendAbsoluteSensorEntries(datastream::UnifiedPacketBuilder& builder)
+{
     // Low-rate ABSOLUTE sensors: append only when the per-sensor stamp advanced.
     // 低レートの「絶対量」センサ: センサ別時刻が進んだときだけ追加する。
     const SensorSnapshot snap = sensor_snapshot.latest();

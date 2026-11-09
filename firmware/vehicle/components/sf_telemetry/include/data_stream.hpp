@@ -71,6 +71,11 @@ private:
     void stopStream(const char* reason);
     void emitUnified();
     void appendEntries(datastream::UnifiedPacketBuilder& builder);
+    void append400HzEntries(datastream::UnifiedPacketBuilder& builder);   // 400Hz duty, pre-mixer output / 400Hz の duty、ミキサー手前の出力
+    void appendFlightPhase400Entry(datastream::UnifiedPacketBuilder& builder);   // 400Hz flight state + flip phase / 400Hz の飛行状態＋フリップのフェーズ
+    void appendFlightFlagsEntry(datastream::UnifiedPacketBuilder& builder);   // 50Hz flags / 50Hz のフラグ
+    void appendPilotAndReferenceEntries(datastream::UnifiedPacketBuilder& builder);   // pilot input, control references, flow / パイロット入力、制御目標、フロー
+    void appendAbsoluteSensorEntries(datastream::UnifiedPacketBuilder& builder);   // low-rate absolute sensors, on change / 低レートの絶対量センサ（更新時のみ）
     void appendToFSilenceEntry(datastream::UnifiedPacketBuilder& builder);   // 50Hz ToF-silence facts (0x4E) / 50Hz ToF 出力停止の事実
     void sendStatus();
     void sendDatagram(const uint8_t* data, size_t length);

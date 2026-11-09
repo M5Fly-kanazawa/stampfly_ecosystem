@@ -87,6 +87,13 @@ TARGET_TOF_HEALTH = test_tof_health
 SRCS_BLIND_LANDING = test_blind_landing.cpp
 TARGET_BLIND_LANDING = test_blind_landing
 
+# TAKEOFF decisions (takeoff_policy.hpp): manual / auto completion, the auto-takeoff abort on the positive floor evidence of the healthy ToF (TakeoffFloorWatch),
+# and the comm-loss landing from TAKEOFF / FLYING, every cell of the normative table. Header-only logic — own binary.
+# TAKEOFF の判断（takeoff_policy.hpp）: 手動・自動の完了、健全な ToF の積極的な床の証拠（TakeoffFloorWatch）による自動離陸の中止、TAKEOFF・FLYING からの通信断着陸。
+# 規範表の全セル。ヘッダのみのロジック — 独自バイナリ。
+SRCS_TAKEOFF_POLICY = test_takeoff_policy.cpp
+TARGET_TAKEOFF_POLICY = test_takeoff_policy
+
 # NOTE: test_state_manager is temporarily disabled. It compiled the firmware
 # state_manager/failsafe through the now-removed simulator/sils/compat shim and
 # sils_topics.cpp (deleted in the SILS clean-slate, 2026-05-31). It will be
@@ -97,7 +104,7 @@ TARGET_BLIND_LANDING = test_blind_landing
 
 .PHONY: all clean test
 
-all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING)
+all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
@@ -123,6 +130,9 @@ $(TARGET_TOF_HEALTH): $(SRCS_TOF_HEALTH)
 $(TARGET_BLIND_LANDING): $(SRCS_BLIND_LANDING)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+$(TARGET_TAKEOFF_POLICY): $(SRCS_TAKEOFF_POLICY)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
 test: all
 	./$(TARGET)
 	./$(TARGET_ESKF_FLIP)
@@ -132,6 +142,7 @@ test: all
 	./$(TARGET_TOF_SILENCE)
 	./$(TARGET_TOF_HEALTH)
 	./$(TARGET_BLIND_LANDING)
+	./$(TARGET_TAKEOFF_POLICY)
 
 clean:
-	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) test_state_manager
+	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) test_state_manager

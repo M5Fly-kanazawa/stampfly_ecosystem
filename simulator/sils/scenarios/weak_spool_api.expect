@@ -1,0 +1,15 @@
+# weak_spool_api.expect — the API takeoff of a craft that cannot lift ends by a ToF-silent LANDING, replies an error, and the motors stop (8th pass, D1)
+# 浮けない機体の API takeoff は ToF なしの LANDING で終わり、error を返し、モータは止まる（8 回目、D1）
+#
+exit 0
+log_contains any "cmd: takeoff"
+log_contains any "Auto-takeoff engaged"
+log_contains any "Transition: TAKEOFF → LANDING"
+log_contains any "reply: error takeoff aborted"
+log_contains any "Touchdown detected (the floor holds the craft up"
+log_absent any "reply: error takeoff timeout"
+log_absent any "Auto-takeoff aborted"
+order "Auto-takeoff engaged" "Transition: TAKEOFF → LANDING"
+order "Transition: TAKEOFF → LANDING" "reply: error takeoff aborted"
+metric alt_max < 0.05 in 6.0 17.5
+metric duty_max < 0.01 in 15.5 17.5

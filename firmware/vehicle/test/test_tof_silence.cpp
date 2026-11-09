@@ -210,11 +210,14 @@ TEST(threshold_is_three_times_the_largest_measured_interval)
 using sf::FlightMode;
 
 static constexpr uint32_t kBlindUs = sf::limits::kBlindLandingTimeoutUs;
+static constexpr uint32_t kMinSilentUs = sf::limits::kBlindLandingMinSilentUs;
 
+// `silent_elapsed_us` defaults to the minimum guaranteed time, so that the LANDING limit alone decides unless a test says otherwise.
+// `silent_elapsed_us` の既定は保証する最低時間: テストが指定しない限り、LANDING の上限だけが判断する。
 static ToFSilenceAction act(FlightState state, FlightMode mode, bool is_silent,
-                            uint32_t blind_elapsed_us = 0)
+                            uint32_t blind_elapsed_us = 0, uint32_t silent_elapsed_us = kMinSilentUs)
 {
-    return sf::decideToFSilenceAction(state, mode, is_silent, blind_elapsed_us);
+    return sf::decideToFSilenceAction(state, mode, is_silent, blind_elapsed_us, silent_elapsed_us);
 }
 
 static constexpr FlightMode kAllModes[] = {FlightMode::ACRO, FlightMode::STABILIZE,
@@ -265,6 +268,21 @@ TEST(landing_completes_only_after_the_blind_time_in_every_mode)
     }
 }
 
+TEST(landing_after_a_long_live_tof_gets_the_minimum_silent_time_before_the_motors_are_cut)
+{
+    // A LANDING with a live ToF that lasted longer than the limit, and then the ToF dies: the limit alone would cut the motors at once, in the air.
+    // The time limit needs BOTH the LANDING time and the continuous silent time.
+    // ToF が生きたまま上限より長く続いた LANDING の後に ToF が死ぬ: 上限だけなら、空中で即座にモータを切る。時間切れには
+    // LANDING の時間と連続した出力停止の時間の「両方」が要る。
+    for (FlightMode mode : kAllModes) {
+        ASSERT_TRUE(act(FlightState::LANDING, mode, true, kBlindUs + 5000000u, 0u) == ToFSilenceAction::None);
+        ASSERT_TRUE(act(FlightState::LANDING, mode, true, kBlindUs + 5000000u, kMinSilentUs - 1u) == ToFSilenceAction::None);
+        ASSERT_TRUE(act(FlightState::LANDING, mode, true, kBlindUs + 5000000u, kMinSilentUs) == ToFSilenceAction::CompleteLanding);
+        // the silent time alone is not enough either / 出力停止の時間だけでも足りない
+        ASSERT_TRUE(act(FlightState::LANDING, mode, true, kBlindUs - 1u, kMinSilentUs * 3u) == ToFSilenceAction::None);
+    }
+}
+
 TEST(flip_defers_to_flying)
 {
     // The alert is re-raised while silent, so the response applies once FLIP returns to FLYING.
@@ -308,35 +326,65 @@ TEST(landing_time_is_counted_from_the_entry_into_landing_and_not_extended_by_a_r
     // しばらく戻ってまた止まっても（出力停止 → 生存 → 出力停止）、時間切れは延びない。
     sf::LandingClock clock;
     uint32_t now = 1000000u;
-    clock.update(false, now);
+    clock.update(false, false, now);
     ASSERT_TRUE(clock.elapsedUs() == 0u);
     const uint32_t entry = now;
-    clock.update(true, now);                          // the first update in LANDING: the entry / LANDING での最初の更新: 入った時点
+    clock.update(true, true, now);                    // the first update in LANDING: the entry / LANDING での最初の更新: 入った時点
     for (int i = 0; i < 4; ++i) {                     // 4 s: ToF silent, then alive for 1.5 s, silent again / 4 s: 出力停止 → 生存 1.5 s → 出力停止
         now += 1000000u;
-        clock.update(true, now);
+        clock.update(true, true, now);
     }
     ASSERT_TRUE(clock.elapsedUs() == now - entry);
     const uint32_t before = clock.elapsedUs();
     now += 6100000u;                                   // 6.1 s more: the time limit (10 s) is reached whatever the ToF did / さらに 6.1 s: ToF が何でも時間切れ
-    clock.update(true, now);
+    clock.update(true, true, now);
     ASSERT_TRUE(clock.elapsedUs() == before + 6100000u);
-    ASSERT_TRUE(sf::decideToFSilenceAction(sf::FlightState::LANDING, sf::FlightMode::ALT_HOLD, true, clock.elapsedUs()) ==
-                sf::ToFSilenceAction::CompleteLanding);
+    ASSERT_TRUE(clock.silentElapsedUs() == clock.elapsedUs());   // silent since the entry / 入ってからずっと出力停止
+    ASSERT_TRUE(sf::decideToFSilenceAction(sf::FlightState::LANDING, sf::FlightMode::ALT_HOLD, true, clock.elapsedUs(),
+                                           clock.silentElapsedUs()) == sf::ToFSilenceAction::CompleteLanding);
     now += 1000u;
-    clock.update(false, now);                          // LANDING ended: cleared / LANDING が終わる: クリア
-    ASSERT_TRUE(clock.elapsedUs() == 0u);
+    clock.update(false, true, now);                    // LANDING ended: cleared / LANDING が終わる: クリア
+    ASSERT_TRUE(clock.elapsedUs() == 0u && clock.silentElapsedUs() == 0u);
     now += 1000u;
-    clock.update(true, now);                           // the next LANDING starts from zero / 次の LANDING はゼロから
-    ASSERT_TRUE(clock.elapsedUs() == 0u);
+    clock.update(true, true, now);                     // the next LANDING starts from zero / 次の LANDING はゼロから
+    ASSERT_TRUE(clock.elapsedUs() == 0u && clock.silentElapsedUs() == 0u);
     now += 500000u;
-    clock.update(true, now);
-    ASSERT_TRUE(clock.elapsedUs() == 500000u);
+    clock.update(true, true, now);
+    ASSERT_TRUE(clock.elapsedUs() == 500000u && clock.silentElapsedUs() == 500000u);
     // across a 32-bit wrap of the clock / 32 ビット時計の巻き戻りをまたぐ
     sf::LandingClock wrapped;
-    wrapped.update(true, 0xFFFFFF00u);
-    wrapped.update(true, 0x00000100u);
-    ASSERT_TRUE(wrapped.elapsedUs() == 0x200u);
+    wrapped.update(true, true, 0xFFFFFF00u);
+    wrapped.update(true, true, 0x00000100u);
+    ASSERT_TRUE(wrapped.elapsedUs() == 0x200u && wrapped.silentElapsedUs() == 0x200u);
+}
+
+TEST(landing_clock_counts_the_continuous_silence_of_this_landing)
+{
+    // A live ToF for 12 s in LANDING, then the ToF dies: the silent time starts at the silence (not at the entry) and restarts if the ToF returns and stops again.
+    // LANDING で 12 s ToF が生きていて、その後に ToF が死ぬ: 出力停止の時間は出力停止から（入った時点からでなく）数え、ToF が戻ってまた止まれば数え直す。
+    sf::LandingClock clock;
+    uint32_t now = 5000000u;
+    clock.update(true, false, now);
+    now += 12000000u;
+    clock.update(true, false, now);
+    ASSERT_TRUE(clock.elapsedUs() == 12000000u && clock.silentElapsedUs() == 0u);
+    clock.update(true, true, now);                     // the ToF dies / ToF が死ぬ
+    ASSERT_TRUE(clock.silentElapsedUs() == 0u);
+    now += 2000000u;
+    clock.update(true, true, now);
+    ASSERT_TRUE(clock.elapsedUs() == 14000000u && clock.silentElapsedUs() == 2000000u);
+    ASSERT_TRUE(sf::decideToFSilenceAction(sf::FlightState::LANDING, sf::FlightMode::ALT_HOLD, true, clock.elapsedUs(),
+                                           clock.silentElapsedUs()) == sf::ToFSilenceAction::None);   // 2 s of the minimum silent time / 最低の出力停止時間のうち 2 s
+    now += 500000u;
+    clock.update(true, false, now);                    // the ToF returns: the silent time is cleared / ToF が戻る: 出力停止の時間はクリア
+    ASSERT_TRUE(clock.silentElapsedUs() == 0u);
+    now += 500000u;
+    clock.update(true, true, now);                     // and dies again: restarts / また死ぬ: 数え直す
+    now += kMinSilentUs;
+    clock.update(true, true, now);
+    ASSERT_TRUE(clock.silentElapsedUs() == kMinSilentUs);
+    ASSERT_TRUE(sf::decideToFSilenceAction(sf::FlightState::LANDING, sf::FlightMode::ALT_HOLD, true, clock.elapsedUs(),
+                                           clock.silentElapsedUs()) == sf::ToFSilenceAction::CompleteLanding);
 }
 
 TEST(blind_landing_limits_are_consistent)
@@ -351,6 +399,7 @@ TEST(blind_landing_limits_are_consistent)
     constexpr float kGravityMps2 = 9.80665f;
     ASSERT_TRUE(sf::limits::kBlindLandingLateRampPerS > 0.0f);
     ASSERT_TRUE(sf::limits::kBlindLandingLateStartS < static_cast<float>(kBlindUs) * 1e-6f);
+    ASSERT_TRUE(kMinSilentUs > 0u && kMinSilentUs < kBlindUs);   // the guaranteed silent time is shorter than the LANDING limit / 保証する出力停止の時間は LANDING の上限より短い
     ASSERT_TRUE(kBlindUs > 0u && kBlindUs < 0x80000000u);
     ASSERT_TRUE(sf::limits::kBlindTouchdownAccelMps2 > 1.56f * kGravityMps2);
     ASSERT_TRUE(sf::limits::kBlindTouchdownAccelMps2 < 3.0f * kGravityMps2);
@@ -376,10 +425,12 @@ int main()
     run_altitude_modes_start_landing_in_takeoff_and_flying();
     run_manual_modes_only_warn_never_land();
     run_landing_completes_only_after_the_blind_time_in_every_mode();
+    run_landing_after_a_long_live_tof_gets_the_minimum_silent_time_before_the_motors_are_cut();
     run_flip_defers_to_flying();
     run_ground_states_do_nothing_here();
     run_altitude_modes_are_refused_while_silent();
     run_landing_time_is_counted_from_the_entry_into_landing_and_not_extended_by_a_returning_tof();
+    run_landing_clock_counts_the_continuous_silence_of_this_landing();
     run_blind_landing_limits_are_consistent();
 
     printf("\n=== Results: %d run, %d passed, %d failed ===\n",

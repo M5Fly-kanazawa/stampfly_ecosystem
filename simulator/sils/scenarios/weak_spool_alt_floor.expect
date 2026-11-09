@@ -1,0 +1,15 @@
+# weak_spool_alt_floor.expect — the healthy ToF shows the craft on the floor, not rising: the auto-takeoff is aborted after 5 s, the motors stop (8th pass, D4)
+# 健全な ToF が、機体は床の上で読みが増えないと示す: 自動離陸は 5 s で中止し、モータは止まる（8 回目、D4）
+#
+# On the floor all the time: no ToF-silence episode, no LANDING, no takeoff completion; about 5 s after TAKEOFF began the state task disarms.
+# ずっと床の上: ToF 出力停止のエピソードも、LANDING も、離陸の完了も無い。TAKEOFF の開始から約 5 s 後に状態タスクが DISARM する。
+exit 0
+log_contains any "Auto-takeoff engaged"
+log_absent any "Downward ToF silence"
+log_absent any "Transition: TAKEOFF → LANDING"
+log_absent any "Transition: TAKEOFF → FLYING"
+log_contains any "Auto-takeoff aborted: the healthy ToF has shown the craft on the floor for 5000 ms"
+log_contains any "Transition: TAKEOFF → IDLE_GROUND"
+order "Auto-takeoff engaged" "Auto-takeoff aborted"
+metric alt_max < 0.05 in 5.0 16.0
+metric duty_max < 0.01 in 11.5 15.5

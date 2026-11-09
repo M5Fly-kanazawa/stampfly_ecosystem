@@ -293,15 +293,15 @@ public:
     void notifyPairingComplete();
 
     /// Periodic update for TIME-DEFERRED transitions (call once per StateTask cycle).
-    /// Today this drives the comm-loss failsafe: a COMM_LOST while FLYING does not land
+    /// Today this drives the comm-loss failsafe: a COMM_LOST while TAKEOFF / FLYING does not land
     /// immediately — it arms a timer (handleAlert) and this method commands the
-    /// FLYING → LANDING transition only after the hover grace period elapses
+    /// TAKEOFF / FLYING → LANDING transition only after the hover grace period elapses
     /// (requirements §9: "hover hold 3 s → auto landing"). Kept separate from
     /// handleAlert because the failsafe raises COMM_LOST only once (rising edge), so the
     /// elapsed-time check needs an independent periodic tick, not another alert.
     /// 時間遅延つき遷移の周期更新（StateTask の各サイクルで1回呼ぶ）。現状は通信断
-    /// フェイルセーフを駆動する: FLYING 中の COMM_LOST は即着陸せず、タイマを起動
-    /// （handleAlert）し、ホバー猶予が経過してから本メソッドが FLYING → LANDING を
+    /// フェイルセーフを駆動する: TAKEOFF・FLYING 中の COMM_LOST は即着陸せず、タイマを起動
+    /// （handleAlert）し、ホバー猶予が経過してから本メソッドが TAKEOFF・FLYING → LANDING を
     /// 指令する（要件§9「ホバー維持3秒→自動着陸」）。failsafe は COMM_LOST を立ち上がり
     /// エッジで1回だけ発報するので、経過判定にはアラートでなく独立した周期ティックが要る。
     ///
@@ -353,10 +353,27 @@ public:
     /// せずに捨てる。ToF が復帰してもモードが勝手に切り替わらず、パイロットがスイッチを入れ直す。
     bool isModeRequestConsumed() const { return last_mode_request_consumed_; }
 
+    /// True while a downward-ToF silence EPISODE is in progress: no new sample for
+    /// sf::limits::kTofSilenceUs (or never one), only invalid samples while flying, or the estimator
+    /// has not re-acquired the ToF yet. The judgement is Failsafe's (R16); this reads the published
+    /// level (failsafe_status.tof_silent) through this task's FailsafeStatusGuard, FRESH at every
+    /// call, so a status nobody refreshes reads as silent (D5).
+    /// 下向き ToF の出力停止の「エピソード」が進行中なら true: sf::limits::kTofSilenceUs の間新サンプル
+    /// 無し（または一度も無い）、飛行中に無効サンプルだけ、または推定器がまだ ToF を取り込み直して
+    /// いない。判定は Failsafe のもの（R16）で、ここでは発行済みのレベル（failsafe_status.tof_silent）を
+    /// このタスクの FailsafeStatusGuard を通して、呼ぶたびに「最新」を読む。誰も更新しない状態は
+    /// 出力停止と読む（D5）。
+    bool isToFSilent() const;
+
 private:
     /// Execute state transition with callbacks
     /// コールバック付きで状態遷移を実行する
     void transition(FlightState new_state);
+    void enterState(FlightState old_state, FlightState new_state);   // switch the state and apply what the entry implies / 状態を切り替え、入ることが意味する処理を行う
+
+    /// Back on the ground: reset the flight mode to STABILIZE and fire the mode callbacks (called by transition() on entering IDLE_GROUND)
+    /// 接地に戻った: 飛行モードを STABILIZE にリセットし、モードのコールバックを呼ぶ（transition() が IDLE_GROUND に入るときに呼ぶ）
+    void resetModeOnGround();
 
     /// Publish current state to system.mode topic
     /// 現在の状態をsystem.modeトピックに発行する
@@ -379,17 +396,6 @@ private:
     /// Log the refusal reason / 拒否理由をログ出力
     void logArmRejected(ArmBlock reason) const;
 
-    /// True while a downward-ToF silence EPISODE is in progress: no new sample for
-    /// sf::limits::kTofSilenceUs (or never one), only invalid samples while flying, or the estimator
-    /// has not re-acquired the ToF yet. The judgement is Failsafe's (R16); this reads the published
-    /// level (failsafe_status.tof_silent) through this task's FailsafeStatusGuard, FRESH at every
-    /// call, so a status nobody refreshes reads as silent (D5).
-    /// 下向き ToF の出力停止の「エピソード」が進行中なら true: sf::limits::kTofSilenceUs の間新サンプル
-    /// 無し（または一度も無い）、飛行中に無効サンプルだけ、または推定器がまだ ToF を取り込み直して
-    /// いない。判定は Failsafe のもの（R16）で、ここでは発行済みのレベル（failsafe_status.tof_silent）を
-    /// このタスクの FailsafeStatusGuard を通して、呼ぶたびに「最新」を読む。誰も更新しない状態は
-    /// 出力停止と読む（D5）。
-    bool isToFSilent() const;
 
     /// Execute the state machine's response to an AlertType::TOF_SILENT alert (see
     /// tof_silence_policy.hpp): disarm on the ground / land from an altitude mode / warn only in
@@ -420,8 +426,8 @@ private:
     /// 衝撃による接地は ImuTask が検出する）。毎回の update() から呼ぶ。
     void handleBlindLandingTimeout(uint32_t now_us);
 
-    /// Land (FLYING → LANDING) once the hover grace after a COMM_LOST alert has elapsed.
-    /// COMM_LOST アラートからのホバー猶予が経過したら着陸（FLYING → LANDING）させる。
+    /// Land (TAKEOFF / FLYING → LANDING) once the hover grace after a COMM_LOST alert has elapsed (decideCommLossLanding()).
+    /// COMM_LOST アラートからのホバー猶予が経過したら着陸（TAKEOFF・FLYING → LANDING）させる（decideCommLossLanding()）。
     void handleCommLossGrace(uint32_t now_us);
 
     /// Refuse a switch into ALT_HOLD / POS_HOLD while the downward ToF is silent; true = refused.

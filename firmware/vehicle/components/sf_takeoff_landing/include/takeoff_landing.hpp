@@ -37,7 +37,7 @@ namespace sf {
 /// Takeoff/landing configuration
 /// 離着陸設定
 struct TakeoffLandingConfig {
-    float ground_tof_m       = 0.05f;   // Ground threshold [m]    / 地上閾値
+    float ground_tof_m       = limits::kTakeoffGroundBandM;   // Ground threshold [m]    / 地上閾値
     float airborne_tof_m     = 0.15f;   // Airborne threshold [m]  / 空中閾値
     float landing_vel_mps    = 0.05f;   // Landing velocity [m/s]  / 着陸速度
     uint32_t landing_hold_ms = 700;     // Firm-ground confirm [ms] (was 1000: faster disarm once settled) / 接地確認時間

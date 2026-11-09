@@ -82,11 +82,11 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | `tof_silent_api_takeoff` | **事故の連鎖そのもの**（Tello 風 API `takeoff`、POS_HOLD）: 自動離陸の上昇中に ToF が出力停止 → TAKEOFF → LANDING で上昇中止（`alt_max` 0.175 m、接地速度 0.81 m/s。4 回目まで 0.43 m/s）→ API は 12 s のタイムアウトを待たず `error takeoff aborted` を返す → ToF が出力停止したままの 2 回目の `takeoff` は最初に `error tof silent - check the sensor`。`--duration 16000000` | vehicle |
 | `tof_silent_hover` | **0.5 m でホバー中（ALT_HOLD・FLYING）に下向き ToF が出力停止**（`--duration 25000000`）: 0.3 s 後に FLYING → LANDING → 降下 → 床に達して IDLE_GROUND。実測: ToF 停止 14.0 s、接地速度 0.60 m/s（4 回目まで 0.43 m/s、通常着陸は 0.3 m/s）。ARM は理由つきで拒否される | vehicle |
 | `tof_silent_hover_1p2` | **高度上限の近く（約 1.1 m）でホバー中に下向き ToF が出力停止**（`--duration 31100000`）: 同じ連鎖。スティック上昇が上限 1.2 m へ向けて絞られるので、上昇に 5 s かかり約 1.1 m で終わる。実測: 停止 20.5 s（高度 1.1 m）、接地速度 0.84 m/s（4 回目まで 0.43 m/s） | vehicle |
-| `tof_silent_alt_climb` | **ALT_HOLD のスティックで上昇中（約 0.8 m、約 0.3 m/s）に出力停止**（`--duration 26500000`）: 速度ループが上昇を止め（最大 0.92 m、沈黙時から 0.12 m）、接地速度 0.77 m/s（4 回目まで 0.40 m/s） | vehicle |
+| `tof_silent_alt_climb` | **ALT_HOLD のスティックで上昇中（約 0.8 m、約 0.3 m/s）に出力停止**（`--duration 26500000`）: 速度ループが上昇を止め（最大 0.92 m、出力停止時から 0.12 m）、接地速度 0.77 m/s（4 回目まで 0.40 m/s） | vehicle |
 | `tof_silent_est_high` | **ホバー推力の見積もりが真のホバーより 19 % 高いまま（`param` 事象で起動時に設定、学習なし）、約 1.2 m で出力停止**（`--duration 28000000`）: 支持推力は加速度計で較正した値（見積もりではない）、`touchdown by time` にならず接地。実測: 最大 1.24 m、接地速度 0.96 m/s（4 回目まで 0.43 m/s） | vehicle |
 | `tof_silent_takeoff_est_high` | **ホバー推力の見積もりが 28 % 高い（`param` 事象 `hover.thrust_corr 1.2`）まま、自動離陸の上昇初期に出力停止**（`--duration 21000000`）: 独立レビューが「致命的」とした場合（旧ビルドで真値の最高 11 m、天井）。上昇は速く（LANDING で 1.3 m/s）、降下は上限（支持推力の 0.95 倍。窓が無いので、空中の全サンプルでの商 × 0.85）の下。実測: 真値の最高 0.80 m、接地速度 1.04 m/s、モータは床の上で止まる。`.expect` は最高 < 1.0 m・接地速度 < 1.3 m/s | vehicle |
 | `tof_silent_api_takeoff_est_high` | 同、Tello 風 API `takeoff`（`--duration 16000000`、`hover.thrust_corr 1.2`）: `error takeoff aborted`、2 回目の `takeoff` は最初に拒否。実測: 真値の最高 0.72 m、接地速度 0.99 m/s（旧ビルドで 11 m）。最高 < 1.0 m・接地速度 < 1.25 m/s | vehicle |
-| `tof_silent_takeoff_noise` | `tof_silent_takeoff_est_high` を `hover.thrust_corr 1.1` とセンサノイズ n2（seed 1、`--noise n2 --seed 1`）で（`--duration 21000000`）: ノイズで上昇が目標に達してから沈黙が判定され、FLYING/POS_HOLD から 1.7 m/s で上昇中に LANDING。実測: 真値の最高 1.20 m、接地速度 1.99 m/s（4 回目まで 0.65 m/s。n2 のプラントは真のホバー推力が低く、窓が無いときの低くした見積もりがその分だけ強く沈める）。最高 < 1.5 m・接地速度 < 2.4 m/s | vehicle |
+| `tof_silent_takeoff_noise` | `tof_silent_takeoff_est_high` を `hover.thrust_corr 1.1` とセンサノイズ n2（seed 1、`--noise n2 --seed 1`）で（`--duration 21000000`）: ノイズで上昇が目標に達してから出力停止が判定され、FLYING/POS_HOLD から 1.7 m/s で上昇中に LANDING。実測: 真値の最高 1.20 m、接地速度 1.99 m/s（4 回目まで 0.65 m/s。n2 のプラントは真のホバー推力が低く、窓が無いときの低くした見積もりがその分だけ強く沈める）。最高 < 1.5 m・接地速度 < 2.4 m/s | vehicle |
 | `tof_silent_touchdown_detect` | `tof_silent_hover` を 3 G の衝撃カットを無効にして（`--param safety.impact.accel_g=10`、`--duration 25000000`）: 接地検出器（衝撃のあとの静止）だけが着陸を終わらせる。`Touchdown detected (impact, then still` → LANDING → IDLE_GROUND、`Impact detected` と `touchdown by time` が無い。実測: 接地速度 0.60 m/s、床の上で静止（真値 0.021 m） | vehicle |
 | `tof_silent_bias_plus` / `tof_silent_bias_minus` | **加速度計のオフセット誤差 ±0.2 m/s² のまま約 1.1 m のホバーで ToF が出力停止**（`tof_silent_hover_1p2` に `bias 0 0 ±0.2 0 0 0` を ToF 停止の直前に足す、`--duration 31100000`。独立レビューの再上昇の再現）: 速度推定が何であれ推力は 支持推力 × 0.95 を超えないので**再上昇しない**（旧ビルド: +0.2 で 2.7 m まで上昇し 5 m/s で接地）。ToF 出力停止中の LANDING での 3 G の衝撃は非常でなく接地（`Touchdown while the ToF is silent (impact)`）。実測: 最高 1.099 m（停止時の高度）、接地速度 0.80 / 0.95 m/s | vehicle |
 | `tof_silent_takeoff_bias_est_high` | **見積もり 28 % 高い + 加速度計のオフセット誤差 +0.2 m/s²（離陸の開始から）+ 自動離陸の上昇初期に出力停止**（`--duration 21000000`）: 未知が 2 つ同時（支持推力は較正できず、速度推定も誤る）。旧ビルドは 3.26 m まで上昇した。実測: 最高 0.80 m、接地速度 0.97 m/s、`emergency DISARM` なし | vehicle |
@@ -108,6 +108,16 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | `alt_ceiling_stick`・`alt_ceiling_stick_noise` | **ALT_HOLD でスロットルスティックを上げ続けても高度上限 1.2 m で止まる**（C3、`--duration 29000000`、後者は `--noise n2 --seed 1`）: 上昇は上限へ向けて絞られ（0.45 1/s × 距離）、真値 1.17〜1.18 m（n2 の 3 seed で 1.185〜1.187 m）で止まり、スティックを下げれば降下できる。上限が無いと同じスティックで 1.97 m まで上昇した | vehicle |
 | `landing_dead_zone` | **近距離の不感帯を模擬した、柔らかい接地（3 G 未満）の ToF 着陸**（`alt_disarm_land` に不感帯を入れたもの。以前は既知失敗、2026-11-09 に PASS）。降下の最後の数 cm でセンサが無効になる（読みは真値に遅れ、真の高さ 0.038 m で 0.085 m）ので、LANDING の降下中に 0.10 m 以下の有効な読み（0.085 m）の後で無効サンプルだけが 0.2 s 続いたら接地とみなす（`TakeoffLandingMgr::deadZoneTouchdown()`、`detailed_design.md` §3 注7）。ログの `Landing detected (ToF dead zone ...)` を確認する。実測: 検出は最後の有効な読みの 0.2 s 後、真の高さ 0.021 m・鉛直速度 0.001 m/s で床の上。`alt_disarm_land` は `tof_deadzone 0` で DISARM の振り分けだけを検証する | vehicle |
 | `tof_invalid_stabilize` | **STABILIZE 飛行中に無効サンプルだけが続く: 強制着陸しない**（D4、`--duration 17000000`）: 警告のみ（`NO forced landing, fly on`）、飛行中の POS_HOLD スイッチは拒否・消費 | vehicle |
+| `weak_spool_stabilize` | **STABILIZE で、モータが弱く床がまだ支える TAKEOFF は、ToF が床の上で無効を返すと、床の上で FLYING になる（許容。8 回目の判断 D2）**（モータ健全度 0.9、`--duration 13000000`）: スロットルが離陸の閾値より上でホバーより下（生値 3100）の 3.5 s、機体は床の上にいて、ToF は最小レンジ未満（無効サンプルだけ）。TAKEOFF の 2 s + 0.15 s の後に ToF 出力停止のエピソード（`Ground contact unknown`）、`Takeoff complete → FLYING/STABILIZE`、`NO forced landing, fly on`（強制着陸しない）。その後パイロットのスロットルで浮く。5.0〜7.0 s の最大高度 < 0.05 m、浮いた後の最大高度 > 0.10 m を確認する（6・7 回目の「床の上では FLYING にしない」は加速度計に基づく仕組みで、8 回目で取り下げた。7 回目のビルドでは不合格、HEAD では合格） | vehicle |
+| `weak_spool_alt` | **ALT_HOLD の自動離陸で、浮けない機体（健全度 0.85）は、ToF が床の上で無効を返すと、ToF 出力停止として床の上で LANDING に入り、床が機体を支えると検出されてモータが止まる（許容。8 回目の判断 D1）**（`--duration 16000000`）: 2 s + 0.15 s の後に `Downward ToF silence episode`・`TAKEOFF → LANDING`、ToF なしの降下の推力は支持推力の 0.95 倍以下なので浮かない。`Touchdown detected (the floor holds the craft up ...)`・`LANDING → IDLE_GROUND`、床の上の最大高度 < 0.05 m、離陸の完了も中止も無いことを確認する（7 回目のビルドでは不合格、HEAD では合格） | vehicle |
+| `weak_spool_alt_offset` | **`weak_spool_alt` に加速度計のオフセット（上向きの読み +0.3 m/s²）を足した変種**（`--duration 16000000`）: 8 回目の判断は加速度計に基づく上昇量に依らないので、期待値は `weak_spool_alt` と同じ | vehicle |
+| `weak_spool_stabilize_offset` | **`weak_spool_stabilize` に同じオフセットを足した変種**（`--duration 13000000`）: 期待値は `weak_spool_stabilize` と同じ | vehicle |
+| `weak_spool_api` | **浮けない機体（健全度 0.85）の API `takeoff`: ToF 無効の規則が離陸を LANDING で終わらせ、`takeoff` は `error takeoff aborted` を返す**（`--duration 18000000`）: 約 8.6 s に `TAKEOFF → LANDING`、`Touchdown detected (the floor holds the craft up ...)` でモータが止まり、床の上の最大高度 < 0.05 m、15.5 s 以降の duty_max < 0.01 を確認する（`error takeoff timeout` は出ない。7 回目のビルドでは不合格、HEAD では合格） | vehicle |
+| `weak_spool_alt_floor` | **健全な ToF が床を有効に読み（`tof_deadzone 0`）、読みが増えない機体（健全度 0.85）の自動離陸は、5 s で中止して DISARM**（8 回目の判断 D4、`--duration 16000000`）: 制御器の備え（3 s）が離陸完了を報告しても TAKEOFF に保ち（床の上で FLYING にならない）、約 10.8 s に `Auto-takeoff aborted: the healthy ToF has shown the craft on the floor for 5000 ms`、`TAKEOFF → IDLE_GROUND`、モータ停止（11.5 s 以降の duty_max < 0.01）、床の上の最大高度 < 0.05 m を確認する（HEAD では床の上で FLYING になり不合格、7 回目のビルドでは中止の文言が違い不合格） | vehicle |
+| `weak_spool_alt_slow_lift` | **ゆっくり浮く機体（健全度 0.88、`tof_deadzone 0`）は中止されず、離陸を完了して飛ぶ**（8 回目の判断 D4、`--duration 25000000`）: ToF の読みが 0.02 → 0.17 m と増えるので床の証拠は無く、約 10 s に `Auto-takeoff complete`、`TAKEOFF → FLYING`、中止なし。浮いた後の最大高度 > 0.15 m、降下速度の最大 < 0.6 m/s を確認する（7 回目のビルドは 0.11〜0.17 m で DISARM して落下し不合格） | vehicle |
+| `commloss_takeoff` | **完了しない TAKEOFF の間にリンクが途絶えると、ホバーの猶予（3 s）の後に LANDING になる**（8 回目の判断 D3、STABILIZE、健全度 0.9、`tof_deadzone 0`、`--duration 22000000`）: ToF が床を有効に読むので ToF による空中の判定は偽のまま、手動の TAKEOFF は完了しない。5.5 s からの 8 s の無音で `Comm lost → hover 3000 ms then LANDING`、`Comm lost → LANDING (hover grace elapsed)`、`TAKEOFF → LANDING`（HEAD と 7 回目のビルドでは TAKEOFF のまま着陸せず不合格） | vehicle |
+| `ceiling_brake_stale_velocity` | **長い ToF 出力停止（オフセット −0.4 m/s²）の直後に ALT_HOLD へ入っても、天井ブレーキが古い加速度積分を信用しない**（7 回目の C1、`--duration 36000000`）: 積分は 3.7 m/s（上昇していない機体で）。6 回目は推力が重さの半分になり、機体は床へ 2.57 m/s で降りた（`alt_min` 0.01 m）。7 回目は `alt_min` 1.06 m、降下速度の最大 0.19 m/s | vehicle |
+| `ceiling_brake_stale_velocity_alt` | **同上、1.24 m（天井）で ALT_HOLD へ入る**（7 回目の C1、`--duration 30000000`）: 6 回目は 0.59 m まで落下（`alt_min` 0.59 m）。7 回目は 1.18〜1.26 m を保つ | vehicle |
 | `tof_silent_flip_end` | **宙返りの最中に ToF が出力停止: 宙返りが終わった瞬間に判断**（D6、`--duration 33000000 --param flip.enable=1`）: FLIP → FLYING の「その場で」LANDING（`ToF silence episode during the maneuver: decided now that FLIP is over`）、宙返りは中断されない（真値 -358 deg） | vehicle |
 | `api_takeoff_emergency` | **`takeoff` の待機中に届いた `emergency` が即座に効く**: 6.0 s に takeoff、7.0 s（上昇中）に `emergency` → 7.04 s にモータ停止、`takeoff` は `error interrupted by emergency`。修正前は 7.76 s（待機の残り 0.76 s 後）。さらに待機中に届いた 2 回目の `takeoff`・`height?`・`rc` を **`emergency` が捨てる**（`error cancelled by emergency`、`rc` はその場で捨てる）ので再離陸しない（モータ停止が 7.5〜13 s 続く）。`--duration 14000000` | vehicle |
 | `api_land_emergency` | **`land` の待機中の `emergency`**: 降下開始 0.6 s 後（16.6 s）に注入 → 16.64 s にモータ停止。修正前は接地まで待たされ 18.12 s。待機中に届いた `takeoff`・`left 100` は捨てられ再離陸しない。`--duration 22000000` | vehicle |
@@ -199,11 +209,194 @@ Per layer, isolate each axis first (`<layer>_<axis>.scn`), then a combined capst
 
 **Added 2026-11-01 — `calib_side_lying` (vehicle, `--duration 39000000`):** regression for the level check of the still-calibration (detailed_design §3 note 10). A craft left lying on its side after a crash for longer than one 3.5 s calibration window keeps being rejected (`Calibration window rejected: not level`), so no calibration completes on its side and no accel_bias of about +-9.8 m/s^2 is seeded; once the hand places it level, calibration completes and ARM is accepted. It fails on a build without the level check (every ARM rejected by the tilt guard).
 
+**Updated 2026-11-10 (eighth pass) — the independent reviews of the 7th pass found one root cause: "the craft has left the floor" was built from the accelerometer alone and gated safety decisions. A missing proof is no longer taken as proof that the craft is on the floor.** Withdrawn: the accelerometer lift evidence (`kVerticalVelocityLiftEvidenceMps2`, `left_floor`, `leftFloor()`, `kManualTakeoffMinRiseM`, `craftIsOffTheFloor()`, the workshop `ControllerStatus`); the ToF-unusable auto-takeoff (D1), the manual TAKEOFF -> FLYING (D2) and `tof_recover_*` / `tof_invalid_alt_hover` are back at their HEAD behaviour and inputs. New: TAKEOFF -> LANDING after the comm-loss grace (D3, `commloss_takeoff`), the auto-takeoff abort only on the POSITIVE floor evidence of a healthy ToF (D4, `weak_spool_alt_floor`, `weak_spool_alt_slow_lift`), the pure functions of `takeoff_policy.hpp` checked cell by cell by `test_takeoff_policy` (D6), `landingBaseThrust()` against the climb after a `land` (E1: 0.00-0.09 m, 7th build 0.65 m), `kBlindLandingMinSilentUs` 5.5 s (E3), the proportional ceiling brake (E4: at most 3 switches per run instead of 136). Not adopted: the sweep of `kTakeoffVelocityDisagreeMps` (E2). SILS, 94 scenarios with `.expect`: PASS 90 / FAIL 0 / KNOWN-FAIL 3 / SKIP 1 (the 7th build: PASS 79 / FAIL 11 on the same set). Host tests: 215. Tables in the Japanese "8th pass" section at the end of the matrix. Not verified on a real vehicle.
+
+**Updated 2026-11-09 (sixth pass) — the remains of the independent review: the auto-takeoff no longer overshoots with a wrong hover-thrust estimate (R1), the support thrust before the calibration is the early estimate as it is (R2), a TAKEOFF that the floor still holds is not a flight (R3), the LANDING time limit needs 4 s of silence, the 5th-pass tables re-measured on the final build (R4); new scenarios `weak_spool_stabilize`, `weak_spool_alt`.**
+
+Changes: (R1) the velocity loop of the auto-takeoff adds the part of the climb that the accelerometer integral shows and the ESKF does not (beyond 0.6 m/s: `takeoffClimbRate()`); the altitude-ceiling brake starts when the PREDICTED stop height (altitude + v x 80 ms + v^2 / (2 a), a = 0.7 x g x 0.5, v = max of the ESKF and the accelerometer-based climb rate) exceeds ceiling + 0.05 m, and its thrust is 0.5 x the SUPPORT thrust (not 0.5 x the hover estimate). (R2) before the support thrust is calibrated, the early estimate (quotient over all airborne samples x 0.92) is used as it is; the 0.75 x hover-estimate cut is only the start value. (R3) the time limit of the invalid-sample count in TAKEOFF needs `leftFloor()`; the manual TAKEOFF -> FLYING needs a 5 cm rise while a ToF-silence episode is in progress; the auto-takeoff time backstop needs the craft off the floor. (R4) the time limit of a LANDING with a silent ToF needs the LANDING time (10 s) AND 4 s of continuous silence; the other items are listed in `detailed_design.md` §3.1 note 12 (6th revision).
+
+### 自動離陸・API 離陸の真値の最高高度（R1、目標 0.5 m、`--param hover.thrust.learn=0`）
+
+`hover.thrust_corr` 0.9 / 1.0 / 1.2 × ノイズ n0 / n2（seed 12345・1・2）。最高高度は最初の LANDING までの真値。旧 = この見直しの前のビルド（HEAD）、新 = 最終ビルド。原因（旧ビルドの `hover.thrust_corr` 1.2・n2、`rv8_h12a`）: ESKF の鉛直速度は ToF の引き継ぎ高さ 0.15 m まで 0 に固定され、指令推力が重さの 1.27 倍のまま 1.2 m/s で上昇し、引き継ぎの後も推力は速度ループの下限（見積もりの 0.78 倍）で、上限の制動は 1.35 m を超えてから、しかも見積もりの 0.5 倍の推力で、1.96 m まで上がって ToF の有効範囲を出て LANDING に入り、2.51 m/s で接地した。
+
+| 場面 | hover.thrust_corr | ノイズ | 旧の最高 [m] | 新の最高 [m] | ≤ 1.35 m |
+|---|---|---|---|---|---|
+| ALT_HOLD 自動離陸 | 0.9 | n0 | 0.59 | 0.59 | ○ |
+| ALT_HOLD 自動離陸 | 0.9 | n2（3 seed の最大） | 0.84 | 0.83 | ○ |
+| ALT_HOLD 自動離陸 | 1.0 | n0 | 0.84 | 0.84 | ○ |
+| ALT_HOLD 自動離陸 | 1.0 | n2（3 seed の最大） | 1.19 | 1.17 | ○ |
+| ALT_HOLD 自動離陸 | 1.2 | n0 | 1.43 | 1.25 | ○ |
+| ALT_HOLD 自動離陸 | 1.2 | n2（3 seed の最大） | 1.96 | 1.25 | ○ |
+| API 離陸 | 0.9 | n0 | 0.60 | 0.60 | ○ |
+| API 離陸 | 0.9 | n2（3 seed の最大） | 0.83 | 0.82 | ○ |
+| API 離陸 | 1.0 | n0 | 0.84 | 0.84 | ○ |
+| API 離陸 | 1.0 | n2（3 seed の最大） | 1.17 | 1.14 | ○ |
+| API 離陸 | 1.2 | n0 | 1.45 | 1.26 | ○ |
+| API 離陸 | 1.2 | n2（3 seed の最大） | 2.03 | 1.27 | ○ |
+| POS_HOLD 自動離陸 | 0.9 | n0 | 0.59 | 0.59 | ○ |
+| POS_HOLD 自動離陸 | 0.9 | n2（3 seed の最大） | 0.84 | 0.83 | ○ |
+| POS_HOLD 自動離陸 | 1.0 | n0 | 0.84 | 0.84 | ○ |
+| POS_HOLD 自動離陸 | 1.0 | n2（3 seed の最大） | 1.19 | 1.17 | ○ |
+| POS_HOLD 自動離陸 | 1.2 | n0 | 1.43 | 1.25 | ○ |
+| POS_HOLD 自動離陸 | 1.2 | n2（3 seed の最大） | 1.96 | 1.26 | ○ |
+
+最悪: 旧 2.03 m → 新 1.27 m（合格: 全条件で 1.35 m 以下）。n0・corr 1.2 で 1.45 → 1.26 m。corr 0.9・1.0 の高さは主にホバー推力の見積もりの誤差（学習を切っているので補正が ±0.15 N に制限される）によるもので、この見直しでは変えていない（普通の離陸の挙動を変えないために、速度の食い違いの余裕 0.6 m/s を置いた: 余裕なしの版は `alt_recenter_gate` の `alt_band` 0.193 → 0.211 と `landing_dead_zone`（接触が 3 G 未満でなくなる）を変えた）。
+
+### 較正前の支持推力（R2）
+
+実機ログ 3 本の再生（`front_tof_poshold_yaw360`・`front_tof_poshold_yaw4x90`・`flip_test2`。較正前に FLYING で出力停止が来たと仮定した全時刻）。「上限 ÷ 機体を支えた推力」= 較正前の上限（支持推力の 0.95 倍）÷ その時刻の前後 1 s の FLYING の平均指令推力:
+
+| ログ | 時刻の数 | 旧（見積もり × 0.75 で切る） | 新（早い推定 × 0.92、そのまま） |
+|---|---|---|---|
+| front_tof_poshold_yaw360 | 7（離陸の開始から 2.0〜5.2 s） | 0.69〜0.71 | 0.87〜0.90 |
+| front_tof_poshold_yaw4x90 | 1（3.45 s 浮上しても較正されない） | 0.63 | 0.86 |
+| flip_test2 | 5 | 0.79〜0.91 | 0.85〜0.98 |
+
+目標の 0.85 倍以上で、重さを超えない（最大 0.98）。0.94 では flip_test2 で 1.00 に届く（不採用）。補正の値の比較（ログ 3 本の較正前の最小〜最大）: 0.85: 0.79〜0.91、0.90: 0.83〜0.96、0.92: 0.85〜0.98、0.94: 0.87〜1.00。
+
+SILS（出力停止を ARM の 0.9〜4.5 s 後に置く: 離陸直後の出力停止と短いホバー。`hover.thrust_corr` 0.9 / 1.0 / 1.2、ノイズ n0 / n2（seed 3 通り）、出力停止時の加速度計のオフセット −0.2 / 0 / +0.2 m/s²、`tof_silent_hover` 基準。1 条件 96 本）。上限 ÷ 真の重さ（同条件の較正済みの値）: 較正前は 0.86〜0.97（重さを超えない）、較正後 約 0.95。旧と新の比較（両方で場面が成立した 78 本）:
+
+| ARM から出力停止までの時間 [s] | 実行数 | 出力停止時からの上昇増分 最大 [m] 旧→新 | 接地速度 最大 [m/s]（ノイズなし・n0）旧→新 | 接地速度 最大 [m/s]（n2）旧→新 |
+|---|---|---|---|---|
+| 0.9 | 12 | 0.20 → 0.18 | 1.83 → 1.39 | 2.63 → 1.91 |
+| 1.2 | 12 | 0.15 → 0.20 | 1.93 → 1.38 | 2.67 → 2.01 |
+| 1.6 | 9 | 0.08 → 0.08 | 1.91 → 1.38 | 2.10 → 1.76 |
+| 2.0 | 9 | 0.05 → 0.05 | 1.88 → 1.42 | 2.04 → 1.76 |
+| 2.5 | 9 | 0.05 → 0.04 | 1.81 → 1.43 | 1.96 → 1.65 |
+| 3.0 | 9 | 0.00 → 0.00 | 1.76 → 1.41 | 1.86 → 1.56 |
+| 3.5 | 9 | 0.00 → 0.00 | 0.92 → 0.92 | 1.83 → 1.53 |
+| 4.5 | 9 | 0.00 → 0.00 | 0.75 → 0.85 | 1.59 → 1.36 |
+
+再上昇は最大 0.007 m（旧: 0.000 m）。接地速度は、較正前（出力停止が ARM の 3.0 s 以内）で、ノイズなしの最大 1.93 → 1.43 m/s、n2 の最大 2.67 → 2.01 m/s に下がる。
+
+### ToF なしの降下の評価表（6 回目、最終ビルド）
+
+5 回目の見直しと同じ条件（6 場面 × 加速度計バイアス 5 通り（ToF 停止と同時 / 離陸開始から）× `hover.thrust_corr` 0.9 / 1.0 / 1.2 × ノイズ off / n0 / n2（3 seed）、1 場面 162 本、計 972 本）で最終ビルドを測り直した。旧 = この見直しの前のビルド（HEAD）。
+
+| 場面 | corr | 成立/全 旧→新 | 出力停止時からの上昇増分 [m] 旧→新 | LANDING 以後の余分な上昇 [m] 旧→新 | 再上昇 [m] 旧→新 | 接地速度 [m/s]（ノイズなし・n0 最大）旧→新 | 接地速度 [m/s]（n2 最大）旧→新 | 空中停止 旧→新 | 床から再離陸 旧→新 |
+|---|---|---|---|---|---|---|---|---|---|
+| 自動離陸の上昇初期 | 0.9 | 54/54 → 54/54 | 0.58 → 0.49 | 0.11 → 0.09 | 0.000 → 0.000 | 0.54 → 0.54 | 1.87 → 1.45 | 0 → 0 | 0 → 0 |
+| 自動離陸の上昇初期 | 1.0 | 54/54 → 54/54 | 0.77 → 0.65 | 0.13 → 0.11 | 0.000 → 0.000 | 1.00 → 0.86 | 2.05 → 1.61 | 0 → 0 | 0 → 0 |
+| 自動離陸の上昇初期 | 1.2 | 54/54 → 54/54 | 0.98 → 0.90 | 0.14 → 0.12 | 0.000 → 0.000 | 1.22 → 0.89 | 2.08 → 1.61 | 0 → 0 | 0 → 0 |
+| API 離陸中 | 0.9 | 54/54 → 54/54 | 0.47 → 0.43 | 0.10 → 0.08 | 0.000 → 0.000 | 0.39 → 0.39 | 1.59 → 1.28 | 0 → 0 | 0 → 0 |
+| API 離陸中 | 1.0 | 54/54 → 54/54 | 0.82 → 0.63 | 0.17 → 0.11 | 0.000 → 0.000 | 0.84 → 0.84 | 1.98 → 1.47 | 0 → 0 | 0 → 0 |
+| API 離陸中 | 1.2 | 54/54 → 54/54 | 1.19 → 0.95 | 0.22 → 0.17 | 0.000 → 0.000 | 1.10 → 0.72 | 2.05 → 1.58 | 0 → 0 | 0 → 0 |
+| 0.5 m ホバー | 0.9 | 54/54 → 54/54 | 0.03 → 0.02 | 0.03 → 0.03 | 0.000 → 0.000 | 0.88 → 0.88 | 1.53 → 1.31 | 0 → 0 | 0 → 0 |
+| 0.5 m ホバー | 1.0 | 54/54 → 54/54 | 0.00 → 0.01 | 0.09 → 0.07 | 0.000 → 0.000 | 0.88 → 0.88 | 1.44 → 1.22 | 0 → 0 | 0 → 0 |
+| 0.5 m ホバー | 1.2 | 27/54 → 54/54 | 0.00 → 0.01 | 0.07 → 0.08 | 0.000 → 0.000 | 0.91 → 0.93 | - → 1.85 | 0 → 0 | 0 → 0 |
+| 1.2 m ホバー | 0.9 | 54/54 → 54/54 | 0.02 → 0.02 | 0.02 → 0.02 | 0.000 → 0.000 | 1.01 → 1.02 | 1.42 → 1.43 | 0 → 0 | 0 → 0 |
+| 1.2 m ホバー | 1.0 | 54/54 → 54/54 | 0.01 → 0.01 | 0.03 → 0.03 | 0.002 → 0.002 | 1.00 → 1.00 | 1.37 → 1.38 | 0 → 0 | 0 → 0 |
+| 1.2 m ホバー | 1.2 | 27/54 → 54/54 | 0.00 → 0.01 | 0.03 → 0.04 | 0.000 → 0.000 | 0.89 → 0.92 | - → 1.41 | 0 → 0 | 0 → 0 |
+| ALT_HOLD 手動上昇中 | 0.9 | 54/54 → 54/54 | 0.13 → 0.13 | 0.03 → 0.03 | 0.000 → 0.000 | 1.02 → 1.03 | 2.02 → 1.68 | 0 → 0 | 0 → 0 |
+| ALT_HOLD 手動上昇中 | 1.0 | 54/54 → 54/54 | 0.13 → 0.13 | 0.01 → 0.02 | 0.000 → 0.000 | 1.03 → 1.03 | 2.02 → 1.75 | 0 → 0 | 0 → 0 |
+| ALT_HOLD 手動上昇中 | 1.2 | 27/54 → 54/54 | 0.14 → 0.12 | 0.02 → 0.02 | 0.000 → 0.000 | 1.09 → 1.19 | - → 2.04 | 0 → 0 | 0 → 0 |
+| STABILIZE 21 s 飛行 → 通信断 | 0.9 | 20/54 → 20/54 | 0.00 → 0.00 | 0.00 → 0.00 | 0.000 → 0.000 | 0.76 → 0.76 | - → - | 0 → 0 | 0 → 0 |
+| STABILIZE 21 s 飛行 → 通信断 | 1.0 | 20/54 → 20/54 | 0.00 → 0.00 | 0.00 → 0.00 | 0.000 → 0.000 | 0.76 → 0.76 | - → - | 0 → 0 | 0 → 0 |
+| STABILIZE 21 s 飛行 → 通信断 | 1.2 | 20/54 → 20/54 | 0.00 → 0.00 | 0.00 → 0.00 | 0.000 → 0.000 | 0.76 → 0.76 | - → - | 0 → 0 | 0 → 0 |
+
+成立した実行: 旧 789 本 / 新 870 本。空中停止: 旧 0 / 新 0; 再上昇>0.01 m: 旧 0 / 新 0; 床から再離陸: 旧 0 / 新 0; 未終了: 旧 0 / 新 0
+
+### 加速度計バイアス別（hover.thrust_corr 0.9 / 1.0 / 1.2 を合わせた最悪、旧 → 新）
+
+| 場面 | 加速度計バイアス | 成立/全 旧→新 | 出力停止時からの上昇増分 最大 [m] | 接地速度 最大 [m/s]（ノイズなし・n0） | 接地速度 最大 [m/s]（n2） | 再上昇 最大 [m] |
+|---|---|---|---|---|---|---|
+| 自動離陸の上昇初期 | -0.2 m/s²（ToF 停止と同時） | 18/18 → 18/18 | 0.95 → 0.79 | 1.14 → 0.77 | 2.02 → 1.57 | 0.000 → 0.000 |
+| 自動離陸の上昇初期 | -0.2 m/s²（離陸開始から） | 18/18 → 18/18 | 0.94 → 0.75 | 1.22 → 0.89 | 2.08 → 1.61 | 0.000 → 0.000 |
+| 自動離陸の上昇初期 | -0.1 m/s²（ToF 停止と同時） | 18/18 → 18/18 | 0.96 → 0.80 | 1.10 → 0.70 | 1.98 → 1.54 | 0.000 → 0.000 |
+| 自動離陸の上昇初期 | -0.1 m/s²（離陸開始から） | 18/18 → 18/18 | 0.95 → 0.78 | 1.14 → 0.76 | 2.01 → 1.57 | 0.000 → 0.000 |
+| 自動離陸の上昇初期 | +0.0 m/s²（なし） | 18/18 → 18/18 | 0.96 → 0.82 | 1.05 → 0.62 | 1.95 → 1.51 | 0.000 → 0.000 |
+| 自動離陸の上昇初期 | +0.1 m/s²（ToF 停止と同時） | 18/18 → 18/18 | 0.97 → 0.83 | 1.01 → 0.55 | 1.93 → 1.47 | 0.000 → 0.000 |
+| 自動離陸の上昇初期 | +0.1 m/s²（離陸開始から） | 18/18 → 18/18 | 0.97 → 0.86 | 0.99 → 0.86 | 1.90 → 1.46 | 0.000 → 0.000 |
+| 自動離陸の上昇初期 | +0.2 m/s²（ToF 停止と同時） | 18/18 → 18/18 | 0.97 → 0.85 | 0.98 → 0.86 | 1.90 → 1.45 | 0.000 → 0.000 |
+| 自動離陸の上昇初期 | +0.2 m/s²（離陸開始から） | 18/18 → 18/18 | 0.98 → 0.90 | 0.96 → 0.84 | 1.87 → 1.43 | 0.000 → 0.000 |
+| API 離陸中 | -0.2 m/s²（ToF 停止と同時） | 18/18 → 18/18 | 1.16 → 0.92 | 1.10 → 0.84 | 2.05 → 1.58 | 0.000 → 0.000 |
+| API 離陸中 | -0.2 m/s²（離陸開始から） | 18/18 → 18/18 | 1.16 → 0.94 | 1.06 → 0.79 | 2.03 → 1.54 | 0.000 → 0.000 |
+| API 離陸中 | -0.1 m/s²（ToF 停止と同時） | 18/18 → 18/18 | 1.17 → 0.93 | 1.05 → 0.81 | 2.00 → 1.50 | 0.000 → 0.000 |
+| API 離陸中 | -0.1 m/s²（離陸開始から） | 18/18 → 18/18 | 1.17 → 0.93 | 1.03 → 0.79 | 1.99 → 1.49 | 0.000 → 0.000 |
+| API 離陸中 | +0.0 m/s²（なし） | 18/18 → 18/18 | 1.17 → 0.94 | 1.00 → 0.79 | 1.97 → 1.43 | 0.000 → 0.000 |
+| API 離陸中 | +0.1 m/s²（ToF 停止と同時） | 18/18 → 18/18 | 1.18 → 0.94 | 0.96 → 0.77 | 1.93 → 1.39 | 0.000 → 0.000 |
+| API 離陸中 | +0.1 m/s²（離陸開始から） | 18/18 → 18/18 | 1.18 → 0.94 | 0.98 → 0.79 | 1.94 → 1.39 | 0.000 → 0.000 |
+| API 離陸中 | +0.2 m/s²（ToF 停止と同時） | 18/18 → 18/18 | 1.19 → 0.95 | 0.93 → 0.75 | 1.90 → 1.36 | 0.000 → 0.000 |
+| API 離陸中 | +0.2 m/s²（離陸開始から） | 18/18 → 18/18 | 1.19 → 0.94 | 0.98 → 0.79 | 1.89 → 1.35 | 0.000 → 0.000 |
+| 0.5 m ホバー | -0.2 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.02 → 0.01 | 0.75 → 0.78 | 1.38 → 1.77 | 0.000 → 0.000 |
+| 0.5 m ホバー | -0.2 m/s²（離陸開始から） | 15/18 → 18/18 | 0.01 → 0.01 | 0.91 → 0.93 | 1.53 → 1.85 | 0.000 → 0.000 |
+| 0.5 m ホバー | -0.1 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.02 → 0.02 | 0.70 → 0.74 | 1.37 → 1.75 | 0.000 → 0.000 |
+| 0.5 m ホバー | -0.1 m/s²（離陸開始から） | 15/18 → 18/18 | 0.02 → 0.01 | 0.79 → 0.80 | 1.00 → 1.78 | 0.000 → 0.000 |
+| 0.5 m ホバー | +0.0 m/s²（なし） | 15/18 → 18/18 | 0.02 → 0.02 | 0.66 → 0.70 | 1.36 → 1.73 | 0.000 → 0.000 |
+| 0.5 m ホバー | +0.1 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.02 → 0.02 | 0.63 → 0.66 | 1.36 → 1.71 | 0.000 → 0.000 |
+| 0.5 m ホバー | +0.1 m/s²（離陸開始から） | 15/18 → 18/18 | 0.01 → 0.01 | 0.56 → 0.63 | 1.37 → 1.57 | 0.000 → 0.000 |
+| 0.5 m ホバー | +0.2 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.03 → 0.02 | 0.59 → 0.63 | 1.35 → 1.70 | 0.000 → 0.000 |
+| 0.5 m ホバー | +0.2 m/s²（離陸開始から） | 15/18 → 18/18 | 0.02 → 0.02 | 0.48 → 0.58 | 1.44 → 1.71 | 0.000 → 0.000 |
+| 1.2 m ホバー | -0.2 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.02 → 0.02 | 1.00 → 1.00 | 1.34 → 1.34 | 0.000 → 0.000 |
+| 1.2 m ホバー | -0.2 m/s²（離陸開始から） | 15/18 → 18/18 | 0.01 → 0.01 | 1.01 → 1.02 | 1.42 → 1.43 | 0.000 → 0.000 |
+| 1.2 m ホバー | -0.1 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.02 → 0.02 | 0.95 → 0.95 | 1.32 → 1.33 | 0.000 → 0.000 |
+| 1.2 m ホバー | -0.1 m/s²（離陸開始から） | 15/18 → 18/18 | 0.02 → 0.02 | 0.96 → 0.96 | 1.33 → 1.35 | 0.000 → 0.000 |
+| 1.2 m ホバー | +0.0 m/s²（なし） | 15/18 → 18/18 | 0.02 → 0.02 | 0.91 → 0.91 | 1.31 → 1.31 | 0.000 → 0.000 |
+| 1.2 m ホバー | +0.1 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.02 → 0.02 | 0.87 → 0.87 | 1.29 → 1.29 | 0.000 → 0.000 |
+| 1.2 m ホバー | +0.1 m/s²（離陸開始から） | 15/18 → 18/18 | 0.01 → 0.01 | 0.85 → 0.85 | 1.25 → 1.25 | 0.000 → 0.000 |
+| 1.2 m ホバー | +0.2 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.02 → 0.02 | 0.83 → 0.83 | 1.26 → 1.26 | 0.000 → 0.000 |
+| 1.2 m ホバー | +0.2 m/s²（離陸開始から） | 15/18 → 18/18 | 0.01 → 0.01 | 0.79 → 0.79 | 1.15 → 1.16 | 0.002 → 0.002 |
+| ALT_HOLD 手動上昇中 | -0.2 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.14 → 0.11 | 0.91 → 0.99 | 1.84 → 1.95 | 0.000 → 0.000 |
+| ALT_HOLD 手動上昇中 | -0.2 m/s²（離陸開始から） | 15/18 → 18/18 | 0.13 → 0.13 | 1.09 → 1.19 | 2.00 → 2.04 | 0.000 → 0.000 |
+| ALT_HOLD 手動上昇中 | -0.1 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.14 → 0.12 | 0.87 → 0.95 | 1.83 → 1.93 | 0.000 → 0.000 |
+| ALT_HOLD 手動上昇中 | -0.1 m/s²（離陸開始から） | 15/18 → 18/18 | 0.14 → 0.13 | 0.96 → 1.06 | 2.02 → 2.01 | 0.000 → 0.000 |
+| ALT_HOLD 手動上昇中 | +0.0 m/s²（なし） | 15/18 → 18/18 | 0.14 → 0.12 | 0.82 → 0.91 | 1.81 → 1.95 | 0.000 → 0.000 |
+| ALT_HOLD 手動上昇中 | +0.1 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.14 → 0.12 | 0.78 → 0.87 | 1.80 → 1.94 | 0.000 → 0.000 |
+| ALT_HOLD 手動上昇中 | +0.1 m/s²（離陸開始から） | 15/18 → 18/18 | 0.14 → 0.12 | 0.65 → 0.74 | 1.97 → 1.69 | 0.000 → 0.000 |
+| ALT_HOLD 手動上昇中 | +0.2 m/s²（ToF 停止と同時） | 15/18 → 18/18 | 0.14 → 0.12 | 0.74 → 0.83 | 1.79 → 1.92 | 0.000 → 0.000 |
+| ALT_HOLD 手動上昇中 | +0.2 m/s²（離陸開始から） | 15/18 → 18/18 | 0.13 → 0.13 | 0.53 → 0.57 | 2.02 → 1.86 | 0.000 → 0.000 |
+| STABILIZE 21 s 飛行 → 通信断 | -0.2 m/s²（ToF 停止と同時） | 0/18 → 0/18 | - → - | - → - | - → - | - → - |
+| STABILIZE 21 s 飛行 → 通信断 | -0.2 m/s²（離陸開始から） | 6/18 → 6/18 | 0.00 → 0.00 | 0.61 → 0.61 | - → - | 0.000 → 0.000 |
+| STABILIZE 21 s 飛行 → 通信断 | -0.1 m/s²（ToF 停止と同時） | 0/18 → 0/18 | - → - | - → - | - → - | - → - |
+| STABILIZE 21 s 飛行 → 通信断 | -0.1 m/s²（離陸開始から） | 9/18 → 9/18 | 0.00 → 0.00 | 0.63 → 0.63 | - → - | 0.000 → 0.000 |
+| STABILIZE 21 s 飛行 → 通信断 | +0.0 m/s²（なし） | 9/18 → 9/18 | 0.00 → 0.00 | 0.62 → 0.62 | - → - | 0.000 → 0.000 |
+| STABILIZE 21 s 飛行 → 通信断 | +0.1 m/s²（ToF 停止と同時） | 9/18 → 9/18 | 0.00 → 0.00 | 0.74 → 0.74 | - → - | 0.000 → 0.000 |
+| STABILIZE 21 s 飛行 → 通信断 | +0.1 m/s²（離陸開始から） | 9/18 → 9/18 | 0.00 → 0.00 | 0.76 → 0.76 | - → - | 0.000 → 0.000 |
+| STABILIZE 21 s 飛行 → 通信断 | +0.2 m/s²（ToF 停止と同時） | 9/18 → 9/18 | 0.00 → 0.00 | 0.75 → 0.75 | - → - | 0.000 → 0.000 |
+| STABILIZE 21 s 飛行 → 通信断 | +0.2 m/s²（離陸開始から） | 9/18 → 9/18 | 0.00 → 0.00 | 0.76 → 0.76 | - → - | 0.000 → 0.000 |
+
+旧 → 新で成立数が増えた場面（0.5 m ホバー・1.2 m ホバー・ALT_HOLD 手動上昇中の 15/18 → 18/18）は、旧ビルドでは離陸が行き過ぎて場面が成立しなかった `hover.thrust_corr` 1.2・ノイズ n2 の 3 本が加わったためで、n2 の最大が増えて見える（同じ条件どうしの比較は上の `hover.thrust_corr` 別の表: 0.5 m ホバー n2 の最大は corr 0.9 で 1.53 → 1.31、corr 1.0 で 1.44 → 1.22 m/s）。加わった 3 本の n2 の接地速度は 0.5 m ホバーで最大 1.85、1.2 m ホバーで 1.41、手動上昇中で 2.04 m/s。
+
+空中でのモータ停止は 0 件のまま、降下が始まった後の再上昇は 0.01 m 以下、床からの再離陸は 0 件。`hover.thrust_corr` 1.2 のノイズ n2 は、旧ビルドでは離陸が行き過ぎて場面が成立しなかった（27/54）が、新ビルドでは成立する（54/54）。STABILIZE の場面は n2 の open-loop の機体が上昇し続けるため、旧・新とも成立しない（20/54）。
+
+### 再確認試験（SILS 全件）と既存シナリオの metric の変化（6 回目）
+
+再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験）の結果。`.expect` 付き 86 本（既存 84 本 + 新規 2 本）: **PASS 82 / FAIL 0 / KNOWN-FAIL 3（`commloss_land_level`・`pos_yaw`・`yaw_hold`）/ SKIP 1（`workshop_acro`）**。基準（84 本で PASS 80 / FAIL 0 / KNOWN-FAIL 3 / SKIP 1）に新規 2 本の PASS を足した形で、合否の変化は無い。既存 84 本のうち `disarm_long_idle`・`workshop_*` を除く全シナリオの metric 321 件を旧ビルドと最終ビルドで比べた: 259 件は同じ値、62 件が変化したが、閾値と合否は変わらない（KNOWN-FAIL の 3 本も同じ理由で不合格のまま）。変化の理由:
+
+| 変化したシナリオ | 値の変化 | 理由 |
+|---|---|---|
+| `tof_silent_takeoff`・`tof_silent_takeoff_est_high`・`tof_silent_takeoff_bias_est_high`・`tof_silent_api_takeoff_est_high`・`tof_silent_takeoff_noise`・`tof_silent_est_high`・`tof_silent_est_high_noise` | `descent_speed_max` 0.92 → 0.54、1.04 → 0.59、0.97 → 0.36、1.00 → 0.56、1.99 → 1.58、0.98 → 0.96。`alt_max` は 0.72 → 0.62（api est_high）、1.20 → 1.10（takeoff_noise）、1.49 → 1.25（est_high_noise） | R2（較正前の支持推力を早い推定のままにした: 上限が高くなり、降下が遅くなる）と R1（離陸の行き過ぎが減る） |
+| `calib` | `att_rmse` 0.0015 → 0.0071 rad（0.40 deg）、`tilt_max` 0.011 → 0.020 rad（閾値 0.087・0.314） | この飛行は 1.2〜1.34 m（STABILIZE で上昇し、ALT_HOLD に入る）で、R1 の「止まる高さの予測」の制動が 8 s の高度を 1.34 → 1.21 m に変えた。姿勢の推定誤差の窓が変わっただけで、制御則の姿勢側は不変 |
+| `crash_refly`・`alt_ceiling_stick_noise`・`api_flight`・`boot_motion`・`pos_flight`・`tof_recover_invalid_first`・`tof_recover_reflip`・`commloss_land_level` | `alt_max` 1.38 → 1.22・1.37 → 1.23（crash_refly）、`duty_max` 0.69 → 0.66（boot_motion）、`alt_rmse` 0.024 → 0.012（tof_recover_reflip）など | 上限（1.2 m）の近くを飛ぶ・離陸が行き過ぎる飛行で、R1 の制動が高度を少し変えた（どれも閾値の内側）。`commloss_land_level` は着陸後の `alt_max` 0.321 → 0.283 m で、閾値 0.1 m を超えたまま（KNOWN-FAIL のまま） |
+| `api_flip_pitch`・`api_flip_roll`・`flip_abort_recover`・`flip_brake_timeout` | `alt_min` 0.99 → 1.06、1.09、`alt_drop_max` 0.027 → 0.079 など（宙返りの角度は 360〜364 deg で同じ） | 宙返りの前の上昇（`up 70` で 1.2 m）の高度が R1 の制動で変わり、宙返りの開始高度が少し違う。宙返りは今回の対象外（持ち主の決定）で、角度・整定時間の判定は変わらない |
+| `weak_spool_alt` | `alt_mean` 0.021 → 0.330 | 新規シナリオ（旧ビルドでは床の上で LANDING に入り不合格） |
+
+### STABILIZE・ToF 出力停止中の通信断で上昇中の機体を止めにくい件（R4、採否の評価）
+
+案: 速度推定を信用できない（最後のリセットから `kVerticalVelocityTrustS` = 2 s を超えた）ときも、降下の開始時の推定速度が上向きなら、推定速度 ÷ 0.75 g（最大 1 s）だけ下限推力（支持推力の 0.25 倍）で減速する。
+
+1. 推定の誤差: `tof_silent_stabilize_commloss`（21 s 出力停止）の LANDING 開始時の推定は、加速度計のオフセット 0 / +0.1 / +0.2 m/s² で、誤差 +0.23 / −2.22 / −4.68 m/s（ノイズなし）。STABILIZE の上昇は屋内で 1 m/s 前後なので、誤差は信号より大きい。
+2. 1 次元の力学モデル（80 ms の遅れ、後半の低下込み。屋内の 1 m・2 m から）:
+
+| 高さ [m] | 真の上昇 [m/s] | 推定の誤差 [m/s] | 案なし 最高 / 接地速度 | 案あり 最高 / 接地速度 |
+|---|---|---|---|---|
+| 1.0 | 0 | +2 | 1.00 m / 0.99 m/s | 1.00 m / **2.20 m/s** |
+| 1.0 | +1 | 0 | 2.02 m / 1.41 m/s | 1.13 m / 1.06 m/s |
+| 1.0 | +1 | −2 | 2.02 m / 1.41 m/s | 2.02 m / 1.41 m/s（効かない） |
+| 1.0 | +1 | +2 | 2.02 m / 1.41 m/s | 1.12 m / **2.23 m/s** |
+| 1.0 | +2 | 0 | 5.08 m / 6.30 m/s | 1.41 m / 1.18 m/s |
+| 1.0 | +2 | −2 | 5.08 m / 6.30 m/s | 5.08 m / 6.30 m/s（効かない） |
+| 2.0 | 0 | +2 | 2.00 m / 1.40 m/s | 2.00 m / **2.42 m/s** |
+| 2.0 | +2 | 0 | 6.08 m / 7.18 m/s | 2.41 m / 1.54 m/s |
+
+3. 判定: **不採用**。効くのは推定の誤差が上昇の速さより小さいときだけ（誤差 0 の行）で、21 s の出力停止の後の誤差（±2〜5 m/s）はそれより大きく、誤差が上向きのとき（約半分）は、ホバー中の機体の接地速度が 1.0 → 2.2 m/s（1 m から）、1.4 → 2.4 m/s（2 m から）に上がる。誤差が小さい（信用時間の 2 s 以内）ときは既存の PI が上昇を止める。上昇中の機体が 3 m の天井へ届く恐れ（真の上昇 2 m/s で 5〜6 m）は残るが、案はそれを防げない（誤差が逆向きの行）。残る対策は ToF の復旧・気圧計の追加（次の段階）。
+
+
 **Updated 2026-11-09 (fifth pass) — the descent without a ToF can no longer climb: the thrust is always at most 0.95 x the support thrust; the support thrust is calibrated over near-hover samples after the craft left the floor; the velocity estimate is trusted for 2 s after its last reset; a floor-holds-the-craft touchdown path; the 3 G impact in a blind LANDING is the touchdown; the LANDING time limit counts from the entry into LANDING; the altitude ceiling is effective; new scenarios `tof_silent_bias_plus`, `tof_silent_bias_minus`, `tof_silent_takeoff_bias_est_high`, `tof_silent_est_high_noise`, `tof_silent_stabilize_commloss`.** An independent review (real logs + SILS) showed that the accelerometer-integral velocity drifts with the time since its last reset (real logs through the estimator after a ToF loss in the hover: -0.21 m/s after 1 s, -0.25 .. -0.39 after 3 s, -0.44 .. -0.71 after 5 s; flip_test2 -0.34 after 2 s) and that a PI which raises the thrust against a "too fast" descent climbs when the estimate is low (old build, accelerometer offset 0.1 / 0.15 / 0.2 m/s^2: rises again, touchdown at 1.43 / 3.38 / 5.06 m/s; a soft touchdown followed by a re-take-off to 1.21 m). Changes: (1) thrust <= `kNoTofThrustCapRatio` (0.95) x the support thrust always (the hover ESTIMATE is no reference of the ceiling); (2) the support thrust = mean thrust x g / mean upward reading over the samples within 5 % of g, from the moment the craft left the floor (healthy ToF says airborne / rise 0.10 m / reading 1 m/s^2 above g), 2 s of them; without a window min(quotient over all airborne samples x 0.85, 0.75 x the hover estimate); (3) the PI only while the velocity estimate is within 2 s of its last reset, else the constant ceiling (also when a manual flight with the ToF stopped for 20+ s ends in LANDING); (4) touchdown = impact then stillness OR the floor holding the craft up (thrust < 0.7 x support and |accel| within 0.1 g of 1 g for 0.5 s), and the 3 G impact in a blind LANDING completes the landing (`Touchdown while the ToF is silent (impact)`, `lastLandingEnd()` = `ToFSilentImpact`) instead of an emergency DISARM; (5) above the ceiling + 0.15 m no climb command, the target returns to the ceiling, thrust <= 0.5 x the estimate while still rising; the altitude velocity loop is reset when the ToF-alive landing resumes; (6) the 10 s limit counts from the entry into LANDING (`LandingClock`, host test). Evaluation: 6 scenes x accelerometer offset error -0.2 / -0.1 / 0 / +0.1 / +0.2 m/s^2 (injected with the silence, and 0.3 s after the ARM / the takeoff command) x `hover.thrust_corr` 0.9 / 1.0 / 1.2 x noise off / n0 / n2 (seeds 12345, 1, 2; 1134 runs, 951 valid: in the others the scene itself fails before the silence - the 1.2 m hover and the stick climb with `hover.thrust_corr` 1.2 and n2, the open-loop STABILIZE program with another plant). Result over the 951 valid runs: motor stop in the air 0, re-rise after the descent started 0 (largest 0.002 m), re-take-off from the floor 0, runs without a touchdown 0. NOT met: touchdown speed <= 0.8 m/s with noise off / n0 in the 1.2 m hover (0.79-1.04 m/s), the early climb (up to 1.22) and the stick climb (up to 1.10); with noise n2 up to 2.08 m/s (the n2 plant hovers at 0.30 N against 0.34 N, so the lowered estimate of an uncalibrated start sinks the craft harder); the rise after LANDING beyond the braking distance of the climb is 0.10-0.22 m in the two early-climb scenes (limit 0.1 m; the braking assumes 7.4 m/s^2). The tables below were re-measured after the PI of the descent got a one-sided anti-windup that acts in the same cycle (`blind_descent.hpp`, 2026-11-09, sixth pass): the same 1134 runs and 951 valid ones, the four zero counts above unchanged (largest re-rise 0.002 m), and the touchdown speed moved by at most +0.04 m/s (the integral now unwinds while the thrust is clamped, so the descent is slightly faster). Tables (worst over the cells; "rise" = max altitude after the silence minus the altitude at the silence; "extra rise after LANDING" = max altitude after LANDING minus the altitude at LANDING minus v^2 / (2 x 7.4 m/s^2) of the climb speed at LANDING; "time" = silence to contact):
 
-### hover.thrust_corr 別（沈黙時の加速度計バイアス −0.2〜+0.2 m/s² の 9 通りの注入 × 3 通りの時刻 × ノイズ off / n0 / n2）
+### hover.thrust_corr 別（出力停止時の加速度計バイアス −0.2〜+0.2 m/s² の 9 通りの注入 × 3 通りの時刻 × ノイズ off / n0 / n2）
 
-| 場面 | 条件 | 有効/全 | 沈黙時からの上昇増分 [m] | LANDING 以後の余分な上昇 [m] | 再上昇 [m] | 沈黙→接地 [s]（ノイズなし最大） | 接地速度 [m/s]（ノイズなし・n0 最大） | 接地速度 [m/s]（n2 最大） | 空中停止 | 床から再離陸 | 終わり方 |
+| 場面 | 条件 | 有効/全 | 出力停止時からの上昇増分 [m] | LANDING 以後の余分な上昇 [m] | 再上昇 [m] | 出力停止→接地 [s]（ノイズなし最大） | 接地速度 [m/s]（ノイズなし・n0 最大） | 接地速度 [m/s]（n2 最大） | 空中停止 | 床から再離陸 | 終わり方 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 自動離陸の上昇初期 (tof_silent_takeoff) | hover.thrust_corr 0.9 | 63/63 | 0.58 | 0.11 | 0.000 | 0.5 | 0.55 | 1.87 | 0 | 0 | 衝撃(ToF なし接地) 63 |
 | 自動離陸の上昇初期 (tof_silent_takeoff) | hover.thrust_corr 1.0 | 63/63 | 0.77 | 0.13 | 0.000 | 0.9 | 1.00 | 2.05 | 0 | 0 | 衝撃(ToF なし接地) 63 |
@@ -226,7 +419,7 @@ Per layer, isolate each axis first (`<layer>_<axis>.scn`), then a combined capst
 
 ### 加速度計バイアス別（hover.thrust_corr 0.9 / 1.0 / 1.2 を合わせた最悪）
 
-| 場面 | 条件 | 有効/全 | 沈黙時からの上昇増分 [m] | LANDING 以後の余分な上昇 [m] | 再上昇 [m] | 沈黙→接地 [s]（ノイズなし最大） | 接地速度 [m/s]（ノイズなし・n0 最大） | 接地速度 [m/s]（n2 最大） | 空中停止 | 床から再離陸 | 終わり方 |
+| 場面 | 条件 | 有効/全 | 出力停止時からの上昇増分 [m] | LANDING 以後の余分な上昇 [m] | 再上昇 [m] | 出力停止→接地 [s]（ノイズなし最大） | 接地速度 [m/s]（ノイズなし・n0 最大） | 接地速度 [m/s]（n2 最大） | 空中停止 | 床から再離陸 | 終わり方 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 自動離陸の上昇初期 (tof_silent_takeoff) | バイアス -0.2 m/s²（ToF 停止と同時） | 21/21 | 0.95 | 0.13 | 0.000 | 1.6 | 1.14 | 2.02 | 0 | 0 | 衝撃(ToF なし接地) 21 |
 | 自動離陸の上昇初期 (tof_silent_takeoff) | バイアス -0.2 m/s²（離陸開始から） | 21/21 | 0.94 | 0.13 | 0.000 | 1.5 | 1.22 | 2.08 | 0 | 0 | 衝撃(ToF なし接地) 21 |
@@ -289,13 +482,13 @@ Sweeps (noise n0 / n2, scenes hover 0.5 m, hover 1.2 m, stick climb, early climb
 
 New build:
 
-| 場面 | corr | n0: 増分[m] | 沈黙→接地[s] | 接地速度[m/s] | 終わり方 | n2 最悪: 増分 | 沈黙→接地 | 接地速度 | 終わり方 |
+| 場面 | corr | n0: 増分[m] | 出力停止→接地[s] | 接地速度[m/s] | 終わり方 | n2 最悪: 増分 | 出力停止→接地 | 接地速度 | 終わり方 |
 |---|---|---|---|---|---|---|---|---|---|
-| 自動離陸の上昇初期で沈黙 (tof_silent_takeoff) | 0.9 | 0.04 | 0.5 | 0.36 | 衝撃 | 0.59 | 2.3 | 0.51 | 衝撃 |
+| 自動離陸の上昇初期で出力停止 (tof_silent_takeoff) | 0.9 | 0.04 | 0.5 | 0.36 | 衝撃 | 0.59 | 2.3 | 0.51 | 衝撃 |
 |  | 1.0 | 0.16 | 1.0 | 0.43 | 衝撃 | 0.76 | 3.1 | 0.57 | 衝撃 |
 |  | 1.1 | 0.38 | 2.0 | 0.36 | 衝撃 | 0.85 | 3.7 | 0.64 | 衝撃 |
 |  | 1.2 | 0.59 | 3.1 | 0.36 | 衝撃 | 0.91 | 4.2 | 0.63 | 衝撃 |
-| API 離陸中に沈黙 (tof_silent_api_takeoff) | 0.9 | 0.03 | 0.5 | 0.25 | 衝撃 | 0.48 | 2.3 | 0.53 | 衝撃 |
+| API 離陸中に出力停止 (tof_silent_api_takeoff) | 0.9 | 0.03 | 0.5 | 0.25 | 衝撃 | 0.48 | 2.3 | 0.53 | 衝撃 |
 |  | 1.0 | 0.13 | 0.8 | 0.43 | 衝撃 | 0.83 | 3.6 | 0.53 | 衝撃 |
 |  | 1.1 | 0.31 | 1.6 | 0.36 | 衝撃 | 1.00 | 4.5 | 0.50 | 衝撃 |
 |  | 1.2 | 0.60 | 2.9 | 0.35 | 衝撃 | 1.18 | 5.3 | 0.61 | 衝撃 |
@@ -314,13 +507,13 @@ New build:
 
 Old build (the working tree before this change; for comparison):
 
-| 場面 | corr | n0: 増分[m] | 沈黙→接地[s] | 接地速度[m/s] | 終わり方 | n2 最悪: 増分 | 沈黙→接地 | 接地速度 | 終わり方 |
+| 場面 | corr | n0: 増分[m] | 出力停止→接地[s] | 接地速度[m/s] | 終わり方 | n2 最悪: 増分 | 出力停止→接地 | 接地速度 | 終わり方 |
 |---|---|---|---|---|---|---|---|---|---|
-| 自動離陸の上昇初期で沈黙 (tof_silent_takeoff) | 0.9 | 0.05 | 0.8 | 0.28 | 衝撃 | 2.14 | 4.5 | 2.70 | 衝撃 |
+| 自動離陸の上昇初期で出力停止 (tof_silent_takeoff) | 0.9 | 0.05 | 0.8 | 0.28 | 衝撃 | 2.14 | 4.5 | 2.70 | 衝撃 |
 |  | 1.0 | 0.46 | 2.7 | 0.82 | 衝撃 | 9.57 | 7.5 | 9.62 | 衝撃 |
 |  | 1.1 | 4.01 | 6.4 | 5.09 | 衝撃 | 24.61 | 9.5 | 20.70 | 他 **空中停止3** |
 |  | 1.2 | 10.79 | 8.2 | 10.67 | 衝撃 | 37.56 | 10.5 | 26.90 | 他/接地判定 **空中停止3** |
-| API 離陸中に沈黙 (tof_silent_api_takeoff) | 0.9 | 0.04 | 0.7 | 0.19 | 衝撃 | 1.85 | 4.3 | 2.45 | 衝撃 |
+| API 離陸中に出力停止 (tof_silent_api_takeoff) | 0.9 | 0.04 | 0.7 | 0.19 | 衝撃 | 1.85 | 4.3 | 2.45 | 衝撃 |
 |  | 1.0 | 0.36 | 2.4 | 0.70 | 衝撃 | 11.52 | 7.7 | 10.83 | 衝撃 |
 |  | 1.1 | 3.40 | 6.3 | 4.50 | 衝撃 | 27.53 | 0.0 | 0.00 | 他 |
 |  | 1.2 | 11.49 | 8.3 | 11.10 | 衝撃 | 46.77 | 2.4 | 8.67 | 他/接地判定 **空中停止2** |
@@ -348,6 +541,269 @@ Old build: 8 of 80 runs stopped the motors in the air (1.1-36 m); new build: 0 o
 **Added 2026-11-09 (2nd independent review) — `tof_recover_frozen_ground`, `tof_recover_edge_consumed`, `tof_recover_climb_alt`, `tof_recover_reflip`, `tof_recover_invalid_first`, `tof_recover_prearm`, `tof_invalid_alt_hover`, `tof_invalid_stabilize`, `tof_silent_flip_end` (vehicle; new SILS fault injection `tof_invalid <0|1>`: every downward-ToF sample is "no target", the samples keep arriving on time).** The recovery from a ToF silence is judged on what the ESTIMATOR did with the samples, not on their arrival: the silence EPISODE ends when `kTofReacquireSamples` (10) consecutive samples were adopted with an innovation <= 0.10 m and the ToF has been alive for 1 s. D1/D2 (`tof_recover_frozen_ground`: truth alt_max 10.9 m -> 2.5 m, motors no longer stop at altitude; `tof_recover_climb_alt`: altitude RMS error 1.19 m -> 0.02 m), D3 (`tof_recover_edge_consumed`, `tof_recover_reflip`: in flight the refused mode-switch edge is consumed, nothing switches by itself at the recovery; the old build entered POS_HOLD / ALT_HOLD at the return and the pilot's OFF then switched it back), D1 (`tof_recover_invalid_first`), the ARM / mode permission (`tof_recover_prearm`), D4 (`tof_invalid_*`: only invalid samples while flying are a silence episode, ALT/POS land, ACRO/STABILIZE only warn; on the ground an invalid ToF is normal, the takeoff is cut after ~0.5 s and the craft rises ~0.16 m), D6 (`tof_silent_flip_end`: decided the moment the flip ends). The first two are the reviewer's reproductions (recover_frozen2, rv_stab_pending_pos) with `.expect`; they FAIL on the previous build and PASS now. D5 (a stale `failsafe_status` reads as silent) has no SILS scenario (there is no injection that stops Failsafe); it is covered by the host test `test_tof_health`.
 
 **Added 2026-11-09 — `api_takeoff_emergency`, `api_land_emergency`, `api_land_stop`, `api_move_stop`, `api_wait_deferred` (vehicle):** while an API command blocks (`takeoff`, `land`, moves, `flip`: `waitUntil` in `api_task.cpp`), the wait now keeps reading the command sources every 50 ms; `emergency` is executed at once (and ends the wait: `error interrupted by emergency`), `stop` is executed at once through the normal `cmdStop` (accepted only while FLYING with a guidance target; then it ends the wait: `error interrupted by stop`), every other line is parked and run afterwards in arrival order (unchanged behaviour). Measured, SILS (injection to last armed motor sample): `emergency` during `takeoff` 7.000 s -> 7.040 s (before the fix 7.760 s, i.e. the rest of the wait); during `land` 16.600 s -> 16.640 s (before: 18.119 s, touchdown). `stop` during `forward 150`: peak horizontal travel 0.14 m (before: 1.48 m, the whole move). The UDP read path is not exercised by SILS (the socket shim never delivers data); only the injection ring is.
+
+### 7 回目の見直し（2026-11-09）— 6 回目の修正に対する独立レビュー 2 本の指摘（C1・I2・I3・I4）
+
+**8 回目の注（2026-11-10）:** この節の I2（上向き加速の証拠）・I3（加速度計に基づく中止）・I4（workshop の `ControllerStatus` 発行）と、それに伴う `tof_recover_*`・`tof_invalid_alt_hover` の入力・閾値の変更は、8 回目で取り下げた（下の「8 回目の見直し」）。C1（天井ブレーキの上昇率、`alignToEskf()`）は残る。以下は 7 回目の記録として残す。
+
+| 指摘 | 変更 | 検証 |
+|---|---|---|
+| C1（致命）天井ブレーキが古い加速度積分で推力を半分に落とす | ブレーキが積分を使うのは自動離陸の上昇と、ESKF の鉛直状態を信用できない間だけ。信用できる間は ESKF 自身の上昇率。ESKF が ToF を取り込み直した周期に、積分を ESKF の速度へ合わせる（`alignToEskf()`） | 新シナリオ `ceiling_brake_stale_velocity`・`_alt`（6 回目のビルドで不合格）、R1 の再測定 |
+| I2（重要）床を離れた証拠が加速度オフセットで床の上でも成立 | 上昇量 `riseM()` は、ろ波した加速度が自分の遅い基準値を `kVerticalVelocityLiftEvidenceMps2`（0.4 m/s²）超えた後だけ、その時点から（加速度 − 基準値）の 2 重積分で数える | 床の上の誤成立の掃引（下）、新シナリオ `weak_spool_alt_offset`・`weak_spool_stabilize_offset`（6 回目のビルドで不合格） |
+| I3（重要）浮けない自動離陸が終わらない | 離陸の開始から 5 s（`kAutoTakeoffNoLiftAbortUs`）床を離れた証拠が無い ALT/POS/API の自動離陸は DISARM で中止（StateTask の `updateAutoTakeoff()`） | `weak_spool_alt`（期待値を更新）、新シナリオ `weak_spool_api` |
+| I4（重要）workshop は `controller_status` を発行しない | workshop の制御タスクが最小限の `ControllerStatus` を毎周期発行 | workshop ファームのビルド（成功）。実機・SILS の workshop の動作は未確認（`workshop_acro` は SKIP） |
+| M（軽微） | `takeoff_elapsed_cycles_` の飽和、`...Mps` への改名、`kManualTakeoffMinRiseM = kTofInvalidTakeoffRiseM`、根拠の数値、`controller_status.latest()` の 1 回読み、関数 3 本を 50 行以内に分割、用語（「出力停止」「正直に」） | host ユニットテスト（`test_blind_landing` 48 本、旧 45 本。8 ファイル計 205 本が合格）、SILS 全件 |
+
+#### C1: 天井ブレーキ（新シナリオ、6 回目のビルド → 7 回目のビルド）
+
+| シナリオ | 内容 | 6 回目のビルド | 7 回目のビルド |
+|---|---|---|---|
+| `ceiling_brake_stale_velocity` | 長い出力停止（オフセット −0.4 m/s²、積分 3.7 m/s）の直後、1.6 m で ALT_HOLD | `alt_min` 0.010 m（床へ 2.57 m/s）、不合格 | `alt_min` 1.06 m、降下速度の最大 0.19 m/s、合格 |
+| `ceiling_brake_stale_velocity_alt` | 同じ状況で 1.24 m（天井）で ALT_HOLD | `alt_min` 0.59 m（降下速度の最大 1.17 m/s）、不合格 | `alt_min` 1.18 m、`alt_max` 1.26 m、降下速度の最大 0.12 m/s、合格 |
+| 対照（オフセット 0、`rv10_recov_alt0`） | 正常な ALT_HOLD への切り替え | 正常 | 正常（`alt_min` 1.23 m、`alt_max` 1.26 m） |
+
+自動離陸・API 離陸の真値の最高高度（R1、`hover.thrust_corr` 0.9 / 1.0 / 1.2 × ノイズ n0 / n2（seed 12345・1・2）、`hover.thrust.learn=0`）: 36 本の最大は **1.282 m**（合格: 1.35 m 以下を維持）。6 回目から 0.003 m を超えて変わったのは 9 本で、最大 0.033 m（原因は、天井の近くで ESKF の上昇率だけを見るブレーキになったためと推定。個別の切り分けは未実施）。
+
+| 場面 | hover.thrust_corr | ノイズ | 6 回目の最高 [m] | 7 回目の最高 [m] | ≤ 1.35 m |
+|---|---|---|---|---|---|
+| ALT_HOLD 自動離陸 | 0.9 | n0 | 0.59 | 0.59 | ○ |
+| ALT_HOLD 自動離陸 | 0.9 | n2（3 seed の最大） | 0.83 | 0.83 | ○ |
+| ALT_HOLD 自動離陸 | 1.0 | n0 | 0.84 | 0.84 | ○ |
+| ALT_HOLD 自動離陸 | 1.0 | n2（3 seed の最大） | 1.17 | 1.17 | ○ |
+| ALT_HOLD 自動離陸 | 1.2 | n0 | 1.25 | 1.25 | ○ |
+| ALT_HOLD 自動離陸 | 1.2 | n2（3 seed の最大） | 1.25 | 1.28 | ○ |
+| API 離陸 | 0.9 | n0 | 0.60 | 0.60 | ○ |
+| API 離陸 | 0.9 | n2（3 seed の最大） | 0.82 | 0.82 | ○ |
+| API 離陸 | 1.0 | n0 | 0.84 | 0.84 | ○ |
+| API 離陸 | 1.0 | n2（3 seed の最大） | 1.14 | 1.14 | ○ |
+| API 離陸 | 1.2 | n0 | 1.26 | 1.26 | ○ |
+| API 離陸 | 1.2 | n2（3 seed の最大） | 1.27 | 1.28 | ○ |
+| POS_HOLD 自動離陸 | 0.9 | n0 | 0.59 | 0.59 | ○ |
+| POS_HOLD 自動離陸 | 0.9 | n2（3 seed の最大） | 0.83 | 0.83 | ○ |
+| POS_HOLD 自動離陸 | 1.0 | n0 | 0.84 | 0.84 | ○ |
+| POS_HOLD 自動離陸 | 1.0 | n2（3 seed の最大） | 1.17 | 1.17 | ○ |
+| POS_HOLD 自動離陸 | 1.2 | n0 | 1.25 | 1.25 | ○ |
+| POS_HOLD 自動離陸 | 1.2 | n2（3 seed の最大） | 1.26 | 1.28 | ○ |
+
+#### I2: 床の上の誤成立と、離陸で証拠が立つまでの遅れ（掃引）
+
+方法: `rv10_ws_m`（STABILIZE、離陸の閾値より上でホバーより下のスロットルが約 3.5 s）と `rv10_wa_m`（ALT_HOLD の自動離陸）を雛形に、モータの健全度 0.85 / 0.9 × 加速度計オフセット −0.3 / −0.2 / −0.1 / 0 / +0.1 / +0.2 / +0.3 m/s²（ARM の 0.3 s 後に注入）× ノイズ n0 / n2 の 56 本を 1 規則ごとに走らせ、床の上にいる（真値が静止高度 + 2 cm 未満で、その後 0.2 s 以内に浮かない）のに FLYING（STABILIZE）または LANDING（ALT_HOLD）に入った数を数えた（`sweep12.py`）。
+
+| 規則 | STABILIZE 健全度 0.85 | STABILIZE 0.9 | ALT_HOLD 0.85 | ALT_HOLD 0.9 | 計 |
+|---|---|---|---|---|---|
+| 6 回目の規則（旧） | 6/14 | 3/14 | 4/14 | 3/14 | 16/56 |
+| 基準値つき 0.3 | 2/14 | 0/14 | 0/14 | 0/14 | 2/56 |
+| 基準値つき 0.4（採用） | 1/14 | 0/14 | 0/14 | 0/14 | 1/56 |
+| 基準値つき 0.5 | 0/14 | 0/14 | 0/14 | 0/14 | 0/56 |
+| 絶対しきい値 0.7（基準値なし） | 0/14 | 0/14 | 0/14 | 0/14 | 0/56 |
+
+離陸側（健全度 0.95 / 1.0 の離陸、ALT / POS 自動離陸と STABILIZE のスティック離陸 × オフセット −0.3 / 0 / +0.3 × n0 / n2）: 機体が浮いてから上昇量が 10 cm に達するまでの遅れ。「証拠なし」は、そのログで上昇量が 10 cm に達しなかった数（ToF が健全なら ToF の空中判定が先に立つので、この表は ToF が使えない場合の下限）。
+
+| 規則 | ALT / POS 自動離陸（12 本） | STABILIZE スティック離陸（6 本） |
+|---|---|---|
+| 6 回目の規則（旧） | 証拠なし 0/12、最大の遅れ 0.57 s | 証拠なし 0/6、最大の遅れ 0.35 s |
+| 基準値つき 0.3 | 証拠なし 2/12、最大の遅れ 0.37 s | 証拠なし 3/6、最大の遅れ 0.19 s |
+| 基準値つき 0.4（採用） | 証拠なし 2/12、最大の遅れ 0.43 s | 証拠なし 3/6、最大の遅れ 0.21 s |
+| 基準値つき 0.5 | 証拠なし 4/12、最大の遅れ 0.29 s | 証拠なし 3/6、最大の遅れ 0.21 s |
+| 絶対しきい値 0.7（基準値なし） | 証拠なし 2/12、最大の遅れ 1.13 s | 証拠なし 3/6、最大の遅れ 0.23 s |
+
+判断: 基準値つきの規則の 0.4 を採用した。理由: (a) 絶対しきい値は、床の上の誤成立を 0 にするのに 0.7 が要り、そこでは普通の ALT 自動離陸の証拠が最大 1.1 s 遅れる。(b) 基準値つきで 0.5 にすると誤成立は 0 本だが、ToF が使えない自動離陸（`tof_invalid_alt_hover` の 2 回目の離陸）が上昇として認識されず、4.3 m まで上昇した（0.4 では 0.32 m で打ち切り）。(c) 0.4 の誤成立 1 本は、モータの健全度 0.85、オフセット −0.3、ノイズ n2 の組み合わせ。**両側とも余裕が薄い（床の上の側は評価表のオフセット 0.3 に対し 0.1 m/s²、離陸の側は 0.05 m/s²）ことは未解決の点であり、加速度計に依らない独立の備え（気圧計）が望ましい。** 実機のモータの振動は、実機ログ 1 本で床の上のろ波した超過が最大約 1.0 m/s² になった（基準値に対しては小さいが、実機での誤成立の有無は未確認）。
+
+代償（既存シナリオ）: 加速度が基準値を 0.4 m/s² 超えない緩やかな上昇（ToF が使えないとき）はこの証拠では認識されない。`tof_recover_invalid_first`・`tof_recover_reflip` は、開始のスロットルを 3171 → 3250（0.3 s）に強めた（離陸の加速度が証拠に届く）。`tof_invalid_alt_hover` は 2 回目の離陸の打ち切りが 0.12 m 遅れ（`alt_max` 0.20 → 0.32 m）、閾値を 0.30 → 0.40 m にした。
+
+#### I3: 浮けない自動離陸
+
+通常の自動離陸（`alt_auto_takeoff`・`pos_auto_takeoff`・API 離陸）は、TAKEOFF の開始から 0.49 s で床を離れ、0.86 s で高さ 0.15 m（ToF の空中）に達する。5 s（`kAutoTakeoffNoLiftAbortUs`）はその 5 倍以上。`weak_spool_alt`（健全度 0.85）は約 11 s（TAKEOFF の開始の 5 s 後）に DISARM し、床の上の最大高度は 0.021 m（6 回目のビルドでは 0.385 m まで浮き、`Auto-takeoff complete`）。`weak_spool_api` は `error takeoff aborted`、14.0〜17.5 s の `duty_max` 0（6 回目のビルドでは 0.77 でモータが回り続けた）。
+
+#### 6 回目の評価表を最終ビルドで測り直した差分（972 本、旧 = 6 回目の最終ビルド、新 = 7 回目の最終ビルド）
+
+| 場面 | corr | 成立/全 旧→新 | 出力停止時からの上昇増分 [m] 旧→新 | LANDING 以後の余分な上昇 [m] 旧→新 | 再上昇 [m] 旧→新 | 接地速度 [m/s]（ノイズなし・n0 最大）旧→新 | 接地速度 [m/s]（n2 最大）旧→新 | 空中停止 旧→新 | 床から再離陸 旧→新 |
+|---|---|---|---|---|---|---|---|---|---|
+| 自動離陸の上昇初期 | 0.9 | 54/54 → 54/54 | 0.49 → 0.49 | 0.09 → 0.09 | 0.000 → 0.000 | 0.54 → 0.54 | 1.45 → 1.45 | 0 → 0 | 0 → 0 |
+| 自動離陸の上昇初期 | 1.0 | 54/54 → 54/54 | 0.65 → 0.65 | 0.11 → 0.11 | 0.000 → 0.000 | 0.86 → 1.00 | 1.61 → 1.61 | 0 → 0 | 0 → 0 |
+| 自動離陸の上昇初期 | 1.2 | 54/54 → 54/54 | 0.90 → 0.94 | 0.12 → 0.13 | 0.000 → 0.000 | 0.89 → 0.89 | 1.61 → 1.67 | 0 → 0 | 0 → 0 |
+| API 離陸中 | 0.9 | 54/54 → 54/54 | 0.43 → 0.43 | 0.08 → 0.08 | 0.000 → 0.000 | 0.39 → 0.39 | 1.28 → 1.28 | 0 → 0 | 0 → 0 |
+| API 離陸中 | 1.0 | 54/54 → 54/54 | 0.63 → 0.63 | 0.11 → 0.11 | 0.000 → 0.000 | 0.84 → 0.84 | 1.47 → 1.47 | 0 → 0 | 0 → 0 |
+| API 離陸中 | 1.2 | 54/54 → 54/54 | 0.95 → 0.95 | 0.17 → 0.17 | 0.000 → 0.000 | 0.72 → 0.72 | 1.58 → 1.58 | 0 → 0 | 0 → 0 |
+| 0.5 m ホバー | 0.9 | 54/54 → 54/54 | 0.02 → 0.02 | 0.03 → 0.03 | 0.000 → 0.000 | 0.88 → 0.88 | 1.31 → 1.31 | 0 → 0 | 0 → 0 |
+| 0.5 m ホバー | 1.0 | 54/54 → 54/54 | 0.01 → 0.01 | 0.07 → 0.07 | 0.000 → 0.000 | 0.88 → 0.88 | 1.22 → 1.22 | 0 → 0 | 0 → 0 |
+| 0.5 m ホバー | 1.2 | 54/54 → 54/54 | 0.01 → 0.00 | 0.08 → 0.08 | 0.000 → 0.000 | 0.93 → 0.92 | 1.85 → 1.84 | 0 → 0 | 0 → 0 |
+| 1.2 m ホバー | 0.9 | 54/54 → 54/54 | 0.02 → 0.02 | 0.02 → 0.02 | 0.000 → 0.000 | 1.02 → 1.02 | 1.43 → 1.43 | 0 → 0 | 0 → 0 |
+| 1.2 m ホバー | 1.0 | 54/54 → 54/54 | 0.01 → 0.01 | 0.03 → 0.03 | 0.002 → 0.002 | 1.00 → 1.00 | 1.38 → 1.38 | 0 → 0 | 0 → 0 |
+| 1.2 m ホバー | 1.2 | 54/54 → 54/54 | 0.01 → 0.01 | 0.04 → 0.05 | 0.000 → 0.003 | 0.92 → 0.93 | 1.41 → 1.36 | 0 → 0 | 0 → 0 |
+| ALT_HOLD 手動上昇中 | 0.9 | 54/54 → 54/54 | 0.13 → 0.13 | 0.03 → 0.03 | 0.000 → 0.000 | 1.03 → 1.03 | 1.68 → 1.68 | 0 → 0 | 0 → 0 |
+| ALT_HOLD 手動上昇中 | 1.0 | 54/54 → 54/54 | 0.13 → 0.13 | 0.02 → 0.02 | 0.000 → 0.000 | 1.03 → 1.03 | 1.75 → 1.75 | 0 → 0 | 0 → 0 |
+| ALT_HOLD 手動上昇中 | 1.2 | 54/54 → 54/54 | 0.12 → 0.12 | 0.02 → 0.02 | 0.000 → 0.002 | 1.19 → 1.19 | 2.04 → 2.02 | 0 → 0 | 0 → 0 |
+| STABILIZE 21 s 飛行 → 通信断 | 0.9 | 20/54 → 20/54 | 0.00 → 0.00 | 0.00 → 0.00 | 0.000 → 0.000 | 0.76 → 0.76 | - → - | 0 → 0 | 0 → 0 |
+| STABILIZE 21 s 飛行 → 通信断 | 1.0 | 20/54 → 20/54 | 0.00 → 0.00 | 0.00 → 0.00 | 0.000 → 0.000 | 0.76 → 0.76 | - → - | 0 → 0 | 0 → 0 |
+| STABILIZE 21 s 飛行 → 通信断 | 1.2 | 20/54 → 20/54 | 0.00 → 0.00 | 0.00 → 0.00 | 0.000 → 0.000 | 0.76 → 0.76 | - → - | 0 → 0 | 0 → 0 |
+
+成立した実行: 旧 870 本 / 新 870 本。空中停止: 旧 0 / 新 0; 再上昇>0.01 m: 旧 0 / 新 0; 床から再離陸: 旧 0 / 新 0; 未終了: 旧 0 / 新 0
+
+#### 再確認試験（SILS 全件）と既存シナリオの metric の変化（7 回目）
+
+`.expect` 付き 91 本（6 回目の 86 本 + 新規 5 本: `weak_spool_alt_offset`・`weak_spool_stabilize_offset`・`weak_spool_api`・`ceiling_brake_stale_velocity`・`ceiling_brake_stale_velocity_alt`）: **PASS 87 / FAIL 0 / KNOWN-FAIL 3（`commloss_land_level`・`pos_yaw`・`yaw_hold`）/ SKIP 1（`workshop_acro`）**。基準（86 本で PASS 82 / FAIL 0 / KNOWN-FAIL 3 / SKIP 1）の 82 本はすべて PASS のまま。6 回目のビルド（開始時の作業ツリー）で同じ 91 本を走らせた結果は PASS 81 / FAIL 6 / KNOWN-FAIL 3 / SKIP 1 で、不合格は新規 5 本と、期待値を更新した `weak_spool_alt`。`disarm_long_idle` は単独で 5 回走らせた（下）。
+
+既存シナリオの metric（329 件）のうち、6 回目のビルドから変わったのは次の 8 件（ほかは小数 3 桁まで同一）:
+
+| シナリオ | 値の変化 | 理由 |
+|---|---|---|
+| `calib` | `att_rmse` 0.0071 → 0.0049 rad | 1.2 m 付近を飛ぶ飛行で、天井ブレーキが ESKF の上昇率だけを見るようになった（C1）ためと推定（個別の切り分けは未実施）。小さくなる側 |
+| `pos_flight` | `tilt_max` 0.2362 → 0.2382 rad（閾値 0.314） | 同上（推定） |
+| `tof_invalid_alt_hover` | `alt_max` 0.2005 → 0.3179 m（閾値 0.30 → 0.40） | I2 の代償: 床を測れない 2 回目の離陸で、上昇の証拠が約 0.12 m 遅れる（上の「代償」） |
+| `tof_silent_est_high_noise` | `alt_max` 1.252 → 1.2545 m | 天井ブレーキの判定が ESKF のみになった（C1）。0.003 m |
+| `tof_silent_takeoff` | `alt_max` 0.2309 → 0.2288 m、`descent_speed_max` 0.5389 → 0.9242 m/s（閾値 1.15） | 床を離れた証拠が上向きの加速の後になったので、離陸の直後の出力停止では支持推力の窓が開くのが遅れ、降下の開始が「低くした見積もり」になった（推定。個別の切り分けは未実施）。閾値内 |
+| `weak_spool_alt`（新規扱い） | 床の上の `alt_max` 0.385 → 0.021 m | I3 の仕様変更 |
+| `tof_recover_invalid_first`・`tof_recover_reflip` | シナリオの入力を変更（上の「代償」）。`alt_rmse` 0.0254 → 0.0268、0.0242 → 0.018、`alt_max`（reflip）1.38 → 1.63 m（閾値 1.7） | 離陸の加速度を強めたため |
+
+`disarm_long_idle`（2300 s の長いシナリオ）: 6 回目の評価で並行実行中に 1 回不合格だった。単独で 5 回走らせると **5 回とも合格し、metric の値も 5 回とも同一**（`alt_min` 0.6357 m、`alt_max` 0.0211 m）で、揺れは無かった。並行実行（12 本）では 7 回目の途中の 3 回の全件実行すべてで合格。不合格の原因は、確認できた範囲では、走行中・走行済みの実行ファイルを `cp` で上書きした直後に OS が実行ファイルを強制終了する（終了コード −9、フライトログ無し）こと（7 回目の途中で再現。評価用のスクリプトは `rm` してから `cp` するようにした）で、6 回目の 1 回の不合格が同じ原因かは確定できない（未確認）。シナリオ側の揺れの原因は見つからなかった。
+
+#### 関数の長さ（コメント込み）
+
+`StateManager::transition` 56 → 33 行（`enterState()` 13 行を分離）、`processEstimatorCommands` 53 → 48 行（`reloadEstimatorParams()` を分離）、`DataStream::appendEntries` 137 → 8 行（`append400HzEntries()` 46 行、`appendFlightPhase400Entry()` 18 行、`appendFlightFlagsEntry()` 25 行、`appendPilotAndReferenceEntries()` 50 行に分離。パケット内の順序は不変）。新規の `ceilingBrakeClimbRate()` 6 行、`updateAutoTakeoff()` 15 行、`accumulateRise()` 16 行。
+
+#### 未確認の項目
+
+- 実機: C1・I2・I3・I4 のいずれも実機は未確認。実機ログ 3 本の再生ハーネス（`rv10_replay.cpp` など）は今回の変更後に再実行していない（未確認）。実機ログの床の上のろ波した超過は約 1.0 m/s² に達した（上の判断）ので、実機での上昇の証拠の誤成立の有無は未確認。
+- `kBlindLandingMinSilentUs`（4 s）の「ToF が生きたまま 10 s を超える LANDING の後に出力停止」の SILS シナリオは作れなかった（天井 1.2 m からの降下は 0.3 m/s で約 4 s で終わり、ToF が生きたまま LANDING を 10 s 以上続ける入力が無い）。host テスト `landing_after_a_long_live_tof_gets_the_minimum_silent_time_before_the_motors_are_cut`・`landing_clock_counts_the_continuous_silence_of_this_landing` で規範表の行を検証している。
+- workshop: ファームのビルドは成功。SILS の workshop ターゲットと実機での動作は未確認。
+- 上昇の証拠のしきい値 0.4 m/s² の両側の余裕が薄い（上の判断）。
+
+### 8 回目の見直し（2026-11-10）— 7 回目の修正に対する独立レビュー 2 本の指摘（根本原因・D1〜D6・E1〜E5）
+
+**根本原因:** 「床を離れた」の判定を加速度計だけ（上向き加速の証拠 0.4 m/s² の後から数える上昇量）で作り、安全判断の門にした。ゆっくり浮く機体では証拠が立たず、逆に床の上でも立ち上がりと同時に入るオフセットで誤成立する。**原則: 証拠が「無い」ことを、床にいる証拠として扱わない。加速度計だけの判定を安全判断の門にしない。**
+
+| 項目 | 変更 | 検証 |
+|---|---|---|
+| D1 ToF が使えない自動離陸が上昇し続ける（3.8〜7.6 m） | TAKEOFF 中の無効サンプル計数の 2 s の時間の備えから `left_floor` の条件を外した（HEAD に戻す） | 下の表（m 行列 90 本、`tof_invalid_alt_hover` の `--thrust-eff`）、`weak_spool_alt`・`weak_spool_api`（床の上の LANDING を許容する期待値に書き直し） |
+| D2 手動の TAKEOFF が出力停止で FLYING にならない | HEAD に戻す（床の上で FLYING 表示になるのは許容。`operation_manual.md` に記載） | `weak_spool_stabilize`（期待値を書き直し）、`u_*` 14 本 |
+| D3 TAKEOFF 中の通信喪失の自動着陸が永久に保留 | 猶予が過ぎたら TAKEOFF からも LANDING（`decideCommLossLanding()`） | 新シナリオ `commloss_takeoff`、`u_0_3095` に通信断を足した SILS |
+| D4 浮けない自動離陸の中止が空中で DISARM する | 中止は、健全な ToF が床の近く・増えないと示す積極的な証拠（`TakeoffFloorWatch`）があるときだけ | 新シナリオ `weak_spool_alt_floor`（中止）・`weak_spool_alt_slow_lift`（中止しない）、`w_*` 18 本、実機ログ 3 本の再生 |
+| D5 加速度計の上向きの証拠を安全判断の門から外す | 証拠・`left_floor`・`leftFloor()`・workshop の発行・`kManualTakeoffMinRiseM`・`craftIsOffTheFloor()` を削除。`tof_recover_*`・`tof_invalid_alt_hover` を HEAD の入力・閾値に戻した | 全件の SILS（`tof_recover_*`・`tof_invalid_alt_hover` は HEAD の入力で合格）、ビルド 2 種 |
+| D6 判断を純関数に | `takeoff_policy.hpp`（`decideTakeoff()`・`decideCommLossLanding()`・`TakeoffFloorWatch`）、`architecture.md` の INV-4 | `test_takeoff_policy`（12 本）、規範表の全セル |
+| E1 API の `land` の後の再上昇 | 着陸のループの基準を、較正した支持推力の 1.08 倍までに抑える（`landingBaseThrust()`） | 下の E1（45 本） |
+| E2 自動離陸の行き過ぎ | 余裕 `kTakeoffVelocityDisagreeMps` の掃引（120 本）。**採らない** | 下の E2 |
+| E3 `kBlindLandingMinSilentUs` | 4 s → 5.5 s | 972 本の評価表（最長 4.7 s → 8 回目の最終ビルドで 4.0 s） |
+| E4 天井ブレーキの断続作動 | 止まる高さの予測の超過に比例する上限（`kAltitudeCeilingBrakeRampM` 0.1 m） | 下の E4（60 本 + 別案の試行） |
+| E5 軽微 | 文章の食い違い、50 行、作業用の名前、言い切り、用語「沈黙」→「出力停止」 | 目視、関数の長さの検査 |
+
+#### D1・D2・D3・D4: 7 回目のレビューの再現条件を最終ビルドで再実行（HEAD / 7 回目の最終ビルド / 8 回目の最終ビルド）
+
+`m_*`・`u_*`・`w_*`・`Na_*` と、`tof_invalid_alt_hover` を `--thrust-eff` で走らせる条件は、レビューの再現条件を作業用に複製したシナリオで、リポジトリには置かない（入力は表の見出しの記述どおり: `m_*` は `tof_invalid_alt_hover` の ARM 後に加速度計オフセットを注入した変種、`u_*` は STABILIZE でスロットル 3088〜3105 の離陸の直後に `tof_silent 1`、`w_*` は ALT_HOLD の自動離陸でモータの健全度を 0.855〜0.88 にした変種）。
+
+| 条件 | 本数 | HEAD | 7 回目 | 8 回目 |
+|---|---|---|---|---|
+| m 行列（`tof_invalid_alt_hover` 型。健全度 0.95 / 0.97 / 1.0 × 加速度オフセット 5 通り × `hover.thrust_corr` なし・0.9・1.2 × ノイズ n0 / n2） | 90 | 最高 0.93 m、1.35 m 超 0 本、空中停止 0 本 | **最高 7.57 m、1.35 m 超 17 本**、空中停止 0 本 | 最高 0.93 m、1.35 m 超 0 本、空中停止 0 本 |
+| 同: 接地速度が 1.5 m/s 超 / 1.0 m/s 超の本数 | 90 | 4 / 46 | 20 / 39 | 4 / 13（4 本は HEAD と同じ実行で 1.59〜1.86 m/s） |
+| `tof_invalid_alt_hover`（`--thrust-eff` 0.9 / 0.95、ノイズ n0）の最高高度 | 2 | 0.44 / 0.69 m | **2.09 / 3.91 m**（2 回目の離陸が空中で DISARM） | 0.44 / 0.69 m（HEAD と同じ） |
+| 同（ノイズ n2） | 2 | 0.95 / 1.05 m | 0.95 / 1.05 m | 0.95 / 1.05 m |
+| `u_*`（STABILIZE、スロットル 3088〜3105、途中で ToF 出力停止。通信断を足さない） | 14 | 14 本とも FLYING → LANDING（最高 0.02〜2.82 m） | **14 本とも TAKEOFF のまま**（最高 0.02〜5.29 m、着陸しない） | HEAD と同じ（14 本とも一致） |
+| `u_0_3095` に通信断（8 s の無音）を足したもの | 1 | 最高 1.07 m、FLYING 5.6 s、LANDING 11.8 s、接地 0.76 m/s | **TAKEOFF のまま 2.76 m まで上昇し、16.6 s に高さ 2.73 m でモータが止まり、7.3 m/s で衝突** | HEAD と同じ |
+| `w_*`（ALT_HOLD、健全度 0.855〜0.88、オフセット −0.3 / 0 / +0.3、不感帯あり） | 18 | 18 本とも床の上で LANDING → IDLE | 18 本とも TAKEOFF → IDLE（DISARM）。健全度 0.875〜0.88 の 4 本は 0.11〜0.18 m まで浮いてから DISARM し、1.2〜1.63 m/s で落下 | HEAD と同じ（18 本とも一致。最高 0.02 m、空中の DISARM 0 本） |
+| 健全度 0.85〜0.9 × 不感帯（切る / あり）の ALT_HOLD 自動離陸 | 10 | 不感帯を切ると 0.36〜0.37 m まで浮いて FLYING（中止なし）。あると床の上で LANDING | 健全度 0.85〜0.88 は 5 s で DISARM（0.87 は 0.07 m まで浮いて 0.8 m/s、0.88 は 0.18 m まで浮いて 1.63 m/s で落下）。0.9 は飛ぶ | 不感帯を切ると、0.85・0.86 は 5 s で DISARM（床の上）、0.87 以上は離陸を完了して飛ぶ。不感帯があると全て床の上で LANDING（HEAD と同じ） |
+
+D4 の注: 実機のセンサは床の上で無効を返す（実機ログ 3 本の TAKEOFF の最初の 186〜344 ms が無効）ので、実機で床の積極的な証拠が立つのは ToF が有効に読める床（マット、傾き）に限られる。実機ログ 3 本の TAKEOFF の ToF サンプルを `TakeoffFloorWatch` に通すと、3 本とも証拠は一度も立たない（TAKEOFF の ToF は無効 → 0.031〜0.041 m → 上昇で、1 s の保持に届かない）。
+
+#### E1: API の `land` の後の再上昇（`hover.thrust_corr` × seed 1〜3、ノイズ n2、1.2 m まで上げてから `land`）
+
+LANDING に入った後の最大上昇 [m]（HEAD / 7 回目 / 8 回目）: corr 1.0: 0.03〜0.05 / 0.03〜0.05 / 0.02〜0.04、1.05: 0.08〜0.13 / 0.08〜0.11 / 0.01〜0.03、1.1: 0.17〜0.24 / 0.17〜0.26 / 0.03〜0.09、1.15: 0.27〜0.32 / 0.28〜0.29 / 0.07、1.2: （HEAD は離陸で 2.0 m まで行き過ぎ、LANDING の前に 2.5 m/s で接地するので比較できない）/ 0.60〜0.65 / 0.00〜0.04。
+
+原因: ToF 生存中の着陸の速度ループは hover 推力の「見積もり」から始まり、積分が遅い。見積もりが支持推力の 1.24 倍のとき（corr 1.2）、推力は数秒間、機体の重さを上回った。HEAD でも起きる。
+
+試した案と結果:
+
+| 案 | 上昇 [m] | `landing_dead_zone` | 採否 |
+|---|---|---|---|
+| (a) 上向き速度が 0 / 0.03 / 0.1 m/s を超える間だけ、推力を支持推力の 0.95 倍に制限 | 0.04〜0.57 | 0.1 m/s は合格（0・0.03 は未実施） | 不十分 |
+| (b) 目標の降下速度に達するまで推力を支持推力の 0.95 倍に制限、または基準を支持推力そのものに制限 | 0.00〜0.05 / 0.00〜0.01 | **不合格**（後者は接触が約 0.2 → 0.34 m/s） | 採らない |
+| (c) 基準を支持推力の 1.05 倍までに制限 | 0.00〜0.04 | **不合格**（3.2 G の衝撃、接触 0.27 m/s。見積もりが支持推力の 1.057 倍で、推力 0.4 % の差で経路が変わる） | 採らない |
+| (d) 基準を支持推力の 1.08 倍までに制限 | 0.00〜0.09 | 合格（変化なし。見積もり 1.057 倍が上限の内側） | **採用** |
+| 同 1.10 / 1.15 倍 | 0.05〜0.11 / 0.17〜0.29 | 合格 | 効きが足りない |
+
+`landing_dead_zone` は、わずかな推力の差で接地の経路（柔らかい接触か、3 G の衝撃か）が入れ替わる境目にあるシナリオで、1.08 は、その 1.057 の外側にある最小の値として選んだ（根拠の数値は `flight_limits.hpp` の `kLandingBaseOverSupportMax`）。
+
+#### E2: 自動離陸の行き過ぎ（API の離陸、`hover.thrust_corr` 0.9 / 1.0 / 1.1 / 1.2 × ノイズ n0 / n2 × seed 1〜3 の 24 本、真値の最高 [m]）
+
+| 余裕 [m/s] | 0.9 n0 | 0.9 n2 | 1.0 n0 | 1.0 n2 | 1.1 n0 | 1.1 n2 | 1.2 n0 | 1.2 n2 | 最悪 |
+|---|---|---|---|---|---|---|---|---|---|
+| 0.6（現行） | 0.60 | 0.77〜0.82 | 0.83 | 1.11〜1.14 | 1.20 | 1.26〜1.29 | 1.30 | 1.29〜1.29 | 1.296 |
+| 0.45 | 0.60 | 0.77〜0.79 | 0.83 | 1.06〜1.13 | 1.20 | 1.26〜1.28 | 1.29 | 1.29〜1.29 | 1.295 |
+| 0.3 | 0.60 | 0.76〜0.78 | 0.83 | 1.03〜1.10 | 1.16〜1.16 | 1.26〜1.26 | 1.29 | 1.29〜1.31 | 1.311 |
+| 0.2 | 0.56 | 0.69〜0.77 | 0.80 | 1.01〜1.11 | 1.15 | 1.25〜1.26 | 1.28 | 1.29〜1.31 | 1.314 |
+| 0.1 | 0.57 | 0.66〜0.77 | 0.79 | 0.99〜1.06 | 1.11 | 1.26〜1.28 | 1.28 | 1.29〜1.30 | 1.303 |
+
+採らない理由: (1) 最悪の `hover.thrust_corr` 1.2 は 1.28〜1.31 m のまま変わらない（行き過ぎを決めるのは天井ブレーキで、余裕ではない）。(2) 改善は 1.0 の n2（1.11〜1.14 → 0.99〜1.06 m）、0.9 の n2（0.77〜0.82 → 0.66〜0.77 m）、1.1 の n0（1.20 → 1.11 m）の最大約 0.09 m だけで、0.5 m の目標に対する行き過ぎは残る。(3) 余裕を小さくすると、普通の離陸の最初の 1 s（積分と ESKF が最大 0.5 m/s 違う）で積分が速度ループに入り、余裕の小さい `alt_recenter_gate`・`landing_dead_zone` の挙動が変わるおそれがある。余裕 0.6〜0.1 のどれでも `alt_recenter_gate`・`alt_auto_takeoff`・`pos_auto_takeoff`・`alt_takeoff_steer`・`alt_flight`・`api_flight`・`pos_flight` は合格した（`landing_dead_zone` は、この掃引の時点で E1 の途中の案が入っていて 0.6 を含む全てで不合格だったため、この掃引では未確認）。余裕は 0.6 のままにする。
+
+#### E4: 天井ブレーキの断続作動（1.2 m のホバーと離陸の行き過ぎ、`hover.thrust_corr` 0.9 / 1.0 / 1.2 × ノイズ n0 / n2 × seed 1〜2 の 12 本、ブレーキが深さの半分より深くなった回数〔seed 1 / 2〕と真値のピーク）
+
+| 幅 `kAltitudeCeilingBrakeRampM`（0 = 硬いブレーキ） | 0.9 n0 | 0.9 n2 | 1.0 n0 | 1.0 n2 | 1.2 n0 | 1.2 n2 | 最悪のピーク |
+|---|---|---|---|---|---|---|---|
+| 0（旧） | 136 / 134 | 9 / 12 | 18 / 18 | 0 / 5 | 2 / 2 | 38 / 38 | 1.288 m |
+| 0.03 m | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 2 / 2 | 9 / 9 | 1.279 m |
+| 0.06 m | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 1 / 1 | 3 / 10 | 1.290 m |
+| 0.1 m（採用） | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 1 / 1 | 3 / 3 | 1.296 m |
+
+比較した別案（seed 1・2）: 上昇率の下限（0.1 / 0.15 / 0.2 / 0.3 m/s 以下ではブレーキしない）は、回数を 89 → 3 / 3 / 2 / 1 回などに減らすが、ピークが 1.363〜1.375 m（0.9 n0）、1.348〜1.693 m（1.2 n2）に増え、1.35 m の限界を超える。解除側のヒステリシス（0.02〜0.06 m）は 89 → 27〜32 回にしか減らない（上昇率が 0 以下になると解除されるため）。比例させる案は回数を 0〜3 に減らし、ピークは 0.008 m しか増えない。文書の「天井でのホバーには触れない」は、「予測の止まる高さが 1.25 m 未満なら触れない。それより上では比例して働く」に直した。
+
+#### 7 回目の評価表を最終ビルドで測り直した差分（972 本、旧 = 7 回目の最終ビルド、新 = 8 回目の最終ビルド）
+
+| 場面 | corr | 成立/全 旧→新 | 出力停止時からの上昇増分 [m] 旧→新 | LANDING 以後の余分な上昇 [m] 旧→新 | 再上昇 [m] 旧→新 | 接地速度 [m/s]（ノイズなし・n0 最大）旧→新 | 接地速度 [m/s]（n2 最大）旧→新 | 空中停止 旧→新 | 床から再離陸 旧→新 |
+|---|---|---|---|---|---|---|---|---|---|
+| 自動離陸の上昇初期 | 0.9 | 54/54 → 54/54 | 0.49 → 0.49 | 0.09 → 0.09 | 0.000 → 0.000 | 0.54 → 0.54 | 1.45 → 1.45 | 0 → 0 | 0 → 0 |
+| 自動離陸の上昇初期 | 1.0 | 54/54 → 54/54 | 0.65 → 0.65 | 0.11 → 0.11 | 0.000 → 0.000 | 1.00 → 0.86 | 1.61 → 1.61 | 0 → 0 | 0 → 0 |
+| 自動離陸の上昇初期 | 1.2 | 54/54 → 54/54 | 0.94 → 0.95 | 0.13 → 0.14 | 0.000 → 0.000 | 0.89 → 0.89 | 1.67 → 1.67 | 0 → 0 | 0 → 0 |
+| API 離陸中 | 0.9 | 54/54 → 54/54 | 0.43 → 0.43 | 0.08 → 0.08 | 0.000 → 0.000 | 0.39 → 0.39 | 1.28 → 1.28 | 0 → 0 | 0 → 0 |
+| API 離陸中 | 1.0 | 54/54 → 54/54 | 0.63 → 0.63 | 0.11 → 0.11 | 0.000 → 0.000 | 0.84 → 0.84 | 1.47 → 1.47 | 0 → 0 | 0 → 0 |
+| API 離陸中 | 1.2 | 54/54 → 54/54 | 0.95 → 0.95 | 0.17 → 0.17 | 0.000 → 0.000 | 0.72 → 0.72 | 1.58 → 1.58 | 0 → 0 | 0 → 0 |
+| 0.5 m ホバー | 0.9 | 54/54 → 54/54 | 0.02 → 0.02 | 0.03 → 0.03 | 0.000 → 0.000 | 0.88 → 0.88 | 1.31 → 1.31 | 0 → 0 | 0 → 0 |
+| 0.5 m ホバー | 1.0 | 54/54 → 54/54 | 0.01 → 0.01 | 0.07 → 0.07 | 0.000 → 0.000 | 0.88 → 0.88 | 1.22 → 1.22 | 0 → 0 | 0 → 0 |
+| 0.5 m ホバー | 1.2 | 54/54 → 54/54 | 0.00 → 0.00 | 0.08 → 0.08 | 0.000 → 0.000 | 0.92 → 0.93 | 1.84 → 1.71 | 0 → 0 | 0 → 0 |
+| 1.2 m ホバー | 0.9 | 54/54 → 54/54 | 0.02 → 0.02 | 0.02 → 0.02 | 0.000 → 0.000 | 1.02 → 1.02 | 1.43 → 1.43 | 0 → 0 | 0 → 0 |
+| 1.2 m ホバー | 1.0 | 54/54 → 54/54 | 0.01 → 0.01 | 0.03 → 0.03 | 0.002 → 0.002 | 1.00 → 1.00 | 1.38 → 1.38 | 0 → 0 | 0 → 0 |
+| 1.2 m ホバー | 1.2 | 54/54 → 54/54 | 0.01 → 0.01 | 0.05 → 0.05 | 0.003 → 0.002 | 0.93 → 0.91 | 1.36 → 1.37 | 0 → 0 | 0 → 0 |
+| ALT_HOLD 手動上昇中 | 0.9 | 54/54 → 54/54 | 0.13 → 0.13 | 0.03 → 0.03 | 0.000 → 0.000 | 1.03 → 1.03 | 1.68 → 1.68 | 0 → 0 | 0 → 0 |
+| ALT_HOLD 手動上昇中 | 1.0 | 54/54 → 54/54 | 0.13 → 0.13 | 0.02 → 0.02 | 0.000 → 0.000 | 1.03 → 1.03 | 1.75 → 1.75 | 0 → 0 | 0 → 0 |
+| ALT_HOLD 手動上昇中 | 1.2 | 54/54 → 54/54 | 0.12 → 0.11 | 0.02 → 0.02 | 0.002 → 0.000 | 1.19 → 1.17 | 2.02 → 1.98 | 0 → 0 | 0 → 0 |
+| STABILIZE 21 s 飛行 → 通信断 | 0.9 | 20/54 → 20/54 | 0.00 → 0.00 | 0.00 → 0.00 | 0.000 → 0.000 | 0.76 → 0.76 | - → - | 0 → 0 | 0 → 0 |
+| STABILIZE 21 s 飛行 → 通信断 | 1.0 | 20/54 → 20/54 | 0.00 → 0.00 | 0.00 → 0.00 | 0.000 → 0.000 | 0.76 → 0.76 | - → - | 0 → 0 | 0 → 0 |
+| STABILIZE 21 s 飛行 → 通信断 | 1.2 | 20/54 → 20/54 | 0.00 → 0.00 | 0.00 → 0.00 | 0.000 → 0.000 | 0.76 → 0.76 | - → - | 0 → 0 | 0 → 0 |
+
+成立した実行: 旧 870 本 / 新 870 本。空中停止: 旧 0 / 新 0; 床から再離陸: 旧 0 / 新 0; 未終了: 旧 0 / 新 0
+
+出力停止から最初の接触までの最長（E3）: 7 回目の最終ビルド 4.66 s（ALT_HOLD 手動上昇中の 4.7 s）→ 8 回目の最終ビルド 4.02 s（同 4.0 s）。`kBlindLandingMinSilentUs` 5.5 s は両方を 0.8 s 以上の余裕で覆い、後半の低下（5 s から推力が下がり、8.33 s でゼロ）の前に収まる。
+
+#### 再確認試験（SILS 全件）と既存シナリオの metric の変化（8 回目）
+
+`.expect` 付き 94 本（7 回目の 91 本 + 新規 3 本: `weak_spool_alt_floor`・`weak_spool_alt_slow_lift`・`commloss_takeoff`）: **PASS 90 / FAIL 0 / KNOWN-FAIL 3（`commloss_land_level`・`pos_yaw`・`yaw_hold`）/ SKIP 1（`workshop_acro`）**。基準（91 本で PASS 87 / FAIL 0 / KNOWN-FAIL 3 / SKIP 1）に、新規 3 本の合格を足した値と一致。
+
+同じ 94 本を 7 回目の最終ビルドで走らせると PASS 79 / FAIL 11 / KNOWN-FAIL 3 / SKIP 1: 新規 3 本、書き直した `weak_spool_*` 5 本、HEAD の入力・閾値に戻した `tof_invalid_alt_hover`・`tof_recover_invalid_first`・`tof_recover_reflip` の 3 本が不合格（`tof_invalid_alt_hover` は `alt_max` 0.3179 m > 0.30）。HEAD のビルドでは新規 3 本のうち `commloss_takeoff`・`weak_spool_alt_floor` が不合格で、`weak_spool_alt_slow_lift` は合格する（HEAD は中止しない）。
+
+既存シナリオの metric（上で挙げた入力・期待値を変えたシナリオを除く 316 件）のうち、7 回目の最終ビルドから変わったのは 46 件（すべて合格のまま）。変わった理由（推定。個別の切り分けは未実施）:
+
+| シナリオ | 値の変化 | 理由 |
+|---|---|---|
+| `tof_silent_takeoff` | `descent_speed_max` 0.9242 → 0.5389 m/s、`alt_max` 0.2288 → 0.2309 m | 上向き加速の証拠を消したので、離陸の直後の出力停止でも支持推力の窓が早く開く（6 回目の値 0.5389 に戻った） |
+| `tof_silent_est_high_noise` | `alt_max` 1.2545 → 1.2977 m（閾値 1.55） | E4（天井ブレーキが比例する） |
+| `ceiling_brake_stale_velocity_alt` | `alt_min` 1.177 → 1.198 m、`alt_max` 1.259 → 1.269 m、降下速度の最大 0.125 → 0.088 m/s | E4 |
+| `calib`・`pos_flight`・`api_flight`・`boot_motion`・`crash_refly`・`flip_*`・`api_flip_*`・`tof_silent_est_high` | `att_rmse`・`tilt_max`・`alt_*`・`flip_*_deg`・`settle_time_s` などが 3 桁目から変わる（例: `calib` の `att_rmse` 0.0049 → 0.0082 rad、`api_flip_pitch` の `tilt_max` 0.0421 → 0.0846 rad、`crash_refly` の `alt_max` 1.2249 → 1.2637 m） | 1.2 m 付近を飛ぶ飛行で、E4 の比例ブレーキが硬いブレーキとは異なる推力を出す（推定） |
+| `weak_spool_alt`・`weak_spool_api`・`weak_spool_stabilize`（+ `_offset` 2 本） | 期待値を書き直した（上の D1・D2） | 8 回目の判断（7 回目の仕組みの取り下げ）。HEAD に無かったシナリオなので、HEAD の合否は変わらない（HEAD でも合格） |
+| `tof_invalid_alt_hover`・`tof_recover_invalid_first`・`tof_recover_reflip` | 7 回目で変えた入力・閾値を HEAD の値に戻した | D5。HEAD の入力で合格 |
+
+#### 関数の長さ・ビルド・ホスト試験
+
+- 50 行（コメント込み）を超える関数で、HEAD からの変更を含むもの: `PidController::compute`（740 行）と `StateTask`（501 行）の 2 本のみ（いずれも HEAD から 50 行超で、今回の変更は数行）。新規・変更した関数（`decideTakeoff`・`decideCommLossLanding`・`TakeoffFloorWatch`・`updateTakeoff`・`brakeAboveCeiling`・`landingBaseThrust`・`handleCommLossGrace`・`publishControllerStatus`〔50 行〕）は 50 行以内、ネスト 2 段以内。
+- `sf build vehicle` 成功（バイナリ 1177.1 KB）。workshop ファーム（`firmware/workshop` を作業用の複製で、`vehicle` と `common` は実体を指して）のビルド成功。
+- ホスト試験 9 ファイル 215 本合格（`test_takeoff_policy` 12 本を追加、`test_blind_landing` は上昇の証拠の試験 2 本を削除して 46 本）。
+
+#### 未確認の項目
+
+- 実機: 8 回目の変更はいずれも実機は未確認。実機ログ 3 本の再生は、`TakeoffFloorWatch` に TAKEOFF の ToF サンプルを通す形だけ行った（上の D4 の注）。上昇の証拠を消したので、7 回目の床の上のオフセットの階段の試験（`rv13_lift`）は対象が無い（再実行不可）。
+- E1 の 1.08・E4 の 0.1 m・E3 の 5.5 s は SILS で決めた候補値。E1 の 1.08 は `landing_dead_zone` の境目に合わせた値で、実機の着陸が同じ境目を持つかは未確認。
+- D1 で受け入れた「床の上の ToF なし LANDING」は、モータが `kNoTofThrustCapRatio` 以下の推力で数秒（`weak_spool_alt` で 8.1 s から 14.5 s の約 6 s）回り、接地検出（床が機体を支える）で止まる。実機は未確認。
+- m 行列の 90 本のうち 4 本は、接地速度が 1.59〜1.86 m/s（ToF なしの降下の最初の離陸の上昇中 0.64〜0.93 m からの接地）で、HEAD と同じ値。8 回目では未解決。
+- 既存シナリオの metric が変わった理由（E4・上昇の証拠の削除）は推定で、個別の切り分けは未実施。
+- E2 の掃引では `landing_dead_zone` は未確認（E1 の途中の案が入っていたため）。最終ビルドの `landing_dead_zone` は合格。
+- workshop: ファームのビルドは成功。SILS の workshop ターゲットと実機での動作は未確認（`workshop_acro` は SKIP）。HEAD の workshop は `controller_status` を発行しない（`takeoff_reached` が立たず、ALT_HOLD / POS_HOLD の自動離陸が完了しない: HEAD と同じ。workshop は高度モードを使わない前提）。
 
 ## 3. How to run
 

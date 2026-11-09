@@ -1,0 +1,31 @@
+# weak_spool_alt.scn — ALT_HOLD auto-takeoff, weak motors (health 0.85): the ToF reads invalid on the floor, the takeoff ends by a ToF-silent LANDING on the floor
+#                      ALT_HOLD の自動離陸、弱いモータ（健全度 0.85）: ToF は床の上で無効を返し、離陸は床の上での ToF なしの LANDING で終わる
+#
+# Motor health 0.85: the hover-thrust estimate (1.12 x the weight) delivers 0.95 x the weight, the craft cannot lift until the velocity loop has raised the thrust (about 4 s of
+# integral). The ToF reads invalid on the floor (the SILS dead zone, as the real sensor does). Spec under test (8th pass, decision D1; detailed_design.md §3.1):
+#  1. The invalid samples are counted after 2 s + 0.15 s of TAKEOFF (the time limit of the tracker): a ToF-silence episode, TAKEOFF -> LANDING (ALT_HOLD needs the altitude).
+#     The craft is still on the floor: ACCEPTED, because the thrust of the descent without a ToF is at most 0.95 x the support thrust (kNoTofThrustCapRatio) and cannot lift the
+#     craft. (The 6th/7th passes tried to prevent this with an accelerometer-based evidence; it was withdrawn.)
+#  2. The floor holds the craft: "Touchdown detected (the floor holds the craft up ...)" -> LANDING -> IDLE_GROUND, the motors stop. No takeoff completion, no abort (the abort
+#     needs the POSITIVE evidence of a healthy ToF; see weak_spool_alt_floor).
+#
+# モータの健全度 0.85: ホバー推力の見積もり（重さの 1.12 倍）が出す推力は重さの 0.95 倍で、速度ループが推力を上げる（積分で約 4 s）まで機体は浮かない。ToF は床の上で無効を返す
+# （SILS の不感帯。実センサと同じ）。検証する仕様（8 回目、判断 D1。detailed_design.md §3.1）:
+#  1. 無効サンプルは TAKEOFF の 2 s + 0.15 s の後に数えられる（トラッカーの時間の上限）: ToF 出力停止のエピソードで、TAKEOFF → LANDING（ALT_HOLD は高度を必要とする）。
+#     機体はまだ床の上: 許容する。ToF なしの降下の推力は高々 支持推力の 0.95 倍（kNoTofThrustCapRatio）で、機体を持ち上げられないため。
+#     （6・7 回目は加速度計に基づく証拠でこれを防ごうとしたが、取り下げた。）
+#  2. 床が機体を支える: "Touchdown detected (the floor holds the craft up ...)" → LANDING → IDLE_GROUND、モータは止まる。離陸の完了も中止も無い（中止には健全な ToF の
+#     「積極的な」証拠が要る。weak_spool_alt_floor 参照）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/weak_spool_alt.scn --target vehicle --duration 16000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    fault 0 0.85
+   0    fault 1 0.85
+   0    fault 2 0.85
+   0    fault 3 0.85
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (5.5 s) — spool, then the auto-takeoff climb
+   +    rc         2048  2048   2048    2048  1     6500      50        1              # D: stick centre — the thrust rises but the craft does not lift; the ToF-invalid rule ends the TAKEOFF by a LANDING at about 8.1 s (TAKEOFF began at about 5.8 s)
+   +    rc         2048  2048   2048    2048  0     4000      50        1              # E: release the ARM button — the craft stays disarmed on the floor (to 16.0 s)

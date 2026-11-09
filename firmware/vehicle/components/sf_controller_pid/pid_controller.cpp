@@ -399,19 +399,99 @@ float PidController::limitClimbAboveCeiling(float velocity_setpoint, float altit
     return fminf(velocity_setpoint, descent_to_ceiling);
 }
 
-/// Altitude ceiling, brake side: above kAltitudeCeilingM + kAltitudeCeilingMarginM and still rising, the thrust is at most
-/// kAltitudeCeilingBrakeFrac x the hover-thrust estimate. The velocity loop alone cannot stop an overshoot (its correction is limited and
-/// the estimate may be high: SILS, 1.69 m after a +35 % estimate), and the climb command is already forbidden by limitClimbAboveCeiling().
-/// 高度上限のブレーキ側: kAltitudeCeilingM + kAltitudeCeilingMarginM を超えてまだ上昇中なら、推力は hover 推力の見積もりの
-/// kAltitudeCeilingBrakeFrac 倍以下。速度ループだけでは行き過ぎを止められない（補正が制限され、見積もりが高いこともある:
-/// SILS で見積もり +35 % から 1.69 m）。上昇の指令は limitClimbAboveCeiling() が既に禁止している。
+/// At rest on the ground: the phase is Grounded and the commanded thrust is below kVerticalVelocityRestThrustFrac of the hover
+/// thrust. A manual takeoff (ACRO / STABILIZE) stays in the Grounded phase until the ToF says airborne, so the thrust decides:
+/// above that fraction the craft may be leaving the floor, and the vertical velocity estimate and the support-thrust window run.
+/// 地上で静止: フェーズが Grounded で、指令推力が hover 推力の kVerticalVelocityRestThrustFrac 倍未満。手動の離陸（ACRO /
+/// STABILIZE）は ToF が空中と言うまで Grounded フェーズのままなので、推力で決める: その割合以上なら機体は床を離れつつあるかも
+/// しれず、鉛直速度の推定と、支持推力の窓が動く。
+bool PidController::restingOnGround(float thrust) const
+{
+    return (phase_ == VerticalPhase::Grounded) && (thrust < limits::kVerticalVelocityRestThrustFrac * hover_thrust_);
+}
+
+/// Climb rate for the velocity loop of the auto-takeoff [m/s]: the ESKF's, plus the part of the climb that the accelerometer integral shows and the ESKF
+/// does not, beyond kTakeoffVelocityDisagreeMps. Below the ToF handoff height the ESKF holds the climb rate at zero, and for about 1 s after the handoff it is
+/// wrong, so a loop on it alone does not see a craft that rises faster than it should (SILS, `hover.thrust_corr` 1.2: 1.2 m/s at the handoff, thrust 1.27 x
+/// the weight, 1.96 m peak). A margin keeps the ordinary takeoff on the ESKF signal: the integral and the ESKF differ by up to 0.5 m/s in the first second
+/// of an ordinary takeoff, and a continuous excess (not a switch) leaves no step.
+/// 自動離陸の速度ループの上昇率 [m/s]: ESKF の値に、加速度積分が示し ESKF が示さない上昇のうち kTakeoffVelocityDisagreeMps を超えた分を足したもの。
+/// ToF の引き継ぎ高さより下では ESKF が上昇率を 0 に固定し、引き継ぎの後の約 1 s は誤っているので、それだけを使うループは、本来より速く上がる機体を
+/// 見ない（SILS の `hover.thrust_corr` 1.2: 引き継ぎで 1.2 m/s、推力は重さの 1.27 倍、ピーク 1.96 m）。余裕を置いて、普通の離陸は ESKF の信号の
+/// ままにする: 普通の離陸の最初の 1 s は、積分と ESKF が最大 0.5 m/s 違う。切り替えでなく連続した超過分なので、段差は出ない。
+/// @param eskf_climb_rate ESKF climb rate, up positive [m/s]  ESKF の上昇率（上が正）[m/s]
+float PidController::takeoffClimbRate(float eskf_climb_rate) const
+{
+    const float disagreement = vertical_velocity_.velocityUp() - eskf_climb_rate;
+    return eskf_climb_rate + fmaxf(disagreement - limits::kTakeoffVelocityDisagreeMps, 0.0f);
+}
+
+/// Thrust of the support reference [N]: the thrust that holds the craft, whatever the hover-thrust estimate says. The
+/// accelerometer-calibrated support thrust once the window is long enough, the early estimate over all airborne samples
+/// before that, the lowered hover estimate when neither exists (blind_landing.hpp, blindLandingStartThrust).
+/// 支持推力の基準 [N]: 機体を支える推力。ホバー推力の見積もりが何であれ。窓が十分長ければ加速度計で較正した支持推力、
+/// それまでは空中の全サンプルでの早い推定、どちらも無ければ低くしたホバー推力の見積もり（blind_landing.hpp、
+/// blindLandingStartThrust）。
+float PidController::supportReferenceThrust() const
+{
+    return blindLandingStartThrust(support_filter_, hover_thrust_);
+}
+
+/// Climb rate that the ceiling brake judges [m/s], up positive. The accelerometer integral (vertical_velocity_) is used ONLY where the ESKF cannot
+/// be believed about a climb: in the auto-takeoff climb (the integral restarted at rest, and the ESKF is pinned below the ToF handoff height and wrong for
+/// about 1 s after it), and while the ESKF vertical state is not trusted (the ToF is silent, or the vertical state is pinned on the ground). While the ESKF is
+/// trusted (ALT_HOLD / POS_HOLD in flight) its own climb rate decides: the integral is an observer output there and, after a long episode without a ToF, it
+/// can be stale (SILS scenario ceiling_brake_stale_velocity: accelerometer offset -0.4 m/s^2, 3.7 m/s on a craft that was not climbing, thrust halved, the craft hit the floor at 1.7 m/s).
+/// 天井ブレーキが判定する上昇率 [m/s]（上が正）。加速度積分（vertical_velocity_）を使うのは、ESKF の上昇を信じられない場面だけ: 自動離陸の上昇
+/// （積分は静止から数え直され、ESKF は ToF の引き継ぎ高さより下で固定され、引き継ぎの後の約 1 s も誤っている）と、ESKF の鉛直状態を信用できない間
+/// （ToF 出力停止、または地上で鉛直状態が固定）。ESKF を信用できる間（飛行中の ALT_HOLD / POS_HOLD）は ESKF 自身の上昇率で決める: そこでの積分は
+/// オブザーバの出力で、ToF なしの長いエピソードの後には古いことがある（SILS のシナリオ ceiling_brake_stale_velocity: 加速度オフセット −0.4 m/s^2、上昇していない機体で
+/// 3.7 m/s、推力が半分になり、機体は 1.7 m/s で床に衝突）。
+float PidController::ceilingBrakeClimbRate(const StateEstimate& state, float eskf_climb_rate) const
+{
+    const bool eskf_trusted = state.airborne && !state.tof_silent;
+    const bool integral_credible = (phase_ == VerticalPhase::TakeoffClimb) || !eskf_trusted;
+    return integral_credible ? fmaxf(eskf_climb_rate, vertical_velocity_.velocityUp()) : eskf_climb_rate;
+}
+
+/// Altitude ceiling, brake side: while the craft is still rising and would stop above kAltitudeCeilingM + kAltitudeCeilingBrakeStartM even if it
+/// braked now, the thrust is limited to a fraction of the SUPPORT thrust (below the weight whatever the hover-thrust estimate says). The fraction
+/// is 1 where the predicted stop height just reaches the start height and falls linearly to kAltitudeCeilingBrakeFrac over kAltitudeCeilingBrakeRampM
+/// of predicted excess: a hover at the ceiling in noise (the climb rate flips sign every few samples) therefore sees only a gentle, continuous
+/// reduction, not a thrust that is halved and released again and again (the first, hard version switched 20-136 times per run, TEST_MATRIX.md, 8th round). The stop height is
+/// altitude + v x actuation lag + v^2 / (2 a) with a = the deceleration of the FULL brake thrust, derated (kAltitudeCeilingBrakeDecelDerate). The velocity
+/// loop alone cannot stop an overshoot (its correction is limited and the estimate may be high: SILS, 1.96 m after a +20 % estimate with noise n2), and the climb command
+/// is already forbidden by limitClimbAboveCeiling().
+/// 高度上限のブレーキ側: まだ上昇中で、今ブレーキをかけても kAltitudeCeilingM + kAltitudeCeilingBrakeStartM より上で止まる見込みの間は、推力を「支持推力」
+/// （ホバー推力の見積もりが何であれ重さ未満）の一定割合以下に制限する。その割合は、止まる高さの予測がちょうど開始の高さに届くところで 1 で、予測の超過
+/// kAltitudeCeilingBrakeRampM で直線的に kAltitudeCeilingBrakeFrac まで下がる: 雑音の中で上限にホバーする機体（上昇率が数サンプルごとに符号を変える）は、
+/// 推力が半分になっては戻ることを繰り返すのでなく、穏やかで連続した低下だけを受ける（最初の硬い版は 1 回の実行で 20〜136 回切り替わった。TEST_MATRIX.md の 8 回目）。
+/// 止まる高さは 高度 + v × 作動の遅れ + v^2 / (2 a)。a は「全」ブレーキ推力の減速度に余裕（kAltitudeCeilingBrakeDecelDerate）を掛けたもの。速度ループだけでは
+/// 行き過ぎを止められない（補正が制限され、見積もりが高いこともある: SILS で見積もり +20 %・ノイズ n2 から 1.96 m）。上昇の指令は limitClimbAboveCeiling() が既に禁止している。
+/// @param climb_rate Climb rate to judge, up positive [m/s] (ceilingBrakeClimbRate())  判定する上昇率（上が正）[m/s]
 /// @design detailed_design.md §3.1 — altitude ceiling is effective (auto-takeoff, ALT_HOLD, POS_HOLD) [OK]
 /// @design architecture.md INV-1 — vertical channel only                                              [OK]
-float PidController::brakeAboveCeiling(float thrust, float altitude, float vel_up) const
+float PidController::brakeAboveCeiling(float thrust, float altitude, float climb_rate) const
 {
-    const bool above = altitude > limits::kAltitudeCeilingM + limits::kAltitudeCeilingMarginM;
-    const float brake = limits::kAltitudeCeilingBrakeFrac * hover_thrust_;
-    return (above && vel_up > 0.0f && thrust > brake) ? brake : thrust;
+    if (climb_rate <= 0.0f) {
+        return thrust;
+    }
+    // The full brake thrust is a fraction of the weight, so its deceleration is g x (1 - fraction), derated.
+    // 全ブレーキ推力は重さの一定割合なので、減速度は g × (1 − 割合) に余裕を掛けたもの。
+    const float brake_decel = limits::kAltitudeCeilingBrakeDecelDerate * math::kGravity *
+                              (1.0f - limits::kAltitudeCeilingBrakeFrac);
+    // The thrust follows the command after the actuation lag, during which the craft keeps its climb rate.
+    // 推力は作動の遅れのあとで指令に従い、その間、機体は上昇率を保つ。
+    const float stop_height = altitude + climb_rate * limits::kSupportThrustLagS +
+                              climb_rate * climb_rate / (2.0f * brake_decel);
+    const float excess_m    = stop_height - (limits::kAltitudeCeilingM + limits::kAltitudeCeilingBrakeStartM);
+    if (excess_m <= 0.0f) {
+        return thrust;
+    }
+    const float ramp  = fminf(excess_m / limits::kAltitudeCeilingBrakeRampM, 1.0f);   // 0 at the start height, 1 from the ramp end / 開始の高さで 0、ランプの終わりから 1
+    const float frac  = 1.0f - (1.0f - limits::kAltitudeCeilingBrakeFrac) * ramp;
+    const float limit = frac * supportReferenceThrust();
+    return (thrust > limit) ? limit : thrust;
 }
 
 void PidController::observeLinks(const StateEstimate& state, const CommandSetpoint& setpoint)
@@ -829,11 +909,13 @@ ControlOutput PidController::compute(
             if (vel_sp_z >  takeoff_climb_rate_) vel_sp_z =  takeoff_climb_rate_;
             if (vel_sp_z < -takeoff_climb_rate_) vel_sp_z = -takeoff_climb_rate_;
             vel_sp_z = limitClimbAboveCeiling(vel_sp_z, altitude);   // the auto-takeoff never climbs above the ceiling + margin / 自動離陸は上限 + 余裕を超えて上昇しない
-            float thrust_correction = alt_vel_.compute(vel_sp_z, vel_up, dt);
+            // The climb rate of the velocity loop is the ESKF's plus the climb that only the accelerometer integral shows (takeoffClimbRate()).
+            // 速度ループの上昇率は、ESKF の値に、加速度積分だけが示す上昇を足したもの（takeoffClimbRate()）。
+            float thrust_correction = alt_vel_.compute(vel_sp_z, takeoffClimbRate(vel_up), dt);
             thrust = hover_thrust_ + thrust_correction;
             if (thrust < 0.0f)         thrust = 0.0f;
             if (thrust > max_thrust_)  thrust = max_thrust_;
-            thrust = brakeAboveCeiling(thrust, altitude, vel_up);   // no overshoot through the ceiling / 上限を突き抜けない
+            thrust = brakeAboveCeiling(thrust, altitude, ceilingBrakeClimbRate(state, vel_up));   // no overshoot through the ceiling / 上限を突き抜けない
 
             // Takeoff-complete detection — robust ONE-SIDED reach + timeout backstop.
             // reached: the craft has CLIMBED to within kTakeoffCaptureBandM of the target
@@ -847,7 +929,7 @@ ControlOutput PidController::compute(
             // 成立し、定常ホバー偏差・鉛直速度ノイズに非依存（旧両側バンド+低速整定は実機で成立せず
             // ロール/ピッチを0固定した。pid_controller.hpp 参照）。タイムアウトは、到達が成立しなく
             // ても必ず TakeoffClimb を抜けてパイロットが姿勢制御を取り戻すことを保証する。
-            ++takeoff_elapsed_cycles_;
+            if (takeoff_elapsed_cycles_ < UINT16_MAX) ++takeoff_elapsed_cycles_;   // saturates: a uint16 counter would wrap at 163.8 s / 上限で止める: uint16 は 163.8 s で一周する
             if (altitude >= takeoff_target_alt_ - kTakeoffCaptureBandM) {
                 if (++takeoff_settle_cycles_ >= kTakeoffSettleCycles) {
                     takeoff_reached_ = true;
@@ -856,7 +938,7 @@ ControlOutput PidController::compute(
                 takeoff_settle_cycles_ = 0;
             }
             if (takeoff_elapsed_cycles_ >= kTakeoffMaxCycles) {
-                takeoff_reached_ = true;   // timeout backstop — never stay dead-sticked
+                takeoff_reached_ = true;   // timeout backstop — never stay dead-sticked in the air / 時間切れの備え — 空中で固まったままにしない
             }
         } else if (flip_active) {
             // FLIP overrides the vertical channel with the sequencer's own
@@ -930,7 +1012,7 @@ ControlOutput PidController::compute(
 
             if (thrust < 0.0f)         thrust = 0.0f;
             if (thrust > max_thrust_)  thrust = max_thrust_;
-            thrust = brakeAboveCeiling(thrust, altitude, vel_up);   // no overshoot through the ceiling / 上限を突き抜けない
+            thrust = brakeAboveCeiling(thrust, altitude, ceilingBrakeClimbRate(state, vel_up));   // no overshoot through the ceiling / 上限を突き抜けない
 
             // Feed the DOB's internal actuation model with the FINAL commanded
             // thrust (DOB correction included) — the correct internal-model-
@@ -973,7 +1055,7 @@ ControlOutput PidController::compute(
     // Remember the thrust commanded this cycle: the blind landing starts its ramp from it.
     // 今周期の指令推力を覚える: ToF なしの着陸はこれからランプを始める。
     last_thrust_ = thrust;
-    if (phase_ != VerticalPhase::Grounded) {   // the idle ground thrust says nothing about hover / 接地中の推力はホバーを表さない
+    if (!restingOnGround(thrust)) {   // the idle ground thrust says nothing about hover / 接地中の推力はホバーを表さない
         updateBlindStartFilters(state, thrust, dt);
     }
 
@@ -1707,6 +1789,21 @@ void PidController::computePositionHold(const StateEstimate& state,
     roll_sp  = clampTilt( ay_body / gravity_);
 }
 
+/// Base thrust of the closed-loop landing [N]: the hover-thrust ESTIMATE, but never more than kLandingBaseOverSupportMax x the SUPPORT thrust once the support thrust is calibrated by the
+/// accelerometer (the weight, to within a few %). The velocity loop starts from this base and its integral is slow, so an estimate that is too high (a stale estimate after the
+/// hover.thrust_corr change, a battery that has sagged) held the thrust above the weight for seconds and the craft climbed after the LANDING began (SILS, `hover.thrust_corr`
+/// 1.05 / 1.1 / 1.15 / 1.2: 0.08 / 0.17 / 0.27 / 0.60 m in the HEAD build). An estimate within the margin (the ordinary landing) is not touched. Before the calibration the estimate is all there is.
+/// 閉ループ着陸の基準推力 [N]: ホバー推力の「見積もり」。ただし、支持推力が加速度計で較正された後は、支持推力の kLandingBaseOverSupportMax 倍（重さ。数 % の範囲で）を超えない。
+/// 速度ループはこの基準から始まり、積分が遅いので、見積もりが高すぎる（hover.thrust_corr の変更の後の古い見積もり、電圧が下がった電池）と、推力が数秒間重さを上回り、LANDING が始まった後も
+/// 機体が上昇した（SILS の `hover.thrust_corr` 1.05 / 1.1 / 1.15 / 1.2: HEAD のビルドで 0.08 / 0.17 / 0.27 / 0.60 m）。余裕の範囲の見積もり（普通の着陸）には触れない。較正の前は、見積もりしか無い。
+float PidController::landingBaseThrust() const
+{
+    if (!support_filter_.calibrated()) {
+        return hover_thrust_;
+    }
+    return fminf(hover_thrust_, limits::kLandingBaseOverSupportMax * blindLandingStartThrust(support_filter_, hover_thrust_));
+}
+
 /// Closed-loop landing descent (ToF alive): track a constant downward velocity with the vertical
 /// velocity loop, with the near-ground settle assist. Returns the thrust.
 /// 閉ループの着陸降下（ToF 生存）: 鉛直速度ループで一定の下向き速度を追従し、近地面の着地アシストを
@@ -1727,7 +1824,8 @@ float PidController::closedLoopLandingThrust(const StateEstimate& state, float d
     const float vel_up   = -state.velocity[2];   // up-positive / 上正
     const float thrust_correction =
         alt_vel_.compute(-landing_descent_rate_, vel_up, dt);
-    thrust = hover_thrust_ + thrust_correction;
+
+    thrust = landingBaseThrust() + thrust_correction;
 
     // Near-ground settle assist: a constant-velocity descent is BALANCED by ground
     // effect near the floor (more rotor lift on reduced thrust), so the craft lingers
@@ -1793,11 +1891,15 @@ void PidController::updateVerticalVelocity(const StateEstimate& state, float dt)
     for (int axis = 0; axis < 3; ++axis) {
         raw_force[axis] = state.specific_force[axis] + state.accel_bias[axis];
     }
+    const bool eskf_trusted = state.airborne && !state.tof_silent;
+    if (tof_was_silent_ && eskf_trusted) {   // the estimator has taken the ToF again: the integral of the episode is dropped / 推定器が ToF を取り込み直した: エピソードの積分は捨てる
+        vertical_velocity_.alignToEskf(-state.velocity[2]);
+    }
+    tof_was_silent_ = state.tof_silent;
     VerticalVelocityInput input{};
     input.dt_s                  = dt;
-    input.at_rest_on_ground     = (phase_ == VerticalPhase::Grounded) &&
-                                  (last_thrust_ < limits::kVerticalVelocityRestThrustFrac * hover_thrust_);
-    input.eskf_trusted          = state.airborne && !state.tof_silent;
+    input.at_rest_on_ground     = restingOnGround(last_thrust_);
+    input.eskf_trusted          = eskf_trusted;
     input.eskf_velocity_up      = -state.velocity[2];   // NED z-down -> up positive / NED の z は下向き → 上を正に
     input.upward_force_raw      = upwardSpecificForce(state.attitude, raw_force);
     vertical_velocity_.update(input);
@@ -1834,7 +1936,7 @@ float PidController::blindLandingThrust(float dt)
                  static_cast<double>(support_filter_.airborneSeconds()), static_cast<double>(vertical_velocity_.riseM()),
                  static_cast<double>(support_filter_.upwardForce()),
                  static_cast<double>(vertical_velocity_.velocityUp()),
-                 static_cast<double>(limits::kVerticalVelocityTrustS - vertical_velocity_.sinceResetS()),
+                 static_cast<double>(blind_gains_.trust_s - vertical_velocity_.sinceResetS()),
                  static_cast<double>(-blind_gains_.descent_rate_mps));
     }
     return blind_descent_.update(vertical_velocity_.velocityUp(), vertical_velocity_.sinceResetS(), dt);
@@ -2087,6 +2189,7 @@ void PidController::reset()
     landing_settle_t_ = 0.0f;            // near-ground settle ramp / 着地アシストのランプ
     blind_descent_.stop();               // blind-landing velocity loop / ToF なしの着陸の速度ループ
     vertical_velocity_.reset();          // the accelerometer-based velocity restarts at rest / 加速度計に基づく速度は静止から
+    tof_was_silent_ = false;             // no episode to close / 閉じるエピソードは無い
     blind_descent_.beginLanding();       // the late-fall time of the descent without a ToF restarts / ToF なしの降下の後半の低下の時間も数え直す
     support_filter_.reset();             // the support-thrust window opens again when the next take-off leaves the floor / 支持推力の窓は次の離陸で床を離れたときに開き直す
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了

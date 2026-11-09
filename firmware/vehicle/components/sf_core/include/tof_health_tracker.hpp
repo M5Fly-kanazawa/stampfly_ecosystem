@@ -126,6 +126,10 @@ inline constexpr InvalidSampleMeaning classifyInvalidSample(const ToFSampleFacts
     case ToFFlightPhase::Ground:
         return InvalidSampleMeaning::Agrees;
     case ToFFlightPhase::Takeoff: {
+        // The time limit is a backstop for a rise that an accelerometer offset hides. Both conditions only bring the verdict EARLIER, so a
+        // craft that the floor still holds (weak motors) may end in a ToF-silent LANDING on the floor: harmless (the descent thrust is below the support thrust).
+        // 時間の上限は、加速度計のオフセットが隠す上昇のための備え。どちらの条件も判定を「早める」向きにしか働かないので、床がまだ支えている機体
+        // （モータが弱い）は、床の上で ToF なしの LANDING に入ることがある: 害は無い（降下の推力は支持推力未満）。
         const bool left_dead_zone = sample.rise_m >= limits::kTofInvalidTakeoffRiseM ||
                                     sample.takeoff_elapsed_us >= limits::kTofInvalidTakeoffMaxUs;
         return left_dead_zone ? InvalidSampleMeaning::Counts : InvalidSampleMeaning::Ignored;

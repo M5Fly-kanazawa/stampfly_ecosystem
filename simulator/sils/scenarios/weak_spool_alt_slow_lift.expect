@@ -1,0 +1,12 @@
+# weak_spool_alt_slow_lift.expect — a craft that lifts slowly is not aborted (8th pass, D4)
+# ゆっくり浮く機体は中止されない（8 回目、D4）
+#
+exit 0
+log_contains any "Auto-takeoff engaged"
+log_absent any "Auto-takeoff aborted"
+log_contains any "Auto-takeoff complete"
+log_contains any "Transition: TAKEOFF → FLYING"
+log_absent any "Transition: TAKEOFF → IDLE_GROUND"
+order "Auto-takeoff engaged" "Auto-takeoff complete"
+metric alt_max > 0.15 in 10.0 24.0
+metric descent_speed_max < 0.6 in 10.0 25.0

@@ -1,0 +1,10 @@
+# ceiling_brake_stale_velocity.expect — the ceiling brake does not trust a stale integral (7th pass, C1)
+# 天井ブレーキは古い積分を信用しない（7 回目、C1）
+#
+# ALT_HOLD is switched on at about 16 s at 1.6 m, above the ceiling (1.2 m): the target returns to the ceiling by a descent, the thrust is not cut, no impact.
+# 約 16 s、天井（1.2 m）より上の 1.6 m で ALT_HOLD を入れる: 目標は天井へ戻って降下し、推力は切られず、衝突しない。
+exit 0
+log_contains any "Mode change: STABILIZE → ALT_HOLD"
+metric descent_speed_max < 1.0 in 16.0 23.5
+metric alt_min > 0.9 in 16.5 23.5
+metric alt_max < 1.75 in 14.0 24.0

@@ -101,8 +101,12 @@ private:
     void applyGroundIntegratorHold();
     float stickClimbRate(float throttle_axis) const;                      // climb rate the throttle stick commands / スロットルスティックが指令する上昇率
     float altitudeHoldClimbRate(float throttle_axis, float altitude);   // stick / rc-guidance climb rate, limited at the altitude ceiling / スティック・rc 誘導の上昇率（高度上限で制限）
-    float limitClimbAboveCeiling(float velocity_setpoint, float altitude);
-    float brakeAboveCeiling(float thrust, float altitude, float vel_up) const;   // thrust at most kAltitudeCeilingBrakeFrac x hover while still rising above the ceiling + margin / 上限 + 余裕を超えて上昇中は推力を hover の kAltitudeCeilingBrakeFrac 倍以下に   // no climb command above the ceiling + margin; the target returns to the ceiling / 上限 + 余裕を超えたら上昇の指令を出さず、目標を上限へ戻す
+    float limitClimbAboveCeiling(float velocity_setpoint, float altitude);   // no climb command above the ceiling + margin; the target returns to the ceiling / 上限 + 余裕を超えたら上昇の指令を出さず、目標を上限へ戻す
+    float ceilingBrakeClimbRate(const StateEstimate& state, float eskf_climb_rate) const;   // climb rate the ceiling brake judges (integral only where the ESKF cannot be believed) / 天井ブレーキが判定する上昇率（ESKF を信じられない場面だけ積分）
+    float brakeAboveCeiling(float thrust, float altitude, float climb_rate) const;   // thrust at most kAltitudeCeilingBrakeFrac x support while the craft would stop above the ceiling + margin / 上限 + 余裕より上で止まる見込みなら推力を支持推力の kAltitudeCeilingBrakeFrac 倍以下に
+    float takeoffClimbRate(float eskf_climb_rate) const;   // climb rate of the auto-takeoff velocity loop: the ESKF's plus the excess climb that only the accelerometer integral shows / 自動離陸の速度ループの上昇率: ESKF の値に、加速度積分だけが示す超過分の上昇を足したもの
+    bool  restingOnGround(float thrust) const;   // Grounded phase and a thrust below kVerticalVelocityRestThrustFrac x hover / Grounded フェーズかつ推力が hover の kVerticalVelocityRestThrustFrac 倍未満
+    float supportReferenceThrust() const;   // the thrust that holds the craft (support calibration, early estimate, lowered hover estimate) / 機体を支える推力（支持推力の較正、早い推定、低くしたホバー推力の見積もり）
 
     /// POS_HOLD cascade: position/velocity error → tilt setpoints (roll/pitch).
     /// Writes roll_sp/pitch_sp [rad], overriding the stick values in the caller.
@@ -696,6 +700,7 @@ private:
     // 床が機体を支えている）か時間切れ（StateManager）。数値はすべて sf::limits（1 か所）にあり、気圧計の
     // 段階で同じ推定器へ速度を融合できる。
     float blindLandingThrust(float dt);
+    float landingBaseThrust() const;   // base of the closed-loop landing: the hover estimate, bounded by the calibrated support thrust / 閉ループ着陸の基準: ホバー推力の見積もり（較正した支持推力で上を抑える）
     float closedLoopLandingThrust(const StateEstimate& state, float dt);   // the ToF-alive descent / ToF 生存中の降下
     float last_thrust_            = 0.0f;    // [-] thrust commanded last cycle (all phases) / 前周期の指令推力（全フェーズ）
     SupportThrustFilter support_filter_;     // means of the commanded thrust and of the upward specific force over the window that opens when the craft
@@ -705,6 +710,7 @@ private:
     BlindDescent blind_descent_;             // the velocity loop of the blind descent / ToF なしの降下の速度ループ
     BlindDescentGains blind_gains_;          // its gains (params safety.blind_descent.*; defaults sf::limits) / そのゲイン
     VerticalVelocityEstimator vertical_velocity_;   // accelerometer-based vertical velocity (every armed cycle) / 加速度計に基づく鉛直速度（ARM 中は毎周期）
+    bool  tof_was_silent_ = false;           // state.tof_silent of the last cycle (the end of an episode aligns the velocity to the ESKF) / 前周期の state.tof_silent（エピソードの終わりに速度を ESKF へ合わせる）
     void  updateVerticalVelocity(const StateEstimate& state, float dt);   // feed vertical_velocity_ / vertical_velocity_ を進める
 
     // Landing steerability gate: the pilot keeps roll/pitch/yaw during a landing
@@ -755,7 +761,8 @@ private:
     // signal isTakeoffComplete). ROBUST one-sided "reached" + timeout backstop:
     //   reached  = altitude has climbed to within kTakeoffCaptureBandM of the target
     //              (one-sided, altitude >= target - band) sustained kTakeoffSettleCycles.
-    //   backstop = after kTakeoffMaxCycles in TakeoffClimb, complete unconditionally.
+    //   backstop = after kTakeoffMaxCycles in TakeoffClimb, complete unconditionally. A craft that the ToF positively shows to be still on the floor is NOT let through by StateTask
+    //              (decideTakeoff(), takeoff_policy.hpp: it holds TAKEOFF there and aborts after kAutoTakeoffNoLiftAbortUs); this controller does not judge the floor.
     // The earlier two-sided band (|target-alt|<band) + low-velocity-settle never fired on
     // hardware: a steady-state offset (real hover altitude ≠ setpoint) or vertical-velocity
     // noise kept it out of the tight window, so the craft stayed in TakeoffClimb with the
@@ -766,7 +773,8 @@ private:
     // 自動離陸完了（TakeoffClimb→Airborne、制御器側 TAKEOFF→FLYING 信号 isTakeoffComplete）。
     // ロバストな「片側到達」＋タイムアウト・バックストップ:
     //   到達 = 高度が目標の kTakeoffCaptureBandM 以内まで上昇（片側, altitude>=target-band）を
-    //          kTakeoffSettleCycles 持続。backstop = TakeoffClimb で kTakeoffMaxCycles 経過で無条件完了。
+    //          kTakeoffSettleCycles 持続。backstop = TakeoffClimb で kTakeoffMaxCycles 経過で無条件完了。ToF が床の上にいると「積極的に」示す機体は StateTask が通さず
+    //          （decideTakeoff()、takeoff_policy.hpp: そこで TAKEOFF を保ち、kAutoTakeoffNoLiftAbortUs 後に中止する）、この制御器は床の判断をしない。
     // 旧来の両側バンド+低速整定は実機で成立しなかった: 定常偏差（実保持高度≠setpoint）や鉛直速度
     // ノイズで窓に入らず、機体が TakeoffClimb に留まりロール/ピッチが0固定された（compute 行~190）。
     // 片側到達は偏差非依存（上昇途中で成立）、タイムアウトは必ず TakeoffClimb を抜けることを保証し

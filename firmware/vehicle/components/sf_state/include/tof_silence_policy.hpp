@@ -141,17 +141,23 @@ inline constexpr bool toFSilenceRefusesArm(bool silent)
 
 /// Decide the action for (state, mode, silent). `blind_landing_elapsed_us` is how long the state has been
 /// LANDING, counted from the moment it entered LANDING (not from the silence: a ToF that returns and
-/// stops again does not extend it; 0 when not applicable).
+/// stops again does not extend it; 0 when not applicable). `silent_elapsed_us` is how long the ToF has been
+/// continuously silent in this LANDING (the descent without a ToF; 0 when not applicable): the landing is
+/// completed by time only after BOTH have passed their limits (kBlindLandingTimeoutUs, kBlindLandingMinSilentUs).
 /// (状態, モード, 出力停止) に対する動作を判断する。`blind_landing_elapsed_us` は状態が LANDING に
 /// 入った時刻から数えた LANDING の経過時間（出力停止の時刻からではない: ToF が戻ってまた止まっても
-/// 延びない。該当しなければ 0）。
+/// 延びない。該当しなければ 0）。`silent_elapsed_us` はこの LANDING の中で ToF が連続して出力停止している時間
+/// （ToF なしの降下。該当しなければ 0）: 時間による着陸完了は、「両方」が上限（kBlindLandingTimeoutUs、
+/// kBlindLandingMinSilentUs）を過ぎた後でだけ。
 ///
 /// Rows (detailed_design.md §3.1):
 ///  - ARMED_GROUND : Disarm (any mode).
 ///  - TAKEOFF, FLYING : StartLanding in ALT_HOLD / POS_HOLD (and the auto-takeoff, which only
 ///              exists in those modes); WarnOnly in ACRO / STABILIZE.
-///  - LANDING : CompleteLanding once blind_landing_elapsed_us >= kBlindLandingTimeoutUs,
-///              because without ToF no touchdown can be detected by height.
+///  - LANDING : CompleteLanding once blind_landing_elapsed_us >= kBlindLandingTimeoutUs AND
+///              silent_elapsed_us >= kBlindLandingMinSilentUs, because without ToF no touchdown can be detected
+///              by height (the second condition: a ToF that dies after a long LANDING gets the minimum time of a
+///              descent without a ToF before the motors are cut in the air).
 ///  - FLIP : None. Interrupting the maneuver would only add a second sequence owner. The response
 ///           is applied AT ONCE when FLIP returns to FLYING: StateManager::notifyFlipComplete()
 ///           looks at the standing level and decides on the spot, it does not wait for the next
@@ -163,8 +169,9 @@ inline constexpr bool toFSilenceRefusesArm(bool silent)
 ///  - ARMED_GROUND: Disarm（モードを問わない）。
 ///  - TAKEOFF・FLYING: ALT_HOLD・POS_HOLD（と、それらにしかない自動離陸）では StartLanding、
 ///             ACRO・STABILIZE では WarnOnly。
-///  - LANDING: blind_landing_elapsed_us >= kBlindLandingTimeoutUs で CompleteLanding。
-///             ToF が無いと高さで接地を検出できないため。
+///  - LANDING: blind_landing_elapsed_us >= kBlindLandingTimeoutUs かつ silent_elapsed_us >= kBlindLandingMinSilentUs で
+///             CompleteLanding。ToF が無いと高さで接地を検出できないため（2 つ目の条件: 長い LANDING の後に ToF が止まった
+///             ときも、ToF なしの降下の最低時間を与えてから、空中でモータを切る）。
 ///  - FLIP: None。マニューバを中断すると、シーケンスの所有者が 2 つになるだけ。応答は FLIP が
 ///          FLYING に戻った「その場で」適用する: StateManager::notifyFlipComplete() が継続状態
 ///          （レベル）を見てその場で判断し、次に再発報されるアラートを待たない（待つと、推定だけで
@@ -174,7 +181,8 @@ inline constexpr bool toFSilenceRefusesArm(bool silent)
 ///          StateManager::requestModeChange（ModeBlock::TofSilent）が担う。
 inline constexpr ToFSilenceAction decideToFSilenceAction(FlightState state, FlightMode mode,
                                                          bool silent,
-                                                         uint32_t blind_landing_elapsed_us)
+                                                         uint32_t blind_landing_elapsed_us,
+                                                         uint32_t silent_elapsed_us)
 {
     if (!silent) {
         return ToFSilenceAction::None;
@@ -187,7 +195,8 @@ inline constexpr ToFSilenceAction decideToFSilenceAction(FlightState state, Flig
             return flightModeNeedsAltitude(mode) ? ToFSilenceAction::StartLanding
                                                  : ToFSilenceAction::WarnOnly;
         case FlightState::LANDING:
-            return (blind_landing_elapsed_us >= limits::kBlindLandingTimeoutUs)
+            return (blind_landing_elapsed_us >= limits::kBlindLandingTimeoutUs &&
+                    silent_elapsed_us >= limits::kBlindLandingMinSilentUs)
                        ? ToFSilenceAction::CompleteLanding
                        : ToFSilenceAction::None;
         default:
@@ -197,14 +206,19 @@ inline constexpr ToFSilenceAction decideToFSilenceAction(FlightState state, Flig
 
 /// Time since the state ENTERED LANDING, whether the downward ToF is alive or silent: the clock of the landing time limit
 /// (kBlindLandingTimeoutUs). It restarts only when LANDING has ended, so a ToF that returns and stops again does not extend it.
+/// It also counts the time the ToF has been continuously silent in this LANDING (the descent without a ToF): the minimum time that a
+/// ToF that dies after a long LANDING gets before the motors are cut (kBlindLandingMinSilentUs).
 /// 状態が LANDING に「入った」時刻からの経過時間（下向き ToF が生きていても出力停止でも）: 着陸の時間切れ
 /// （kBlindLandingTimeoutUs）の時計。LANDING が終わったときだけ数え直すので、ToF が戻ってまた止まっても延びない。
+/// この LANDING の中で ToF が連続して出力停止している時間（ToF なしの降下）も数える: 長い LANDING の後に ToF が止まったときに、
+/// モータを切る前に与える最低時間（kBlindLandingMinSilentUs）。
 class LandingClock {
 public:
     /// Observe the state once per update. 更新ごとに 1 回、状態を観測する。
     /// @param landing Whether the state is LANDING now      今 LANDING か
+    /// @param silent  Whether the downward ToF is silent now 今 下向き ToF が出力停止か
     /// @param now_us  Current time [us]                    現在時刻 [us]
-    void update(bool landing, uint32_t now_us)
+    void update(bool landing, bool silent, uint32_t now_us)
     {
         if (landing && !running_) {
             running_  = true;
@@ -213,13 +227,24 @@ public:
             running_ = false;
         }
         elapsed_us_ = running_ ? (now_us - since_us_) : 0u;   // unsigned difference: correct across a wrap / 符号なしの差: 巻き戻りをまたいでも正しい
+        if (running_ && silent && !silent_running_) {
+            silent_running_  = true;
+            silent_since_us_ = now_us;
+        } else if (!(running_ && silent)) {
+            silent_running_ = false;
+        }
+        silent_elapsed_us_ = silent_running_ ? (now_us - silent_since_us_) : 0u;
     }
     uint32_t elapsedUs() const { return elapsed_us_; }   ///< Time in LANDING [us], 0 when not landing / LANDING の経過 [us]。着陸中でなければ 0
+    uint32_t silentElapsedUs() const { return silent_elapsed_us_; }   ///< Continuous silence in this LANDING [us], 0 when the ToF is alive / この LANDING での連続した出力停止 [us]。ToF が生きていれば 0
 
 private:
     bool     running_    = false;
     uint32_t since_us_   = 0;
     uint32_t elapsed_us_ = 0;
+    bool     silent_running_    = false;
+    uint32_t silent_since_us_   = 0;
+    uint32_t silent_elapsed_us_ = 0;
 };
 
 }  // namespace sf

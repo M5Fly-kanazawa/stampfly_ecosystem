@@ -96,7 +96,10 @@ inline bool upwardSpecificForceValid(float upward_specific_force)
  * Nothing is averaged before the craft leaves the floor (the floor carries part of the weight: the reading is about g while the
  * thrust rises). It has left when the healthy ToF says it is airborne, or the estimated rise since rest reaches kSupportLeaveRiseM,
  * or the low-passed excess of the reading over g reaches kSupportLeaveExcessMps2 (the last two are accelerometer integrals / readings:
- * an offset error can hide a gentle take-off from them, SILS: rise -1.9 m after +0.2 m/s^2 from the take-off). After that only the samples whose low-passed reading is within
+ * an offset error can hide a gentle take-off from them, SILS: rise -1.9 m after +0.2 m/s^2 from the take-off). This verdict only OPENS THE WINDOW
+ * and is not a safety gate (nobody asks "has it left the floor?" of it): a window that opens too early averages floor samples (reading g, a small thrust), so the support
+ * thrust comes out LOWER and the thrust ceiling of the descent without a ToF follows it down (the safe side); one that opens too late leaves the lowered hover
+ * estimate in force (also the safe side). After that only the samples whose low-passed reading is within
  * kSupportHoverBandFrac x g of g enter the means: there the thrust is the weight, so the quotient is the hover thrust
  * and the nonlinearity of the thrust against the command (SILS: the quotient is 12 % high in a climb of +0.2 g) does not
  * matter. The means are plain means over the first kBlindThrustFilterTauS of such samples (equal weights: no seed noise), then a
@@ -104,7 +107,9 @@ inline bool upwardSpecificForceValid(float upward_specific_force)
  * actuation lag (kSupportThrustLagS). calibrated() holds once kSupportWindowS of near-hover samples have been averaged:
  * real hovers show a 2 s mean within +-1 % of the long mean (0.3 s: +-5 %, 1 s: +-2.5 %).
  * 機体が床を離れるまでは何も平均しない（床が重さの一部を支え、推力が上がっても読みは約 g）。離れたとは、健全な ToF が空中と
- * 言っている、静止からの上昇量の推定が kSupportLeaveRiseM に達する、または読みの g に対するろ波した超過が kSupportLeaveExcessMps2 に達すること。その後は、
+ * 言っている、静止からの上昇量の推定が kSupportLeaveRiseM に達する、または読みの g に対するろ波した超過が kSupportLeaveExcessMps2 に達すること。この判定は窓を「開く」
+ * だけで、安全判断の門ではない（「床を離れたか」を誰もここに問わない）: 窓が早く開きすぎれば床の上のサンプル（読みは g、推力は小さい）を平均して、支持推力が「低く」出て、
+ * ToF なしの降下の推力の上限もそれに従って下がる（安全側）。遅すぎれば低くした hover 推力の見積もりが効き続ける（これも安全側）。その後は、
  * ろ波した読みが g の ±kSupportHoverBandFrac × g 以内のサンプルだけを平均に入れる: そこでは推力は重さに等しく、商はホバー
  * 推力になり、推力と指令の非線形性（SILS: +0.2 g の上昇では商が 12 % 高い）は影響しない。平均は、そのようなサンプルの最初の
  * kBlindThrustFilterTauS の間は単純平均（重みが等しい: 初期値の雑音が残らない）、その後は同じ時定数のローパス（長い飛行の
@@ -176,7 +181,7 @@ public:
     bool  leftFloor() const  { return left_floor_; }                         ///< The craft has left the floor / 機体は床を離れた
     bool  calibrated() const { return left_floor_ && primed_ && age_s_ >= limits::kSupportWindowS; }   ///< Window long enough / 窓が十分長い
     bool  hasThrust() const  { return primed_; }                             ///< thrust() holds a value / thrust() が値を持つ
-    float nearHoverSeconds() const { return age_s_; }
+    float nearHoverSeconds() const { return age_s_; }                        ///< Near-hover time averaged so far [s] / ここまでに平均したホバー近傍の時間 [s]
     float airborneSeconds() const { return air_age_s_; }                     ///< Airborne time averaged so far [s] / ここまでに平均した空中の時間 [s]
     /// Early estimate: the quotient over ALL airborne samples, x kSupportClimbDerate; 0 when there are fewer than kSupportClimbMinS of them
     /// 早い推定: 空中の「全」サンプルでの商 × kSupportClimbDerate。kSupportClimbMinS 未満なら 0
@@ -184,7 +189,7 @@ public:
     {
         if (air_age_s_ < limits::kSupportClimbMinS || air_force_ < limits::kBlindMinUpwardSpecificForce) return 0.0f;
         return limits::kSupportClimbDerate * air_thrust_ * math::kGravity / air_force_;
-    }                        ///< Near-hover time averaged so far [s] / ここまでに平均したホバー近傍の時間 [s]
+    }
     float thrust() const     { return thrust_; }                             ///< Mean commanded thrust [N] / 指令推力の平均 [N]
     float upwardForce() const { return force_; }                             ///< Mean upward specific force [m/s^2], 0 = none / 上向きの加速度計の測定値の平均。0 = 無し
 
@@ -214,18 +219,20 @@ private:
  * reading is above g by the same ratio, which the quotient removes). It needs neither the hover-thrust estimate nor a
  * hover to have been flown, and is bounded to [kBlindCalibratedMinFrac, kBlindCalibratedMaxFrac] x hover_thrust
  * against a bad reading.
- * Not calibrated (take-off not yet made, window still short, or no usable reading): the hover-thrust estimate,
- * lowered: min(mean_thrust if any, kBlindUncalibratedFrac * hover_thrust). The thrust ceiling follows it, so an estimate
- * that is too high cannot make the craft climb unless it is more than 1 / kBlindUncalibratedFrac / kNoTofThrustCapRatio
- * (= 40 %) above the truth.
+ * Not calibrated (window still short, or no usable reading): the early estimate over all the airborne samples (climbEstimate(), x
+ * kSupportClimbDerate) as it is, bounded above by kBlindCalibratedMaxFrac * hover_thrust; before kSupportClimbMinS of airborne samples exist (take-off not yet
+ * made), the hover-thrust estimate, lowered: kBlindUncalibratedFrac * hover_thrust. The thrust ceiling follows it, so an estimate that is too high cannot
+ * make the craft climb unless it is more than 1 / kBlindUncalibratedFrac / kNoTofThrustCapRatio (= 40 %) above the truth, and the early estimate does not
+ * depend on the estimate at all.
  * 較正済み（窓が十分長く、読みの平均が使える）:
  *   support = 推力の平均 × g ÷ 上向きの加速度計の測定値の平均
  * （定常ホバーは g を読むので support = 推力の平均。上昇中は推力がホバー推力より高く、読みも同じ比率で g より
  * 高いので、商でその分が消える）。ホバー推力の見積もりも、ホバーを飛んだ履歴も要らず、誤った読みに備え
  * [kBlindCalibratedMinFrac, kBlindCalibratedMaxFrac] × hover_thrust に制限する。
- * 未較正（離陸していない、窓がまだ短い、または使える読みが無い）: ホバー推力の見積もりを低くしたもの:
- * min(推力の平均（あれば）, kBlindUncalibratedFrac × hover_thrust)。推力の上限はそれに従うので、見積もりが高すぎても、
- * 真値を 1 / kBlindUncalibratedFrac / kNoTofThrustCapRatio（= 40 %）超えて高くない限り、機体は上昇しない。
+ * 未較正（窓がまだ短い、または使える読みが無い）: 空中の全サンプルでの早い推定（climbEstimate()、× kSupportClimbDerate）をそのまま使い、
+ * 上は kBlindCalibratedMaxFrac × hover_thrust で抑える。空中のサンプルが kSupportClimbMinS 分たまる前（離陸していない）は、ホバー推力の見積もりを
+ * 低くしたもの: kBlindUncalibratedFrac × hover_thrust。推力の上限はそれに従うので、見積もりが高すぎても、真値を
+ * 1 / kBlindUncalibratedFrac / kNoTofThrustCapRatio（= 40 %）超えて高くない限り、機体は上昇しないし、早い推定は見積もりに全く依らない。
  *
  * @param filter       The window means (SupportThrustFilter)                  窓の平均
  * @param hover_thrust The (possibly wrong) hover thrust estimate [N]          ホバー推力の見積もり（誤っていることがある）[N]
@@ -242,7 +249,14 @@ inline float blindLandingStartThrust(const SupportThrustFilter& filter, float ho
         return support;
     }
     const float early = filter.climbEstimate();   // 0 = none yet / 0 = まだ無い
-    return (early > 0.0f && early < uncalibrated_cap) ? early : uncalibrated_cap;
+    if (early <= 0.0f) {
+        return uncalibrated_cap;
+    }
+    // The early estimate does not depend on the hover estimate, so the lowered hover estimate does not cut it; only the same
+    // sanity bound as the calibrated value applies.
+    // 早い推定はホバー推力の見積もりに依らないので、低くした見積もりでは切らない。較正した値と同じ、異常値に備えた上限だけを掛ける。
+    const float upper = limits::kBlindCalibratedMaxFrac * hover_thrust;
+    return (early < upper) ? early : upper;
 }
 
 /**

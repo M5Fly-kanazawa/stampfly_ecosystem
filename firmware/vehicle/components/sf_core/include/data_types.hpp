@@ -502,6 +502,11 @@ struct ToFHealth {
                                  // 推定器が小さなイノベーションでサンプルを連続採用し、ToF が生存している
     bool     invalid_stuck;      // flying, only invalid samples for kTofInvalidPersistUs
                                  // 飛行中に無効サンプルだけが続いている
+    bool     floor_stays;        // TAKEOFF: the healthy ToF has read a valid height at or below kTakeoffGroundBandM that has not risen by more than
+                                 // kAutoTakeoffFloorRiseM for kAutoTakeoffFloorHoldUs (TakeoffFloorWatch, takeoff_policy.hpp): the POSITIVE evidence that
+                                 // the craft is still on the floor. False otherwise, in particular when the ToF is silent or reads invalid.
+                                 // TAKEOFF 中: 健全な ToF が kTakeoffGroundBandM 以下の有効な高さを読み、その読みが kAutoTakeoffFloorHoldUs の間 kAutoTakeoffFloorRiseM を
+                                 // 超えて増えていない（TakeoffFloorWatch、takeoff_policy.hpp）: 機体がまだ床の上にいるという「積極的な」証拠。それ以外は false（特に ToF が出力停止・無効のとき）
     uint32_t timestamp;          // [us]
 };
 
@@ -566,7 +571,7 @@ struct ControllerStatus {
     // 無いときはどちらも 0。
     float    vertical_velocity_up;  // [m/s] vertical velocity estimate, up positive / 鉛直速度の推定（上が正）
     float    blind_thrust_ratio;    // [-] commanded / support thrust (0 = no blind descent) / 指令÷支持推力（0=ToF なし降下なし）
-    float    vertical_rise_m;       // [m] estimated rise since the craft last rested on the ground (0 at rest) / 地上で最後に静止してからの上昇量の推定（静止中は 0）
+    float    vertical_rise_m;       // [m] estimated rise since the craft last rested on the ground (0 at rest; an accelerometer integral: it may drift on the floor, so it is used only where an error is harmless) / 地上で最後に静止してからの上昇量の推定（静止中は 0。加速度の積分なので床の上でもずれうる: 誤っても害の無い使い方だけをする）
     // Flip maneuver status (flip-maneuver-plan.md §4.1/§4.3). Detection layer
     // facts published by the flip sequencer (sf_controller_pid, a later task);
     // StateManager/state_task read them to judge/execute the FLYING<->FLIP

@@ -31,6 +31,7 @@
 
 #include "topics.hpp"
 #include "state_manager.hpp"
+#include "takeoff_policy.hpp"
 #include "config.hpp"
 #include "params.hpp"
 
@@ -623,27 +624,54 @@ static void arbitrateFlightMode(sf::FlightMode want)
     const bool relevel =
         (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) &&
         (want != g_state_manager.getMode());
-    if (edge || relevel) {
-        if (g_state_manager.requestModeChange(want)) {
-            if (relevel && !edge) {
-                ESP_LOGI(TAG, "Mode re-leveled to switch position");
-            }
-            prev_want = want;
-        } else if (g_state_manager.isModeRequestConsumed()) {
-            // Refused IN FLIGHT by a ToF-silence episode: the edge is CONSUMED, not
-            // retried. Retrying would switch to ALT_HOLD/POS_HOLD by itself at the
-            // instant the ToF recovers, long after the pilot flipped the switch; the
-            // pilot flips it again (CLI `status` shows modeblock: TofSwitchConsumed).
-            // 飛行中に ToF 出力停止のエピソードで拒否: エッジは再試行せず「消費」する。
-            // 再試行すると、パイロットがスイッチを入れてからずっと後の ToF 復帰の瞬間に
-            // ALT_HOLD/POS_HOLD へ勝手に切り替わる。パイロットが入れ直す（CLI `status` が
-            // modeblock: TofSwitchConsumed を示す）。
-            prev_want = want;
-        }
-        // Otherwise rejected: prev_want unchanged — the edge persists (see above).
-        // それ以外の拒否時: prev_want 不変 — エッジは持続（上記参照）。
-    } else {
+    if (!edge && !relevel) {
         prev_want = want;
+        return;
+    }
+    if (g_state_manager.requestModeChange(want)) {
+        if (relevel && !edge) {
+            ESP_LOGI(TAG, "Mode re-leveled to switch position");
+        }
+        prev_want = want;
+        return;
+    }
+    if (g_state_manager.isModeRequestConsumed()) {
+        // Refused IN FLIGHT by a ToF-silence episode: the edge is CONSUMED, not
+        // retried. Retrying would switch to ALT_HOLD/POS_HOLD by itself at the
+        // instant the ToF recovers, long after the pilot flipped the switch; the
+        // pilot flips it again (CLI `status` shows modeblock: TofSwitchConsumed).
+        // 飛行中に ToF 出力停止のエピソードで拒否: エッジは再試行せず「消費」する。
+        // 再試行すると、パイロットがスイッチを入れてからずっと後の ToF 復帰の瞬間に
+        // ALT_HOLD/POS_HOLD へ勝手に切り替わる。パイロットが入れ直す（CLI `status` が
+        // modeblock: TofSwitchConsumed を示す）。
+        prev_want = want;
+    }
+    // Otherwise rejected: prev_want unchanged — the edge persists (see above).
+    // それ以外の拒否時: prev_want 不変 — エッジは持続（上記参照）。
+}
+
+/// Execute the TAKEOFF decision of takeoff_policy.hpp (decideTakeoff()): the judgement is the pure function's, StateTask only collects the facts and acts (INV-3).
+/// takeoff_policy.hpp の TAKEOFF の判断（decideTakeoff()）を実行する: 判断は純関数のもので、StateTask は事実を集めて実行するだけ（INV-3）。
+/// @design detailed_design.md §3 — TAKEOFF -> FLYING (manual: ToF airborne / auto: captured) / TAKEOFF -> IDLE_GROUND (auto: ToF shows the floor for 5 s) [OK]
+static void updateTakeoff(uint32_t takeoff_since_us, uint32_t now_us)
+{
+    sf::TakeoffFacts facts;
+    facts.auto_takeoff       = sf::flightModeNeedsAltitude(g_state_manager.getMode());
+    facts.airborne           = sf::system_status.latest().airborne;
+    facts.controller_reached = sf::controller_status.latest().takeoff_reached;
+    facts.floor_stays        = sf::tof_health.latest().floor_stays && !g_state_manager.isToFSilent();   // detected by ImuTask (INV-3), only a healthy ToF counts / ImuTask が検出（INV-3）。健全な ToF だけが数える
+    facts.elapsed_us         = static_cast<uint32_t>(now_us - takeoff_since_us);   // unsigned difference: correct across a wrap / 符号なしの差: 巻き戻りをまたいでも正しい
+    switch (sf::decideTakeoff(facts)) {
+    case sf::TakeoffAction::Complete:
+        g_state_manager.notifyTakeoffComplete();   // → FLYING
+        break;
+    case sf::TakeoffAction::AbortDisarm:
+        ESP_LOGW(TAG, "Auto-takeoff aborted: the healthy ToF has shown the craft on the floor for %u ms → DISARM",
+                 static_cast<unsigned>(sf::limits::kAutoTakeoffNoLiftAbortUs / 1000u));
+        g_state_manager.requestDisarm();
+        break;
+    case sf::TakeoffAction::Continue:
+        break;
     }
 }
 
@@ -687,6 +715,7 @@ void StateTask(void* pvParameters)
     // config::ARMED_GROUND_SPOOL_US）。prev_fs で突入エッジを検出する。
     uint32_t armed_ground_since_us = 0;
     sf::FlightState prev_fs = sf::FlightState::INIT;
+    uint32_t takeoff_since_us = 0;   // TAKEOFF entry time [us], for the auto-takeoff abort / TAKEOFF 突入時刻 [us]（自動離陸の中止用）
 
     // Bench motor test bookkeeping: a test has run and its re-level is still owed,
     // and the last time motor_test was seen active (start of the quiet window).
@@ -959,6 +988,9 @@ void StateTask(void* pvParameters)
         if (fs == sf::FlightState::ARMED_GROUND && prev_fs != sf::FlightState::ARMED_GROUND) {
             armed_ground_since_us = now_us;
         }
+        if (fs == sf::FlightState::TAKEOFF && prev_fs != sf::FlightState::TAKEOFF) {
+            takeoff_since_us = now_us;   // TAKEOFF entry edge, for the abort / 中止のための TAKEOFF 突入エッジ
+        }
         prev_fs = fs;
 
         if (fs == sf::FlightState::ARMED_GROUND) {
@@ -976,13 +1008,7 @@ void StateTask(void* pvParameters)
                 g_state_manager.notifyTakeoff();          // → TAKEOFF (manual)
             }
         } else if (fs == sf::FlightState::TAKEOFF) {
-            const bool complete =
-                (g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD)
-                    ? sf::controller_status.latest().takeoff_reached  // 0.5m captured
-                    : sf::system_status.latest().airborne;            // ToF off the ground
-            if (complete) {
-                g_state_manager.notifyTakeoffComplete();  // → FLYING
-            }
+            updateTakeoff(takeoff_since_us, now_us);   // manual: ToF airborne; auto: 0.5 m captured, or the floor shown for 5 s / 手動: ToF が空中、自動: 0.5 m 捕捉、または床が 5 s 示された
         } else if (fs == sf::FlightState::FLIP) {
             // Flip sequencer reports completion OR abort-then-recovery the same way
             // (controller_status.flip_done), same shape as takeoff_reached above —

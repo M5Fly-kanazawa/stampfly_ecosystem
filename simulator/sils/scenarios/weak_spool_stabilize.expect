@@ -1,0 +1,15 @@
+# weak_spool_stabilize.expect — STABILIZE, a TAKEOFF the floor holds becomes FLYING on the floor, with the warning and no forced landing (8th pass, D2)
+# 床が支える TAKEOFF は床の上で FLYING になる。警告は出るが強制着陸はしない（8 回目、D2）
+#
+# Still on the floor at 5.0-7.0 s (alt < 5 cm); the episode (2 s + 0.15 s of invalid samples) and "Takeoff complete" follow; no forced landing; the pilot's throttle then lifts the craft.
+# 5.0〜7.0 s はまだ床の上（高度 5 cm 未満）。エピソード（無効サンプル 2 s + 0.15 s）と "Takeoff complete" が続く。強制着陸は無し。その後パイロットのスロットルで浮く。
+exit 0
+log_contains any "Transition: ARMED_GROUND → TAKEOFF"
+log_contains any "Ground contact unknown"
+log_contains any "Takeoff complete → FLYING/STABILIZE"
+log_contains any "NO forced landing, fly on"
+log_absent any "Transition: FLYING → LANDING"
+order "Transition: ARMED_GROUND → TAKEOFF" "Ground contact unknown"
+order "Ground contact unknown" "Takeoff complete → FLYING/STABILIZE"
+metric alt_max < 0.05 in 5.0 7.0
+metric alt_max > 0.10 in 9.0 11.0

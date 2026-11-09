@@ -20,6 +20,7 @@
 #include "params.hpp"
 #include "sensor_freshness.hpp"
 #include "tof_silence_policy.hpp"
+#include "takeoff_policy.hpp"
 #include "esp_log.h"
 #include "esp_timer.h"
 
@@ -129,7 +130,7 @@ ArmBlock StateManager::evaluateArmBlock() const
     // purpose: a silent ToF freezes the ground-contact flag (wrong TiltPending otherwise).
     // 判定3b: ToF 出力停止のエピソード中でないこと（サンプルが来て、推定器が取り込み直した）。ACRO を含む
     // 「全モード」。isToFSilent() 参照。姿勢判定より前に置くのは意図的: ToF が出力停止すると接地フラグが
-    // 凍結し、そうしないと誤って TiltPending を報告する。
+    // 最後の値のまま固定され、そうしないと誤って TiltPending を報告する。
     // @design detailed_design.md §3.1 — ARM rejected while the downward ToF is silent [OK]
     if (toFSilenceRefusesArm(isToFSilent())) {
         return ArmBlock::TofSilent;
@@ -849,7 +850,7 @@ void StateManager::handleToFSilenceAlert()
     // 再発報する。モータ騒音の中で毎秒の音は邪魔になる）。
     constexpr uint8_t kToFWarnToneEveryN = 5;
 
-    switch (decideToFSilenceAction(state_, mode_, isToFSilent(), 0u)) {
+    switch (decideToFSilenceAction(state_, mode_, isToFSilent(), 0u, 0u)) {
         case ToFSilenceAction::Disarm:
             ESP_LOGE(TAG, "Downward ToF silent while armed on the ground → DISARM");
             transition(FlightState::IDLE_GROUND);
@@ -899,10 +900,10 @@ void StateManager::handleBlindLandingTimeout(uint32_t now_us)
     // cleared only when LANDING ends. A ToF that returns and stops again therefore does not extend it.
     // LANDING の時計: 状態が LANDING に「入った」時刻から、ToF が生きていても出力停止でも数え、LANDING が終わる
     // ときだけクリアする。ToF が戻ってまた止まっても延びない。
-    landing_clock_.update(state_ == FlightState::LANDING, now_us);
+    landing_clock_.update(state_ == FlightState::LANDING, silent, now_us);
     const uint32_t blind_elapsed_us = landing_clock_.elapsedUs();
 
-    if (decideToFSilenceAction(state_, mode_, silent, blind_elapsed_us) ==
+    if (decideToFSilenceAction(state_, mode_, silent, blind_elapsed_us, landing_clock_.silentElapsedUs()) ==
         ToFSilenceAction::CompleteLanding) {
         ESP_LOGW(TAG, "Downward ToF silent after %lu ms of LANDING → touchdown by time",
                  static_cast<unsigned long>(blind_elapsed_us / 1000));
@@ -973,23 +974,24 @@ void StateManager::handleCommLossGrace(uint32_t now_us)
 
     // Cancel only once we are back on the ground: a pilot DISARM, impact-IDLE, or a
     // completed landing already ended the flight, so the auto-land is moot. While
-    // still airborne the pending flag survives — a loss during TAKEOFF lands after
-    // the craft reaches FLYING. (Recovery of the link does NOT cancel — the
-    // requirement is an unconditional hover-then-land.)
+    // still airborne the pending flag survives. (Recovery of the link does NOT cancel —
+    // the requirement is an unconditional hover-then-land.)
     // 地上に戻ったらキャンセル: パイロット DISARM・衝撃 IDLE・着陸完了で飛行が終わって
-    // いれば自動着陸は不要。空中にいる間は保留フラグを維持する — TAKEOFF 中の喪失は
-    // FLYING 到達後に着陸する。（リンク復帰ではキャンセルしない — 要件は無条件のホバー→着陸。）
+    // いれば自動着陸は不要。空中にいる間は保留フラグを維持する。（リンク復帰では
+    // キャンセルしない — 要件は無条件のホバー→着陸。）
     if (!isAirborne(state_)) {
         comm_lost_pending_ = false;
         return;
     }
 
-    // Grace period elapsed and we are FLYING → land. During TAKEOFF/LANDING keep the
-    // flag pending (LANDING is already what we want; TAKEOFF transitions to FLYING).
-    // 猶予経過かつ FLYING → 着陸。TAKEOFF/LANDING 中はフラグを保留のまま維持
-    // （LANDING なら既に目的の状態、TAKEOFF はやがて FLYING へ遷移）。
-    if (state_ == FlightState::FLYING &&
-        comm_lost_watch_.isSilent(kCommLossHoverUs)) {
+    // Grace period elapsed in TAKEOFF or FLYING → land (decideCommLossLanding(), takeoff_policy.hpp). TAKEOFF
+    // too: a TAKEOFF that does not complete (a craft the floor still holds, a ToF that shows the floor) used to
+    // keep the craft on the stale setpoint with no failsafe at all. During LANDING the flag stays pending
+    // (LANDING is already what we want); during FLIP it waits for FLYING.
+    // 猶予経過が TAKEOFF または FLYING なら着陸（decideCommLossLanding()、takeoff_policy.hpp）。TAKEOFF も: 完了しない
+    // TAKEOFF（床がまだ支えている機体、ToF が床を示している機体）では、機体が古い目標のままフェイルセーフなしで続いた。
+    // LANDING 中はフラグを保留のまま維持（LANDING は既に目的の状態）、FLIP 中は FLYING まで待つ。
+    if (decideCommLossLanding(state_, comm_lost_watch_.isSilent(kCommLossHoverUs))) {
         ESP_LOGW(TAG, "Comm lost → LANDING (hover grace elapsed)");
         comm_lost_pending_ = false;
         transition(FlightState::LANDING);
@@ -1039,6 +1041,61 @@ void StateManager::onModeChange(OnModeChangeCallback callback)
 // 内部: 遷移実行
 // =============================================================================
 
+/// Back on the ground: reset the flight mode to STABILIZE (called by transition() on entering IDLE_GROUND).
+/// 接地に戻った: 飛行モードを STABILIZE にリセットする（transition() が IDLE_GROUND に入るときに呼ぶ）。
+void StateManager::resetModeOnGround()
+{
+    // On returning to the ground, reset the flight mode to STABILIZE so the NEXT
+    // takeoff always starts in the direct-throttle mode that lifts off. Without this a
+    // mode selected in flight (e.g. ALT_HOLD) PERSISTS across DISARM/emergency-IDLE, and
+    // a re-takeoff in that mode never produces takeoff thrust from the ground — a real
+    // crash→re-fly robustness bug found by crash_refly.scn. The controller learns its mode
+    // ONLY via ControllerCmd::ModeChange (ControlTask does NOT read system_mode.sub_mode),
+    // so we must FIRE the onModeChange callbacks here — not just set mode_. They publish the
+    // mode change, which reconfigures the controller to STABILIZE and clears the stale
+    // ALT/POS cascade + hover-thrust state; without the fire the controller keeps holding
+    // hover on the re-takeoff and never climbs.
+    // 接地に戻ったら飛行モードを STABILIZE にリセットし、次の離陸が必ず離陸スラストを出す直接
+    // スロットルモードで始まるようにする。これが無いと飛行中に選んだモード（例 ALT_HOLD）が
+    // DISARM/緊急IDLE を跨いで残り、そのモードでの再離陸は地上から離陸スラストを出せない
+    // ——crash_refly.scn が見つけた実 crash→再飛行バグ。制御器はモードを ControllerCmd::
+    // ModeChange 経由でのみ把握する（ControlTask は system_mode.sub_mode を読まない）ため、ここで
+    // onModeChange コールバックを呼び出す必要がある（mode_ を変えるだけでは不十分）。呼び出しで
+    // モード変更が発行され、制御器が STABILIZE へ再構成され古い ALT/POS カスケード＋ホバー推力
+    // 状態がクリアされる。呼び出さないと制御器は再離陸でホバーを保持し続け上昇しない。
+    if (mode_ != FlightMode::STABILIZE) {
+        ESP_LOGI(TAG, "Flight mode reset to STABILIZE (on ground)");
+        FlightMode old_mode = mode_;
+        mode_ = FlightMode::STABILIZE;
+        for (int i = 0; i < mode_callback_count_; i++) {
+            if (mode_callbacks_[i]) {
+                mode_callbacks_[i](old_mode, mode_);
+            }
+        }
+    }
+}
+
+/// Switch to the new state and apply what the entry itself implies (between the onExit and the onEnter callbacks of transition()): the landing end is forgotten, a
+/// battery emergency deferred during FLIP is cleared when FLIP is left WITHOUT returning to FLYING (DISARM / impact / emergency stop already land the craft on the ground
+/// directly, so the deferred alert is moot; leaving it set would apply a stale emergency to some LATER, unrelated flip; the FLIP -> FLYING path re-applies it explicitly in
+/// notifyFlipComplete()), and the flight mode is reset on entering IDLE_GROUND.
+/// 新しい状態へ切り替え、入ること自体が意味する処理を行う（transition() の onExit と onEnter の間）: 着陸の終わり方を忘れ、FLIP を FLYING へ戻らずに抜けたときは FLIP 中に
+/// 保留した電池緊急をクリアし（DISARM・衝撃・緊急停止は既に接地するので、保留したアラートは意味を失う。残すと無関係な「後の」flip に古い緊急事態を適用する。
+/// FLIP → FLYING の経路は notifyFlipComplete() が明示的に再適用する）、IDLE_GROUND に入るときは飛行モードをリセットする。
+void StateManager::enterState(FlightState old_state, FlightState new_state)
+{
+    state_ = new_state;
+    if (new_state == FlightState::LANDING) {
+        last_landing_end_ = LandingEnd::None;   // the next landing's end is not known yet / 次の着陸の終わり方はまだ分からない
+    }
+    if (old_state == FlightState::FLIP && new_state != FlightState::FLYING) {
+        battery_emergency_pending_ = false;
+    }
+    if (new_state == FlightState::IDLE_GROUND) {
+        resetModeOnGround();
+    }
+}
+
 void StateManager::transition(FlightState new_state)
 {
     FlightState old_state = state_;
@@ -1058,55 +1115,7 @@ void StateManager::transition(FlightState new_state)
         }
     }
 
-    // Update state
-    // 状態を更新
-    state_ = new_state;
-    if (new_state == FlightState::LANDING) {
-        last_landing_end_ = LandingEnd::None;   // the next landing's end is not known yet / 次の着陸の終わり方はまだ分からない
-    }
-
-    // Clear a battery emergency deferred during FLIP (handleAlert, LOW_BATTERY/
-    // EMERGENCY case) when FLIP is left WITHOUT returning to FLYING — DISARM/
-    // impact/emergency-stop already land the craft on the ground directly, so the
-    // deferred alert is moot. Leaving it set would apply a stale emergency to some
-    // LATER, unrelated flip. The FLIP → FLYING path re-applies it explicitly in
-    // notifyFlipComplete() instead of clearing it here.
-    // FLIP を FLYING へ戻らずに抜けるとき（DISARM/衝撃/緊急停止は既に接地するため）、
-    // FLIP 中に保留した電池緊急（handleAlert の LOW_BATTERY/EMERGENCY 分岐）をクリア
-    // する — そのまま残すと無関係な「後の」flip に古い緊急事態を適用することになる。
-    // FLIP → FLYING の経路はここでクリアせず、notifyFlipComplete() が明示的に再適用する。
-    if (old_state == FlightState::FLIP && new_state != FlightState::FLYING) {
-        battery_emergency_pending_ = false;
-    }
-
-    // On returning to the ground, reset the flight mode to STABILIZE so the NEXT
-    // takeoff always starts in the direct-throttle mode that lifts off. Without this a
-    // mode selected in flight (e.g. ALT_HOLD) PERSISTS across DISARM/emergency-IDLE, and
-    // a re-takeoff in that mode never produces takeoff thrust from the ground — a real
-    // crash→re-fly robustness bug found by crash_refly.scn. The controller learns its mode
-    // ONLY via ControllerCmd::ModeChange (ControlTask does NOT read system_mode.sub_mode),
-    // so we must FIRE the onModeChange callbacks here — not just set mode_. They publish the
-    // mode change, which reconfigures the controller to STABILIZE and clears the stale
-    // ALT/POS cascade + hover-thrust state; without the fire the controller keeps holding
-    // hover on the re-takeoff and never climbs.
-    // 接地に戻ったら飛行モードを STABILIZE にリセットし、次の離陸が必ず離陸スラストを出す直接
-    // スロットルモードで始まるようにする。これが無いと飛行中に選んだモード（例 ALT_HOLD）が
-    // DISARM/緊急IDLE を跨いで残り、そのモードでの再離陸は地上から離陸スラストを出せない
-    // ——crash_refly.scn が見つけた実 crash→再飛行バグ。制御器はモードを ControllerCmd::
-    // ModeChange 経由でのみ把握する（ControlTask は system_mode.sub_mode を読まない）ため、ここで
-    // onModeChange コールバックを呼び出す必要がある（mode_ を変えるだけでは不十分）。呼び出しで
-    // モード変更が発行され、制御器が STABILIZE へ再構成され古い ALT/POS カスケード＋ホバー推力
-    // 状態がクリアされる。呼び出さないと制御器は再離陸でホバーを保持し続け上昇しない。
-    if (new_state == FlightState::IDLE_GROUND && mode_ != FlightMode::STABILIZE) {
-        ESP_LOGI(TAG, "Flight mode reset to STABILIZE (on ground)");
-        FlightMode old_mode = mode_;
-        mode_ = FlightMode::STABILIZE;
-        for (int i = 0; i < mode_callback_count_; i++) {
-            if (mode_callbacks_[i]) {
-                mode_callbacks_[i](old_mode, mode_);
-            }
-        }
-    }
+    enterState(old_state, new_state);
 
     // Fire onEnter callbacks for new state
     // 新状態のonEnterコールバックを呼び出す
