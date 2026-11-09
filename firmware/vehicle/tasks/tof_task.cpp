@@ -37,6 +37,10 @@
  *     a warning, XSHUT is held low, bottom sensing continues unchanged.
  *     前方センサの初期化失敗は Optional 扱い: 警告のみ、XSHUT を Low に保ち
  *     底面の測距は従来どおり継続する。
+ *   - Front sensor fails kFrontDisableFailCycles reads in a row (seen with USB
+ *     power only) → disabled at run time the same way (reset + presence cleared).
+ *     前方が kFrontDisableFailCycles 回連続で読み出しに失敗（USB 給電のみで発生）
+ *     → 実行中に同じ方法で停止する（リセット保持 + presence を落とす）。
  *
  * Takeoff/Landing detection logic (TakeoffLandingMgr) runs in a
  * different layer and is wired in a later milestone (M4+) — this
@@ -64,6 +68,13 @@ static constexpr TickType_t kPeriodTicks = pdMS_TO_TICKS(33);
 /// At 30Hz, log at most once every ~3 seconds during persistent failure.
 /// 読み取り失敗ログの抑制間隔。30Hz で持続的失敗時は約 3 秒に 1 回まで警告
 static constexpr uint32_t kReadFailLogIntervalCycles = 90;
+
+/// Consecutive front-sensor I2C failures after which the front ToF is disabled.
+/// 30 cycles ≈ 1 s at 30Hz. Seen on hardware with USB power only: the front part
+/// re-addresses fine but every later read fails, flooding the console.
+/// 前方 ToF を停止する連続 I2C 失敗回数。30Hz で 30 回 ≈ 1 秒。USB 給電のみの実機で、
+/// 前方はアドレス付け替えまで成功するがその後の読み出しが全て失敗し、コンソールを埋めた。
+static constexpr uint32_t kFrontDisableFailCycles = 30;
 
 /// Front sensor I2C address after re-addressing (bottom is 0x30). Both parts boot at
 /// 0x29, so the front one is moved only AFTER the bottom one has left 0x29.
@@ -133,11 +144,13 @@ static void initFrontTof()
 
 /// Poll one sensor once: if a sample is ready, read it, publish it to `topic`, stamp the
 /// BSP freshness for `sensor_id`, and rearm the sensor. Read failures are log-throttled
-/// per sensor through `last_fail_log_cycle`.
+/// per sensor through `last_fail_log_cycle`. Returns false when an I2C transaction
+/// failed; "no new sample yet" is NOT a failure.
 /// センサ 1 個を 1 回ポーリングする。新サンプルがあれば読み、`topic` に発行し、
 /// `sensor_id` の鮮度を BSP に記録し、センサを再アームする。読み取り失敗のログは
-/// `last_fail_log_cycle` でセンサ毎に抑制する。
-static void pollSensor(stampfly::VL53L3CXWrapper& sensor,
+/// `last_fail_log_cycle` でセンサ毎に抑制する。I2C 通信が失敗したら false を返す
+/// （「新サンプル未到達」は失敗ではない）。
+static bool pollSensor(stampfly::VL53L3CXWrapper& sensor,
                        sf::Topic<sf::TofData, sf::Queue, 2>& topic,
                        sf::internal::board::SensorId sensor_id,
                        const char* label,
@@ -152,12 +165,12 @@ static void pollSensor(stampfly::VL53L3CXWrapper& sensor,
             ESP_LOGW(TAG, "%s isDataReady failed: %s", label, esp_err_to_name(err));
             last_fail_log_cycle = cycle_count;
         }
-        return;
+        return false;
     }
     if (!ready) {
         // No new sample yet — retry on next cycle.
         // 新サンプル未到達 — 次サイクルに再試行
-        return;
+        return true;
     }
 
     // Step 2: read distance and publish / ステップ 2: 距離を読んで発行
@@ -179,6 +192,30 @@ static void pollSensor(stampfly::VL53L3CXWrapper& sensor,
     // 各読み取り後、次の計測用にセンサを再アームする必要がある
     // (VL53L3CX ドライバの契約)。
     sensor.clearInterruptAndStartMeasurement();
+    return err == ESP_OK;
+}
+
+/// Count consecutive front-sensor failures and disable the front ToF once the streak
+/// reaches kFrontDisableFailCycles: hold it in reset and clear its presence so
+/// sensor_health, the CLI and the log all show it as absent. Bottom is unaffected.
+/// 前方センサの連続失敗を数え、kFrontDisableFailCycles に達したら前方 ToF を停止する:
+/// リセット保持し presence を落とすので、sensor_health・CLI・ログとも「前方なし」になる。
+/// 底面には影響しない。
+static void trackFrontFailure(bool ok, uint32_t& fail_streak)
+{
+    if (ok) {
+        fail_streak = 0;
+        return;
+    }
+    if (++fail_streak < kFrontDisableFailCycles) {
+        return;
+    }
+    ESP_LOGW(TAG, "VL53L3CX front failed %u reads in a row — disabled "
+                  "(battery not connected?)", static_cast<unsigned>(fail_streak));
+    holdFrontInReset();
+    g_front_present = false;
+    sf::internal::board::set_sensor_present(
+        sf::internal::board::SensorId::FrontToF, false);
 }
 
 void TofTask(void* /*pvParameters*/)
@@ -240,6 +277,7 @@ void TofTask(void* /*pvParameters*/)
     uint32_t cycle_count = 0;
     uint32_t last_fail_log_cycle = 0;
     uint32_t last_front_fail_log_cycle = 0;
+    uint32_t front_fail_streak = 0;
 
     while (true) {
         ++cycle_count;
@@ -250,9 +288,11 @@ void TofTask(void* /*pvParameters*/)
                    sf::internal::board::SensorId::BottomToF, "bottom",
                    cycle_count, last_fail_log_cycle);
         if (g_front_present) {
-            pollSensor(g_tof_front, sf::sensor_tof_front,
-                       sf::internal::board::SensorId::FrontToF, "front",
-                       cycle_count, last_front_fail_log_cycle);
+            const bool front_ok = pollSensor(g_tof_front, sf::sensor_tof_front,
+                                             sf::internal::board::SensorId::FrontToF,
+                                             "front", cycle_count,
+                                             last_front_fail_log_cycle);
+            trackFrontFailure(front_ok, front_fail_streak);
         }
 
         vTaskDelayUntil(&last_wake, kPeriodTicks);

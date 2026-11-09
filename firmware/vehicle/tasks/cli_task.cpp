@@ -337,6 +337,17 @@ int cmd_sensor(int argc, char** argv)
     if (all || std::strcmp(which, "tof") == 0) {
         std::printf("tof  : %.3f m  status=%u valid=%s\n", snap.tof_distance, snap.tof_status,
                     snap.tof_valid ? "yes" : "no");
+        // Front ToF is optional: show its reading only while sensor_health reports it
+        // present (it is cleared when the sensor is absent or was disabled after failures).
+        // 前方 ToF は任意センサ: sensor_health が present と報告している間だけ値を表示する
+        // （未搭載、または連続失敗で停止した場合は present が落ちる）。
+        const uint8_t front_bit = 1u << static_cast<int>(sf::SensorId::TofFront);
+        if (sf::sensor_health.latest().present_mask & front_bit) {
+            std::printf("tof_f: %.3f m  status=%u\n", snap.tof_front_distance,
+                        snap.tof_front_status);
+        } else {
+            std::printf("tof_f: absent\n");
+        }
     }
     if (all || std::strcmp(which, "flow") == 0) {
         std::printf("flow : dx=%d dy=%d squal=%u\n", snap.flow_dx, snap.flow_dy, snap.flow_squal);
