@@ -19,6 +19,7 @@ Subcommands:
     info     - Show a bundle's summary (meta.json + per-stream stats)
     analyze  - Analyze a bundle (gyro PSD, hover stats; --health: motor-fault report)
     viz      - Visualize a bundle (every stream at its native rate; -i: Plotly)
+    video    - Render a flight log as an mp4 (3D StampFly flies the logged path)
 
 Every reader accepts a `.sflog.zip` or an extracted bundle directory and
 defaults to the newest bundle in logs/ (`paths.latest_bundle()`).
@@ -291,6 +292,48 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     viz_parser.set_defaults(func=run_viz)
 
+    # --- video ---
+    video_parser = log_subparsers.add_parser(
+        "video",
+        help="Render a flight log as an mp4 (3D StampFly + side panels)",
+        description="Render a flight log as an mp4 in which a 3D StampFly flies "
+                     "the logged trajectory, with numbers, three attitude views and "
+                     "motor-duty / battery-voltage bars at the side. Needs Chrome and "
+                     "ffmpeg (see `sf doctor`). Position and attitude are the "
+                     "vehicle's own estimate (ESKF). LOG is a .sflog.zip, a bundle "
+                     "folder or a UDP .jsonl. By default the video is written to "
+                     "logs/videos/<log name>_3d.mp4 (with --time-range S E: "
+                     "<log name>_3d_<S>-<E>s.mp4); an existing file is never "
+                     "overwritten (_2, _3, ... is appended) unless --force. "
+                     "--out FILE overrides the name. The default window is the "
+                     "longest stretch with thrust, padded by 1 s on each side.",
+    )
+    video_parser.add_argument("log", nargs="?", metavar="LOG",
+                              help="Log path (default: newest bundle in logs/)")
+    video_parser.add_argument("--out", metavar="FILE",
+                              help="Output mp4 (default: logs/videos/<log name>_3d.mp4)")
+    video_parser.add_argument("--force", action="store_true",
+                              help="Overwrite an existing output file instead of adding _2, _3, ...")
+    video_parser.add_argument("--time-range", nargs=2, type=float, metavar=("START", "END"),
+                              help="Seconds from the first sample (default: the flight, auto-detected)")
+    video_parser.add_argument("--speed", type=float, default=1.0,
+                              help="Replay speed, 1 = real time (default: 1)")
+    video_parser.add_argument("--fps", type=float, default=30.0, help="Frames per second (default: 30)")
+    video_parser.add_argument("--view", choices=["oblique", "top", "side"], default="oblique",
+                              help="Main camera (default: oblique)")
+    video_parser.add_argument("--tilt-gain", type=float, default=3.0,
+                              help="Exaggeration of the tilt shown (default: 3; 1 = true angle)")
+    video_parser.add_argument("--vehicle-scale", type=float, default=2.0,
+                              help="Size of the drawn vehicle (default: 2 = twice life size)")
+    video_parser.add_argument("--zoom", type=float, default=0.6, help="Main camera zoom (default: 0.6)")
+    video_parser.add_argument("--size", choices=["1920x1080", "1280x720"], default="1920x1080",
+                              help="Video size (default: 1920x1080)")
+    video_parser.add_argument("--frames-dir", metavar="DIR",
+                              help="Write JPEG frames to DIR instead of an mp4 (no ffmpeg needed)")
+    video_parser.add_argument("--swiftshader", action="store_true",
+                              help="Force Chrome's software renderer (use if frames come out blank)")
+    video_parser.set_defaults(func=run_video)
+
     parser.set_defaults(func=run_help)
 
 
@@ -306,6 +349,7 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("  info      Show flight-log bundle information")
     console.print("  analyze   Analyze a bundle (--health: motor-health report)")
     console.print("  viz       Visualize a bundle (-i: interactive Plotly)")
+    console.print("  video     Render a flight log as an mp4 (3D StampFly)")
     console.print()
     console.print("Run 'sf log <subcommand> --help' for details.")
     return 0
@@ -766,6 +810,87 @@ def run_viz(args: argparse.Namespace) -> int:
     if getattr(args, "interactive", False):
         return _viz_interactive(bundle_path, args)
     return _viz_bundle(bundle_path, args)
+
+
+def run_video(args: argparse.Namespace) -> int:
+    """`sf log video`: flight log -> mp4 (tools/log_analyzer/replay_video/).
+    The log may be a bundle or a legacy UDP .jsonl (converted in a temporary
+    folder). Default output: logs/videos/<log name>_3d.mp4, never overwriting.
+    `sf log video`: フライトログ -> mp4（tools/log_analyzer/replay_video/）。
+    ログは一式かレガシーの UDP .jsonl（一時フォルダで変換）。既定の出力は
+    logs/videos/<ログ名>_3d.mp4 で、既存ファイルは上書きしない。"""
+    import tempfile
+
+    sys.path.insert(0, str(paths.root() / "tools" / "log_analyzer"))
+    try:
+        from replay_video import output_path, record, replay_data
+    except ImportError as e:
+        console.error(f"Failed to import the video tools: {e}")
+        return 1
+    finally:
+        sys.path.pop(0)
+
+    jsonl = bool(args.log) and args.log.endswith(".jsonl")
+    if jsonl:
+        source = Path(args.log)
+        if not source.exists():
+            console.error(f"Input file not found: {source}")
+            return 1
+    else:
+        source = _resolve_bundle_arg(args.log)
+        if source is None:
+            return 1
+    stem = source.stem if jsonl else _bundle_stem(source)
+
+    try:
+        out = output_path.resolve_output_path(
+            stem, get_log_dir() / "videos", args.out, args.time_range, args.force)
+    except (FileExistsError, OSError) as e:
+        console.error(str(e))
+        return 1
+
+    with tempfile.TemporaryDirectory(prefix="sf_video_log_") as tmp:
+        try:
+            if jsonl:
+                console.info(f"Converting {source.name} ...")
+                converted = Path(tmp) / f"{stem}.sflog.zip"
+                sflog.jsonl_to_bundle(source, converted)
+                log = sflog.load(converted)
+            else:
+                log = sflog.load(source)
+            data = replay_data.build_replay_data(
+                log, fps=args.fps, speed=args.speed, time_range=args.time_range,
+                source_name=source.name)
+        except Exception as e:  # noqa: BLE001
+            console.error(f"Could not read the log: {e}")
+            return 1
+
+    from .. import __version__
+    data["meta"]["sf_version"] = f"v{__version__}"
+    meta = data["meta"]
+    console.info(f"Window {meta['start']:.1f}-{meta['end']:.1f} s, {meta['n_frames']} frames "
+                 f"at {meta['fps']:g} fps (speed x{meta['speed']:g})")
+    width, height = (int(v) for v in args.size.split("x"))
+    frames_dir = Path(args.frames_dir) if args.frames_dir else None
+
+    def progress(done: int, total: int, eta_s: float) -> None:
+        print(f"\r  frame {done}/{total}  remaining about {eta_s:.0f} s   ", end="", flush=True)
+
+    started = datetime.now()
+    try:
+        record.record_video(
+            data, None if frames_dir else out, size=(width, height), view=args.view,
+            tilt_gain=args.tilt_gain, vehicle_scale=args.vehicle_scale, zoom=args.zoom,
+            frames_dir=frames_dir, swiftshader=args.swiftshader, progress=progress)
+    except record.RecordError as e:
+        print()
+        console.error(str(e))
+        return 1
+    print()
+    elapsed = (datetime.now() - started).total_seconds()
+    written = frames_dir.absolute() if frames_dir else out
+    console.success(f"Wrote {written} ({elapsed:.0f} s)")
+    return 0
 
 
 def _viz_interactive(bundle_path: Path, args: argparse.Namespace) -> int:

@@ -1,0 +1,39 @@
+constants: KE=0.0005905 KT=0.0005905 CQ=3.38e-11 CT=7.6e-09 I0A=0.0443 I0B=2.915e-09 ETA=0.976 MASS=0.037
+firmware: CT=1e-08 AM=6.0368e-08 BM=0.000669904 CM=0.0153
+per-motor hover thrust T_h = m g / 4 = 0.090712 N
+R_out strictly decreasing for D>=0.01: True
+
+== (1) identity check inverse(forward(D,V)) == D, D 0.05..1.00 step 0.01, V 3.4..4.3 step 0.01 (8736 points, float64 python)
+max |duty error| = 4.330e-15 at D=0.99 V=3.62 (T=0.16112 N, recovered D=0.990000)
+off-grid (20000 quasi-random points) max |duty error| = 4.441e-15
+reverse (T in 1..199 mN -> D -> plant T) interior max |thrust error| = 1.943e-16 N
+
+== (2) hover gain ratio r(V) = (dT/dD)_plant / (dT/dD)_firmware
+A (task definition): plant slope at plant hover duty D_p; firmware slope at firmware hover duty D_f = fw_duty(T_h,V).
+B (closed-loop coupling): both slopes at the SAME duty D_p, i.e. d T_plant / d T_cmd through baseline duty=fw_duty(T_cmd).
+central difference step h = 0.002 in D
+    V  D_plant     D_fw     dTp/dD     dTf/dD      rA      rB
+ 3.60   0.7205   0.7168    0.14108    0.20981  0.6724  0.6706
+ 3.65   0.7077   0.7070    0.14436    0.21273  0.6786  0.6782
+ 3.70   0.6930   0.6974    0.09552    0.21564  0.4430  0.4445
+ 3.75   0.6758   0.6881    0.10688    0.21856  0.4890  0.4939
+ 3.80   0.6603   0.6791    0.11695    0.22147  0.5280  0.5361
+ 3.85   0.6467   0.6703    0.12996    0.22439  0.5792  0.5905
+ 3.90   0.6343   0.6617    0.13793    0.22730  0.6068  0.6209
+ 3.95   0.6229   0.6533    0.14609    0.23021  0.6346  0.6512
+ 4.00   0.6125   0.6451    0.15432    0.23313  0.6619  0.6809
+ 4.05   0.6027   0.6372    0.16252    0.23604  0.6885  0.7097
+ 4.10   0.5935   0.6294    0.16929    0.23896  0.7085  0.7315
+ 4.15   0.5847   0.6218    0.17716    0.24187  0.7325  0.7574
+ 4.20   0.5764   0.6144    0.18482    0.24478  0.7550  0.7817
+mean over 3.70..4.10 V (9 points): rA_bar = 0.5933   rB_bar = 0.6066
+
+hover level check: plant thrust at firmware hover duty / T_h
+  V=3.6: 0.9943
+  V=3.8: 1.0231
+  V=4.0: 1.0531
+  V=4.2: 1.0740
+
+non-smoothness scan: rA at 0.005 V steps (3.6..4.2), step h = 0.0005 in D
+rA fine scan min 0.4416 max 0.7612; largest step-to-step change 0.1662 at V=3.685 (typical 0.0073)
+plant hover duty runs 0.5764..0.7205, i.e. crosses 14 R_out table knots (0.01 spacing); the slope of the linear interpolation is piecewise constant between knots, so rA is piecewise-smooth with kinks at each knot

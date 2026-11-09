@@ -310,7 +310,7 @@ analysis/
 tools/
 ├── README.md
 ├── calibration/       # sf cal
-├── log_analyzer/      # sf log（wifi / convert / analyze / viz / list / info）。UDP 取得 udp_capture.py を含む
+├── log_analyzer/      # sf log（wifi / convert / analyze / viz / video / list / info）。UDP 取得 udp_capture.py を含む。replay_video/ = sf log video（出力は logs/videos/）
 ├── params_audit/      # sf params check / generate
 ├── sysid/             # sf sysid（同定・自動調整）
 ├── flasher_gui/       # sf flasher（GUI 書き込み）。書き込み処理の本体は lib/sfcli/commands/flash.py
@@ -394,7 +394,8 @@ simulator/
 - 同梱する資産にはライセンス全文のファイルとバージョンの記録を必ず添える
 - 現在の同梱資産: `lib/sfcli/assets/vendor/blockly/`（LICENSE, VERSION.txt）、
   `simulator/shared/assets/vendor/three/`（README に出典と MIT 表記）、
-  `tools/log_analyzer/vendor/plotly.min.js`（`plotly.min.js.LICENSE.txt`）
+  `tools/log_analyzer/vendor/plotly.min.js`（`plotly.min.js.LICENSE.txt`）、
+  `tools/log_analyzer/replay_video/vendor/three/`（three.js r160、`LICENSE`・`VERSION.txt`）
 - Python の依存は `pyproject.toml` / `requirements*.txt` で管理し、同梱しない
 
 ---

@@ -1,0 +1,25 @@
+diff --git a/firmware/vehicle/components/sf_controller_pid/pid_controller.cpp b/firmware/vehicle/components/sf_controller_pid/pid_controller.cpp
+index a3c8d6b3..484411d1 100644
+--- a/firmware/vehicle/components/sf_controller_pid/pid_controller.cpp
++++ b/firmware/vehicle/components/sf_controller_pid/pid_controller.cpp
+@@ -858,6 +858,20 @@ ControlOutput PidController::compute(
+             // 真のホバー推力へ追従（モータ劣化/電圧低下にロバスト）。上の推力出力の後に呼ぶので
+             // 同サイクル影響ゼロ（純粋な低速バックグラウンド適応）。INV-1: 鉛直のみ。
+             learnHoverThrust(thrust_correction, vel_up, climb_rate_sp, dt);
++
++            // EXPERIMENT INSTRUMENTATION (F1/F1g, log only, no effect on control): print the
++            // learned hover thrust ratio and the velocity-loop correction once per second.
++            // 実験用計装（ログのみ・制御に影響なし）: 学習済みホバー推力比と速度ループ補正を毎秒出力。
++            static float hoverdbg_time_s = 0.0f;
++            static int hoverdbg_count = 0;
++            hoverdbg_time_s += dt;
++            if (++hoverdbg_count >= 400) {
++                hoverdbg_count = 0;
++                ESP_LOGI(TAG, "HOVERDBG t=%d corr=%.5f vel=%.6f",
++                         static_cast<int>(hoverdbg_time_s * 1.0e6f),
++                         static_cast<double>(hover_thrust_ / kMassG),
++                         static_cast<double>(thrust_correction));
++            }
+         }
+     }
+ 

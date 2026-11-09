@@ -1,0 +1,179 @@
+{
+  "pass": true,
+  "criteria_file": "<repo>/analysis/datasets/flightlog/forward_check.yaml",
+  "motor_delay_ms": 0.0,
+  "noise": "off",
+  "bundle": "<repo>/simulator/sils/viz/out_scn_sysid_gate/sils_sysid_gate_20261103T081346.sflog.zip",
+  "scenario_pass": true,
+  "self_consistency": {
+    "pass": true,
+    "axes": [
+      {
+        "axis": "roll",
+        "rms": 6.280675028684902,
+        "residual": 0.000637948835100653,
+        "scale": 0.9999608022441866,
+        "status": "PASS"
+      },
+      {
+        "axis": "pitch",
+        "rms": 2.6379029959989952,
+        "residual": 4.110005990503868e-05,
+        "scale": 1.000000705580682,
+        "status": "PASS"
+      },
+      {
+        "axis": "yaw",
+        "rms": 2.9238438635617947,
+        "residual": 3.149975169037294e-05,
+        "scale": 1.0000003929583512,
+        "status": "PASS"
+      }
+    ]
+  },
+  "real_logs": {
+    "pass": true,
+    "metrics": [
+      {
+        "log": "vehicle_roll_flip_20261002T184904.sflog.zip",
+        "axis": "roll",
+        "name": "flip_nofit_residual",
+        "value": 0.3111288640196317,
+        "unit": "",
+        "criterion": "< 0.5",
+        "status": "PASS",
+        "detail": "window 15.85-16.25 s, best scale 0.790"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T184904.sflog.zip",
+        "axis": "roll",
+        "name": "flip_best_delay_ms",
+        "value": 4.0,
+        "unit": "ms",
+        "criterion": "< 8",
+        "status": "PASS",
+        "detail": "window 15.85-16.25 s, best scale 0.790"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T184904.sflog.zip",
+        "axis": "roll",
+        "name": "hover_gain",
+        "value": 0.7753531582470181,
+        "unit": "",
+        "criterion": "0.6 - 1.4",
+        "status": "PASS",
+        "detail": "window 5.5-15.5 s, coherence 0.89"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T184904.sflog.zip",
+        "axis": "roll",
+        "name": "hover_delay_ms",
+        "value": 4.421182397080561,
+        "unit": "ms",
+        "criterion": "< 8",
+        "status": "PASS",
+        "detail": "window 5.5-15.5 s, coherence 0.89"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T184904.sflog.zip",
+        "axis": "pitch",
+        "name": "hover_gain",
+        "value": 0.4062449978454242,
+        "unit": "",
+        "criterion": "0.6 - 1.4",
+        "status": "reference",
+        "detail": "window 5.5-15.5 s, coherence 0.59"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T184904.sflog.zip",
+        "axis": "pitch",
+        "name": "hover_delay_ms",
+        "value": 4.920845372732185,
+        "unit": "ms",
+        "criterion": "< 8",
+        "status": "reference",
+        "detail": "window 5.5-15.5 s, coherence 0.59"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T205207.sflog.zip",
+        "axis": "roll",
+        "name": "flip_nofit_residual",
+        "value": 0.28478593357639426,
+        "unit": "",
+        "criterion": "< 0.5",
+        "status": "PASS",
+        "detail": "window 6.66-7.1 s, best scale 0.807"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T205207.sflog.zip",
+        "axis": "roll",
+        "name": "flip_best_delay_ms",
+        "value": 3.0,
+        "unit": "ms",
+        "criterion": "< 8",
+        "status": "PASS",
+        "detail": "window 6.66-7.1 s, best scale 0.807"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T205207.sflog.zip",
+        "axis": "pitch",
+        "name": "flip_nofit_residual",
+        "value": 1.3984842463728258,
+        "unit": "",
+        "criterion": "< 0.5",
+        "status": "reference",
+        "detail": "window 6.95-7.45 s, best scale 0.335"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T205207.sflog.zip",
+        "axis": "pitch",
+        "name": "flip_best_delay_ms",
+        "value": 40.0,
+        "unit": "ms",
+        "criterion": "< 8",
+        "status": "reference",
+        "detail": "window 6.95-7.45 s, best scale 0.335; at search edge"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T205207.sflog.zip",
+        "axis": "roll",
+        "name": "hover_gain",
+        "value": 0.8367909479655836,
+        "unit": "",
+        "criterion": "0.6 - 1.4",
+        "status": "PASS",
+        "detail": "window 4.4-6.4 s, coherence 0.95"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T205207.sflog.zip",
+        "axis": "roll",
+        "name": "hover_delay_ms",
+        "value": 4.214697291585772,
+        "unit": "ms",
+        "criterion": "< 8",
+        "status": "PASS",
+        "detail": "window 4.4-6.4 s, coherence 0.95"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T205207.sflog.zip",
+        "axis": "pitch",
+        "name": "hover_gain",
+        "value": 0.758520008536705,
+        "unit": "",
+        "criterion": "0.6 - 1.4",
+        "status": "reference",
+        "detail": "window 4.4-6.4 s, coherence 0.81"
+      },
+      {
+        "log": "vehicle_roll_flip_20261002T205207.sflog.zip",
+        "axis": "pitch",
+        "name": "hover_delay_ms",
+        "value": 11.884868438271758,
+        "unit": "ms",
+        "criterion": "< 8",
+        "status": "reference",
+        "detail": "window 4.4-6.4 s, coherence 0.81"
+      }
+    ]
+  }
+}

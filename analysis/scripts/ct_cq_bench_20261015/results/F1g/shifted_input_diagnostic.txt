@@ -1,0 +1,62 @@
+=== acro_flight (K=1.0625): PASS
+  [PASS] metric att_rmse < 0.05236 in [7.0,9.7]  (att_rmse=0.0364 (2.08 deg))
+  [PASS] metric tilt_max < 0.4363 in [7.0,9.7]  (tilt_max=0.1360 (7.79 deg))
+=== alt_flight (K=1.0625): PASS
+  [PASS] metric alt_rmse < 0.08 in [11.0,17.8]  (alt_rmse=0.0155)
+  [PASS] metric alt_band < 0.35 in [11.0,17.8]  (alt_band=0.2661)
+  [PASS] metric duty_max < 0.92 in [11.0,17.8]  (duty_max=0.6463)
+=== calib_side_lying (K=1.0625): FAIL
+  [FAIL] log_contains any 'not level'  (absent)
+  [FAIL] order 'Impact detected' before 'not level'  (idx_a=11455 idx_b=-1)
+=== crash_refly (K=1.0625): FAIL
+  [FAIL] log_contains any 'DISARM accepted'  (absent)
+  [FAIL] order 'Drone placed on ground' before 'DISARM accepted'  (idx_a=12261 idx_b=-1)
+  [PASS] metric alt_max > 0.4 in [9.0,11.3]  (alt_max=2.5295)
+  [PASS] metric alt_max < 0.1 in [12.0,14.0]  (alt_max=0.0211)
+  [PASS] metric alt_max > 0.3 in [14.8,16.4]  (alt_max=0.4000)
+  [PASS] metric alt_max > 0.5 in [27.0,32.4]  (alt_max=2.5208)
+  [FAIL] metric alt_min > 0.3 in [30.0,32.4]  (alt_min=0.0125)
+  [PASS] metric tilt_max < 0.2618 in [29.0,32.4]  (tilt_max=0.0000 (0.00 deg))
+  [PASS] metric att_rmse < 0.08727 in [30.0,32.4]  (att_rmse=0.0000 (0.00 deg))
+  [PASS] metric duty_max < 0.95 in [28.0,32.4]  (duty_max=0.6514)
+=== modeswitch (K=1.0625): PASS
+  [PASS] metric horizontal_drift_max < 2.0 in [11.0,16.6]  (horizontal_drift_max=0.2678)
+  [PASS] metric tilt_max < 0.3142 in [10.0,21.6]  (tilt_max=0.1660 (9.51 deg))
+  [PASS] metric alt_min > 0.25 in [10.0,21.6]  (alt_min=0.8192)
+  [PASS] metric alt_max < 1.6 in [10.0,21.6]  (alt_max=1.2560)
+  [PASS] metric duty_max < 0.92 in [8.0,21.6]  (duty_max=0.7301)
+  [PASS] metric att_rmse < 0.08727 in [13.0,16.6]  (att_rmse=0.0082 (0.47 deg))
+=== pos_pitch (K=1.0625): PASS
+  [PASS] metric horizontal_drift_max < 3.0 in [7.6,21.6]  (horizontal_drift_max=0.4844)
+  [PASS] metric tilt_max < 0.3142 in [7.6,21.6]  (tilt_max=0.1664 (9.53 deg))
+  [PASS] metric duty_max < 0.9 in [7.6,21.6]  (duty_max=0.7043)
+  [PASS] metric att_rmse < 0.08727 in [14.6,21.6]  (att_rmse=0.0096 (0.55 deg))
+=== pos_roll (K=1.0625): PASS
+  [PASS] metric horizontal_drift_max < 3.0 in [7.6,21.6]  (horizontal_drift_max=0.4145)
+  [PASS] metric tilt_max < 0.3142 in [7.6,21.6]  (tilt_max=0.1586 (9.09 deg))
+  [PASS] metric duty_max < 0.9 in [7.6,21.6]  (duty_max=0.7077)
+  [PASS] metric att_rmse < 0.08727 in [14.6,21.6]  (att_rmse=0.0078 (0.45 deg))
+=== stab_flight (K=1.0625): FAIL
+  [FAIL] metric att_rmse < 0.05236 in [7.0,13.0]  (att_rmse=0.0648 (3.72 deg))
+  [PASS] metric tilt_max < 0.3142 in [7.0,13.0]  (tilt_max=0.2351 (13.47 deg))
+  [PASS] metric duty_max < 1.001 in [7.0,13.0]  (duty_max=0.7291)
+=== stab_ground_windup (K=1.0625): PASS
+  [PASS] metric duty_spread_max < 0.05 in [8.0,29.5]  (duty_spread_max=0.0032)
+  [PASS] metric duty_max < 0.35 in [8.0,29.5]  (duty_max=0.1885)
+  [PASS] metric tilt_max < 0.0873 in [30.0,33.5]  (tilt_max=0.0221 (1.27 deg))
+=== commloss_land_level (K=1.0625): FAIL
+  [FAIL] log_contains any 'Comm lost → LANDING'  (absent)
+  [FAIL] log_contains any 'Autonomous landing engaged'  (absent)
+  [FAIL] log_contains any 'Transition: FLYING → LANDING'  (absent)
+  [FAIL] log_contains any 'Transition: LANDING → IDLE_GROUND'  (absent)
+  [FAIL] order 'Comm lost → LANDING' before 'Autonomous landing engaged'  (idx_a=-1 idx_b=-1)
+  [FAIL] metric tilt_max > 0.1396 in [11.5,13.5]  (tilt_max=0.0000 (0.00 deg))
+  [PASS] metric tilt_max < 0.1047 in [15.0,15.6]  (tilt_max=0.0000 (0.00 deg))
+  [PASS] metric alt_max < 0.1 in [17.5,18.5]  (alt_max=0.0211)
+=== pos_yaw (K=1.0625): FAIL
+  [FAIL] log_contains any 'DISARM accepted'  (absent)
+  [FAIL] order 'Mode change: STABILIZE → POS_HOLD' before 'DISARM accepted'  (idx_a=11240 idx_b=-1)
+  [PASS] metric horizontal_drift_max < 3.0 in [9.1,22.1]  (horizontal_drift_max=0.4863)
+  [PASS] metric tilt_max < 0.3142 in [9.1,22.1]  (tilt_max=0.1708 (9.79 deg))
+  [FAIL] metric duty_max < 0.9 in [9.1,22.1]  (duty_max=0.9415)
+  [PASS] metric att_rmse < 0.08727 in [15.0,22.1]  (att_rmse=0.0005 (0.03 deg))

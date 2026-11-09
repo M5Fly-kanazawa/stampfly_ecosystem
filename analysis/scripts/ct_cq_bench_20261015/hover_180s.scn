@@ -1,0 +1,15 @@
+# hover_180s.scn — ALT_HOLD auto-takeoff to 0.5 m, then hold ~190 s with the stick at centre
+#                  ALT_HOLD 自動離陸（0.5 m）→ スティック中立で約 190 s ホバー保持
+# (F1 / F1g experiment, 2026-11-03; copy of alt_auto_takeoff.scn with a long hold. No .expect on
+#  purpose: it is a measurement scenario, and without a matching .expect `sf sils regression`
+#  does not pick it up.)
+# Run: sf sils scenario analysis/scripts/ct_cq_bench_20261015/hover_180s.scn --target vehicle --duration 200000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (~4 s)
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM — spool, auto-takeoff fires
+   +    rc   2048  2048   2048    2048  1     190000    50        1              # D: throttle centre — climb to 0.5 m and hold ~190 s
+   +    rc   2048  2048   2048    2048  0     200       50                       # E: release ARM button
+   +    rc   2048  2048   2048    2048  1     200       50                       # F: press again → DISARM
+   +    rc   2048  2048   2048    2048  0     600       50                       # G: settle disarmed
