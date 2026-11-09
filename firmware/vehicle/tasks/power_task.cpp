@@ -36,6 +36,7 @@
 #include "sf_board.hpp"
 #include "power_monitor.hpp"
 #include "failsafe.hpp"
+#include "sensor_freshness.hpp"
 
 static const char* TAG = "PowerTask";
 
@@ -63,6 +64,16 @@ namespace {
 /// — detailed_design §2 は publisher を「sf_board / 各 task」と記載しており、タスク経由は
 /// 設計上許容される。IMU は Critical: 失敗していれば init() で停止しているため、ここに来た
 /// 時点で存在する。
+///
+/// Freshness is judged by one sf::SilenceWatch per sensor. The age of a NEW sample is SIGNED
+/// (the stamp is written by another task and can be newer than now_us; an unsigned difference
+/// would wrap to ~4.29e9 and false-flag stale), ts==0 means "never published" -> silent, and the
+/// silent time SATURATES (a sensor silent for over 35.8 min must not read healthy again when a
+/// 32-bit difference turns negative or wraps). See sensor_freshness.hpp.
+/// 鮮度はセンサごとの sf::SilenceWatch で判定する。新サンプルの経過は符号付き（時刻印は別タスクが
+/// 書くため now_us より新しいことがあり、符号なしの差は ~4.29e9 に桁あふれして偽の stale になる）、
+/// ts==0 は「未発行」→ 停止、停止時間は飽和する（35.8 分を超えて停止したセンサが、32bit の差が負・
+/// 巻き戻りになって再び健全と見えてはならない）。sensor_freshness.hpp 参照。
 ///
 /// @publisher sensor_health
 /// @design architecture.md §3 — R15 sensor_health 1 Hz                 [OK]
@@ -95,20 +106,22 @@ sf::SensorHealth buildSensorHealth(uint32_t now_us)
         {SensorId::TofFront, board::sensor_last_update_us(BoardId::FrontToF), board::sensor_present(BoardId::FrontToF)},
     };
 
+    // One watch per sensor bit, kept across calls (PowerTask only). / センサのビットごとに 1 つ保持（PowerTask のみ）。
+    static sf::SilenceWatch watches[static_cast<int>(SensorId::Count)];
+
     sf::SensorHealth health{};
     health.timestamp = now_us;
     for (const auto& e : entries) {
         const int bit = static_cast<int>(e.id);
         health.last_update_us[bit] = e.ts;
+        // Observe every cycle, present or not (never miss a long gap). / 存在に関わらず毎周期観測。
+        watches[bit].observe(now_us, e.ts);
         if (!e.present) {
             continue;
         }
         health.present_mask |= static_cast<uint8_t>(1u << bit);
-        // Healthy = present AND a sample arrived within the staleness window. ts==0 means
-        // "never published" → not fresh. The uint32 subtraction handles a single wrap.
-        // 健全 = 存在 かつ staleness 窓内にサンプル到着。ts==0 は未発行→非鮮度。uint32 の
-        // 引き算は1回の桁あふれを正しく扱う。
-        const bool fresh = (e.ts != 0) && ((now_us - e.ts) < config::SENSOR_HEALTH_STALE_US);
+        // Healthy = present AND a sample in the window. / 健全 = 存在 かつ窓内にサンプル到着。
+        const bool fresh = watches[bit].isFresh(config::SENSOR_HEALTH_STALE_US);
         if (fresh) {
             health.healthy_mask |= static_cast<uint8_t>(1u << bit);
         }

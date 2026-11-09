@@ -1,0 +1,18 @@
+# tof_silent_takeoff_bias_est_high.expect — ToF silent early in the auto-takeoff climb, estimate 28 % high AND accelerometer offset error +0.2 m/s^2
+# 自動離陸の上昇の初期に ToF が出力停止、見積もり 28 % 高く、加速度計のオフセット誤差 +0.2 m/s^2
+exit 0
+log_contains any "Transition: ARMED_GROUND → TAKEOFF"
+log_contains any "Downward ToF silent (>= 300 ms without a sample) in TAKEOFF/POS_HOLD → LANDING"
+log_contains any "Blind landing: ToF silent, velocity loop"
+log_contains any "Touchdown while the ToF is silent (impact) → landing complete, not an emergency"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_contains any "ARM rejected: downward ToF is silent"
+log_absent any "Transition: TAKEOFF → FLYING"
+log_absent any "touchdown by time"
+log_absent any "emergency DISARM"
+order "in TAKEOFF/POS_HOLD → LANDING" "Blind landing: ToF silent"
+order "Blind landing: ToF silent" "Touchdown while the ToF is silent (impact)"
+order "Touchdown while the ToF is silent (impact)" "ARM rejected: downward ToF is silent"
+metric alt_max < 1.2 in 7.5 20.0
+metric descent_speed_max < 1.2 in 8.4 15.0
+metric alt_max < 0.05 in 14.0 20.0

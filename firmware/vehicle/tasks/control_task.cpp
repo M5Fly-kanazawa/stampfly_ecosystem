@@ -39,6 +39,7 @@
 #include "app_hooks.hpp"
 #include "actuator.hpp"
 #include "flight_state.hpp"
+#include "failsafe_status_guard.hpp"   // a stale failsafe_status reads as ToF silent
 #include "config.hpp"
 
 static const char* TAG = "ControlTask";
@@ -186,6 +187,87 @@ static void processControllerCommands(sf::IController& controller)
     }
 }
 
+/// Publish the controller's facts on controller_status (the controller is a core component with no topic
+/// access, so the task layer carries them): guidance, auto-takeoff capture, flip gate and result, and the
+/// blind-descent facts the ImuTask reads. Returns what it published (the log stream records it too).
+/// 制御器の事実を controller_status に発行する（制御器はトピック禁制のコア部品なので、タスク層が運ぶ）:
+/// 誘導、自動離陸の捕捉、フリップの判定と結果、ImuTask が読むToF なし降下の事実。
+static sf::ControllerStatus publishControllerStatus(sf::IController& controller)
+{
+    // Publish the controller's guidance-engaged fact so the API source can
+    // release its target when the controller self-cancels guidance (pilot
+    // stick movement / mode change) — "the pilot always wins" stays
+    // observable to ApiTask (M-3). The controller is a core component with
+    // no topic access, so the task layer carries the fact to the topic.
+    // 制御器の誘導係合の事実を発行し、制御器がスティック動作/モード変更で誘導を
+    // 自発解除したとき API ソースが目標を解放できるようにする —「パイロット優先」を
+    // ApiTask から観測可能にする (M-3)。制御器はトピック禁制のコア部品ゆえ、タスク層
+    // が事実をトピックへ運ぶ。
+    // takeoff_reached carries the auto-takeoff capture event to StateTask, which
+    // uses it to drive TAKEOFF→FLYING for ALT/POS (decoupled from the ToF 0.15m
+    // airborne edge). Same task-layer carries-the-fact pattern as guidance_active.
+    // takeoff_reached は自動離陸の捕捉イベントを StateTask へ運び、ALT/POS の
+    // TAKEOFF→FLYING を駆動する（ToF 0.15m 空中エッジとは分離）。guidance_active と
+    // 同じ「タスク層が事実を運ぶ」パターン。
+    // flip_ready/flip_block_reason/flip_active/flip_done/flip_result (plan
+    // §4.1/§4.3): read from the controller every cycle, same task-layer-
+    // carries-the-fact pattern as guidance_active/takeoff_reached above.
+    // flip_result is NOT cleared by the controller on FLIP->FLYING (see
+    // FlipSequencer::reset()'s doc) — it stays readable by the Tello API,
+    // which polls this topic AFTER state_task's transition, until the
+    // controller's NEXT onFlip() overwrites it.
+    // flip_ready/flip_block_reason/flip_active/flip_done/flip_result
+    // （plan §4.1/§4.3）: 毎周期制御器から読む。guidance_active/
+    // takeoff_reached と同じ「タスク層が事実を運ぶ」パターン。
+    // flip_result は制御器が FLIP→FLYING で消さない
+    // （FlipSequencer::reset() のドキュメント参照）— state_task の遷移
+    // 「後」に本トピックをポーリングする Tello API から、制御器の
+    // 「次」の onFlip() が上書きするまで読み出せる。
+    sf::ControllerStatus status{};
+    status.guidance_active = controller.isGuidanceActive();
+    status.takeoff_reached = controller.isTakeoffComplete();
+    sf::FlipBlockReason flip_reason = sf::FlipBlockReason::None;
+    status.flip_ready = controller.isFlipReady(flip_reason);
+    status.flip_block_reason = static_cast<uint8_t>(flip_reason);
+    status.flip_active = controller.isFlipActive();
+    sf::FlipResult flip_result = sf::FlipResult::None;
+    status.flip_done = controller.isFlipDone(flip_result);
+    status.flip_result = static_cast<uint8_t>(flip_result);
+    status.flip_phase = static_cast<uint8_t>(controller.flipPhase());
+    status.flip_phi_rad = controller.flipRotationRad();
+    status.vertical_velocity_up = controller.verticalVelocityUp();   // blind-touchdown detector (ImuTask) / ToF なし接地検出器（ImuTask）
+    status.blind_thrust_ratio   = controller.blindThrustRatio();
+    status.vertical_rise_m      = controller.verticalRiseM();   // ToF health tracker (ImuTask) / ToF 健全性トラッカー（ImuTask）
+    status.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::controller_status.publish(status);
+    return status;   // the log stream records the same facts / ログのストリームも同じ事実を記録する
+}
+
+/// Inject the ToF-silence level and the airborne fact into the controller's LOCAL copy of the state (the
+/// controller is a core component: it may not read topics).
+/// ToF 出力停止のレベルと airborne の事実を、制御器に渡す「ローカルコピー」の state へ注入する（制御器は
+/// コア部品でトピックを読めない）。
+static void injectToFFacts(sf::StateEstimate& state, sf::FailsafeStatusGuard& failsafe_guard)
+{
+    // The downward-ToF silence LEVEL (Failsafe's judgement, 10 Hz): the autonomous landing
+    // descends blind (velocity loop on an accelerometer-based estimate) while it is set. A silent ToF is also never a
+    // "usable observation": the snapshot keeps the LAST sample's validity, which would let the
+    // FLIP gate (C6) trust an altitude nobody can see.
+    // 下向き ToF の出力停止「レベル」（Failsafe の判定、10 Hz）: これが立っている間、自動着陸は
+    // ToF なしで降りる（加速度計に基づく速度推定の速度ループ）。出力停止中の ToF は「使用可能な観測」でもない:
+    // スナップショットは「最後のサンプル」の有効性を保持するので、そのままだと FLIP の判定（C6）が
+    // 誰も見られない高度を信用してしまう。
+    const sf::FailsafeStatus tof_silence = failsafe_guard.guard(
+        static_cast<uint32_t>(esp_timer_get_time()), sf::failsafe_status.latest());
+    state.tof_silent      = tof_silence.tof_silent;
+    state.tof_valid       = sf::sensor_snapshot.latest().tof_valid && !state.tof_silent;
+    // The estimator's vertical state is free (not pinned by the on-ground hold): ImuTask's
+    // published ground-contact verdict, which already accounts for a silent ToF.
+    // 推定器の鉛直状態が自由（接地ホールドで固定されていない）: ImuTask が発行する接地の判定で、
+    // ToF 出力停止も織り込み済み。
+    state.airborne        = sf::system_status.latest().airborne;
+}
+
 void ControlTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "ControlTask started");
@@ -227,6 +309,8 @@ void ControlTask(void* pvParameters)
     // エラーではない。モータ強制ゼロは実行したまま（disarmed 中は無害）、ERROR
     // ログだけを判定する。飛行中の本物の IMU 停止は従来どおり大きく報告される。
     bool imu_pipeline_seen = false;
+
+    sf::FailsafeStatusGuard failsafe_guard;   // this task's guard: a stale status reads as ToF silent / このタスクのガード: 古い状態は ToF 出力停止と読む
 
     while (true) {
         // =====================================================================
@@ -289,7 +373,15 @@ void ControlTask(void* pvParameters)
         // フリップ列生成器の C5/C6 判定に使う（plan §3.1）。この2フィールドの
         // ドキュメントは data_types.hpp 参照。
         state.battery_voltage = sf::sensor_power.latest().voltage;
-        state.tof_valid       = sf::sensor_snapshot.latest().tof_valid;
+        injectToFFacts(state, failsafe_guard);   // ToF-silence level, airborne fact / ToF 出力停止のレベル、airborne
+
+        // Feed the link / guidance staleness watches EVERY cycle, armed or not: compute() runs
+        // only while armed, and a watch that misses a 35.8 min DISARM gap could read a dead
+        // link as alive when the next ARM arrives (sensor_freshness.hpp, problem 3).
+        // リンク・誘導の鮮度監視器へ、ARM 中か否かに関わらず「毎周期」観測を与える。compute() は
+        // ARM 中しか走らず、35.8 分の DISARM の空きを見逃した監視器は、次の ARM で途絶したリンクを
+        // 生存と読みうる（sensor_freshness.hpp 問題3）。
+        controller.observeLinks(state, setpoint);
 
         // =====================================================================
         // Step 2: Gate the motor output on the system arm state.
@@ -408,49 +500,7 @@ void ControlTask(void* pvParameters)
         // ログ用に制御出力を発行
         sf::control_output.publish(control);
 
-        // Publish the controller's guidance-engaged fact so the API source can
-        // release its target when the controller self-cancels guidance (pilot
-        // stick movement / mode change) — "the pilot always wins" stays
-        // observable to ApiTask (M-3). The controller is a core component with
-        // no topic access, so the task layer carries the fact to the topic.
-        // 制御器の誘導係合の事実を発行し、制御器がスティック動作/モード変更で誘導を
-        // 自発解除したとき API ソースが目標を解放できるようにする —「パイロット優先」を
-        // ApiTask から観測可能にする (M-3)。制御器はトピック禁制のコア部品ゆえ、タスク層
-        // が事実をトピックへ運ぶ。
-        // takeoff_reached carries the auto-takeoff capture event to StateTask, which
-        // uses it to drive TAKEOFF→FLYING for ALT/POS (decoupled from the ToF 0.15m
-        // airborne edge). Same task-layer carries-the-fact pattern as guidance_active.
-        // takeoff_reached は自動離陸の捕捉イベントを StateTask へ運び、ALT/POS の
-        // TAKEOFF→FLYING を駆動する（ToF 0.15m 空中エッジとは分離）。guidance_active と
-        // 同じ「タスク層が事実を運ぶ」パターン。
-        // flip_ready/flip_block_reason/flip_active/flip_done/flip_result (plan
-        // §4.1/§4.3): read from the controller every cycle, same task-layer-
-        // carries-the-fact pattern as guidance_active/takeoff_reached above.
-        // flip_result is NOT cleared by the controller on FLIP->FLYING (see
-        // FlipSequencer::reset()'s doc) — it stays readable by the Tello API,
-        // which polls this topic AFTER state_task's transition, until the
-        // controller's NEXT onFlip() overwrites it.
-        // flip_ready/flip_block_reason/flip_active/flip_done/flip_result
-        // （plan §4.1/§4.3）: 毎周期制御器から読む。guidance_active/
-        // takeoff_reached と同じ「タスク層が事実を運ぶ」パターン。
-        // flip_result は制御器が FLIP→FLYING で消さない
-        // （FlipSequencer::reset() のドキュメント参照）— state_task の遷移
-        // 「後」に本トピックをポーリングする Tello API から、制御器の
-        // 「次」の onFlip() が上書きするまで読み出せる。
-        sf::ControllerStatus status{};
-        status.guidance_active = controller.isGuidanceActive();
-        status.takeoff_reached = controller.isTakeoffComplete();
-        sf::FlipBlockReason flip_reason = sf::FlipBlockReason::None;
-        status.flip_ready = controller.isFlipReady(flip_reason);
-        status.flip_block_reason = static_cast<uint8_t>(flip_reason);
-        status.flip_active = controller.isFlipActive();
-        sf::FlipResult flip_result = sf::FlipResult::None;
-        status.flip_done = controller.isFlipDone(flip_result);
-        status.flip_result = static_cast<uint8_t>(flip_result);
-        status.flip_phase = static_cast<uint8_t>(controller.flipPhase());
-        status.flip_phi_rad = controller.flipRotationRad();
-        status.timestamp = static_cast<uint32_t>(esp_timer_get_time());
-        sf::controller_status.publish(status);
+        const sf::ControllerStatus status = publishControllerStatus(controller);   // controller facts to the topic / 制御器の事実をトピックへ
 
         // =====================================================================
         // Step 4: Run the X-quad mixer. It reads the control_output published

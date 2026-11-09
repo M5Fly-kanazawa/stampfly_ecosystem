@@ -40,6 +40,8 @@ public:
     void resetPositionVelocity() override;
     void holdPositionVelocity() override;
     void holdAttitudeCorrection(bool hold) override;
+    void reacquireAltitude() override;
+    ToFObservation lastToFObservation() const override;
     void applyCalibration(const float gyro_bias[3], const float accel_bias[3]) override;
     void freezeBias() override;
     void unfreezeBias() override;

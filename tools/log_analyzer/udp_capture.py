@@ -26,6 +26,10 @@ Packet IDs:
           kPktFlightPhase400)
     0x4D  Flight flags (50Hz, unified-packet entry -- pilot ARM/FLIP buttons,
           flip readiness, ArmBlock, attitude verdicts, see kPktFlightFlags)
+    0x4E  ToF silence facts (50Hz, unified-packet entry -- accelerometer-based
+          vertical velocity estimate, estimated rise, thrust ratio of the descent
+          without a ToF, failsafe verdict + reason, ToF health, ModeBlock; see
+          data_stream_wire.hpp kPktToFSilence)
     0x4F  Status / Heartbeat (1Hz)
     0x50  Unified packet: header carries a 16-bit `sequence`, unwrapped here
           and combined with each sub-sample's in-packet index to form the
@@ -87,6 +91,7 @@ PKT_DUTY400   = 0x4A  # 400Hz motor duty (unified-packet entry, 8 samples/entry)
 PKT_CTRL_OUTPUT400 = 0x4B  # 400Hz pre-mixer commanded thrust+torque (8 samples/entry)
 PKT_FLIGHT_PHASE400 = 0x4C  # 400Hz flight_state + flip phase/result/angle (8 samples/entry)
 PKT_FLIGHT_FLAGS    = 0x4D  # 50Hz pilot buttons + flip/arm readiness flags and block reasons
+PKT_TOF_SILENCE     = 0x4E  # 50Hz downward-ToF silence facts (vertical velocity estimate, ToF-less descent, failsafe verdict, mode block)
 PKT_RATE_REF  = 0x99  # virtual ID for 400Hz rate_ref (fixed part of unified packet)
 PKT_STATUS    = 0x4F
 PKT_UNIFIED   = 0x50  # 8x IMU+ESKF + 8x PosVel + 8x RateRef + variable entries
@@ -130,6 +135,13 @@ PILOT_BUTTON_FLIP = 0x02
 FLAG_FLIP_READY = 0x01
 FLAG_ATTITUDE_MISMATCH = 0x02
 FLAG_ATTITUDE_VERIFIED = 0x04
+
+# WireToFSilence::tof_flags bit layout (data_stream_wire.hpp kToFFlag*)
+# WireToFSilence::tof_flags のビット配置（data_stream_wire.hpp の kToFFlag*）
+TOF_FLAG_SILENT = 0x01
+TOF_FLAG_ALTITUDE_RELIABLE = 0x02
+TOF_FLAG_INVALID_STUCK = 0x04
+TOF_FLAG_STATUS_STALE = 0x08
 
 # hPa -> Pa: the wire carries barometric pressure as raw hPa
 # (data_stream_wire.hpp WireBaro), but v1's baro.csv unifies on SI Pa
@@ -221,6 +233,12 @@ assert struct.calcsize(FMT_FLIGHT_PHASE400) == 5
 #   + arm_block(B)
 FMT_FLIGHT_FLAGS = '<I4B'
 assert struct.calcsize(FMT_FLIGHT_FLAGS) == 8
+
+# ToFSilence: 19 bytes (one kPktToFSilence entry) -- mirrors WireToFSilence.
+#   timestamp_us(I) + vertical_velocity_up(f) + vertical_rise_m(f)
+#   + descent_thrust_ratio(f) + tof_flags(B) + tof_reason(B) + mode_block(B)
+FMT_TOF_SILENCE = '<I3f3B'
+assert struct.calcsize(FMT_TOF_SILENCE) == 19
 
 # Header: 4 bytes
 FMT_HEADER = '<B H B'
@@ -464,6 +482,25 @@ def parse_packet(data: bytes) -> list:
                     'attitude_mismatch': int(bool(flags & FLAG_ATTITUDE_MISMATCH)),
                     'attitude_verified': int(bool(flags & FLAG_ATTITUDE_VERIFIED)),
                 }))
+            # ToF silence facts (0x4E): one 50Hz record per packet.
+            # ToF 出力停止の事実（0x4E）: パケットあたり 50Hz で1件。
+            elif (sensor_id == PKT_TOF_SILENCE and data_size == 19
+                    and offset + data_size <= len(data) - 1):
+                (ts, velocity_up, rise_m, thrust_ratio,
+                 tof_flags, reason, mode_block) = struct.unpack_from(
+                    FMT_TOF_SILENCE, data, offset)
+                results.append((PKT_TOF_SILENCE, {
+                    'timestamp_us': ts,
+                    'vertical_velocity_up': velocity_up,
+                    'vertical_rise_m': rise_m,
+                    'descent_thrust_ratio': thrust_ratio,
+                    'tof_silent': int(bool(tof_flags & TOF_FLAG_SILENT)),
+                    'tof_reason': reason,
+                    'tof_altitude_reliable': int(bool(tof_flags & TOF_FLAG_ALTITUDE_RELIABLE)),
+                    'tof_invalid_stuck': int(bool(tof_flags & TOF_FLAG_INVALID_STUCK)),
+                    'tof_status_stale': int(bool(tof_flags & TOF_FLAG_STATUS_STALE)),
+                    'mode_block': mode_block,
+                }))
             elif sensor_id in SAMPLE_INFO and offset + data_size <= len(data) - 1:
                 _, fmt, sample_size = SAMPLE_INFO[sensor_id]
                 if data_size == sample_size:
@@ -604,6 +641,10 @@ _FLIGHT_PHASE_KEYS = ('timestamp_us', 'seq', 'flight_state', 'flip_phase',
 _FLIGHT_FLAGS_KEYS = ('timestamp_us', 'pilot_arm', 'pilot_flip', 'flip_ready',
                       'flip_block_reason', 'arm_block', 'attitude_mismatch',
                       'attitude_verified')
+_TOF_SILENCE_KEYS = ('timestamp_us', 'vertical_velocity_up', 'vertical_rise_m',
+                     'descent_thrust_ratio', 'tof_silent', 'tof_reason',
+                     'tof_altitude_reliable', 'tof_invalid_stuck',
+                     'tof_status_stale', 'mode_block')
 _ESKF_COV_KEYS = (
     'timestamp_us',
     'p_pos_x', 'p_pos_y', 'p_pos_z',
@@ -1089,7 +1130,8 @@ class UDPTelemetryCapture:
         # 400Hz 飛行フェーズ（0x4C）/ 50Hz 飛行フラグ（0x4D）: フリップ解析用。
         # 2026-10-02 より古いファームには無い（情報表示のみ）。
         for label, pkt in (('flight phase', PKT_FLIGHT_PHASE400),
-                           ('flight flags', PKT_FLIGHT_FLAGS)):
+                           ('flight flags', PKT_FLIGHT_FLAGS),
+                           ('ToF silence', PKT_TOF_SILENCE)):
             n = self.sample_count.get(pkt, 0)
             state = f'present ({n} samples)' if n else 'NOT present (older firmware)'
             print(f"  {label} (0x{pkt:02X}): {state}")
@@ -1199,6 +1241,9 @@ class UDPTelemetryCapture:
         if self.samples.get(PKT_FLIGHT_FLAGS):
             streams['flight_flags'] = self._build_stream(
                 [_select(s, _FLIGHT_FLAGS_KEYS) for s in self.samples[PKT_FLIGHT_FLAGS]], 'timestamp_us')
+        if self.samples.get(PKT_TOF_SILENCE):
+            streams['tof_silence'] = self._build_stream(
+                [_select(s, _TOF_SILENCE_KEYS) for s in self.samples[PKT_TOF_SILENCE]], 'timestamp_us')
         if self.samples.get(PKT_CONTROL):
             streams['pilot'] = self._build_stream(
                 [_pilot_row(s) for s in self.samples[PKT_CONTROL]], 'timestamp_us')

@@ -17,6 +17,7 @@
 
 #include "topics.hpp"
 #include "params.hpp"
+#include "flight_limits.hpp"   // limits::kBlindTouchdownAccelG (the default of safety.blind_touchdown.accel_g) / 同パラメータの既定値
 #include "esp_log.h"
 #include "esp_timer.h"   // reload-callback timestamps / 再読込コールバックの時刻印
 #include "nvs_flash.h"
@@ -54,6 +55,8 @@ Topic<FlowData,        RingBuffer, 8>  log_flow;
 Topic<SystemMode,      Latest, 1>      system_mode;
 Topic<SystemAlert,     Queue, 4>       system_alert;
 Topic<SystemStatus,    Latest, 1>      system_status;
+Topic<FailsafeStatus,  Latest, 1>      failsafe_status;
+Topic<ToFHealth,       Latest, 1>      tof_health;
 Topic<PairingStatus,   Latest, 1>      pairing_state;
 Topic<PairingComplete, Latest, 1>      pairing_complete;
 Topic<PairingDiag,     Latest, 1>      pairing_diag;
@@ -93,6 +96,8 @@ void topics_init()
     system_mode.init();
     system_alert.init();
     system_status.init();
+    failsafe_status.init();
+    tof_health.init();
     pairing_state.init();
     pairing_complete.init();
     pairing_diag.init();
@@ -761,6 +766,15 @@ namespace param_vars {
     float safety_tilt_max_deg   = 10.0f;
     float safety_tilt_persist_s = 0.5f;
     float safety_tilt_lpf_s     = 1.0f;
+    float safety_blind_descent_rate = limits::kBlindDescentRateMps;   // CANDIDATES, defined once in flight_limits.hpp / 候補値、定義は flight_limits.hpp に 1 か所
+    float safety_blind_descent_kp   = limits::kBlindDescentKp;
+    float safety_blind_descent_ti   = limits::kBlindDescentTiS;
+    float safety_vvel_settle        = limits::kVerticalVelocityHandoffSettleS;
+    float safety_vvel_tau           = limits::kVerticalVelocityEskfTauS;
+    float safety_blind_cap_ratio    = limits::kNoTofThrustCapRatio;
+    float safety_vvel_trust         = limits::kVerticalVelocityTrustS;
+    float safety_blind_floor_s     = limits::kBlindFloorS;   // CANDIDATE, defined once in flight_limits.hpp / 候補値、定義は flight_limits.hpp に 1 か所
+    float safety_blind_touchdown_g = limits::kBlindTouchdownAccelG;   // CANDIDATE, defined once in flight_limits.hpp / 候補値、定義は flight_limits.hpp に 1 か所
 
     // Calibration — boot gyro/accel bias calibration on/off (ImuTask seeds the
     // estimator at rest before flight). Default on.
@@ -1016,6 +1030,33 @@ static const ParamEntry table[] = {
     {"safety.tilt_check.max_deg",   ParamType::FLOAT, &safety_tilt_max_deg,   10.0f, 3.0f,  45.0f, nullptr},
     {"safety.tilt_check.persist_s", ParamType::FLOAT, &safety_tilt_persist_s, 0.5f,  0.1f,  5.0f,  nullptr},
     {"safety.tilt_check.lpf_s",     ParamType::FLOAT, &safety_tilt_lpf_s,     1.0f,  0.1f,  5.0f,  nullptr},
+    // Impact threshold [G] of the touchdown while the downward ToF is silent (blind landing, CANDIDATE):
+    // the touchdown is an impact above this, then stillness (blind_touchdown.hpp). At 10 G (max) no impact
+    // is ever seen, so the blind landing ends by its time limit — used by the tof_silent_hover_timed scenario.
+    // ToF 出力停止中の接地（ToF なしの着陸）の衝撃の閾値 [G]（候補値）: 接地は、これを超える衝撃のあとの静止
+    // （blind_touchdown.hpp）。最大の 10 G にすると衝撃を見ないので、ToF なしの着陸は時間切れで終わる —
+    // tof_silent_hover_timed シナリオが使う。
+    {"safety.blind_touchdown.accel_g", ParamType::FLOAT, &safety_blind_touchdown_g, limits::kBlindTouchdownAccelG, 1.05f, 10.0f, nullptr},
+    // Time [s] the floor must hold the craft up for the second touchdown path (thrust below 0.7 x the support thrust and |accel| near 1 g, no impact
+    // needed). 100 s (max) switches the path off: with 10 G above too, the descent without a ToF ends only by its time limit (tof_silent_hover_timed).
+    // 2 つ目の接地経路（推力が支持推力の 0.7 倍未満で |加速度| が 1 g の近く。衝撃は不要）で、床が機体を支えていなければならない時間 [s]。
+    // 最大の 100 s でこの経路は働かない: 上の 10 G と合わせると、ToF なしの降下は時間切れでしか終わらない（tof_silent_hover_timed）。
+    {"safety.blind_touchdown.floor_s", ParamType::FLOAT, &safety_blind_floor_s, limits::kBlindFloorS, 0.1f, 100.0f, nullptr},
+    // Blind descent (ToF silent): target speed [m/s, down], P gain [1/(m/s), x hover thrust], integral
+    // time [s] of the velocity loop (CANDIDATES; SILS sweeps them by parameter).
+    // ToF なしの降下: 速度ループの目標速度 [m/s、下向き]・P ゲイン [1/(m/s)、hover 推力に対する割合]・積分時間 [s]
+    // （候補値。SILS が掃引する）。
+    {"safety.blind_descent.rate_mps", ParamType::FLOAT, &safety_blind_descent_rate, limits::kBlindDescentRateMps, 0.1f, 1.5f, &notifyControllerReload},
+    {"safety.blind_descent.kp",       ParamType::FLOAT, &safety_blind_descent_kp,   limits::kBlindDescentKp,      0.1f, 5.0f, &notifyControllerReload},
+    {"safety.vvel.settle_s",          ParamType::FLOAT, &safety_vvel_settle,        limits::kVerticalVelocityHandoffSettleS, 0.0f, 5.0f, &notifyControllerReload},
+    {"safety.vvel.tau_s",             ParamType::FLOAT, &safety_vvel_tau,           limits::kVerticalVelocityEskfTauS, 0.2f, 20.0f, &notifyControllerReload},
+    {"safety.blind_descent.ti_s",     ParamType::FLOAT, &safety_blind_descent_ti,   limits::kBlindDescentTiS,     0.2f, 20.0f, &notifyControllerReload},
+    // Thrust ceiling / support thrust of the descent without a ToF, and how long the PI trusts the velocity estimate [s] (CANDIDATES;
+    // SILS sweeps them. A ratio of 1 or more lets the craft climb: only for reproducing the old behavior).
+    // ToF なしの降下の「推力の上限 ÷ 支持推力」と、PI が速度推定を信用する時間 [s]（候補値。SILS が掃引する。
+    // 比が 1 以上だと機体は上昇しうる: 旧挙動の再現専用）。
+    {"safety.blind_descent.cap_ratio", ParamType::FLOAT, &safety_blind_cap_ratio,   limits::kNoTofThrustCapRatio, 0.3f, 1.5f, &notifyControllerReload},
+    {"safety.vvel.trust_s",           ParamType::FLOAT, &safety_vvel_trust,         limits::kVerticalVelocityTrustS, 0.0f, 120.0f, &notifyControllerReload},
 
     // Calibration — boot gyro/accel bias calibration on/off
     {"calibration.enable",     ParamType::BOOL,  &calibration_enable, 1.0f,   0.0f,   1.0f,    nullptr},

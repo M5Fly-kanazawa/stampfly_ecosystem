@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "data_types.hpp"   // sf::ToFObservation
 #include "sf_math.hpp"
 #include <cstdint>
 
@@ -208,6 +209,9 @@ public:
     // =========================================================================
 
     void updateToF(float distance);
+    /// What updateToF() did with the last sample (adopted or gated out, and the innovation).
+    /// updateToF() が直近のサンプルをどう扱ったか（採用か棄却か、とイノベーション）。
+    ToFObservation lastToFObservation() const { return last_tof_; }
     void updateToFVelocity(float distance, float dt);  // ToF velocity observation
     void updateBaro(float altitude);
     void updateMag(const Vec3& mag);
@@ -279,6 +283,18 @@ public:
     ///
     /// @design docs/plans/flip-maneuver-plan.md §3.6 — estimator handling during flip [OK]
     void holdAttitudeCorrection(bool hold);
+
+    /// Re-acquire the vertical channel from the ToF: inflate the vertical (POS_Z/VEL_Z)
+    /// covariance and suspend the ToF absolute-innovation gate for the next accepted sample (or
+    /// cfg_.tof_reacquire_timeout_s). The ONE mechanism shared by the end of a flip
+    /// (holdAttitudeCorrection(false)) and the end of a ToF silence (IEstimator::reacquireAltitude).
+    /// 鉛直チャネルを ToF から取り込み直す: 鉛直（POS_Z/VEL_Z）共分散を膨張し、次に採用される
+    /// サンプル（または cfg_.tof_reacquire_timeout_s）まで ToF の絶対値イノベーション判定を
+    /// 一時停止する。宙返りの終わり（holdAttitudeCorrection(false)）と ToF 出力停止の終わり
+    /// （IEstimator::reacquireAltitude）が共有する「唯一の」仕組み。
+    ///
+    /// @design detailed_design.md §3.1 注 12 — ToF re-acquisition after a silence [OK]
+    void reacquireVertical();
 
 private:
     // Nominal state / 名目状態
@@ -354,6 +370,7 @@ private:
     // cfg_.tof_reacquire_timeout_s 経過のいずれか早い方でクリア）。
     bool  attitude_correction_held_        = false;
     bool  tof_gate_suspended_              = false;
+    ToFObservation last_tof_;   // outcome of the last updateToF() / 直近の updateToF() の結果
     float tof_gate_suspended_elapsed_s_    = 0.0f;
 
     // Internal / 内部

@@ -191,12 +191,18 @@ void EskfCore::holdAttitudeCorrection(bool hold)
     // 再開: detailed_design.md §3（FLIP → FLYING 行）の単一 verb
     // ResumeAttitudeCorrection に対応する3つの処理をまとめて行う。
     attitude_correction_held_ = false;
+    reacquireVertical();   // (b) + (c) below, shared with the end of a ToF silence / 下の (b)(c)。ToF 出力停止の終わりと共有
+    ESP_LOGI(TAG, "Attitude correction resumed");
+}
 
+void EskfCore::reacquireVertical()
+{
     // (b) Inflate the vertical (POS_Z/VEL_Z) covariance — the estimate is kept, but its
     // confidence is reset to "uncertain" because the accel-attitude/ToF corrections
-    // that normally bound the vertical channel were off for the maneuver's duration.
-    // (b) 鉛直（POS_Z/VEL_Z）共分散を膨張 — 推定値は保持するが、マニューバ継続中は
-    // 鉛直チャネルを抑える加速度姿勢/ToF 補正が止まっていたため、自信は「不確か」に戻す。
+    // that normally bound the vertical channel were off for the maneuver's (or the ToF
+    // silence's) duration.
+    // (b) 鉛直（POS_Z/VEL_Z）共分散を膨張 — 推定値は保持するが、マニューバ（または ToF 出力停止）
+    // 継続中は鉛直チャネルを抑える加速度姿勢/ToF 補正が止まっていたため、自信は「不確か」に戻す。
     const uint16_t vertical_mask = (1u << POS_Z) | (1u << VEL_Z);
     inflateCovariance(vertical_mask);
 
@@ -207,8 +213,7 @@ void EskfCore::holdAttitudeCorrection(bool hold)
     tof_gate_suspended_ = true;
     tof_gate_suspended_elapsed_s_ = 0.0f;
 
-    ESP_LOGI(TAG, "Attitude correction resumed, vertical covariance inflated, "
-                  "ToF gate suspended for re-acquisition");
+    ESP_LOGI(TAG, "Vertical covariance inflated, ToF gate suspended for re-acquisition");
 }
 
 // =============================================================================
@@ -597,6 +602,7 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
 
 void EskfCore::updateToF(float distance)
 {
+    last_tof_ = ToFObservation{};   // not adopted until the sample passes every gate / 全判定を通るまで未採用
     if (!cfg_.use_tof) return;
 
     // Tilt check / 傾きチェック
@@ -615,6 +621,7 @@ void EskfCore::updateToF(float distance)
     // Innovation: y = -height - pos_z (NED: z down)
     // イノベーション: y = -height - pos_z（NED: z下向き）
     float innovation = -height - pos_.z;
+    last_tof_.innovation_m = fabsf(innovation);
 
     // Absolute innovation gate — normally always on, EXCEPT for one sample right
     // after ResumeAttitudeCorrection (flip-maneuver-plan.md §3.6): the held window
@@ -629,13 +636,14 @@ void EskfCore::updateToF(float distance)
     if (!tof_gate_suspended_ && fabsf(innovation) > cfg_.tof_innov_gate) return;
 
     if (tof_gate_suspended_) {
-        ESP_LOGI(TAG, "ToF re-acquired after flip window (innovation=%.3fm)",
+        ESP_LOGI(TAG, "ToF re-acquired after a flip window / ToF silence (innovation=%.3fm)",
                  static_cast<double>(innovation));
         tof_gate_suspended_ = false;
         tof_gate_suspended_elapsed_s_ = 0.0f;
     }
 
     scalarUpdate(H, innovation, cfg_.tof_noise * cfg_.tof_noise);
+    last_tof_.adopted = true;
 }
 
 void EskfCore::updateToFVelocity(float distance, float dt)

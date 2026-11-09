@@ -37,6 +37,32 @@ constexpr uint16_t ADDR_BOTTOM  = 0x30;   // re-addressed bottom altimeter
 // ToF を供給）。環境変数 SILS_VL53_TEST_MM があれば常にそちらが優先。
 void set_distance_mm(float mm);
 
+// Fault injection (scenario `tof_silent`): while silent, the model never reports
+// "data ready", so the firmware's TofTask sees no new sample — the sensor has stopped
+// delivering, as in the 2026-11 accident (last sample, then nothing). The model keeps
+// answering every I2C transaction with ACK, so this is "no new data", not an I2C error.
+// 故障注入（シナリオ `tof_silent`）: 出力停止中はモデルが「データ準備完了」を返さないので、
+// ファームの TofTask は新サンプルを得ない — 2026-11 の事故（最後のサンプルの後は何も来ない）
+// と同じく、センサが出力を止めた状態。I2C の応答は常に ACK のままなので、これは
+// 「新データ無し」であって I2C エラーではない。
+void set_silent(bool silent);
+
+// Fault injection (scenario `tof_invalid`): while invalid, every sample is "no target" (the
+// histogram has no return pulse), whatever the Plant distance — the sensor keeps delivering
+// samples on time, but all of them are invalid (e.g. a floor material it cannot range). The
+// firmware's silence watch cannot see this: the stamps keep advancing.
+// 故障注入（シナリオ `tof_invalid`）: 無効中は、Plant の距離に関わらず全サンプルが「目標なし」
+// （histogram に反射パルスが無い）— センサはサンプルを時間どおり届け続けるが、全て無効（例: 測距
+// できない床材）。ファームの出力停止の監視には見えない: 時刻印は進み続けるため。
+void set_invalid(bool invalid);
+
+// Close-range dead zone (scenario `tof_deadzone`): on (the default) = a true distance below MIN_MM has no
+// return pulse (reads "no target"), as the real sensor on the floor; off = the true distance is ranged down
+// to the floor (the model before 2026-11-09).
+// 近距離の不感帯（シナリオ `tof_deadzone`）: 有効（既定）= 真の距離が MIN_MM 未満では反射パルスが無い
+// （「目標なし」。床の上の実機のセンサと同じ）。無効 = 床まで真の距離を測る（2026-11-09 より前のモデル）。
+void set_deadzone(bool enabled);
+
 // One VL53 I2C transaction. 16-bit BE register pointer in wbuf[0..1] (write-then-
 // read = repeated-START). Returns 0 (ACK). Mirrors the real chip's register map
 // only where the ST driver reads it; everything else is zero/ACK self-heal.

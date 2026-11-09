@@ -28,6 +28,7 @@
 
 #include "flight_state.hpp"
 #include "data_types.hpp"
+#include "failsafe_status_guard.hpp"   // a stale failsafe_status reads as ToF silent
 #include "led.hpp"
 #include "buzzer.hpp"
 #include <cstdint>
@@ -187,6 +188,31 @@ private:
     uint8_t  autotune_led_       = 0;
     uint16_t autotune_led_ticks_ = 0;
     bool autotuneOverlay(LedPattern& out) const;
+
+    /// On the ground with ARM blocked: the LED pattern of the published reason (true = applies).
+    /// 地上で ARM 阻害中: 発行済みの理由に対応する LED パターン（true = 該当）。
+    bool armBlockOverlay(const SystemMode& mode, LedPattern& out) const;
+
+    /// True while armed (any airborne or on-ground armed state) with the downward ToF silent
+    /// (failsafe_status). Drives the yellow fast-blink warning on both LED channels.
+    /// ARM 中（空中・地上の ARM 状態のいずれも）に下向き ToF が出力停止しているとき true
+    /// （failsafe_status）。両 LED チャネルの黄高速点滅の警告を駆動する。
+    bool tofSilentWhileArmed() const;
+
+    /// Drain ui_command (buzzer mute, LED brightness, user LED override, boot-chime selection).
+    /// ui_command を排出する（ブザー mute、LED 輝度、ユーザー LED 占有、起動音の選択）。
+    void applyUiCommands();
+
+    /// Boot mute window countdown and the deferred power-on chime (flash safety, see above).
+    /// 起動ミュート窓のカウントダウンと遅延させた起動音（フラッシュ安全。上記参照）。
+    void playDeferredBootChime();
+
+    // This task's guard on failsafe_status and the guarded value of the current update() (a status
+    // nobody refreshes reads as "ToF silent": the LED must not stay quiet because Failsafe died).
+    // failsafe_status に対するこのタスクのガードと、現在の update() のガード済みの値（誰も更新しない
+    // 状態は「ToF 出力停止」と読む: Failsafe が止まったせいで LED が黙ったままになってはならない）。
+    FailsafeStatusGuard tof_guard_;
+    FailsafeStatus      tof_status_ = {};
 
     // User LED override (ws::disable_led_task / ws::led_color, W1 §1-2): while
     // active, update() skips the state/mode pattern drawing for BOTH channels

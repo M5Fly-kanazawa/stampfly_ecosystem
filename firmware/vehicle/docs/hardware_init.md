@@ -155,7 +155,7 @@ Level 1: Bus peripherals
 Level 2: Critical sensors / actuators
   - BMI270 IMU 初期化 → 失敗時は abort()
   - Motor HAL 初期化 → 失敗時は abort()
-  - VL53L3CX Bottom ToF 初期化 → ALT/POS で必須、失敗時は abort()
+  - VL53L3CX Bottom ToF 初期化 → **モードを問わず必須**（ユーザー決定 2026-11: ToF の出力停止中は ACRO を含め次の ARM を拒否する。実行時の出力停止の扱いは `detailed_design.md` §3 注12）、失敗時は abort()
 
 Level 3: Optional sensors
   - BMM150 Mag → 失敗時は sensor_present(Mag) = false で続行
@@ -206,7 +206,7 @@ ledc_timer     ─→  Motor / LED / Buzzer
 | Critical | Motor HAL | `abort()` + LED 赤点滅 | 推力を出せない |
 | Critical | NVS | `abort()` | パラメータ・キャリブを読めない |
 | Critical | I2C bus / SPI host / LEDC timer | `abort()` | 全 HAL が依存する基盤 |
-| Critical | VL53L3CX Bottom ToF | `abort()`（ALT/POS モード使用時のみ） | 高度推定の主観測 |
+| Critical | VL53L3CX Bottom ToF | `abort()`（モードを問わない。実行時に出力停止すると ACRO を含め次の ARM を拒否、`detailed_design.md` §3 注12） | 高度推定の主観測。ACRO / STABILIZE の制御則は高度を使わないが、高度センサが保証できない機体は離陸させない（ユーザー決定 2026-11） |
 | **Optional** | BMM150 Mag | `sensor_present(Mag) = false` で続行 | ヨー推定がドリフトしやすくなるが ACRO/STAB は可能 |
 | Optional | VL53L3CX Front ToF | `sensor_present(FrontToF) = false` | 障害物検知不能、フライトは可能 |
 | Optional | PMW3901 Flow | `sensor_present(Flow) = false` | 位置推定の補助、ホバーは ToF + Baro で可能 |

@@ -1,0 +1,32 @@
+# tof_silent_touchdown_detect.expect — the blind-landing touchdown detector ends the landing (impact, then stillness)
+# ToF なしの着陸の接地検出器が着陸を終わらせる（衝撃のあとの静止）
+#
+# Chain: auto-takeoff complete (FLYING, 0.5 m) -> ToF output stops -> LANDING -> velocity-loop descent ->
+# contact (impact) -> stillness for 0.25 s -> "Touchdown detected (impact, then still ..." -> IDLE_GROUND.
+# The 3 G impact cut is disabled by the run line, so the detector is the only thing that can end the landing
+# before the time limit.
+# 連鎖: 自動離陸完了（FLYING、0.5 m）→ ToF 出力停止 → LANDING → 速度ループの降下 → 接触（衝撃）→ 0.25 s の静止
+# → "Touchdown detected (impact, then still ..." → IDLE_GROUND。3 G の衝撃カットは実行行で無効にしてあるので、
+# 時間切れより前に着陸を終わらせられるのは検出器だけ。
+exit 0
+log_contains any "Takeoff complete → FLYING/ALT_HOLD"
+log_contains any "Downward ToF silent (>= 300 ms without a sample) in FLYING/ALT_HOLD → LANDING"
+log_contains any "Blind landing: ToF silent, velocity loop"
+log_contains any "Touchdown detected (impact, then still"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_contains any "ARM rejected: downward ToF is silent"
+log_absent any "Impact detected"
+log_absent any "touchdown by time"
+order "Blind landing: ToF silent" "Touchdown detected (impact, then still"
+order "Touchdown detected (impact, then still" "Transition: LANDING → IDLE_GROUND"
+order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silent"
+# Touchdown speed (truth): measured 0.48 m/s (target 0.4 m/s). Bound 0.6 m/s.
+# 接地速度（真値）: measured 0.48 m/s（目標 0.4 m/s）。上限 0.6 m/s。
+# 2026-11-09 (5th review): bound 0.6 -> 0.8 m/s (measured 0.43 -> 0.60 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
+# (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g) instead of by the PI.
+# 2026-11-09（5 回目の見直し）: 上限 0.6 → 0.8 m/s（実測 0.43 → 0.60 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
+# 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
+metric descent_speed_max < 0.8 in 14.0 18.0
+# Landed and stays on the floor: the touchdown was real, not declared in the air (truth 0.021 m resting).
+# 着地して床の上に留まる: 接地は本物で、空中で宣言したのではない（真値 0.021 m で静止）。
+metric alt_max < 0.05 in 17.0 22.0

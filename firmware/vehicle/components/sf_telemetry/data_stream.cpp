@@ -64,6 +64,7 @@
 
 #include "topics.hpp"
 #include "params.hpp"
+#include "failsafe_status_guard.hpp"   // isFailsafeStatusStaleForDisplay()
 
 static const char* TAG = "DataStream";
 
@@ -352,6 +353,8 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
     flags.arm_block         = flag_mode.arm_block;
     countDrop(builder.addEntry(datastream::kPktFlightFlags, &flags, sizeof(flags)));
 
+    appendToFSilenceEntry(builder);
+
     // Pilot input (50Hz cadence — one per packet, like the old vehicle).
     // パイロット入力（50Hz — 旧 vehicle と同じくパケットあたり 1 件）。
     const CommandSetpoint setpoint = command_setpoint.latest();
@@ -440,6 +443,41 @@ void DataStream::appendEntries(datastream::UnifiedPacketBuilder& builder)
         }
         countDrop(builder.addEntry(datastream::kPktMag, &mag, sizeof(mag)));
     }
+}
+
+// -----------------------------------------------------------------------------
+// appendToFSilenceEntry — 50Hz downward-ToF silence facts (0x4E).
+// appendToFSilenceEntry — 50Hz 下向き ToF 出力停止の事実（0x4E）。
+//
+// The failsafe verdict is logged as Failsafe published it; "status_stale" says that the
+// publication itself stopped (a reader would then treat the ToF as silent, FailsafeStatusGuard).
+// The controller fields keep the last value ControlTask published (not republished while disarmed).
+// フェイルセーフの判定は Failsafe が発行したまま記録する。status_stale は発行そのものが止まったこと
+// （読む側はそのとき ToF を出力停止と扱う。FailsafeStatusGuard）。制御器由来の値は ControlTask が最後に
+// 発行した値のまま（disarm 中は再発行されない）。
+//
+// @design requirements.md §7 — Data Stream; protocol/spec/flight_log.yaml stream tof_silence [OK]
+// -----------------------------------------------------------------------------
+void DataStream::appendToFSilenceEntry(datastream::UnifiedPacketBuilder& builder)
+{
+    const FailsafeStatus   failsafe = failsafe_status.latest();
+    const ToFHealth        health   = tof_health.latest();
+    const ControllerStatus control  = controller_status.latest();
+    const SystemMode       mode     = system_mode.latest();
+    const uint32_t now_us = static_cast<uint32_t>(esp_timer_get_time());
+
+    datastream::WireToFSilence entry = {};
+    entry.timestamp_us         = batch_[datastream::kSamplesPerPacket - 1].timestamp;   // IMU clock / IMU 時計
+    entry.vertical_velocity_up = control.vertical_velocity_up;
+    entry.vertical_rise_m      = control.vertical_rise_m;
+    entry.descent_thrust_ratio = control.blind_thrust_ratio;
+    entry.tof_flags = (failsafe.tof_silent ? datastream::kToFFlagSilent : 0) |
+                      (health.altitude_reliable ? datastream::kToFFlagAltitudeReliable : 0) |
+                      (health.invalid_stuck ? datastream::kToFFlagInvalidStuck : 0) |
+                      (isFailsafeStatusStaleForDisplay(now_us, failsafe.timestamp) ? datastream::kToFFlagStatusStale : 0);
+    entry.tof_reason = failsafe.tof_reason;
+    entry.mode_block = mode.mode_block;
+    countDrop(builder.addEntry(datastream::kPktToFSilence, &entry, sizeof(entry)));
 }
 
 // -----------------------------------------------------------------------------

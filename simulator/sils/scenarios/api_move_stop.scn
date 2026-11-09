@@ -1,0 +1,33 @@
+# api_move_stop.scn — `stop` while `forward` is waiting to arrive
+#                     `forward` が到達を待っている最中の `stop`
+#
+# `forward 150` (0.3 m/s, about 5 s) blocks until the estimate reaches the target. A `stop`
+# 1.0 s into the move must be accepted at once (re-target the current position and heading),
+# end the wait ("error interrupted by stop" for the `forward`) and brake the craft well short
+# of 1.5 m. Before the fix the `stop` was read only after the move had finished, so it could
+# not stop anything.
+# `forward 150`（0.3 m/s、約 5 s）は推定が目標へ着くまで待機する。移動開始 1.0 s 後の `stop` は
+# 直ちに受理され（現在位置と向きを置き直す）、待機を終わらせ（`forward` は "error interrupted by
+# stop"）、機体を 1.5 m のずっと手前で止めねばならない。修正前は `stop` が移動の完了後にやっと
+# 読まれ、何も止められなかった。
+#
+# R2: a `left 50` arrives while `forward` waits and is parked. The accepted `stop` must discard it
+# ("error cancelled by stop"): replaying it would make the craft move again right after the stop.
+# R2: `forward` の待機中に `left 50` が届き、後回しにされる。受理された `stop` はそれを捨てねば
+# ならない（"error cancelled by stop"）。再生すると stop の直後に機体が再び動く。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_move_stop.scn --target vehicle --duration 26000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> hover at 0.5 m
+   +    rc         2048  2048   2048    2048  0     10000     50      # D: the takeoff finishes, hover (to t=16)
+   +    api        "forward 150"                                      # E: t=16.0 s — +150 cm forward
+   +    rc         2048  2048   2048    2048  0     500       50      # F: the move runs (to t=16.5)
+   +    api        "left 50"                                          # F2: parked during the wait
+   +    rc         2048  2048   2048    2048  0     500       50      # F3: the move runs (to t=17)
+   +    api        "stop"                                             # G: t=17.0 s — stop while forward waits
+   +    rc         2048  2048   2048    2048  0     6000      50      # H: braked and holding (to t=23)
+   +    api        "land"                                             # I: land
+   +    rc         2048  2048   2048    2048  0     6000      50      # J: touchdown (to t=29)

@@ -1,0 +1,20 @@
+# disarm_long_idle.expect — flight after a 38 min silent DISARM (see the .scn header)
+# 38 分の無音 DISARM のあとの飛行（.scn ヘッダ参照）
+#
+#   • ARM accepted → auto-takeoff → FLYING → pilot DISARM → auto-land → touchdown:
+#     the whole chain works after the long gap (no watcher stuck "silent")
+#   • no "Comm lost → LANDING": the state manager did not land a healthy link
+#   • hover reaches the 0.5 m altitude; the craft ends on the ground
+exit 0
+log_contains any "ARM accepted"
+log_contains any "Auto-takeoff engaged"
+log_contains any "Takeoff complete"
+log_contains any "DISARM in ALT_HOLD → auto-land"
+log_contains any "Autonomous landing engaged"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_absent any "Comm lost → LANDING"
+order "ARM accepted" "Takeoff complete"
+order "Takeoff complete" "DISARM in ALT_HOLD → auto-land"
+order "Autonomous landing engaged" "Transition: LANDING → IDLE_GROUND"
+metric alt_min  > 0.30 in 2291.0 2292.5   # hovering about 0.5 m after the long idle
+metric alt_max  < 0.05 in 2297.0 2299.0   # landed and settled

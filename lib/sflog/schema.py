@@ -116,6 +116,20 @@ STREAMS = {   'imu': {   'file': 'imu.csv',
                                        ('arm_block', 'int', 'enum'),
                                        ('attitude_mismatch', 'int', '0/1'),
                                        ('attitude_verified', 'int', '0/1'))},
+    'tof_silence': {   'file': 'tof_silence.csv',
+                       'source': 'ToFSilence (0x4E)',
+                       'nominal_rate_hz': 50,
+                       'required': False,
+                       'columns': (   ('timestamp_us', 'int', 'us'),
+                                      ('vertical_velocity_up', 'float', 'm/s'),
+                                      ('vertical_rise_m', 'float', 'm'),
+                                      ('descent_thrust_ratio', 'float', '-'),
+                                      ('tof_silent', 'int', '0/1'),
+                                      ('tof_reason', 'int', 'enum'),
+                                      ('tof_altitude_reliable', 'int', '0/1'),
+                                      ('tof_invalid_stuck', 'int', '0/1'),
+                                      ('tof_status_stale', 'int', '0/1'),
+                                      ('mode_block', 'int', 'enum'))},
     'pilot': {   'file': 'pilot.csv',
                  'source': 'Control (0x42)',
                  'nominal_rate_hz': 50,
@@ -845,12 +859,19 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                                               '前判定の阻害理由（ArmBlock、SystemMode.arm_block）。0=None（判定を通る）, '
                                               '1=Pairing, 2=Battery, 3=Calibrating, '
                                               '4=BenchRelevel, 5=TiltPending, '
-                                              '6=TiltMismatch。',
+                                              '6=TiltMismatch, 7=TofSilent（下向き ToF '
+                                              'の出力停止のエピソード中: 新サンプルが来ないか、推定器がまだ ToF '
+                                              'を取り込み直していない。ACRO を含む全モードで ARM を拒否）。',
                             'description_en': 'Pre-arm gate block reason (ArmBlock, '
                                               'SystemMode.arm_block). 0=None (gates '
                                               'pass), 1=Pairing, 2=Battery, '
                                               '3=Calibrating, 4=BenchRelevel, '
-                                              '5=TiltPending, 6=TiltMismatch.'},
+                                              '5=TiltPending, 6=TiltMismatch, '
+                                              '7=TofSilent (a downward-ToF silence '
+                                              'episode: no new samples, or the '
+                                              'estimator has not re-acquired the ToF '
+                                              'yet; ARM is refused in every mode, ACRO '
+                                              'included).'},
                         {   'name': 'attitude_mismatch',
                             'type': 'int',
                             'unit': '0/1',
@@ -867,6 +888,136 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                                               'judged and agrees '
                                               '(SystemStatus.attitude_verified). '
                                               'Required for ARM.'}],
+    'tof_silence': [   {   'name': 'timestamp_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': '機体起動基準のマイクロ秒タイムスタンプ（統合パケット最終サンプルの IMU '
+                                             '時刻）。',
+                           'description_en': 'Vehicle boot-relative microsecond '
+                                             'timestamp (IMU time of the unified '
+                                             "packet's last sample)."},
+                       {   'name': 'vertical_velocity_up',
+                           'type': 'float',
+                           'unit': 'm/s',
+                           'description_ja': '加速度計の積分に基づく鉛直速度の推定（上が正。ControllerStatus.vertical_velocity_up）。ToF '
+                                             'なし降下の速度ループが使う値で、ESKF '
+                                             'の速度ではない。制御器が最後に発行した値で、disarm '
+                                             '中は更新されない（flight_phase の flight_state '
+                                             'と合わせて読む）。',
+                           'description_en': 'Accelerometer-integral vertical velocity '
+                                             'estimate, up positive '
+                                             '(ControllerStatus.vertical_velocity_up). '
+                                             'The value the velocity loop of the '
+                                             'descent without a ToF uses, not the ESKF '
+                                             'velocity. The last value the controller '
+                                             'published; not updated while disarmed '
+                                             '(read together with '
+                                             'flight_phase.flight_state).'},
+                       {   'name': 'vertical_rise_m',
+                           'type': 'float',
+                           'unit': 'm',
+                           'description_ja': '機体が地上で最後に静止してからの上昇量の推定（ControllerStatus.vertical_rise_m。静止中は '
+                                             '0）。加速度の積分なのでオフセット誤差で時間とともにずれる。制御器が最後に発行した値で、disarm '
+                                             '中は更新されない。',
+                           'description_en': 'Estimated rise since the craft last '
+                                             'rested on the ground '
+                                             '(ControllerStatus.vertical_rise_m; 0 at '
+                                             'rest). An accelerometer integral, so an '
+                                             'offset error makes it drift with time. '
+                                             'The last value the controller published; '
+                                             'not updated while disarmed.'},
+                       {   'name': 'descent_thrust_ratio',
+                           'type': 'float',
+                           'unit': '-',
+                           'description_ja': 'ToF なし降下の指令推力 ÷ '
+                                             '支持推力（ControllerStatus.blind_thrust_ratio）。0 '
+                                             'は ToF なし降下をしていない。上限は '
+                                             '0.95（機体を支える推力より小さく、上昇できない）。',
+                           'description_en': 'Commanded thrust / support thrust of the '
+                                             'descent without a ToF '
+                                             '(ControllerStatus.blind_thrust_ratio). 0 '
+                                             '= no such descent. The ceiling is 0.95 '
+                                             '(below the thrust that holds the craft, '
+                                             'so it cannot climb).'},
+                       {   'name': 'tof_silent',
+                           'type': 'int',
+                           'unit': '0/1',
+                           'description_ja': '下向き ToF '
+                                             'の出力停止のエピソード中（FailsafeStatus.tof_silent）。新サンプルが '
+                                             '0.3 s 来ない、飛行中に無効サンプルだけが続く、または推定器がまだ ToF '
+                                             'を取り込み直していない間 1。',
+                           'description_en': 'A downward-ToF silence episode is in '
+                                             'progress (FailsafeStatus.tof_silent): no '
+                                             'new sample for 0.3 s, only invalid '
+                                             'samples while flying, or the estimator '
+                                             'has not re-acquired the ToF yet.'},
+                       {   'name': 'tof_reason',
+                           'type': 'int',
+                           'unit': 'enum',
+                           'description_ja': '出力停止の理由（ToFSilenceReason、FailsafeStatus.tof_reason）。0=None, '
+                                             '1=NoSample（新サンプルが来ない）, '
+                                             '2=InvalidStuck（飛行中に無効サンプルだけ）, '
+                                             '3=Reacquiring（サンプルは戻ったが推定器が取り込み直していない）, '
+                                             '4=StatusStale（failsafe_status '
+                                             '自体が更新されない。読む側が付ける）。tof_silent=0 のときは 0。',
+                           'description_en': 'Why the ToF is silent (ToFSilenceReason, '
+                                             'FailsafeStatus.tof_reason). 0=None, '
+                                             '1=NoSample, 2=InvalidStuck (only invalid '
+                                             'samples while flying), 3=Reacquiring '
+                                             '(samples are back, the estimator has not '
+                                             're-acquired the ToF), 4=StatusStale '
+                                             '(failsafe_status itself is not '
+                                             'refreshed; set by the reader). 0 while '
+                                             'tof_silent=0.'},
+                       {   'name': 'tof_altitude_reliable',
+                           'type': 'int',
+                           'unit': '0/1',
+                           'description_ja': 'ToF '
+                                             'の高度を信用できる（ToFHealth.altitude_reliable）: '
+                                             '推定器が小さなイノベーションでサンプルを連続して採用し、ToF '
+                                             'が一定時間生存している。',
+                           'description_en': 'The ToF altitude can be trusted '
+                                             '(ToFHealth.altitude_reliable): the '
+                                             'estimator adopted samples in a row with '
+                                             'a small innovation and the ToF has been '
+                                             'alive for a set time.'},
+                       {   'name': 'tof_invalid_stuck',
+                           'type': 'int',
+                           'unit': '0/1',
+                           'description_ja': '飛行中に無効サンプルだけが続いている（ToFHealth.invalid_stuck）。地上の無効は正常なので '
+                                             '0。',
+                           'description_en': 'Flying, and only invalid samples for a '
+                                             'set time (ToFHealth.invalid_stuck). 0 on '
+                                             'the ground, where invalid is normal.'},
+                       {   'name': 'tof_status_stale',
+                           'type': 'int',
+                           'unit': '0/1',
+                           'description_ja': 'failsafe_status 自体が更新されていない（表示用の判定。1 '
+                                             'のとき読む側は ToF を出力停止と扱う）。',
+                           'description_en': 'failsafe_status itself is no longer '
+                                             'refreshed (a display test; a reader '
+                                             'treats the ToF as silent while it is '
+                                             '1).'},
+                       {   'name': 'mode_block',
+                           'type': 'int',
+                           'unit': 'enum',
+                           'description_ja': '直近のフライトモード変更要求が拒否された理由（ModeBlock、SystemMode.mode_block）。0=None（拒否中の要求なし）, '
+                                             '1=TofSilent（地上で ALT_HOLD/POS_HOLD '
+                                             'を拒否。要求は持続し、エピソードが終わると自動で適用される）, '
+                                             '2=TofSwitchConsumed（飛行中のエピソードで '
+                                             'ALT_HOLD/POS_HOLD '
+                                             'を拒否。スイッチのエッジは消費され、パイロットが入れ直す必要がある）。',
+                           'description_en': 'Why the latest flight-mode change '
+                                             'request was refused (ModeBlock, '
+                                             'SystemMode.mode_block). 0=None (no '
+                                             'refused request pending), 1=TofSilent '
+                                             '(ALT_HOLD/POS_HOLD refused on the '
+                                             'ground; the request persists and applies '
+                                             'by itself when the episode ends), '
+                                             '2=TofSwitchConsumed (refused in flight '
+                                             'during an episode; the switch edge is '
+                                             'consumed and the pilot must flip the '
+                                             'switch again).'}],
     'pilot': [   {   'name': 'timestamp_us',
                      'type': 'int',
                      'unit': 'us',

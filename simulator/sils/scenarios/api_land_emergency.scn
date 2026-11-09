@@ -1,0 +1,31 @@
+# api_land_emergency.scn — `emergency` while `land` is waiting for touchdown
+#                          `land` が接地を待っている最中の `emergency`
+#
+# Same as api_takeoff_emergency but the blocking command is `land` (waits for IDLE_GROUND, up
+# to 20 s). The `emergency` arrives 0.6 s into the descent and must cut the motors at once; the
+# interrupted `land` answers "error interrupted by emergency".
+# api_takeoff_emergency と同じだが、待機中のコマンドは `land`（IDLE_GROUND まで最大 20 s 待つ）。
+# `emergency` は降下開始の 0.6 s 後に届き、即座にモータを止めねばならない。打ち切られた `land` は
+# "error interrupted by emergency" を返す。
+#
+# R2: a `takeoff` and a `left 100` arrive while `land` waits and are parked. The `emergency` must
+# discard them ("error cancelled by emergency"); replaying the `takeoff` would fly the craft again
+# right after the emergency.
+# R2: `land` の待機中に `takeoff` と `left 100` が届き、後回しにされる。`emergency` はそれらを
+# 捨てねばならない（"error cancelled by emergency"）。`takeoff` を再生すると emergency の直後に
+# 機体が再び飛ぶ。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_land_emergency.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> hover at 0.5 m
+   +    rc         2048  2048   2048    2048  0     10000     50      # D: the takeoff finishes, hover (to t=16)
+   +    api        "land"                                             # E: t=16.0 s — autonomous landing
+   +    rc         2048  2048   2048    2048  0     300       50      # F: descending (to t=16.3)
+   +    api        "takeoff"                                          # F2: parked during the wait
+   +    api        "left 100"                                         # F3: parked during the wait
+   +    rc         2048  2048   2048    2048  0     300       50      # F4: descending (to t=16.6)
+   +    api        "emergency"                                        # G: t=16.6 s — emergency while land waits
+   +    rc         2048  2048   2048    2048  0     4000      50      # H: motors must be stopped (to t=20.6)

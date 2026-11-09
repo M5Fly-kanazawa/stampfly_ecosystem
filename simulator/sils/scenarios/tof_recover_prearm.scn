@@ -1,0 +1,26 @@
+# tof_recover_prearm.scn — ARM is refused until the estimator has re-acquired the ToF, not just until samples arrive
+#                          ARM は、サンプルが届くだけでなく、推定器が ToF を取り込み直すまで拒否される
+#
+# 2nd independent review: the ARM / altitude-mode permission was "a fresh sample arrived". Spec under test: the ToF
+# stops at 3.0 s and resumes at 9.0 s; an ARM press 0.3 s after the return (9.3 s) is REFUSED with the reason
+# "estimator has not re-acquired the ToF yet" (the ToF must be alive for 1 s AND 10 samples must be adopted with a
+# small innovation); a press at 11.2 s is ACCEPTED. (tof_silent_prearm.scn covers the plain silence; this one the
+# recovery.) The motors never spin.
+#
+# 2 回目の独立レビュー: ARM・高度モードの許可条件が「新しいサンプルが届いた」だった。検証する仕様: ToF が 3.0 s に
+# 停止し 9.0 s に復帰する。復帰の 0.3 s 後（9.3 s）の ARM 操作は「推定器がまだ ToF を取り込み直していない」理由で
+# 拒否される（ToF が 1 s 生存し、かつ小さなイノベーションで 10 サンプルが採用されること）。11.2 s の操作は受理される。
+# （tof_silent_prearm.scn は単純な出力停止、こちらは復帰。）モータは回らない。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_recover_prearm.scn --target vehicle --duration 14000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     3000      50      # A: boot at rest, ToF alive for 3 s
+   +    tof_silent 1                                                  # B: 3.0 s — ToF output stops
+   +    rc         2048  2048   2048    2048  0     6000      50      # C: silence persists (to 9.0 s)
+   +    tof_silent 0                                                  # D: 9.0 s — ToF output resumes
+   +    rc         2048  2048   2048    2048  0     300       50      # E: 0.3 s after the return
+   +    rc         2048  2048   2048    2048  1     400       50      # F: ARM attempt (9.3 s) -> REFUSED (not re-acquired yet)
+   +    rc         2048  2048   2048    2048  0     1500      50      # G: release; the episode ends (~10.0 s)
+   +    rc         2048  2048   2048    2048  1     1000      50      # H: ARM attempt (11.2 s) -> ACCEPTED
+   +    rc         2048  2048   2048    2048  0     600       50      # I: release the ARM button

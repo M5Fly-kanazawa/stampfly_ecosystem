@@ -58,6 +58,7 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `ctrl_output` | `ctrl_output.csv` | ControlOutput400 (0x4B) | 400 Hz | - |
 | `flight_phase` | `flight_phase.csv` | FlightPhase400 (0x4C) | 400 Hz | - |
 | `flight_flags` | `flight_flags.csv` | FlightFlags (0x4D) | 50 Hz | - |
+| `tof_silence` | `tof_silence.csv` | ToFSilence (0x4E) | 50 Hz | - |
 | `pilot` | `pilot.csv` | Control (0x42) | 50 Hz | - |
 | `ctrl_ref` | `ctrl_ref.csv` | CtrlRef (0x48) | 50 Hz | - |
 | `baro` | `baro.csv` | Baro (0x45) | 50 Hz | - |
@@ -199,9 +200,26 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `pilot_flip` | int | 0/1 | 送信機の FLIP ボタン（制御フラグ bit1）。 |
 | `flip_ready` | int | 0/1 | 制御器のフリップ実行条件 C2-C8 が成立（ControllerStatus.flip_ready）。 制御器が最後に発行した値で、disarm 中は更新されない（flight_phase の flight_state と合わせて読む）。 |
 | `flip_block_reason` | int | enum | フリップ不成立理由（FlipBlockReason）。0=None, 1=NotFlying, 2=TooLow, 3=NotSteady, 4=BatteryLow, 5=EstimatorUnhealthy, 6=Cooldown, 7=Busy, 8=SourceConflict, 9=Disabled（flip.enable=0）。flip_ready=0 のときのみ意味を持つ。 |
-| `arm_block` | int | enum | ARM 前判定の阻害理由（ArmBlock、SystemMode.arm_block）。0=None（判定を通る）, 1=Pairing, 2=Battery, 3=Calibrating, 4=BenchRelevel, 5=TiltPending, 6=TiltMismatch。 |
+| `arm_block` | int | enum | ARM 前判定の阻害理由（ArmBlock、SystemMode.arm_block）。0=None（判定を通る）, 1=Pairing, 2=Battery, 3=Calibrating, 4=BenchRelevel, 5=TiltPending, 6=TiltMismatch, 7=TofSilent（下向き ToF の出力停止のエピソード中: 新サンプルが来ないか、推定器がまだ ToF を取り込み直していない。ACRO を含む全モードで ARM を拒否）。 |
 | `attitude_mismatch` | int | 0/1 | 地上で推定姿勢が重力方向と不一致（SystemStatus.attitude_mismatch）。 |
 | `attitude_verified` | int | 0/1 | 地上で姿勢チェックが判定済みかつ一致（SystemStatus.attitude_verified）。ARM に必須。 |
+
+#### tof_silence（`tof_silence.csv`）
+
+由来: ToFSilence (0x4E) ／ 公称レート: 50 Hz ／ 必須: 任意
+
+| 列名 | 型 | 単位 | 説明 |
+|---|---|---|---|
+| `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ（統合パケット最終サンプルの IMU 時刻）。 |
+| `vertical_velocity_up` | float | m/s | 加速度計の積分に基づく鉛直速度の推定（上が正。ControllerStatus.vertical_velocity_up）。ToF なし降下の速度ループが使う値で、ESKF の速度ではない。制御器が最後に発行した値で、disarm 中は更新されない（flight_phase の flight_state と合わせて読む）。 |
+| `vertical_rise_m` | float | m | 機体が地上で最後に静止してからの上昇量の推定（ControllerStatus.vertical_rise_m。静止中は 0）。加速度の積分なのでオフセット誤差で時間とともにずれる。制御器が最後に発行した値で、disarm 中は更新されない。 |
+| `descent_thrust_ratio` | float | - | ToF なし降下の指令推力 ÷ 支持推力（ControllerStatus.blind_thrust_ratio）。0 は ToF なし降下をしていない。上限は 0.95（機体を支える推力より小さく、上昇できない）。 |
+| `tof_silent` | int | 0/1 | 下向き ToF の出力停止のエピソード中（FailsafeStatus.tof_silent）。新サンプルが 0.3 s 来ない、飛行中に無効サンプルだけが続く、または推定器がまだ ToF を取り込み直していない間 1。 |
+| `tof_reason` | int | enum | 出力停止の理由（ToFSilenceReason、FailsafeStatus.tof_reason）。0=None, 1=NoSample（新サンプルが来ない）, 2=InvalidStuck（飛行中に無効サンプルだけ）, 3=Reacquiring（サンプルは戻ったが推定器が取り込み直していない）, 4=StatusStale（failsafe_status 自体が更新されない。読む側が付ける）。tof_silent=0 のときは 0。 |
+| `tof_altitude_reliable` | int | 0/1 | ToF の高度を信用できる（ToFHealth.altitude_reliable）: 推定器が小さなイノベーションでサンプルを連続して採用し、ToF が一定時間生存している。 |
+| `tof_invalid_stuck` | int | 0/1 | 飛行中に無効サンプルだけが続いている（ToFHealth.invalid_stuck）。地上の無効は正常なので 0。 |
+| `tof_status_stale` | int | 0/1 | failsafe_status 自体が更新されていない（表示用の判定。1 のとき読む側は ToF を出力停止と扱う）。 |
+| `mode_block` | int | enum | 直近のフライトモード変更要求が拒否された理由（ModeBlock、SystemMode.mode_block）。0=None（拒否中の要求なし）, 1=TofSilent（地上で ALT_HOLD/POS_HOLD を拒否。要求は持続し、エピソードが終わると自動で適用される）, 2=TofSwitchConsumed（飛行中のエピソードで ALT_HOLD/POS_HOLD を拒否。スイッチのエッジは消費され、パイロットが入れ直す必要がある）。 |
 
 #### pilot（`pilot.csv`）
 
@@ -439,6 +457,7 @@ Encoding utf-8, header row, no comment rows. Column 1 is always `timestamp_us` (
 | `ctrl_output` | `ctrl_output.csv` | ControlOutput400 (0x4B) | 400 Hz | - |
 | `flight_phase` | `flight_phase.csv` | FlightPhase400 (0x4C) | 400 Hz | - |
 | `flight_flags` | `flight_flags.csv` | FlightFlags (0x4D) | 50 Hz | - |
+| `tof_silence` | `tof_silence.csv` | ToFSilence (0x4E) | 50 Hz | - |
 | `pilot` | `pilot.csv` | Control (0x42) | 50 Hz | - |
 | `ctrl_ref` | `ctrl_ref.csv` | CtrlRef (0x48) | 50 Hz | - |
 | `baro` | `baro.csv` | Baro (0x45) | 50 Hz | - |
@@ -580,9 +599,26 @@ Source: FlightFlags (0x4D) / Nominal rate: 50 Hz / Required: no
 | `pilot_flip` | int | 0/1 | Transmitter FLIP button (control flags bit1). |
 | `flip_ready` | int | 0/1 | Controller flip execution conditions C2-C8 hold (ControllerStatus.flip_ready). The last value the controller published; not updated while disarmed (read together with flight_phase.flight_state). |
 | `flip_block_reason` | int | enum | Why a flip is blocked (FlipBlockReason). 0=None, 1=NotFlying, 2=TooLow, 3=NotSteady, 4=BatteryLow, 5=EstimatorUnhealthy, 6=Cooldown, 7=Busy, 8=SourceConflict, 9=Disabled (flip.enable=0). Meaningful only when flip_ready=0. |
-| `arm_block` | int | enum | Pre-arm gate block reason (ArmBlock, SystemMode.arm_block). 0=None (gates pass), 1=Pairing, 2=Battery, 3=Calibrating, 4=BenchRelevel, 5=TiltPending, 6=TiltMismatch. |
+| `arm_block` | int | enum | Pre-arm gate block reason (ArmBlock, SystemMode.arm_block). 0=None (gates pass), 1=Pairing, 2=Battery, 3=Calibrating, 4=BenchRelevel, 5=TiltPending, 6=TiltMismatch, 7=TofSilent (a downward-ToF silence episode: no new samples, or the estimator has not re-acquired the ToF yet; ARM is refused in every mode, ACRO included). |
 | `attitude_mismatch` | int | 0/1 | On the ground the estimated attitude disagrees with gravity (SystemStatus.attitude_mismatch). |
 | `attitude_verified` | int | 0/1 | On the ground the attitude check has judged and agrees (SystemStatus.attitude_verified). Required for ARM. |
+
+#### tof_silence (`tof_silence.csv`)
+
+Source: ToFSilence (0x4E) / Nominal rate: 50 Hz / Required: no
+
+| Column | Type | Unit | Description |
+|---|---|---|---|
+| `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp (IMU time of the unified packet's last sample). |
+| `vertical_velocity_up` | float | m/s | Accelerometer-integral vertical velocity estimate, up positive (ControllerStatus.vertical_velocity_up). The value the velocity loop of the descent without a ToF uses, not the ESKF velocity. The last value the controller published; not updated while disarmed (read together with flight_phase.flight_state). |
+| `vertical_rise_m` | float | m | Estimated rise since the craft last rested on the ground (ControllerStatus.vertical_rise_m; 0 at rest). An accelerometer integral, so an offset error makes it drift with time. The last value the controller published; not updated while disarmed. |
+| `descent_thrust_ratio` | float | - | Commanded thrust / support thrust of the descent without a ToF (ControllerStatus.blind_thrust_ratio). 0 = no such descent. The ceiling is 0.95 (below the thrust that holds the craft, so it cannot climb). |
+| `tof_silent` | int | 0/1 | A downward-ToF silence episode is in progress (FailsafeStatus.tof_silent): no new sample for 0.3 s, only invalid samples while flying, or the estimator has not re-acquired the ToF yet. |
+| `tof_reason` | int | enum | Why the ToF is silent (ToFSilenceReason, FailsafeStatus.tof_reason). 0=None, 1=NoSample, 2=InvalidStuck (only invalid samples while flying), 3=Reacquiring (samples are back, the estimator has not re-acquired the ToF), 4=StatusStale (failsafe_status itself is not refreshed; set by the reader). 0 while tof_silent=0. |
+| `tof_altitude_reliable` | int | 0/1 | The ToF altitude can be trusted (ToFHealth.altitude_reliable): the estimator adopted samples in a row with a small innovation and the ToF has been alive for a set time. |
+| `tof_invalid_stuck` | int | 0/1 | Flying, and only invalid samples for a set time (ToFHealth.invalid_stuck). 0 on the ground, where invalid is normal. |
+| `tof_status_stale` | int | 0/1 | failsafe_status itself is no longer refreshed (a display test; a reader treats the ToF as silent while it is 1). |
+| `mode_block` | int | enum | Why the latest flight-mode change request was refused (ModeBlock, SystemMode.mode_block). 0=None (no refused request pending), 1=TofSilent (ALT_HOLD/POS_HOLD refused on the ground; the request persists and applies by itself when the episode ends), 2=TofSwitchConsumed (refused in flight during an episode; the switch edge is consumed and the pilot must flip the switch again). |
 
 #### pilot (`pilot.csv`)
 

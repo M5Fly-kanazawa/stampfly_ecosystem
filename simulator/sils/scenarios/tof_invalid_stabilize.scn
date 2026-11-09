@@ -1,0 +1,30 @@
+# tof_invalid_stabilize.scn — only INVALID ToF samples during a MANUAL STABILIZE flight: warning only, NO forced landing
+#                             手動 STABILIZE 飛行中に「無効」な ToF サンプルだけが続く: 警告のみ・強制着陸しない
+#
+# 2nd independent review, D4 for the manual modes (the twin of tof_silent_stabilize.scn with `tof_invalid` instead of
+# `tof_silent`). Spec under test: after 0.5 s of only invalid samples while flying (judged ~8.1 s) the state machine
+# only WARNS (log "NO forced landing, fly on"; the LED / tone are driven from the same level) and the pilot keeps
+# the vertical axis (the craft stays around 0.5 m until the pilot lowers the throttle); the POS_HOLD switch at 8.5 s is
+# REFUSED in flight and its edge CONSUMED (the switch is back OFF at 9.5 s, nothing follows by itself).
+#
+# 2 回目の独立レビューの D4 の手動モード版（tof_silent_stabilize.scn の `tof_silent` を `tof_invalid` にした兄弟）。
+# 検証する仕様: 飛行中に 0.5 s の間無効サンプルだけが続いた後（約 8.1 s に判定）、状態機械は警告だけを出し（ログ
+# "NO forced landing, fly on"。LED・音は同じレベルから駆動）、パイロットは鉛直軸を握ったまま（スロットルを下げる
+# まで機体は約 0.5 m に留まる）。8.5 s の POS_HOLD スイッチは飛行中に拒否されエッジは消費される（9.5 s にスイッチは
+# 切られ、その後は勝手には何も起きない）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_invalid_stabilize.scn --target vehicle --duration 17000000
+#
+#  <t>  ch          <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc           2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s — boot calibration
+   +    rc           2048  2048   2048    2048  1     1000      50                       # B: ARM (4.0 s), STABILIZE
+   +    rc           3171  2048   2048    2048  1     1000      50                       # C: throttle up (5.0 s) -> TAKEOFF -> FLYING
+   +    rc           3070  2048   2048    2048  1     1500      50                       # D: near-hover throttle (to 7.5 s)
+   +    tof_invalid  1                                                                   # E: 7.5 s — every ToF sample is invalid from now on
+   +    rc           3070  2048   2048    2048  1     1000      50                       # F: keep flying; judged ~8.1 s -> warning only
+   +    rc           3070  2048   2048    2048  1     1000      50        0     0     1  # G: POS switch ON (8.5 s) while flying -> REFUSED, edge CONSUMED
+   +    rc           3070  2048   2048    2048  1     1500      50                       # H: POS switch back OFF (9.5 s); still STABILIZE
+   +    rc           3030  2048   2048    2048  1     3500      50                       # I: the pilot descends (11.0 s) and lands
+   +    rc           2048  2048   2048    2048  0     300       50                       # J: release the ARM button
+   +    rc           2048  2048   2048    2048  1     300       50                       # K: press (14.8 s): on the ground an invalid ToF is normal -> ARM accepted
+   +    rc           2048  2048   2048    2048  0     800       50                       # L: settle

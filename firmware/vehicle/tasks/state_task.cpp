@@ -567,6 +567,86 @@ static void handleAttitudeMismatch(AttitudeMismatchTracker& tracker)
     tracker.previous_mismatch = mismatch;
 }
 
+/// Apply the requested flight mode on the mode-switch EDGE (and re-level it in IDLE_GROUND): the mode
+/// arbitration of the NORMATIVE event x state table (detailed_design.md §3.1), including the rule that an edge
+/// refused IN FLIGHT by a ToF-silence episode is CONSUMED.
+/// モードスイッチの「エッジ」で要求された飛行モードを適用する（IDLE_GROUND ではレベル合わせも）: 規範の
+/// イベント×状態の表（detailed_design.md §3.1）のモード調停。飛行中に ToF 出力停止のエピソードで拒否された
+/// エッジは「消費」する規則を含む。
+///
+/// RE-LEVEL in IDLE_GROUND: parked and disarmed, the switch position
+/// IS the truth. Without this, the crash-return mode reset (ground →
+/// STABILIZE, a re-fly-safety rule) leaves the actual mode disagreeing
+/// with a switch that never moved — no edge ever comes, the LED shows
+/// STABILIZE while the pilot's switch says ACRO (hardware bug report,
+/// 2026-06-11). Armed/flying states stay edge-only so a parked
+/// transmitter can never override the API mid-flight.
+/// IDLE_GROUND では「レベル合わせ」: 設置・非 ARM ならスイッチ位置こそが
+/// 真。これが無いと墜落復帰のモードリセット（接地→STABILIZE、再飛行安全則）
+/// の後、動いていないスイッチと実モードの不一致が固定化する — エッジは
+/// 永遠に来ず、スイッチが ACRO でも LED は STABILIZE のまま（実機バグ報告,
+/// 2026-06-11）。ARM 後・飛行中はエッジのみ＝放置送信機が飛行中の API
+/// モードを覆せない性質は不変。
+/// Mode arbitration — implements the NORMATIVE event×state table in
+/// detailed_design.md §3.1 (モード調停表). Two rules:
+///  EDGE:    a switch flip requests the mode; if the current state
+///           rejects it (INIT/TAKEOFF/LANDING/FLIP/IDLE_HELD), prev_want
+///           is NOT updated, so the edge PERSISTS and retries until a
+///           state accepts it (e.g. a flip during the ~1 s TAKEOFF
+///           window applies on reaching FLYING — hole #2 found while
+///           writing the table; a flip during FLIP applies the same way
+///           once FLIP → FLYING, plan §4.3 FLIP row — no extra code:
+///           requestModeChange() simply excludes FLIP from
+///           mode_change_allowed, same shape as TAKEOFF/LANDING).
+///  RELEVEL: in IDLE_GROUND (parked + disarmed) the switch position
+///           IS the truth — any mismatch re-applies it (covers the
+///           crash-return STABILIZE reset under an un-moved switch —
+///           hole #1, hardware LED bug).
+/// Armed/flying states stay edge-only: a parked transmitter can never
+/// override the API mode mid-flight.
+/// モード調停 — detailed_design.md §3.1 の「規範」遷移表を写す。2 規則:
+///  エッジ:   スイッチ反転で要求。現状態が拒否（INIT/TAKEOFF/LANDING/FLIP/
+///            IDLE_HELD）なら prev_want を更新せず、エッジは「持続」して
+///            受理される状態まで再試行（例: 約1秒の TAKEOFF 窓中の反転は
+///            FLYING 到達時に適用 — 表の作成中に発見した抜け②。FLIP 中の
+///            反転も同様に FLIP → FLYING 到達時に適用される、plan §4.3
+///            FLIP 行 — 追加コード不要: requestModeChange() は単に FLIP を
+///            mode_change_allowed から除くだけで TAKEOFF/LANDING と同型）。
+///  再適用:   IDLE_GROUND（設置・非 ARM）ではスイッチ位置が真 — 不一致は
+///            再適用（墜落復帰の STABILIZE リセット×不動スイッチ＝抜け①、
+///            実機 LED バグ）。
+/// ARM 後・飛行中はエッジのみ: 放置送信機は API モードを覆せない。
+static void arbitrateFlightMode(sf::FlightMode want)
+{
+    static sf::FlightMode prev_want = sf::FlightMode::STABILIZE;
+    const bool edge = (want != prev_want);
+    const bool relevel =
+        (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) &&
+        (want != g_state_manager.getMode());
+    if (edge || relevel) {
+        if (g_state_manager.requestModeChange(want)) {
+            if (relevel && !edge) {
+                ESP_LOGI(TAG, "Mode re-leveled to switch position");
+            }
+            prev_want = want;
+        } else if (g_state_manager.isModeRequestConsumed()) {
+            // Refused IN FLIGHT by a ToF-silence episode: the edge is CONSUMED, not
+            // retried. Retrying would switch to ALT_HOLD/POS_HOLD by itself at the
+            // instant the ToF recovers, long after the pilot flipped the switch; the
+            // pilot flips it again (CLI `status` shows modeblock: TofSwitchConsumed).
+            // 飛行中に ToF 出力停止のエピソードで拒否: エッジは再試行せず「消費」する。
+            // 再試行すると、パイロットがスイッチを入れてからずっと後の ToF 復帰の瞬間に
+            // ALT_HOLD/POS_HOLD へ勝手に切り替わる。パイロットが入れ直す（CLI `status` が
+            // modeblock: TofSwitchConsumed を示す）。
+            prev_want = want;
+        }
+        // Otherwise rejected: prev_want unchanged — the edge persists (see above).
+        // それ以外の拒否時: prev_want 不変 — エッジは持続（上記参照）。
+    } else {
+        prev_want = want;
+    }
+}
+
 void StateTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "StateTask started");
@@ -712,65 +792,7 @@ void StateTask(void* pvParameters)
             if (req.pos_hold)      want = sf::FlightMode::POS_HOLD;
             else if (req.alt_hold) want = sf::FlightMode::ALT_HOLD;
             else if (req.acro)     want = sf::FlightMode::ACRO;
-            static sf::FlightMode prev_want = sf::FlightMode::STABILIZE;
-            // RE-LEVEL in IDLE_GROUND: parked and disarmed, the switch position
-            // IS the truth. Without this, the crash-return mode reset (ground →
-            // STABILIZE, a re-fly-safety rule) leaves the actual mode disagreeing
-            // with a switch that never moved — no edge ever comes, the LED shows
-            // STABILIZE while the pilot's switch says ACRO (hardware bug report,
-            // 2026-06-11). Armed/flying states stay edge-only so a parked
-            // transmitter can never override the API mid-flight.
-            // IDLE_GROUND では「レベル合わせ」: 設置・非 ARM ならスイッチ位置こそが
-            // 真。これが無いと墜落復帰のモードリセット（接地→STABILIZE、再飛行安全則）
-            // の後、動いていないスイッチと実モードの不一致が固定化する — エッジは
-            // 永遠に来ず、スイッチが ACRO でも LED は STABILIZE のまま（実機バグ報告,
-            // 2026-06-11）。ARM 後・飛行中はエッジのみ＝放置送信機が飛行中の API
-            // モードを覆せない性質は不変。
-            // Mode arbitration — implements the NORMATIVE event×state table in
-            // detailed_design.md §3.1 (モード調停表). Two rules:
-            //  EDGE:    a switch flip requests the mode; if the current state
-            //           rejects it (INIT/TAKEOFF/LANDING/FLIP/IDLE_HELD), prev_want
-            //           is NOT updated, so the edge PERSISTS and retries until a
-            //           state accepts it (e.g. a flip during the ~1 s TAKEOFF
-            //           window applies on reaching FLYING — hole #2 found while
-            //           writing the table; a flip during FLIP applies the same way
-            //           once FLIP → FLYING, plan §4.3 FLIP row — no extra code:
-            //           requestModeChange() simply excludes FLIP from
-            //           mode_change_allowed, same shape as TAKEOFF/LANDING).
-            //  RELEVEL: in IDLE_GROUND (parked + disarmed) the switch position
-            //           IS the truth — any mismatch re-applies it (covers the
-            //           crash-return STABILIZE reset under an un-moved switch —
-            //           hole #1, hardware LED bug).
-            // Armed/flying states stay edge-only: a parked transmitter can never
-            // override the API mode mid-flight.
-            // モード調停 — detailed_design.md §3.1 の「規範」遷移表を写す。2 規則:
-            //  エッジ:   スイッチ反転で要求。現状態が拒否（INIT/TAKEOFF/LANDING/FLIP/
-            //            IDLE_HELD）なら prev_want を更新せず、エッジは「持続」して
-            //            受理される状態まで再試行（例: 約1秒の TAKEOFF 窓中の反転は
-            //            FLYING 到達時に適用 — 表の作成中に発見した抜け②。FLIP 中の
-            //            反転も同様に FLIP → FLYING 到達時に適用される、plan §4.3
-            //            FLIP 行 — 追加コード不要: requestModeChange() は単に FLIP を
-            //            mode_change_allowed から除くだけで TAKEOFF/LANDING と同型）。
-            //  再適用:   IDLE_GROUND（設置・非 ARM）ではスイッチ位置が真 — 不一致は
-            //            再適用（墜落復帰の STABILIZE リセット×不動スイッチ＝抜け①、
-            //            実機 LED バグ）。
-            // ARM 後・飛行中はエッジのみ: 放置送信機は API モードを覆せない。
-            const bool edge = (want != prev_want);
-            const bool relevel =
-                (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) &&
-                (want != g_state_manager.getMode());
-            if (edge || relevel) {
-                if (g_state_manager.requestModeChange(want)) {
-                    if (relevel && !edge) {
-                        ESP_LOGI(TAG, "Mode re-leveled to switch position");
-                    }
-                    prev_want = want;
-                }
-                // Rejected: prev_want unchanged — the edge persists (see above).
-                // 拒否時: prev_want 不変 — エッジは持続（上記参照）。
-            } else {
-                prev_want = want;
-            }
+            arbitrateFlightMode(want);
         }
 
         // =====================================================================

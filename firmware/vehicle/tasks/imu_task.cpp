@@ -29,6 +29,7 @@
  */
 
 #include <atomic>     // s_imu_spi_init_done (FlowTask SPI-init serialization)
+#include <cmath>      // std::sqrt (accelerometer magnitude for the blind touchdown)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -42,6 +43,8 @@
 #include "tilt_consistency.hpp"   // TiltConsistencyMonitor (attitude vs gravity on the ground)
 #include "calibration.hpp"
 #include "failsafe.hpp"     // ImuAnomalyDetector (400Hz impact/gyro checks)
+#include "failsafe_status_guard.hpp"   // reader-side guard: a stale failsafe_status reads as ToF silent
+#include "tof_health_tracker.hpp"       // has the estimator re-acquired the downward ToF?
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
 #include "params.hpp"
@@ -84,6 +87,7 @@ static sf::IEstimator* g_estimator = nullptr;
 /// 渡すか）なので imu_task が所有する。実証済みの firmware/vehicle（landing handler を
 /// imu_task で回す）と同じ構造。
 static sf::TakeoffLandingMgr g_takeoff_landing;
+static sf::TakeoffLandingConfig readTakeoffLandingConfig();   // defined below, used by the ReloadParams verb / 下で定義、ReloadParams verb が使う
 
 /// IMU-rate anomaly detector (impact / gyro anomaly, requirements §9). Owned by
 /// this task and fed per-sample at 400Hz — the previous 10Hz latest() peek in
@@ -128,6 +132,19 @@ static sf::CalibrationMgr g_calib;
 /// 地上から高度を錨付けする構成（eskf.use_tof=false）ではホールドは不要かつ有害（ToF 駆動の
 /// 空中検出が解除されない）なので無効化する。タスク開始時に eskf.use_tof から1回読む。
 static bool g_tof_vertical = true;
+
+/// Has the estimator re-acquired the downward ToF? Fed with every ToF sample (and the clock every
+/// cycle); its facts go out on tof_health, Failsafe judges the verdict (failsafe_status.tof_silent).
+/// 推定器は下向き ToF を取り込み直したか？ ToF サンプルごと（と毎周期の時計）で更新し、事実は
+/// tof_health に出す。判定（failsafe_status.tof_silent）は Failsafe が出す。
+static sf::ToFHealthTracker g_tof_health;
+
+/// This task's guard on failsafe_status (a status nobody refreshes reads as "ToF silent") and the
+/// guarded value of the current IMU cycle (refreshed by refreshToFSilenceInputs()).
+/// failsafe_status に対するこのタスクのガード（誰も更新しない状態は「ToF 出力停止」と読む）と、
+/// 現在の IMU 周期のガード済みの値（refreshToFSilenceInputs() が更新する）。
+static sf::FailsafeStatusGuard g_failsafe_guard;
+static sf::FailsafeStatus      g_failsafe = {};
 
 /// BMI270 IMU driver instance (file-scope, not exposed as global)
 /// BMI270 IMU ドライバインスタンス（ファイルスコープ、グローバル非公開）
@@ -244,6 +261,261 @@ static void applyMagBootPolicy(const sf::MagData& mag)
     g_estimator->setMagReference(ned);
 }
 
+/// Refresh the ToF-silence inputs of this IMU cycle: the guarded failsafe_status (D5: a stale
+/// status reads as silent) and the clock of the ToF health tracker. EVERY cycle, in every flight
+/// state (SilenceWatch needs continuous observation).
+/// この IMU 周期の ToF 出力停止の入力を更新する: ガード済みの failsafe_status（D5: 古い状態は
+/// 出力停止と読む）と、ToF 健全性トラッカーの時計。飛行状態に関わらず「毎周期」
+/// （SilenceWatch は連続観測が要る）。
+static void refreshToFSilenceInputs(uint32_t now_us)
+{
+    g_failsafe = g_failsafe_guard.guard(now_us, sf::failsafe_status.latest());
+    g_tof_health.tick(now_us);
+}
+
+/// Ground-contact flag as the rest of the system may trust it.
+/// TakeoffLandingMgr releases/sets it from ToF samples only, so during a ToF-silence EPISODE
+/// (no new sample, only invalid samples while flying, or the estimator has not re-acquired the ToF
+/// yet; failsafe_status.tof_silent) the raw flag proves nothing. A flag frozen "on the ground" kept
+/// the estimator pinning position/velocity to zero while the craft climbed (2026-11 accident), and
+/// after the samples returned the raw flag was trusted again before the estimator agreed with them
+/// (2nd review D1). During the episode: armed -> NOT on the ground; disarmed -> on the ground
+/// (motors off). The episode ends only when the estimator has re-acquired the ToF. Ground-contact
+/// consumers (vertical handoff / hold, tilt monitor, the published airborne flag) must call this
+/// instead of g_takeoff_landing.isOnGround().
+/// 離着陸マネージャの接地フラグは ToF サンプルだけで立つ／下りるので、ToF 出力停止の「エピソード」
+/// （新サンプル無し、飛行中に無効サンプルだけ、または推定器がまだ ToF を取り込み直していない。
+/// failsafe_status.tof_silent）の間、生のフラグは何も保証しない。「接地」のまま固定されると、機体が
+/// 上昇しても推定器が位置・速度を 0 に固定し続けた（2026-11 の事故）。サンプルが戻った後も、推定器が
+/// それと一致する前に生のフラグが再び信用された（2 回目のレビューの D1）。エピソード中は、ARM 中なら
+/// 「接地していない」、DISARM 中なら「接地している」（モータ停止）。エピソードは推定器が ToF を
+/// 取り込み直したときだけ終わる。接地フラグを使う側（鉛直ハンドオフ・ホールド、傾きモニタ、発行する
+/// airborne フラグ）は g_takeoff_landing.isOnGround() でなくこれを呼ぶこと。
+static bool groundContactTrusted()
+{
+    if (!g_failsafe.tof_silent) {
+        return g_takeoff_landing.isOnGround();
+    }
+    return !sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state));
+}
+
+/// Feed the blind-touchdown detector one IMU sample: active only in LANDING with a silent ToF. The
+/// detector needs three facts besides |accel|, which the controller publishes on controller_status:
+/// the commanded thrust relative to the support thrust and the vertical velocity estimate.
+/// ToF なし接地検出器に IMU サンプルを 1 つ与える: ToF 出力停止中の LANDING でのみ有効。検出器は |加速度|
+/// のほかに 2 つの事実を必要とし、制御器が controller_status に出す: 支持推力に対する指令推力と、鉛直速度の推定。
+static void feedBlindTouchdown(const sf::ImuData& imu)
+{
+    const bool landing =
+        static_cast<sf::FlightState>(sf::system_mode.latest().state) == sf::FlightState::LANDING;
+    const bool blind_landing = landing && g_failsafe.tof_silent;
+    const sf::ControllerStatus controller = sf::controller_status.latest();
+    sf::BlindTouchdownInput input{};
+    input.dt_s                 = config::IMU_DT;
+    input.accel_magnitude      = std::sqrt(imu.accel[0] * imu.accel[0] + imu.accel[1] * imu.accel[1] +
+                                           imu.accel[2] * imu.accel[2]);
+    input.thrust_ratio         = controller.blind_thrust_ratio;
+    input.vertical_velocity_up = controller.vertical_velocity_up;
+    g_takeoff_landing.updateBlindTouchdown(input, blind_landing);
+}
+
+/// The ToF-silence episode starts while ARMED: flip the raw ground-contact flag to "airborne"
+/// (once, on the rising edge). From then on it returns to "ground" only through the existing
+/// air->ground debounce (valid ground readings), never by a missing or invalid sample (D1).
+/// ARM 中に ToF 出力停止のエピソードが始まったら、生の接地フラグを「空中」に倒す（立ち上がりの
+/// エッジで 1 回）。以後「接地」へ戻るのは既存の空中→接地デバウンス（有効な地上読み）だけで、
+/// 欠測や無効サンプルでは戻らない（D1）。
+static void markGroundContactUnknownOnSilence(bool armed)
+{
+    static bool was_silent = false;
+    static bool was_armed  = false;
+    if (g_failsafe.tof_silent && !was_silent && armed) {
+        g_takeoff_landing.markAirborne();
+    }
+    if (was_armed && !armed) {
+        g_tof_health.onDisarm();   // the stuck verdict is a flight fact: it ends with the flight / 飛行の事実は飛行とともに終わる
+    }
+    was_silent = g_failsafe.tof_silent;
+    was_armed  = armed;
+}
+
+/// Map the flight state to the phase the ToF health tracker needs (what an invalid sample means
+/// depends on it, classifyInvalidSample()). INIT / IDLE_* / ARMED_GROUND are all "resting".
+/// 飛行状態を、ToF 健全性トラッカーが必要とするフェーズへ写す（無効サンプルの意味はこれで決まる。
+/// classifyInvalidSample()）。INIT・IDLE_*・ARMED_GROUND はすべて「静止」。
+static sf::ToFFlightPhase toFFlightPhase(sf::FlightState state)
+{
+    switch (state) {
+    case sf::FlightState::TAKEOFF: return sf::ToFFlightPhase::Takeoff;
+    case sf::FlightState::FLYING:  return sf::ToFFlightPhase::Flying;
+    case sf::FlightState::LANDING: return sf::ToFFlightPhase::Landing;
+    case sf::FlightState::FLIP:    return sf::ToFFlightPhase::Flip;
+    default:                       return sf::ToFFlightPhase::Ground;
+    }
+}
+
+/// Time since the TAKEOFF state was entered [us] (0 outside TAKEOFF). The entry is noticed at the
+/// next ToF sample (up to ~33 ms late: the elapsed time errs short, i.e. the counting starts later).
+/// TAKEOFF に入ってからの時間 [us]（TAKEOFF の外では 0）。入ったことは次の ToF サンプルで気付く（最大
+/// 約 33 ms 遅れ: 経過時間は短めに出る = 数え始めが遅くなる側）。
+static uint32_t takeoffElapsedUs(sf::FlightState state, uint32_t now_us)
+{
+    static sf::FlightState previous = sf::FlightState::INIT;
+    static uint32_t entered_us = 0;
+    if (state == sf::FlightState::TAKEOFF && previous != sf::FlightState::TAKEOFF) {
+        entered_us = now_us;
+    }
+    previous = state;
+    return (state == sf::FlightState::TAKEOFF) ? static_cast<uint32_t>(now_us - entered_us) : 0u;
+}
+
+/// Tell the health tracker what the estimator did with this ToF sample, and in which flight phase
+/// it arrived: the meaning of an INVALID sample depends on it (on the ground before takeoff it is
+/// normal, in the first moments of TAKEOFF the craft is still in the sensor's dead zone, ...;
+/// tof_health_tracker.hpp). The rise is the accelerometer integral of the controller.
+/// この ToF サンプルを推定器がどう扱ったかと、どの飛行フェーズで届いたかを健全性トラッカーに伝える:
+/// 無効サンプルの意味はそれで決まる（離陸前の地上では正常、TAKEOFF の最初の間は機体がまだセンサの
+/// 不感帯にいる、など。tof_health_tracker.hpp）。上昇量は制御器の加速度積分。
+static void feedToFHealth(const sf::TofData& tof)
+{
+    const sf::FlightState state = static_cast<sf::FlightState>(sf::system_mode.latest().state);
+
+    // An estimator that does not use the ToF (eskf.use_tof = false: the barometer anchors the
+    // altitude) has nothing to re-acquire: the ToF being alive is all that can be asked of it.
+    // ToF を使わない推定器（eskf.use_tof = false: 気圧計が高度を錨付けする）には取り込み直すものが
+    // 無い: ToF が生きていることだけを求められる。
+    const sf::ToFObservation observed = g_estimator->lastToFObservation();
+    sf::ToFSampleFacts facts;
+    facts.now_us             = static_cast<uint32_t>(esp_timer_get_time());
+    facts.valid              = tof.valid;
+    facts.adopted            = !g_tof_vertical || observed.adopted;
+    facts.innovation_m       = g_tof_vertical ? observed.innovation_m : 0.0f;
+    facts.distance_m         = tof.distance;
+    facts.phase              = toFFlightPhase(state);
+    facts.rise_m             = sf::controller_status.latest().vertical_rise_m;
+    facts.takeoff_elapsed_us = takeoffElapsedUs(state, facts.now_us);
+    g_tof_health.onSample(tof.timestamp, facts);
+}
+
+/// Publish the tracker's facts on tof_health (Failsafe reads them). / トラッカーの事実を tof_health に
+/// 発行する（Failsafe が読む）。
+static void publishToFHealth()
+{
+    sf::ToFHealth health = {};
+    health.altitude_reliable = g_tof_health.altitudeReliable();
+    health.invalid_stuck     = g_tof_health.invalidStuck();
+    health.timestamp         = static_cast<uint32_t>(esp_timer_get_time());
+    sf::tof_health.publish(health);
+}
+
+/// Drain the downward-ToF queue: feed every sample to the estimator, the takeoff/landing manager
+/// and the health tracker, mirror it into the snapshot, and publish tof_health. Returns true when at
+/// least one sample was consumed.
+/// 下向き ToF のキューを排出する: 全サンプルを推定器・離着陸マネージャ・健全性トラッカーに与え、
+/// スナップショットにミラーし、tof_health を発行する。1 つ以上消費したら true。
+static bool consumeToFSamples(bool armed, bool in_landing_descent, sf::SensorSnapshot& snap)
+{
+    sf::TofData tof;
+    bool consumed = false;
+    while (sf::sensor_tof.read(tof)) {
+        // The first VALID sample after a loss: the estimator re-acquires the ToF BEFORE it sees
+        // the sample (vertical covariance inflated, innovation gate lifted for that sample; the
+        // same mechanism as the end of a flip). Armed only: on the ground the estimate is pinned
+        // to the known ground state anyway.
+        // 喪失後の最初の「有効」サンプル: サンプルを見せる「前」に、推定器が ToF を取り込み直す
+        // （鉛直の共分散を広げ、そのサンプルだけイノベーション判定を外す。宙返りの終わりと同じ
+        // 仕組み）。ARM 中だけ: 地上では推定は既知の地上状態に固定されている。
+        if (g_tof_health.needsReacquire(tof.valid) && armed) {
+            g_estimator->reacquireAltitude();
+        }
+        g_estimator->updateTof(tof);
+        // Inject the SAME sample into the takeoff/landing manager so it does not compete
+        // with the estimator for the sensor_tof queue (single consumer). Also inject the
+        // current vertical velocity (NED down) so the landing detector stays a pure
+        // function of its inputs (no topic read inside the manager).
+        // 同じサンプルを離着陸マネージャに注入し、sensor_tof キューを推定器と奪い合わない
+        // ようにする（単一 consumer）。鉛直速度（NED down）も注入し、着陸検出器を入力の純粋な
+        // 関数に保つ（マネージャ内でトピックを読まない）。
+        g_takeoff_landing.update(tof, armed, g_estimator->getState().velocity[2],
+                                 in_landing_descent);
+        feedToFHealth(tof);
+        consumed = true;
+        snap.tof_distance  = tof.distance;
+        snap.tof_status    = tof.status;
+        snap.tof_valid     = tof.valid;
+        snap.tof_timestamp = tof.timestamp;   // per-sensor stamp for the Data Stream / Data Stream 用センサ別時刻
+    }
+    if (consumed) {
+        publishToFHealth();   // BEFORE the snapshot is published, so a new stamp never meets old facts / スナップショットの発行より「前」に（新しい時刻印が古い事実と出会わない）
+    }
+    return consumed;
+}
+
+/// Drain the front ToF queue into the snapshot (log-only sensor, not fused). Returns true if the snapshot changed.
+/// 前方 ToF のキューを排出してスナップショットへ（ログ専用で融合しない）。スナップショットが変われば true。
+static bool consumeFrontToFSamples(sf::SensorSnapshot& snap)
+{
+    bool snap_dirty = false;
+    // Front ToF is log-only (not fused): drain the queue and mirror it for the Data Stream.
+    // Stays at timestamp 0 when the optional sensor is absent.
+    // 前方 ToF はログ専用（融合しない）: キューを排出して Data Stream 用にミラーする。
+    // 任意センサが無い場合は timestamp 0 のまま。
+    sf::TofData tof_front;
+    while (sf::sensor_tof_front.read(tof_front)) {
+        snap.tof_front_distance  = tof_front.distance;
+        snap.tof_front_status    = tof_front.status;
+        snap.tof_front_timestamp = tof_front.timestamp;
+        snap_dirty = true;
+    }
+    return snap_dirty;
+}
+
+/// Fuse every optical-flow sample and mirror it for the Data Stream. Returns true if the snapshot changed.
+/// 光学フローの全サンプルを融合し、Data Stream 用にミラーする。スナップショットが変われば true。
+static bool consumeFlowSamples(sf::SensorSnapshot& snap)
+{
+    bool snap_dirty = false;
+    sf::FlowData flow;
+    while (sf::sensor_flow.read(flow)) {
+        g_estimator->updateFlow(flow);
+        // Mirror EVERY flow sample for the Data Stream: dx/dy are incremental
+        // (displacement since the previous read), so a latest()-style 50Hz peek
+        // would silently drop half the displacement — offline replay needs all.
+        // Data Stream 用に「全」フローサンプルをミラー: dx/dy は差分量（前回読み
+        // 出しからの変位）ゆえ、50Hz の latest() 覗き見では変位の半分が黙って
+        // 失われる — オフライン再生には全量が要る。
+        sf::log_flow.publish(flow);
+        snap.flow_dx = flow.dx; snap.flow_dy = flow.dy; snap.flow_squal = flow.squal;
+        snap.flow_timestamp = flow.timestamp;
+        snap_dirty = true;
+    }
+    return snap_dirty;
+}
+
+/// Fuse the magnetometer and barometer samples and mirror them. Returns true if the snapshot changed.
+/// 磁気センサと気圧計のサンプルを融合してミラーする。スナップショットが変われば true。
+static bool consumeMagAndBaroSamples(sf::SensorSnapshot& snap)
+{
+    bool snap_dirty = false;
+    sf::MagData mag;
+    while (sf::sensor_mag.read(mag)) {
+        applyMagBootPolicy(mag);
+        g_estimator->updateMag(mag);
+        snap.mag[0] = mag.mag[0]; snap.mag[1] = mag.mag[1]; snap.mag[2] = mag.mag[2];
+        snap.mag_timestamp = mag.timestamp;
+        snap_dirty = true;
+    }
+
+    sf::BaroData baro;
+    while (sf::sensor_baro.read(baro)) {
+        g_estimator->updateBaro(baro);
+        snap.baro_pressure = baro.pressure; snap.baro_altitude = baro.altitude;
+        snap.baro_timestamp = baro.timestamp;
+        snap_dirty = true;
+    }
+    return snap_dirty;
+}
+
 /// Process async sensor observations from queues
 /// キューからの非同期センサ観測を処理する
 static void processAsyncSensors()
@@ -270,68 +542,12 @@ static void processAsyncSensors()
     static sf::SensorSnapshot snap{};
     bool snap_dirty = false;
 
-    sf::TofData tof;
-    while (sf::sensor_tof.read(tof)) {
-        g_estimator->updateTof(tof);
-        // Inject the SAME sample into the takeoff/landing manager so it does not compete
-        // with the estimator for the sensor_tof queue (single consumer). Also inject the
-        // current vertical velocity (NED down) so the landing detector stays a pure
-        // function of its inputs (no topic read inside the manager).
-        // 同じサンプルを離着陸マネージャに注入し、sensor_tof キューを推定器と奪い合わない
-        // ようにする（単一 consumer）。鉛直速度（NED down）も注入し、着陸検出器を入力の純粋な
-        // 関数に保つ（マネージャ内でトピックを読まない）。
-        g_takeoff_landing.update(tof, armed, g_estimator->getState().velocity[2],
-                                 in_landing_descent);
-        snap.tof_distance  = tof.distance;
-        snap.tof_status    = tof.status;
-        snap.tof_valid     = tof.valid;
-        snap.tof_timestamp = tof.timestamp;   // per-sensor stamp for the Data Stream / Data Stream 用センサ別時刻
-        snap_dirty = true;
-    }
+    markGroundContactUnknownOnSilence(armed);
+    snap_dirty = consumeToFSamples(armed, in_landing_descent, snap) || snap_dirty;
 
-    // Front ToF is log-only (not fused): drain the queue and mirror it for the Data Stream.
-    // Stays at timestamp 0 when the optional sensor is absent.
-    // 前方 ToF はログ専用（融合しない）: キューを排出して Data Stream 用にミラーする。
-    // 任意センサが無い場合は timestamp 0 のまま。
-    sf::TofData tof_front;
-    while (sf::sensor_tof_front.read(tof_front)) {
-        snap.tof_front_distance  = tof_front.distance;
-        snap.tof_front_status    = tof_front.status;
-        snap.tof_front_timestamp = tof_front.timestamp;
-        snap_dirty = true;
-    }
-
-    sf::FlowData flow;
-    while (sf::sensor_flow.read(flow)) {
-        g_estimator->updateFlow(flow);
-        // Mirror EVERY flow sample for the Data Stream: dx/dy are incremental
-        // (displacement since the previous read), so a latest()-style 50Hz peek
-        // would silently drop half the displacement — offline replay needs all.
-        // Data Stream 用に「全」フローサンプルをミラー: dx/dy は差分量（前回読み
-        // 出しからの変位）ゆえ、50Hz の latest() 覗き見では変位の半分が黙って
-        // 失われる — オフライン再生には全量が要る。
-        sf::log_flow.publish(flow);
-        snap.flow_dx = flow.dx; snap.flow_dy = flow.dy; snap.flow_squal = flow.squal;
-        snap.flow_timestamp = flow.timestamp;
-        snap_dirty = true;
-    }
-
-    sf::MagData mag;
-    while (sf::sensor_mag.read(mag)) {
-        applyMagBootPolicy(mag);
-        g_estimator->updateMag(mag);
-        snap.mag[0] = mag.mag[0]; snap.mag[1] = mag.mag[1]; snap.mag[2] = mag.mag[2];
-        snap.mag_timestamp = mag.timestamp;
-        snap_dirty = true;
-    }
-
-    sf::BaroData baro;
-    while (sf::sensor_baro.read(baro)) {
-        g_estimator->updateBaro(baro);
-        snap.baro_pressure = baro.pressure; snap.baro_altitude = baro.altitude;
-        snap.baro_timestamp = baro.timestamp;
-        snap_dirty = true;
-    }
+    snap_dirty = consumeFrontToFSamples(snap) || snap_dirty;
+    snap_dirty = consumeFlowSamples(snap) || snap_dirty;
+    snap_dirty = consumeMagAndBaroSamples(snap) || snap_dirty;
 
     if (snap_dirty) {
         snap.timestamp = static_cast<uint32_t>(esp_timer_get_time());
@@ -386,7 +602,7 @@ static void applyVerticalGroundHandoff()
     // @design development_roadmap.md §3 Layer 3 — ToF-only vertical handoff        [OK]
     // @design architecture.md §4 — controller/full-state reset is owned by the state
     //         machine; the timing-critical ToF-synced vertical handoff stays here    [OK]
-    const bool on_ground = g_takeoff_landing.isOnGround();
+    const bool on_ground = groundContactTrusted();   // not the raw flag: it freezes when the ToF is silent / 生のフラグでない: ToF 出力停止で固定されたままになる
     static bool was_on_ground = true;   // boot state: on the ground / 起動時は接地
 
     // Ground→airborne edge: reset pos/vel (and covariance) for a clean ToF lock.
@@ -445,9 +661,15 @@ static void publishSystemStatus(uint32_t now_us)
     st.calibrated = g_calibrated;
     st.attitude_mismatch = g_tilt_monitor.mismatch();   // auto-disarm / self-heal (注10)
     st.attitude_verified = g_tilt_monitor.verified();   // ARM requires it (注10)
-    st.airborne   = !g_takeoff_landing.isOnGround();
+    st.airborne   = !groundContactTrusted();
     st.held       = g_takeoff_landing.isHeld();           // IDLE_GROUND ↔ IDLE_HELD
-    st.landing    = g_takeoff_landing.isLandingDetected(); // LANDING → IDLE_GROUND
+    // LANDING → IDLE_GROUND. With a silent ToF the height-based landing detection cannot be
+    // trusted (its inputs froze), so only the accelerometer touchdown counts.
+    // LANDING → IDLE_GROUND。ToF が出力停止中は高さによる着陸検出を信用できない（入力が固定されたままで
+    // いる）ので、加速度計による接地だけを数える。
+    st.landing    = g_failsafe.tof_silent
+                        ? g_takeoff_landing.isBlindTouchdown()
+                        : g_takeoff_landing.isLandingDetected();
     st.timestamp  = now_us;
     sf::system_status.publish(st);
 }
@@ -475,7 +697,7 @@ static void updateTiltMonitor(const sf::ImuData& imu)
 {
     const sf::StateEstimate estimate = g_estimator->getState();
     g_tilt_monitor.update(config::IMU_DT, imu.accel, estimate.attitude,
-                          g_takeoff_landing.isOnGround());
+                          groundContactTrusted());
 }
 
 /// Set up the boot gyro/accel bias calibration (called once in ImuTask setup). Reads
@@ -709,6 +931,7 @@ static void processEstimatorCommands()
             // ライブチューニング: 本タスクの文脈で eskf.* を読み直す（params
             // コールバックは verb を発行するだけ — タスク跨ぎで触らない）。
             g_estimator->reloadParams();
+            g_takeoff_landing.reloadConfig(readTakeoffLandingConfig());   // the touchdown thresholds too / 接地の閾値も
             break;
         case sf::EstimatorCmd::HoldAttitudeCorrection:
         case sf::EstimatorCmd::ResumeAttitudeCorrection:
@@ -740,6 +963,40 @@ static void imuTimerCallback(void* arg)
     if (imu_task != nullptr) {
         xTaskNotifyGive(imu_task);
     }
+}
+
+/// Read the touchdown settings of the landing manager from the parameters: the impact threshold of the touchdown
+/// without a ToF (impact, then stillness) from safety.blind_touchdown.accel_g and the floor time from
+/// safety.blind_touchdown.floor_s. Used at boot and at every live reload, so a changed parameter reaches the detector.
+/// 離着陸マネージャの接地の設定をパラメータから読む: ToF なしの接地（衝撃のあとの静止）の衝撃の閾値は
+/// safety.blind_touchdown.accel_g、床の時間は safety.blind_touchdown.floor_s。起動時とライブ再読込のたびに使うので、
+/// 変えたパラメータは検出器に届く。
+static sf::TakeoffLandingConfig readTakeoffLandingConfig()
+{
+    sf::TakeoffLandingConfig landing_config;
+    float blind_touchdown_g = landing_config.blind_touchdown_accel_mps2 / sf::math::kGravity;
+    sf::params::get_float("safety.blind_touchdown.accel_g", blind_touchdown_g);
+    landing_config.blind_touchdown_accel_mps2 = blind_touchdown_g * sf::math::kGravity;
+    sf::params::get_float("safety.blind_touchdown.floor_s", landing_config.blind_floor_s);
+    return landing_config;
+}
+
+/// Initialize the takeoff/landing manager from the parameters (boot).
+/// 離着陸マネージャをパラメータから初期化する（起動時）。
+static void initTakeoffLanding()
+{
+    g_takeoff_landing.init(readTakeoffLandingConfig());
+}
+
+/// The vertical ground-hold applies only when ToF is the vertical sensor (a barometer would anchor altitude from
+/// the ground, making the hold unnecessary and its ToF-driven release impossible). Read eskf.use_tof once.
+/// 地上ホールドは ToF が鉛直センサの時のみ適用（気圧計があれば地上から錨付けでき ホールドは不要かつ ToF 駆動の
+/// 解除が不能になる）。eskf.use_tof を 1 回読む。
+static void initToFVerticalPolicy()
+{
+    bool use_tof = true;
+    sf::params::get_bool("eskf.use_tof", use_tof);
+    g_tof_vertical = use_tof;
 }
 
 void ImuTask(void* pvParameters)
@@ -798,7 +1055,7 @@ void ImuTask(void* pvParameters)
 
     // Initialize the takeoff/landing manager (ToF-altitude ground/airborne detection).
     // 離着陸マネージャを初期化（ToF 高度で接地/空中を判定）。
-    g_takeoff_landing.init();
+    initTakeoffLanding();
 
     // Initialize the IMU-rate anomaly detector (impact / gyro anomaly) with the
     // thresholds from the safety.* parameters (params SSOT, not struct defaults).
@@ -810,14 +1067,7 @@ void ImuTask(void* pvParameters)
     // 傾き整合モニタを初期化（地上での姿勢 vs 重力）。
     initTiltMonitor();
 
-    // The vertical ground-hold applies only when ToF is the vertical sensor (a
-    // barometer would anchor altitude from the ground, making the hold unnecessary
-    // and its ToF-driven release impossible). Read eskf.use_tof once.
-    // 地上ホールドは ToF が鉛直センサの時のみ適用（気圧計があれば地上から錨付けでき
-    // ホールドは不要かつ ToF 駆動の解除が不能になる）。eskf.use_tof を1回読む。
-    bool use_tof = true;
-    sf::params::get_bool("eskf.use_tof", use_tof);
-    g_tof_vertical = use_tof;
+    initToFVerticalPolicy();   // vertical ground-hold only when the ToF is the vertical sensor / 地上ホールドは ToF が鉛直センサのときだけ
 
     // The boot gyro/accel bias calibration is now started by the onEnter(IDLE_GROUND)
     // transition callback (architecture §6 / detailed_design §3 — calibration is
@@ -930,6 +1180,8 @@ void ImuTask(void* pvParameters)
         // （architecture §4 reset 集約）。
         processEstimatorCommands();
 
+        refreshToFSilenceInputs(now);   // ToF-silence inputs: guarded failsafe_status, tracker clock / ToF 出力停止の入力: ガード済み failsafe_status、トラッカーの時計
+
         // Boot calibration: while still active (on the ground at boot), accumulate the
         // at-rest bias and seed the estimator once on completion. Runs in parallel with
         // the normal predict below (the on-ground estimate is anchored), so it adds no
@@ -946,6 +1198,8 @@ void ImuTask(void* pvParameters)
         // =====================================================================
 
         g_estimator->predict(imu, config::IMU_DT);
+
+        feedBlindTouchdown(imu);   // blind-landing touchdown, every IMU cycle (a silent ToF drives nothing) / ToF なし着陸の接地。毎 IMU 周期（出力停止した ToF は何も駆動しない）
 
         // =====================================================================
         // Step 3: Process async sensor observations

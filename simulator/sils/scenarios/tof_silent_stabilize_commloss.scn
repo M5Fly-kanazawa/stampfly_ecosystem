@@ -1,0 +1,43 @@
+# tof_silent_stabilize_commloss.scn — STABILIZE flown with the ToF silent for 20 s, then the link is lost and the craft lands
+#                                     STABILIZE を ToF 出力停止のまま 20 s 以上飛んだ後、通信が途絶して着陸する
+#
+# A manual flight (STABILIZE: the throttle stick is the thrust, no altitude loop) that goes on for 20 s with the downward ToF silent (warning only,
+# `NO forced landing, fly on`), then the command link is lost: after the comm-loss hover grace the craft lands. The velocity of the descent is an
+# accelerometer integral that was last reset when the ToF stopped, 24 s earlier: it is far beyond kVerticalVelocityTrustS (2 s), so the PI of the
+# descent must NOT be used from the first cycle (the previous build started its loop on an estimate drifted by tens of seconds) and the thrust
+# is the constant ceiling kNoTofThrustCapRatio x the support thrust (calibrated over the 20 s of near-hover samples). Spec under test:
+#  1. FLYING (STABILIZE) goes on after the silence (warning only), no LANDING until the comm-loss.
+#  2. The comm-loss landing starts the descent without a ToF with a CALIBRATED support thrust and the velocity estimate NOT trusted (`trusted -`).
+#  3. The craft does not rise again after LANDING starts, lands, and the 3 G impact of the touchdown ends LANDING without an emergency DISARM.
+# The throttle program is open-loop (STABILIZE has no altitude loop): hand-tuned in the SILS with noise n0 so that the craft stays at 0.6-0.75 m for
+# 25 s (3090-3093 is the hover raw value of the plant with the silent ToF; the battery sag asks for 3101-3107 after 22 s). Declared with `--noise n0` (the program was tuned there; seed 12345): the plant's hover thrust differs with the noise level.
+#
+# 手動飛行（STABILIZE: スロットルスティックが推力で、高度ループなし）を、下向き ToF が出力停止したまま 20 s 続け（警告のみ、
+# `NO forced landing, fly on`）、その後に通信が途絶する: 通信断のホバーの猶予の後、機体は着陸する。降下の速度は加速度の積分で、
+# 最後のリセットは 24 s 前の ToF 停止時なので、kVerticalVelocityTrustS（2 s）をはるかに超える: 降下の PI は最初の周期から使っては
+# ならず（前のビルドは数十秒ドリフトした推定の上で速度ループを始めた）、推力は kNoTofThrustCapRatio × 支持推力（20 s のホバー近傍の
+# サンプルで較正済み）の一定の上限になる。検証する仕様:
+#  1. 沈黙の後も FLYING（STABILIZE）が続く（警告のみ）。通信断まで LANDING にならない。
+#  2. 通信断の着陸は、「較正済み」の支持推力で、速度推定を「信用しない」（`trusted -`）まま ToF なしの降下を始める。
+#  3. LANDING が始まった後、機体は再上昇せず、着地し、接地の 3 G の衝撃は非常の DISARM でなく LANDING を終わらせる。
+# スロットルの列は開ループ（STABILIZE に高度ループは無い）: ノイズ n0 の SILS で、機体が 25 s の間 0.6〜0.75 m に留まるように手で調整した
+# （3090〜3093 が ToF 出力停止中のプラントのホバーの生値。電池の電圧低下で 22 s 後は 3101〜3107 が要る）。`--noise n0`（seed 12345）で宣言する（その条件で調整した。プラントのホバー推力はノイズの水準で変わる）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_stabilize_commloss.scn --target vehicle --duration 50000000 --noise n0
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s — boot calibration
+   +    rc         2048  2048   2048    2048  1     1000      50                       # B: ARM (4.0 s), STABILIZE
+   +    rc         3171  2048   2048    2048  1     1000      50                       # C: throttle up (5.0 s) -> TAKEOFF -> FLYING
+   +    rc         3070  2048   2048    2048  1     3300      50                       # D: brake the climb (to 9.3 s): the craft is at ~0.65 m and nearly still
+   +    tof_silent 1                                                                   # E: 9.3 s — ToF output stops (warning only in STABILIZE)
+   +    rc         3093  2048   2048    2048  1     2000      50                       # F: hover throttle (to 11.3 s)
+   +    rc         3090  2048   2048    2048  1     6000      50                       # G: ... (to 17.3 s)
+   +    rc         3090  2048   2048    2048  1     3000      50                       # H: ... (to 20.3 s)
+   +    rc         3092  2048   2048    2048  1     2000      50                       # I: ... (to 22.3 s)
+   +    rc         3101  2048   2048    2048  1     3000      50                       # J: the battery sags: more throttle (to 25.3 s)
+   +    rc         3107  2048   2048    2048  1     5000      50                       # K: ... (to 30.3 s): the ToF has been silent for 21 s
+   +8000  rc         2048  2048   2048    2048  1     300       50                    # L: 8 s of silence on the link -> COMM_LOST (>0.5 s) -> 3 s hover grace -> LANDING (~33.8 s) -> touchdown
+   +    rc         2048  2048   2048    2048  0     300       50                       # M: release the ARM button
+   +    rc         2048  2048   2048    2048  1     300       50                       # N: press (ARM refused: the ToF is silent)
+   +    rc         2048  2048   2048    2048  0     800       50                       # O: settle

@@ -1,0 +1,30 @@
+# tof_silent_takeoff_noise.scn — ToF silent early in the auto-takeoff climb, sensor noise n2, estimate 17 % too high
+#                                 自動離陸の上昇の初期に ToF が出力停止、センサノイズ n2、見積もり 17 % 高い
+#
+# tof_silent_takeoff_est_high.scn with `hover.thrust_corr 1.1` and the sensor-noise model n2 (seed 1; the
+# acceptance runs use 3 seeds, see TEST_MATRIX.md): the review's noisy case (truth peak 9.2 m in the old
+# build). The velocity estimate integrates a noisy accelerometer; the scenario fixes that the loop is still
+# bounded and gentle. Spec under test:
+#  1. The landing starts from FLYING or TAKEOFF (here: FLYING, still climbing at 1.7 m/s); the truth peak stays below 1.5 m (old build, noise n2: up to 25 m), the touchdown speed below 0.9 m/s
+#     and the motors stop only on the floor.
+#  2. ARM is refused while the sensor is silent.
+#
+# tof_silent_takeoff_est_high.scn を `hover.thrust_corr 1.1` とセンサノイズモデル n2（seed 1。合否の試験は 3 seed、
+# TEST_MATRIX.md 参照）で行う: レビューのノイズありの場合（旧ビルドで真値の最高 9.2 m）。速度推定はノイズのある
+# 加速度計を積分する。ループがそれでも有界で穏やかなことを固定する。検証する仕様:
+#  1. 着陸は FLYING か TAKEOFF から始まる（ここでは FLYING、1.7 m/s で上昇中）。真値の最高は 1.5 m 未満（旧ビルド、ノイズ n2: 最大 25 m）、接地速度は 0.9 m/s 未満、モータは床の上で
+#     だけ止まる。
+#  2. センサが出力停止している間、ARM は拒否される。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_takeoff_noise.scn --target vehicle --duration 21000000 --noise n2 --seed 1
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    param      hover.thrust_corr 1.1                                                 # P: hover-thrust estimate 1.1 x mg = 0.399 N against the true 0.34 N (+17 %)
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        0     0     1  # B: POS switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     900       50        0     0     1  # C: ARM in POS_HOLD (7.5 s) — spool, then the auto-takeoff climb
+   +    tof_silent 1                                                                   # D: 8.4 s — ToF output stops (last sample, then nothing)
+   +    rc         2048  2048   2048    2048  1     8000      50        0     0     1  # E: stick centre — LANDING by silence, then blind landing by time
+   +    rc         2048  2048   2048    2048  0     200       50        0     0     1  # F: release the ARM button
+   +    rc         2048  2048   2048    2048  1     1000      50        0     0     1  # G: press again (17 s) — landed, ToF still silent → ARM REFUSED
+   +    rc         2048  2048   2048    2048  0     600       50                       # H: settle

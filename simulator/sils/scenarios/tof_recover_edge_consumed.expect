@@ -1,0 +1,5 @@
+exit 0
+log_contains any "IN FLIGHT the switch request is CONSUMED"
+log_contains any "ToF re-acquired after a flip window / ToF silence"
+order "Impact/anomaly → emergency DISARM" "Mode change: STABILIZE → POS_HOLD"
+metric alt_max < 1.0 in 7.5 12.0

@@ -1,0 +1,7 @@
+exit 0
+log_contains any "Downward ToF silence episode: estimator has not re-acquired the ToF yet"
+log_contains any "ToF re-acquired after a flip window / ToF silence"
+order "ToF re-acquired after a flip window / ToF silence" "Mode change: STABILIZE → ALT_HOLD"
+metric alt_rmse < 0.05 in 10.0 17.0
+metric alt_max < 1.5 in 7.5 25.0
+log_contains any "Transition: LANDING → IDLE_GROUND"

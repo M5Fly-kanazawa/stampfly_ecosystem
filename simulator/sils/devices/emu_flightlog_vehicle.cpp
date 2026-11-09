@@ -53,11 +53,13 @@
 #include "data_types.hpp"   // sf::ImuData, sf::StateEstimate, sf::ControlOutput, ...
 #include "params.hpp"       // sf::params::get_float — SSOT rate-loop gains
 #include "flight_state.hpp" // sf::isArmed — controller_status is only live while armed
+#include "failsafe_status_guard.hpp"   // sf::isFailsafeStatusStaleForDisplay — same test as the Data Stream's status_stale bit
 
 namespace {
 
 constexpr int kCtrlRefDecimation = 8;    // 400Hz / 8 = 50Hz, matches CtrlRef's real rate
 constexpr int kFlightFlagsDecimation = 8;   // 400Hz / 8 = 50Hz, matches FlightFlags' real rate
+constexpr int kToFSilenceDecimation  = 8;   // 400Hz / 8 = 50Hz, matches the ToFSilence (0x4E) entry's real rate
 constexpr int kStatusDecimation  = 400;  // 400Hz / 400 = 1Hz, matches Status's real rate
 
 // eskf_status bitmask literal. Not a live topic -- the real firmware's own
@@ -252,6 +254,32 @@ void write_flight_flags_row(int64_t ts)
         (int)sys.attitude_mismatch, (int)sys.attitude_verified);
 }
 
+// --- tof_silence.csv (50Hz) ---
+// Mirror the firmware Data Stream's ToFSilence (0x4E) entry (DataStream::appendToFSilenceEntry): the
+// accelerometer-based vertical velocity estimate, the estimated rise and the thrust ratio of the descent
+// without a ToF (controller_status, last value published while armed), the failsafe verdict and its
+// reason, the ToF health facts, and the refused-mode reason.
+// ファームの Data Stream の ToFSilence（0x4E）エントリ（DataStream::appendToFSilenceEntry）を写す:
+// 加速度計に基づく鉛直速度の推定・上昇量の推定・ToF なし降下の推力比（controller_status。armed 中に最後に
+// 発行された値）、フェイルセーフの判定とその理由、ToF の健全状態、拒否されたモードの理由。
+
+void write_tof_silence_row(int64_t ts)
+{
+    std::FILE* f = sils_emu_flightlog_stream("tof_silence",
+        "timestamp_us,vertical_velocity_up,vertical_rise_m,descent_thrust_ratio,tof_silent,tof_reason,"
+        "tof_altitude_reliable,tof_invalid_stuck,tof_status_stale,mode_block");
+    if (f == nullptr) return;
+    const sf::FailsafeStatus   failsafe = sf::failsafe_status.latest();
+    const sf::ToFHealth        health   = sf::tof_health.latest();
+    const sf::ControllerStatus control  = sf::controller_status.latest();
+    const sf::SystemMode       mode     = sf::system_mode.latest();
+    const bool stale = sf::isFailsafeStatusStaleForDisplay(static_cast<uint32_t>(ts), failsafe.timestamp);
+    std::fprintf(f, "%lld,%.7g,%.7g,%.7g,%d,%d,%d,%d,%d,%d\n", (long long)ts,
+        (double)control.vertical_velocity_up, (double)control.vertical_rise_m, (double)control.blind_thrust_ratio,
+        (int)failsafe.tof_silent, (int)failsafe.tof_reason,
+        (int)health.altitude_reliable, (int)health.invalid_stuck, (int)stale, (int)mode.mode_block);
+}
+
 // --- ctrl_ref.csv (50Hz, decimated at the call site) ---
 
 void write_ctrl_ref_row(const sf::ControlOutput& ctrl, const sf::MotorOutput& motor)
@@ -407,6 +435,7 @@ extern "C" void sils_emu_flightlog_firmware_sample(int64_t now_us)
     write_posvel_row(ts, seq, est);
     write_flight_phase_row(ts, seq);
     if (seq % kFlightFlagsDecimation == 0) write_flight_flags_row(ts);
+    if (seq % kToFSilenceDecimation == 0) write_tof_silence_row(ts);
 
     const sf::ControlOutput ctrl  = sf::control_output.latest();
     const sf::MotorOutput   motor = sf::actuator_motor.latest();

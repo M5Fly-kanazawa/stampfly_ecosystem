@@ -1,0 +1,41 @@
+# tof_silent_takeoff.expect — downward ToF silent during the auto-takeoff climb (POS_HOLD)
+# 自動離陸の上昇中に下向き ToF が出力停止（POS_HOLD）
+#
+# Chain: ARM -> ARMED_GROUND -> TAKEOFF (climb starts) -> ToF output stops -> Failsafe raises TOF_SILENT
+# -> the state machine goes TAKEOFF -> LANDING (the climb is aborted, it never reaches FLYING) -> blind
+# velocity-loop descent -> touchdown (detector / impact cut) -> LANDING -> IDLE_GROUND (motors stop) -> ARM is
+# refused with the ToF-silent reason.
+# 連鎖: ARM -> ARMED_GROUND -> TAKEOFF（上昇開始）-> ToF 出力停止 -> Failsafe が TOF_SILENT を発報 -> 状態機械が
+# TAKEOFF -> LANDING（上昇を中止。FLYING には到達しない）-> ToF なしの速度ループの降下 -> 接地（検出器・衝撃カット）
+# -> LANDING -> IDLE_GROUND（モータ停止）-> ARM は ToF 出力停止の理由で拒否される。
+exit 0
+log_contains any "ARM accepted"
+log_contains any "Transition: ARMED_GROUND → TAKEOFF"
+log_contains any "Downward ToF silent (>= 300 ms without a sample) in TAKEOFF/POS_HOLD → LANDING"
+log_contains any "Blind landing: ToF silent, velocity loop"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_contains any "ARM rejected: downward ToF is silent"
+log_absent any "Transition: TAKEOFF → FLYING"
+order "Transition: ARMED_GROUND → TAKEOFF" "in TAKEOFF/POS_HOLD → LANDING"
+order "in TAKEOFF/POS_HOLD → LANDING" "Blind landing: ToF silent"
+order "Blind landing: ToF silent" "Transition: LANDING → IDLE_GROUND"
+order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silent"
+# The silent climb stays low: measured alt_max 0.231 m (ToF stops 8.39 s, LANDING ~8.7 s). Before the
+# 2026-11-09 fix the frozen "on the ground" flag let the estimator pin the climb (the accident climbed to the
+# ceiling); with the open-loop ramp of the first fix it was 0.528 m. Bound 0.30 m.
+# 出力停止した上昇は低く収まる: 実測 alt_max 0.231 m（ToF 停止 8.39 s、LANDING 約 8.7 s）。2026-11-09 の修正前は
+# 固定されたままの「接地」フラグが推定器に上昇を固定させた（事故では天井まで上昇）。最初の修正の開ループのランプでは
+# 0.528 m だった。上限 0.30 m。
+metric alt_max < 0.30 in 7.5 20.0
+# Touchdown speed of the velocity-loop descent (target 0.4 m/s): measured 0.43 m/s (truth). The open-loop ramp
+# of the first fix measured 0.825 m/s, the frozen ground flag 1.86 m/s. Bound 0.6 m/s.
+# 速度ループの降下の接地速度（目標 0.4 m/s）: 実測 0.43 m/s（真値）。最初の修正の開ループのランプは 0.825 m/s、
+# 固定されたままの接地フラグは 1.86 m/s だった。上限 0.6 m/s。
+# 2026-11-09 (5th review): bound 0.6 -> 1.15 m/s (measured 0.43 -> 0.91 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
+# (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g) instead of by the PI.
+# 2026-11-09（5 回目の見直し）: 上限 0.6 → 1.15 m/s（実測 0.43 → 0.91 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
+# 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
+metric descent_speed_max < 1.15 in 8.4 14.0
+# Landed and stays on the floor (truth altitude 0.021 m resting) after the motors stop.
+# モータ停止後は床の上で静止（真値高度 0.021 m）。
+metric alt_max < 0.05 in 13.0 20.0

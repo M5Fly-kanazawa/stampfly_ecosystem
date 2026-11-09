@@ -1,0 +1,33 @@
+# tof_silent_prearm.scn — ARM is refused while the downward ToF is silent, accepted again after
+#                         下向き ToF が出力停止している間 ARM は拒否され、復帰後は受理される
+#
+# On the ground the ToF stops delivering samples (no bus error). Spec under test:
+#  1. ARM is REFUSED with the reason "downward ToF is silent" (the same reason is published
+#     as ArmBlock::TofSilent for the LED / `status` prearm line).
+#  2. The motors never start (no thrust while the ARM is refused).
+#  3. When the sensor delivers samples again the judgement clears by itself, and a fresh ARM
+#     is ACCEPTED (silence is a level condition, not a latch).
+#
+# 地上で ToF がサンプルを出さなくなる（バスエラー無し）。検証する仕様:
+#  1. ARM は「下向き ToF が出力停止」の理由で拒否される（同じ理由が ArmBlock::TofSilent として
+#     LED・`status` の prearm 行向けに発行される）。
+#  2. モータは回り始めない（ARM 拒否の間は推力ゼロ）。
+#  3. センサが再びサンプルを出すと判定は自動で解除され、新しい ARM は受理される（出力停止は
+#     レベル条件でラッチではない）。
+#
+# Timeline (s): ToF stops 3 → boot calibration done ~5 → ARM attempt 7 (refused)
+#               → ToF resumes 9 → ARM attempt 10.5 (accepted).
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_prearm.scn --target vehicle --duration 15000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     3000      50      # A: boot at rest, ToF alive for 3 s
+   +    tof_silent 1                                                  # B: 3.0 s — ToF output stops
+   +    rc         2048  2048   2048    2048  0     4000      50      # C: calibration completes (~5 s), silence persists
+   +    rc         2048  2048   2048    2048  1     1000      50      # D: ARM attempt (7 s) → REFUSED (downward ToF silent)
+   +    rc         2048  2048   2048    2048  0     1000      50      # E: release
+   +    tof_silent 0                                                  # F: 9.0 s — ToF output resumes
+   +    rc         2048  2048   2048    2048  0     1500      50      # G: fresh samples → judgement clears
+   +    rc         2048  2048   2048    2048  1     1000      50      # H: ARM attempt (10.5 s) → ACCEPTED
+   +    rc         2048  2048   2048    2048  0     500       50      # I: release the ARM button
+   +    rc         2048  2048   2048    2048  1     200       50      # J: press again → DISARM
+   +    rc         2048  2048   2048    2048  0     600       50      # K: settle disarmed

@@ -22,7 +22,7 @@ ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロッ�
 
 ## 2. 離陸シーケンスと時系列（実測）
 
-下図は実 SILS ラン（`alt_auto_takeoff` シナリオ、ノイズ off、決定論的）の高度時系列である。真値（青）と ESKF 推定（赤破線）、フェーズ帯（ARMED_GROUND／TAKEOFF／FLYING）、地上ブラインド窓、ToF ハンドオフ、行き過ぎピーク、目標捕捉を重ねた。
+下図は実 SILS ラン（`alt_auto_takeoff` シナリオ、ノイズ off、決定論的）の高度時系列である。真値（青）と ESKF 推定（赤破線）、フェーズ帯（ARMED_GROUND／TAKEOFF／FLYING）、地上ToF なしの窓、ToF ハンドオフ、行き過ぎピーク、目標捕捉を重ねた。
 
 ![離陸タイムライン（実測）](figures/fig2_takeoff_timeline.png)
 
@@ -33,7 +33,7 @@ ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロッ�
 | ARM 受理 | 7.50 s | 0 m | IDLE_GROUND → ARMED_GROUND | プロペラ 0（Grounded フェーズ）、スプール整定 0.3 s 開始 |
 | スプール完了 → 離陸 | 7.84 s | 0 m | ARMED_GROUND → TAKEOFF | `notifyTakeoff()`、props on・上昇開始（TakeoffClimb フェーズ） |
 | ToF ハンドオフ | 8.64 s | 0.15 m | TAKEOFF | ESKF 鉛直リセット（クラスB, ImuTask）。推定が真値の追従を開始 |
-| 行き過ぎピーク | 10.1 s | **0.66 m** | TAKEOFF（TakeoffClimb） | 地上ブラインド窓由来の運動量で目標 0.5m を超過 |
+| 行き過ぎピーク | 10.1 s | **0.66 m** | TAKEOFF（TakeoffClimb） | 地上ToF なしの窓由来の運動量で目標 0.5m を超過 |
 | 目標捕捉 → FLYING | 11.5 s | **0.5 m**（→ ~0.54 m 整定） | TAKEOFF → FLYING | 制御器が目標を捕捉し `takeoff_reached` 通知 → ALT_HOLD 係合 |
 
 ポイントは、**最終的な保持高度が「行き過ぎたピーク 0.66m」ではなく「目標値 0.5m（実測 ~0.54m）」になる**こと。旧仕様は ToF 0.15m で運動量任せに高度を捕捉していたが、新仕様は目標値で捕捉するため決定論的に 0.5m へ収束する。
@@ -90,7 +90,7 @@ TakeoffClimb は通常の ALT_HOLD と同じ 2 段カスケードを、目標 0.
 
 目標近傍で外側ループの誤差が小さくなり vel_sp が 0 へ落ちる → 減速して**目標を捕捉**、という算段。
 
-### 地上ブラインド窓（観測不能性）
+### 地上ToF なしの窓（観測不能性）
 
 ESKF は離陸前、鉛直の位置・速度を **0 に固定（hold）**している。鉛直を見られる唯一のセンサ ToF が **約 0.15m 以上**でしか安定ロックしないためで、0.15m を超えた瞬間にハンドオフして実値へ切り替える。
 
@@ -111,7 +111,7 @@ if (vel_sp >  takeoff_climb_rate) vel_sp =  takeoff_climb_rate;
 if (vel_sp < -takeoff_climb_rate) vel_sp = -takeoff_climb_rate;   // ← 緩降下も許す
 ```
 
-要は「**離陸＝目標へ整定する閉ループ**であって片道の上昇ではない」ので、行き過ぎを下方修正できる両方向の自由度が必須。これで peak 0.66m → 目標 0.5m へ減速 → ~0.54m で安定保持（alt_rmse 1.5cm）。残る ~0.16m の overshoot 自体はブラインド窓由来の過渡で、実機で大きければソフトスタートで抑えられる（実機チューニング項目）。
+要は「**離陸＝目標へ整定する閉ループ**であって片道の上昇ではない」ので、行き過ぎを下方修正できる両方向の自由度が必須。これで peak 0.66m → 目標 0.5m へ減速 → ~0.54m で安定保持（alt_rmse 1.5cm）。残る ~0.16m の overshoot 自体はToF なしの窓由来の過渡で、実機で大きければソフトスタートで抑えられる（実機チューニング項目）。
 
 ## 5. まとめ・教訓
 

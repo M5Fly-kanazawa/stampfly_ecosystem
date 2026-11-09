@@ -154,7 +154,18 @@
 # "Flip requested (direction=Right)" が1回、サイクルのDISARMより前に現れ、
 # 間に2回目の Flip requested が無いこと — で代用する）。
 #
-# Run: sf sils scenario simulator/sils/scenarios/rc_flip.scn --target vehicle --duration 64000000 --param flip.enable=1
+# 2026-11-09: the altitude ceiling (sf::limits::kAltitudeCeilingM = 1.2 m) now also bounds the ALT_HOLD stick climb and tapers
+# it toward the ceiling, so the throttle pulses above no longer reach ~1.5 m: the craft hovers at 1.0-1.15 m before each press
+# (truth). With the default flip.min_height_m = 1.0 m the presses were refused `TooLow`, so the run sets flip.min_height_m = 0.8 m:
+# the subject here is the button path and the direction rule, not the minimum height (flip.min_height_m is a safety margin
+# for the real flips, which started at 1.41 / 1.70 m; with the ceiling those are flown from STABILIZE / ACRO, which have no ceiling).
+# 2026-11-09: 高度上限（sf::limits::kAltitudeCeilingM = 1.2 m）が ALT_HOLD のスティック上昇も縛り、上限へ向けて上昇を絞るので、
+# 上のスロットルパルスはもう約 1.5 m に届かない: 機体は各押下の前に 1.0〜1.15 m（真値）でホバーする。既定の
+# flip.min_height_m = 1.0 m だと押下が `TooLow` で拒否されたので、走行は flip.min_height_m = 0.8 m にする: ここで見るのは
+# ボタンの経路と方向の規則で、最低高度ではない（flip.min_height_m は実機の宙返りの安全余裕で、実機は 1.41 / 1.70 m で
+# 始めた。上限があるので、それらは上限の無い STABILIZE / ACRO から飛ばす）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/rc_flip.scn --target vehicle --duration 64000000 --param flip.enable=1 --param flip.min_height_m=0.8
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos> <flip>
 #

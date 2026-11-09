@@ -1,0 +1,37 @@
+# tof_silent_hover.expect — downward ToF silent while hovering (ALT_HOLD, FLYING)
+# ホバー中（ALT_HOLD・FLYING）に下向き ToF が出力停止
+#
+# Chain: auto-takeoff complete (FLYING) → ToF output stops → Failsafe raises TOF_SILENT → FLYING →
+# LANDING (ALT_HOLD needs the altitude) → velocity-loop descent → touchdown by the detector /
+# impact cut (LANDING → IDLE_GROUND) → ARM is refused with the ToF-silent reason.
+# 連鎖: 自動離陸完了（FLYING）→ ToF 出力停止 → Failsafe が TOF_SILENT を発報 → FLYING → LANDING
+# （ALT_HOLD は高度を必要とする）→ 速度ループの降下 → 検出器・衝撃カットによる接地
+# （LANDING → IDLE_GROUND）→ ARM は ToF 出力停止の理由で拒否される。
+exit 0
+log_contains any "Takeoff complete → FLYING/ALT_HOLD"
+log_contains any "Downward ToF silent (>= 300 ms without a sample) in FLYING/ALT_HOLD → LANDING"
+log_contains any "Blind landing: ToF silent, velocity loop"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_contains any "ARM rejected: downward ToF is silent"
+order "Takeoff complete → FLYING/ALT_HOLD" "in FLYING/ALT_HOLD → LANDING"
+order "in FLYING/ALT_HOLD → LANDING" "Blind landing: ToF silent"
+order "Blind landing: ToF silent" "Transition: LANDING → IDLE_GROUND"
+order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silent"
+# Settled to 0.46-0.52 m until the silence is judged (the takeoff overshoot, peak 0.80 m at 10.8 s, is
+# an existing behaviour); ToF stops 13.999 s, LANDING ~14.3 s: no climb before LANDING starts.
+# 出力停止が判定されるまで 0.46〜0.52 m に整定（離陸の行き過ぎ、10.8 s に最大 0.80 m、は既存の挙動）。
+# ToF 停止 13.999 s、LANDING 約 14.3 s: LANDING が始まるまでに上昇しない。
+metric alt_mean > 0.40 in 13.0 14.0
+metric alt_max < 0.60 in 13.0 14.5
+# Touchdown speed of the blind descent from 0.46 m: measured 0.48 m/s (truth; 0.71 m/s with the open-loop
+# ramp of the first fix); the closed-loop landing with a working ToF touches down at 0.3 m/s. Bound 0.6 m/s.
+# 0.46 m からの ToF なしの降下の接地速度: 実測 0.48 m/s（真値。最初の修正の開ループのランプでは 0.71 m/s）。
+# ToF が生きている閉ループの着陸は 0.3 m/s。上限 0.6 m/s。
+# 2026-11-09 (5th review): bound 0.6 -> 0.8 m/s (measured 0.43 -> 0.60 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
+# (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g) instead of by the PI.
+# 2026-11-09（5 回目の見直し）: 上限 0.6 → 0.8 m/s（実測 0.43 → 0.60 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
+# 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
+metric descent_speed_max < 0.8 in 14.0 18.0
+# On the floor and stopped after the blind descent (touchdown ~15.5 s; truth 0.021 m resting).
+# ToF なしの降下の後は床の上で停止（接地 約 15.5 s、真値 0.021 m で静止）。
+metric alt_max < 0.05 in 17.0 22.0

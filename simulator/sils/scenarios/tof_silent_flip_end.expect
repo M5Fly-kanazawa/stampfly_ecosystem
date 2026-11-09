@@ -1,0 +1,15 @@
+# tof_silent_flip_end.expect — the ToF goes silent during a flip: decided the moment the flip ends
+# 宙返りの最中に ToF が出力停止: 宙返りが終わった瞬間に判断する
+exit 0
+log_contains any "Flip requested (direction=Forward)"
+log_contains any "Flip complete → FLYING"
+log_contains any "ToF silence episode during the maneuver: decided now that FLIP is over"
+log_contains any "in FLYING/POS_HOLD → LANDING"
+log_contains any "Blind landing: ToF silent, velocity loop"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+order "Flip complete → FLYING" "ToF silence episode during the maneuver: decided now that FLIP is over"
+order "ToF silence episode during the maneuver: decided now that FLIP is over" "in FLYING/POS_HOLD → LANDING"
+# The flip itself is not interrupted: a full forward revolution (truth, integrated pitch rate).
+# 宙返り自体は中断されない: 前方への 1 回転（真値、ピッチレートの積分）。
+metric flip_pitch_deg < -330 in 22.9 24.0
+metric flip_pitch_deg > -400 in 22.9 24.0

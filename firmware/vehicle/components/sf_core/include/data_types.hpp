@@ -151,6 +151,28 @@ struct StateEstimate {
     // と control_task.cpp 参照）。
     float battery_voltage; // [V] live pack voltage, injected by ControlTask / 実電源電圧、ControlTaskが注入
     bool  tof_valid;       // ToF observation currently usable, injected by ControlTask / ToF観測が使用可能、ControlTaskが注入
+    bool  tof_silent;      // A downward-ToF silence EPISODE is in progress (no new sample for
+                           // sf::limits::kTofSilenceUs, only invalid samples while flying, or the
+                           // estimator has not re-acquired the ToF yet; NOT one out-of-range
+                           // sample): the altitude estimate cannot be trusted, so the autonomous
+                           // landing descends blind (velocity loop on an accelerometer-based estimate). Injected by
+                           // ControlTask from failsafe_status (through FailsafeStatusGuard).
+                           // 下向き ToF の出力停止の「エピソード」が進行中（sf::limits::kTofSilenceUs
+                           // の間新サンプル無し、飛行中に無効サンプルだけ、または推定器がまだ ToF を
+                           // 取り込み直していない。単発の範囲外ではない）: 高度推定を信用できない
+                           // ので、自動着陸は ToF なしの降下（加速度計に基づく速度推定の速度ループ）で降りる。
+                           // ControlTask が failsafe_status から（FailsafeStatusGuard を通して）注入。
+    bool  airborne;        // The estimator's vertical state is FREE: the ground-contact hold is not
+                           // pinning position/velocity at zero (system_status.airborne, published by
+                           // ImuTask). During the take-off climb below the ToF handoff height it is
+                           // false, and state.velocity then says nothing about the climb. Injected by
+                           // ControlTask; the vertical velocity estimator (vertical_velocity_estimator.hpp)
+                           // follows the ESKF only while this is true AND the ToF is not silent.
+                           // 推定器の鉛直状態が「自由」: 接地ホールドが位置・速度を 0 に固定していない
+                           // （ImuTask が発行する system_status.airborne）。ToF の引き継ぎ高さより下の離陸の上昇中は
+                           // false で、そのとき state.velocity は上昇を表さない。ControlTask が注入する。鉛直速度の
+                           // 推定器（vertical_velocity_estimator.hpp）は、これが true かつ ToF が出力停止でない間だけ
+                           // ESKF に従う。
 };
 
 // =============================================================================
@@ -333,6 +355,15 @@ enum class ArmBlock : uint8_t {
     BenchRelevel = 4,   // bench motor test active / re-level pending    / モータテスト中/再水平化待ち
     TiltPending  = 5,   // attitude check not judged yet (~1 s after reset) / 姿勢判定が未完了
     TiltMismatch = 6,   // estimate disagrees with gravity (place level) / 推定が重力と不一致
+    TofSilent    = 7,   // a downward-ToF silence episode is in progress: no new samples, or the
+                        // estimator has not re-acquired the ToF yet (NOT the same as a single
+                        // out-of-range reading) / 下向き ToF の出力停止エピソード中: 新サンプルが
+                        // 来ない、または推定器がまだ ToF を取り込み直していない（単発の範囲外の
+                        // 読みとは別物）
+                        // NOTE: appended LAST so the logged values 1..6 stay valid, but its
+                        // gate priority is between BenchRelevel and TiltPending (gate 3b).
+                        // 注: 記録済みの値 1..6 を保つため末尾に追加したが、判定の優先順位は
+                        // BenchRelevel と TiltPending の間（判定 3b）。
 };
 
 /// Get human-readable ARM-block reason name
@@ -347,7 +378,38 @@ inline const char* armBlockName(ArmBlock reason)
         case ArmBlock::BenchRelevel: return "BenchRelevel";
         case ArmBlock::TiltPending:  return "TiltPending";
         case ArmBlock::TiltMismatch: return "TiltMismatch";
+        case ArmBlock::TofSilent:    return "TofSilent";
         default:                     return "UNKNOWN";
+    }
+}
+
+/// Why a flight-mode change request is refused (published in SystemMode.mode_block).
+/// Not a state: it is set when StateManager::requestModeChange() refuses a mode and cleared
+/// when a request is accepted or the condition ends.
+/// フライトモード変更要求が拒否される理由（SystemMode.mode_block に発行）。状態ではない:
+/// StateManager::requestModeChange() がモードを拒否したときに立ち、要求が受理されるか条件が
+/// 解消すると下りる。
+enum class ModeBlock : uint8_t {
+    None      = 0,   // no refused request pending / 拒否中の要求なし
+    TofSilent = 1,   // ALT_HOLD/POS_HOLD refused on the GROUND: a ToF-silence episode is in progress.
+                     // The request persists and applies by itself when the episode ends.
+                     // 地上で ALT_HOLD/POS_HOLD を拒否: ToF 出力停止のエピソード中。要求は持続し、
+                     // エピソードが終わると自動で適用される。
+    TofSwitchConsumed = 2,   // ALT_HOLD/POS_HOLD refused IN FLIGHT during an episode: the switch edge
+                             // is CONSUMED (never applied by itself), the pilot must flip the switch again
+                             // 飛行中のエピソードで ALT_HOLD/POS_HOLD を拒否: スイッチのエッジは「消費」
+                             // され（自動では適用されない）、パイロットがスイッチを入れ直す必要がある
+};
+
+/// Get human-readable mode-block reason name
+/// モード阻害理由の名前を取得する
+inline const char* modeBlockName(ModeBlock reason)
+{
+    switch (reason) {
+        case ModeBlock::None:      return "None";
+        case ModeBlock::TofSilent: return "TofSilent";
+        case ModeBlock::TofSwitchConsumed: return "TofSwitchConsumed";
+        default:                   return "UNKNOWN";
     }
 }
 
@@ -359,6 +421,9 @@ struct SystemMode {
     bool armed;           // Armed flag            / ARM状態
     uint8_t arm_block;    // ArmBlock enum — why ARM is refused now (None = gates pass)
                           // ArmBlock — 今 ARM が拒否される理由（None=判定を通る）
+    uint8_t mode_block;   // ModeBlock enum — why the latest flight-mode change request was
+                          // refused (None = no refused request pending)
+                          // ModeBlock — 直近のモード変更要求が拒否された理由（None=拒否中の要求なし）
     uint32_t timestamp;   // [us]
 };
 
@@ -368,6 +433,76 @@ struct SystemAlert {
     uint8_t type;         // Alert type enum       / アラート種別
     uint8_t severity;     // Severity level        / 重要度
     uint32_t timestamp;   // [us]
+};
+
+/// Why the downward ToF is in a silence episode (FailsafeStatus.tof_reason). 0 = no episode.
+/// 下向き ToF が出力停止のエピソード中である理由（FailsafeStatus.tof_reason）。0 = エピソードなし。
+enum class ToFSilenceReason : uint8_t {
+    None         = 0,   // no episode / エピソードなし
+    NoSample     = 1,   // no new sample for kTofSilenceUs (sensor stopped) / 新サンプルが来ない（センサ停止）
+    InvalidStuck = 2,   // flying, only invalid samples for kTofInvalidPersistUs / 飛行中に無効サンプルだけが続く
+    Reacquiring  = 3,   // samples are back, the estimator has not re-acquired the ToF yet
+                        // サンプルは戻ったが、推定器がまだ ToF を取り込み直していない
+    StatusStale  = 4,   // failsafe_status itself is not refreshed (set by the READER, D5)
+                        // failsafe_status 自体が更新されない（読む側が設定する。D5）
+};
+
+/// Human-readable ToF-silence reason / ToF 出力停止の理由の名前
+inline const char* toFSilenceReasonName(ToFSilenceReason reason)
+{
+    switch (reason) {
+        case ToFSilenceReason::None:         return "none";
+        case ToFSilenceReason::NoSample:     return "no new sample";
+        case ToFSilenceReason::InvalidStuck: return "only invalid samples while flying";
+        case ToFSilenceReason::Reacquiring:  return "estimator has not re-acquired the ToF yet";
+        case ToFSilenceReason::StatusStale:  return "failsafe status is stale";
+        default:                             return "UNKNOWN";
+    }
+}
+
+/// Failsafe level facts — published by Failsafe (PowerTask, 10 Hz) every update. Alerts
+/// (system_alert) carry the EVENTS; this carries the standing LEVEL that other components read
+/// (StateManager pre-arm / mode gates, ImuTask ground-contact trust, ControlTask blind landing).
+/// Readers go through sf::FailsafeStatusGuard (failsafe_status_guard.hpp), which turns a status
+/// that is no longer refreshed into "silent".
+/// フェイルセーフのレベル（継続状態）の事実 — Failsafe（PowerTask、10 Hz）が毎回発行する。
+/// アラート（system_alert）は「イベント」を運び、こちらは他の部品が読む「継続状態」を運ぶ
+/// （StateManager の ARM 前・モード判定、ImuTask の接地フラグ信用、ControlTask の ToF なし着陸）。
+/// 読む側は sf::FailsafeStatusGuard（failsafe_status_guard.hpp）を通す。更新されなくなった状態は
+/// 「出力停止」に読み替えられる。
+struct FailsafeStatus {
+    bool     tof_silent;  // A ToF-silence EPISODE is in progress: from the loss (no new sample for
+                          // kTofSilenceUs, or only invalid samples while flying for
+                          // kTofInvalidPersistUs) until the estimator has RE-ACQUIRED the ToF
+                          // (tof_health_tracker.hpp). While set, nothing may trust the ToF altitude.
+                          // 下向き ToF の出力停止の「エピソード」が進行中: 喪失（kTofSilenceUs の間
+                          // 新サンプル無し、または飛行中に無効サンプルだけが kTofInvalidPersistUs
+                          // 続く）から、推定器が ToF を「取り込み直す」まで。立っている間は、誰も
+                          // ToF の高度を信用してはならない。
+    uint8_t  tof_reason;  // ToFSilenceReason (0 while tof_silent is false) / ToFSilenceReason（tof_silent が偽なら 0）
+    uint32_t timestamp;   // [us]
+};
+
+/// What the estimator did with the last ToF sample (IEstimator::lastToFObservation()).
+/// 推定器が直近の ToF サンプルをどう扱ったか（IEstimator::lastToFObservation()）。
+struct ToFObservation {
+    bool  adopted      = false;   // the sample passed every gate and updated the state / 全ての判定を通り、状態を更新した
+    float innovation_m = 0.0f;    // |ToF height - estimated height| before the update [m] / 更新前の |ToF の高さ − 推定高度|
+};
+
+/// What ImuTask knows about the downward ToF and the estimator's use of it — published by ImuTask
+/// (the only consumer of the ToF samples) at every ToF sample; Failsafe turns it into the verdict
+/// on failsafe_status. A fact, not a decision.
+/// 下向き ToF と、推定器による ToF の使われ方について ImuTask が知っていること — ToF サンプルの
+/// 唯一の消費者である ImuTask がサンプルごとに発行する。Failsafe がこれを failsafe_status の判定に
+/// 変える。事実であって判断ではない。
+struct ToFHealth {
+    bool     altitude_reliable;  // the estimator adopted kTofReacquireSamples samples in a row with a
+                                 // small innovation and the ToF has been alive for kTofAliveMinUs
+                                 // 推定器が小さなイノベーションでサンプルを連続採用し、ToF が生存している
+    bool     invalid_stuck;      // flying, only invalid samples for kTofInvalidPersistUs
+                                 // 飛行中に無効サンプルだけが続いている
+    uint32_t timestamp;          // [us]
 };
 
 /// Boot/system readiness status — published by ImuTask, read by the pre-arm checks
@@ -423,6 +558,15 @@ struct ControllerStatus {
                                // 自動離陸(ALT/POS)が目標高度を捕捉した — 制御器駆動の
                                // TAKEOFF→FLYING トリガ（ToF 0.15m 空中エッジ=ESKFハンドオフ専用とは分離）。
     uint32_t timestamp;        // [us]
+    // Blind descent facts (ToF silent), carried by the task layer for the touchdown detector in ImuTask
+    // (blind_touchdown.hpp): the accelerometer-based vertical velocity estimate and the commanded thrust
+    // relative to the thrust that held the craft. Both are 0 when no blind descent runs.
+    // ToF なしの降下の事実（ToF 出力停止中）。ImuTask の接地検出器（blind_touchdown.hpp）のためにタスク層が
+    // 運ぶ: 加速度計に基づく鉛直速度の推定と、機体を支えていた推力に対する指令推力の比。ToF なし降下が
+    // 無いときはどちらも 0。
+    float    vertical_velocity_up;  // [m/s] vertical velocity estimate, up positive / 鉛直速度の推定（上が正）
+    float    blind_thrust_ratio;    // [-] commanded / support thrust (0 = no blind descent) / 指令÷支持推力（0=ToF なし降下なし）
+    float    vertical_rise_m;       // [m] estimated rise since the craft last rested on the ground (0 at rest) / 地上で最後に静止してからの上昇量の推定（静止中は 0）
     // Flip maneuver status (flip-maneuver-plan.md §4.1/§4.3). Detection layer
     // facts published by the flip sequencer (sf_controller_pid, a later task);
     // StateManager/state_task read them to judge/execute the FLYING<->FLIP
@@ -800,6 +944,7 @@ enum class NotifyEvent : uint8_t {
     AutotuneFail  = 9, // autotune failed (gains kept)   / autotune 失敗（ゲイン据え置き）
     ArmRejected   = 10, // ARM request refused by a pre-arm gate (error tone) / ARM 要求が事前判定で拒否（エラー音）
     FlipRejected  = 11, // FLIP button press refused / timed out (error tone) / FLIP ボタン押下が拒否・時間切れ（エラー音）
+    TofSilentWarn = 12, // downward ToF silent in a manual flight (ACRO/STABILIZE): warning, no forced landing / 手動飛行中に下向き ToF が出力停止: 警告のみ（強制着陸しない）
 };
 
 /// Notify command — NotifyTask consumes and drives LED/buzzer (HAL direct)

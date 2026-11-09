@@ -73,7 +73,7 @@ LED は**2 チャネル**に分かれる:
 
 ### システム状態（StampS3 内蔵 LED, GPIO21）
 
-優先度は上から（上位が下位を上書き）: 低電圧 > ペアリング > ARM 阻害表示（地上のみ。傾き不一致 / 待機）> 飛行状態。
+優先度は上から（上位が下位を上書き）: 低電圧 > **ARM 中の下向き ToF 出力停止（手動飛行の警告）** > ペアリング > ARM 阻害表示（地上のみ。傾き不一致 / 待機 / 下向き ToF 出力停止）> 飛行状態。
 
 | 状態 | 色 | パターン |
 |------|-----|---------|
@@ -81,6 +81,8 @@ LED は**2 チャネル**に分かれる:
 | ペアリング中（探索中）| 青 | 高速点滅 |
 | **傾き不一致**（地上で姿勢推定が重力とずれている。**持ち上げて水平な地面に置き直す**）| **赤** | **低速点滅** |
 | **待機**（地上。校正中〔**静止するまで完了しない**〕・傾き判定待ち〔リセット/DISARM 後の約 1 秒〕・モータテスト後の再水平化待ち〔約 1.5 秒〕。**動かさず待つ**）| マゼンタ | 低速点滅 |
+| **下向き ToF 出力停止**（地上。高度センサ〔ToF〕が新しい測定値を出さない、または出力が戻った後に推定器が取り込み直す前〔約 1 秒〕。**センサを確認し、電源を入れ直す。復帰後も約 1 秒待つ**）| **黄** | **高速点滅** |
+| **下向き ToF 出力停止**（ARM 中。新しい測定値が来ない・空中で無効な測定値だけが続く〔飛行中は 0.5 秒、離陸中は 5 cm 上がってから 0.15 秒〕・復帰後に推定器が取り込み直す前〔約 1 秒〕。**ACRO・STABILIZE では強制着陸されない**ので自分で着陸させる。ALT_HOLD・POS_HOLD では自動で着陸に入る。本体 LED・MCU LED の両方）| **黄** | **高速点滅**（警告音も鳴る）|
 | INIT（初期化中）| 白 | 常灯 |
 | IDLE_GROUND（校正済・ARM 可）| 緑 | 常灯 |
 | IDLE_HELD（手持ち検出）| シアン | 高速点滅 |
@@ -135,7 +137,7 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 | DISARM 操作（**ALT_HOLD/POS_HOLD で飛行中**）| → **自動着陸**（FLYING → LANDING）。空中でモータを切らず緩降下（0.3 m/s）で接地し、接地検出で本当の DISARM。**着陸中にもう一度 DISARM すると即カット（中断）** |
 | 機体ボタン クリック（地上）| ARM/DISARM トグル（飛行中のクリックは無視）|
 
-**ARM できない時**: ARM 操作（RC ボタン・機体ボタン・API）が拒否されると**エラー音（errorTone）が 1 回**鳴り、拒否中は LED が理由を示す（赤低速点滅＝傾き不一致、マゼンタ低速点滅＝待機、青高速点滅＝ペアリング中、シアン低速点滅＝低電圧）。CLI `status` の `prearm` 行は `prearm  : ready` または `prearm  : BLOCKED (tilt mismatch - place level)` のように理由を 1 行で示す（WiFi CLI でも可）。拒否の対象: 校正中（マゼンタ点滅）・低電圧/USB 給電・**ペアリング中**・ベンチ用モータテスト中/テスト後の再水平化待ち（約 1.5 秒）・**地上で姿勢推定が重力とずれている間**（`ARM rejected: attitude estimate disagrees with gravity`）は ARM 拒否（CLI `status`
+**ARM できない時**: ARM 操作（RC ボタン・機体ボタン・API）が拒否されると**エラー音（errorTone）が 1 回**鳴り、拒否中は LED が理由を示す（赤低速点滅＝傾き不一致、マゼンタ低速点滅＝待機、青高速点滅＝ペアリング中、シアン低速点滅＝低電圧、黄高速点滅＝下向き ToF 出力停止）。CLI `status` の `prearm` 行は `prearm  : ready` または `prearm  : BLOCKED (tilt mismatch - place level)` のように理由を 1 行で示す（WiFi CLI でも可）。拒否の対象: 校正中（マゼンタ点滅）・低電圧/USB 給電・**ペアリング中**・ベンチ用モータテスト中/テスト後の再水平化待ち（約 1.5 秒）・**下向き ToF（高度センサ）の出力停止のエピソード中**（新しい測定値が 0.3 秒以上来ない、空中で無効な測定値だけが続いた〔飛行中は 0.5 秒、離陸中は 5 cm 上がってから 0.15 秒〕、または出力が戻っても推定器がまだ ToF を取り込み直していない〔測定値が 1 秒以上途切れず届き、かつ推定が ToF と 10 回連続で一致するまで、復帰の約 1 秒後〕。**ACRO を含む全モードで拒否**。測定値が「届いた」だけでは許可されない）（`ARM rejected: downward ToF is silent (理由)`、CLI `prearm  : BLOCKED (downward ToF silent / not re-acquired - ...)`。飛行中に出力停止した場合は、**ALT_HOLD・POS_HOLD・自動離陸では上昇を中止して自動で着陸する**（降下は高度を使わずに降りる。**推力の上限は、機体を支えていた推力（支持推力。加速度計で較正する）の 0.95 倍で、重さより小さいので、機体は上昇できない**。加速度計から鉛直速度を推定し、その推定を信用できる間（最後のリセットから 2 秒）は −0.4 m/s で降りるように推力を調整する（上限以下に限る）。2 秒を過ぎたら、上限の一定推力で降りる。さらに、降下が 5 秒続いたら推力を絞り始め、8.3 秒でゼロにする。接地は加速度計: 2 g 超の衝撃のあと 0.25 秒間、加速も降下もしていなければ着陸完了、または床が機体を支えている状態（推力が支持推力の 0.7 倍未満なのに加速度計が 1 g を示す）が 0.5 秒続けば着陸完了。ただし通常は 3 G の衝撃カットが先に働いて DISARM する（アラートの種別は ToF 出力停止中の LANDING では非常にならず、接地として扱う）。LANDING に入ってから 10 秒たっても接地を検出できないときは時間切れで着陸完了とし、モータを止める（この時点で推力はすでにゼロで、機体は接地しているか自由落下中）。接地速度は SILS の実測（場面が成立した 951 本）で、センサノイズなしの最大が 1.22 m/s（離陸直後に出力停止した場合）、ホバー中・手動上昇中の出力停止で 0.4〜1.1 m/s、センサノイズ n2 の最悪が 2.08 m/s と、通常着陸の約 0.3 m/s よりずっと速いので、屋外や人の近くでは避ける。ALT_HOLD・POS_HOLD ではスティックで上げても高度 1.2 m で止まる（高度上限。自動離陸は 0.5 m）ので、落下距離は 1.2 m までに抑えられる。SILS の値で実機は未検証）。**ARMED_GROUND（ARM 済みで地上）で ToF が出力停止したときは、モードを問わず自動で DISARM する**（機体は飛んでいないので、飛ばさない）。**ACRO・STABILIZE では強制着陸せず**、本体の LED（2 系統）が黄の高速点滅になり警告音が鳴るので、パイロットが自分で着陸させる。出力停止中は ALT_HOLD・POS_HOLD への切り替えも拒否され、CLI `status` に `modeblock: REFUSED (...)` と `tof     : SILENT - 理由 ...` が出る。**飛行中に拒否したスイッチは「消費」される**: ToF が復帰しても自動では ALT_HOLD・POS_HOLD に切り替わらないので、復帰後（黄の点滅が消えてから）にスイッチを入れ直す。地上で拒否した切り替えは、エピソードが終わると自動で適用される）・**地上で姿勢推定が重力とずれている間**（`ARM rejected: attitude estimate disagrees with gravity`）は ARM 拒否（CLI `status`
 で確認可）。ずれは IDLE_GROUND 中に自動で（滞在ごとに1回）推定器リセットで再水平化される。起動・リセット直後は判定に約 1 秒かかり、その間は `ARM rejected: attitude check not passed yet` で拒否される。ずれが残る（機体が傾いて置かれている等）場合は、LED が**赤の低速点滅**になる。機体を持ち上げて水平な地面に置き直す（置き直しで再校正される）。リセット/DISARM 直後の約 1 秒（傾き判定待ち）とモータテスト後の約 1.5 秒（再水平化待ち）は**マゼンタの低速点滅**で、動かさずに待つと緑に戻る。
 
 **地上での自動 DISARM**: ARM したまま地上（ARMED_GROUND）でプロペラを回し続け、モータ振動で姿勢推定が重力方向から約 10° 以上ずれて 0.5 秒続くと、機体は自動で DISARM（モータ停止）し、ブザーが DISARM 音を鳴らす（ログ: `Disarmed on ground: attitude estimate disagrees with gravity`）。ACRO/STABILIZE ではスロットルを上げれば状態に関係なく浮くため、傾いた推定で離陸させないための措置。DISARM 後は推定器をリセットして再水平化する（再校正はしない）。判定が通るまでの約 1 秒は ARM できない。しきい値は暫定（`safety.tilt_check.max_deg/persist_s/lpf_s`）。
@@ -205,11 +207,13 @@ with StampFly("192.168.10.1") as fly:  # connect() = SDK モード（SoftAP は 
 | `up/down/left/right/forward/back <cm>`、`cw/ccw <deg>`、`go <x> <y> <z> <speed>` | 相対移動（10〜300cm、目標合成・到達後 ok）|
 | `battery?` `height?` `attitude?` `speed?` | クエリ |
 
+**待機中のコマンド:** `takeoff`・`land`・移動・`flip` などは目的を達成するまで応答を返さずに待つが、その間も機体はコマンドを読み続ける（50 ms ごと）。待機中に `emergency` を送ると**待機の残りを待たず**モータを止め、待機していたコマンドは `error interrupted by emergency` を返す。待機中の `stop` は飛行中（FLYING）で誘導目標があれば即座に受理され（現在位置と向きで止まる）、待機していたコマンドは `error interrupted by stop` を返す。`takeoff` / `land` / `flip` の待機中は飛行中でない（または FLIP 中）ため `stop` は通常どおり拒否され（`error not flying or guidance released ...`）、待機は続く。それ以外のコマンドは待機が終わってから到着順に実行される（従来どおり）。実機での遅延は未確認（SILS では注入からモータ停止まで 40 ms）。
+
 **システム同定（レートループ）:** ホバー中に `sysid <roll|pitch|yaw> <chirp|doublet> <amp_dps> <dur_s>` で1軸のレート目標に励振を加算できる（振幅≤86dps・10s にクランプ、Airborne 限定）。ホスト側は `sf log wifi` でキャプチャ → `sf sysid rate-fit` でプラント同定（b,T,L）→ `sf sysid rate-tune --wc <rad/s> --pm <deg>` で位相余裕・交差周波数仕様を満たす PID を自動算出（`param set` 行を出力）。励振飛行は `sf sysid rate-excite --takeoff --land` で自動化可。
 
 **オンボード自動チューン:** ホバー中に `autotune <roll|pitch|yaw> [ωc rad/s] [PM deg]`（既定 25/60）で、機体が単独で ①ステップドサイン9点掃引（2〜35Hz）②プラント同定 G(s)=b·e^{-Ls}/(s(Ts+1)) ③仕様を満たす PID 設計＋余裕の数値検証 ④**ライブ適用**（NVS 非保存 — 着陸後に確認飛行してから `param save`）を行う。安全判定: フィット残差・余裕誤差±5°・param 範囲・ゲイン跳躍 [1/4,4]× — どれかに掛かると**旧ゲインのまま** "error … gains unchanged" を返す。応答例: `ok kp=9.3e-04 ti=0.167 td=0.0056 wc=60.0 pm=50.0 gm=27.8`。
 
-**安全則:** ①ペアリング済み送信機を中立で保持（スティックを動かすと API 誘導は即解除＝パイロット優先。モードスイッチはエッジ適用なので置いたままの位置は API を妨げない）②通信断フェイルセーフ（自動着陸）は API の下で常に有効 ③移動は1回 3m・高度 0.2〜2.0m にクランプ。
+**安全則:** ①ペアリング済み送信機を中立で保持（スティックを動かすと API 誘導は即解除＝パイロット優先。モードスイッチはエッジ適用なので置いたままの位置は API を妨げない）②通信断フェイルセーフ（自動着陸）は API の下で常に有効 ③移動は1回 3m、目標高度は 0.2〜1.2m（高度上限 `kAltitudeCeilingM`）にクランプ。上限や距離を超える指示は、**クランプした値で実行し `ok` を返す**（移動は要求より短く、高さは上限で止まる。機体側のログに警告 `target altitude clamped to the 1.20 m ceiling` が 1 行出る）。
 
 **宙返り（Flip）は既定で無効（`flip.enable` = 0）。** 実機での初回の宙返り（2026-10-02）が失敗し、原因解析中のためである。無効の間は API `flip` が `error flip: disabled` を返し、FLIP ボタンも拒否される（機体側のログに `Flip button: rejected (Disabled)`）。有効にするのは、ネットを張った監督下の試験に限る: `param set flip.enable 1`（即時反映、再起動不要。NVS に保存するなら `param save`）、試験後は `param set flip.enable 0`。
 
@@ -418,6 +422,7 @@ craft's pose); the StampS3 LED serves as the independent status display.
 | POS_HOLD | magenta | solid | slow blink |
 | (during INIT) | white | solid | — |
 | **Low battery** (top priority) | cyan | fast blink | fast blink |
+| **Downward ToF silent while armed** (below low battery; manual-flight warning) | yellow | fast blink | fast blink |
 
 The ARM/DISARM distinction on the ground lives on the StampS3 LED (ARMED_GROUND = green slow blink, IDLE_GROUND = green solid).
 
@@ -433,7 +438,7 @@ The ARM/DISARM distinction on the ground lives on the StampS3 LED (ARMED_GROUND 
   (release the spring stick to unlock) after takeoff or an in-flight switch into ALT/POS.
   STABILIZE/ACRO keep the manual throttle takeoff (throttle = thrust, centre = off).
 
-### System state (StampS3 built-in LED, GPIO21), priority: low-battery > pairing > ARM-blocked (ground only: tilt mismatch / wait) > flight state
+### System state (StampS3 built-in LED, GPIO21), priority: low-battery > **downward ToF silent while armed (manual-flight warning)** > pairing > ARM-blocked (ground only: tilt mismatch / wait / downward ToF silent) > flight state
 
 | State | Colour | Pattern |
 |-------|--------|---------|
@@ -441,6 +446,8 @@ The ARM/DISARM distinction on the ground lives on the StampS3 LED (ARMED_GROUND 
 | Pairing (searching) | blue | fast blink |
 | **Tilt mismatch** (ground; the estimate disagrees with gravity — **pick the craft up and place it level**) | **red** | **slow blink** |
 | **Wait** (ground; calibrating [**never completes while moving**], tilt check pending [~1 s after reset/DISARM], or bench re-level pending [~1.5 s]; **keep still and wait**) | magenta | slow blink |
+| **Downward ToF silent** (ground: the altitude sensor [ToF] delivers no new measurement, or its output is back but the estimator has not re-acquired it yet [~1 s]; **check the sensor, power-cycle, and wait ~1 s after it returns**) | **yellow** | **fast blink** |
+| **Downward ToF silent** (ARMED: no new measurement, only invalid measurements in the air [0.5 s while flying; 0.15 s in a takeoff once the craft has risen 5 cm], or the estimator has not re-acquired the ToF yet [~1 s]. **ACRO / STABILIZE are NOT force-landed**, land yourself; ALT_HOLD / POS_HOLD start an automatic landing. Body LED and MCU LED both) | **yellow** | **fast blink** (with a warning tone) |
 | INIT | white | solid |
 | IDLE_GROUND (ready) | green | solid |
 | IDLE_HELD | cyan | fast blink |
@@ -485,7 +492,9 @@ identical to the legacy vehicle.**
 - **Takeoff**: throttle > 0.5 in ARMED_GROUND → TAKEOFF → FLYING (ToF airborne). **Landing**: throttle
   down / DISARM.
 
-ARM is refused while calibrating, on low/USB power, while pairing, during/after a bench motor test (re-level pending), or until the attitude check has passed on the ground (about 1 s after boot/reset; refused while it disagrees with gravity). A refused ARM request (RC button, on-board click or API) plays the error tone once, and while refused the StampS3 LED shows why (red slow blink = tilt mismatch: place the craft level; magenta slow blink = wait and keep still; blue fast = pairing; cyan slow = low battery). `status` prints one line: `prearm  : ready` or `prearm  : BLOCKED (tilt mismatch - place level)`. A craft left ARMED on the ground with spinning props whose estimate drifts ~10 deg or more from gravity for 0.5 s is disarmed automatically (the estimator is then reset to level; no recalibration, since the craft may be tilted); thresholds are provisional (`safety.tilt_check.*`).
+ARM is refused while calibrating, on low/USB power, while pairing, during/after a bench motor test (re-level pending), or until the attitude check has passed on the ground (about 1 s after boot/reset; refused while it disagrees with gravity), or **during a downward-ToF silence episode** (no new measurement for 0.3 s, only invalid measurements in the air [0.5 s while flying; 0.15 s in a takeoff once the craft has risen 5 cm], or the output is back but the estimator has not re-acquired the ToF yet: it needs >= 1 s of continuous measurements AND 10 consecutive agreeing samples, ~1 s after the return; **refused in every mode, ACRO included**; a measurement that merely arrives is not enough; log `ARM rejected: downward ToF is silent (reason)`). A refused ARM request (RC button, on-board click or API) plays the error tone once, and while refused the StampS3 LED shows why (red slow blink = tilt mismatch: place the craft level; magenta slow blink = wait and keep still; blue fast = pairing; cyan slow = low battery; yellow fast = downward ToF silent). `status` prints one line: `prearm  : ready` or `prearm  : BLOCKED (tilt mismatch - place level)`. During a ToF silence episode `status` also prints `tof     : SILENT - <reason>` and, while a mode switch was refused, `modeblock: REFUSED (...)`. ALT_HOLD / POS_HOLD switches are refused during an episode: **in flight the refused switch is CONSUMED** (the mode never switches by itself when the ToF recovers: flip the switch again after the yellow blink has stopped); on the ground the refused switch applies by itself when the episode ends. In flight, a silence in ALT_HOLD / POS_HOLD / auto-takeoff aborts the climb and lands the craft automatically (the descent does not use altitude. **The thrust ceiling is 0.95 x the thrust that was holding the craft (the support thrust, calibrated by the accelerometer), which is below the weight, so the craft cannot climb.** The vertical velocity is estimated from the accelerometer and, while that estimate is trusted (2 s after its last reset), the thrust is adjusted to descend at -0.4 m/s (never above the ceiling). After 2 s the descent continues at the constant ceiling thrust. After 5 s of descent the thrust is also reduced, reaching zero at 8.3 s. The touchdown is detected by the accelerometer: an impact above 2 g followed by 0.25 s with no acceleration and no descent, or the floor holding the craft up (the thrust is below 0.7 x the support thrust yet the accelerometer reads 1 g) for 0.5 s, completes the landing; normally the 3 G impact cut fires first and disarms (during a LANDING with a silent ToF it is treated as the touchdown, not as an emergency). If no touchdown is detected 10 s after LANDING was entered, the time limit completes the landing and stops the motors (the thrust is already zero by then: the craft is on the floor or in free fall). The touchdown speed measured in SILS over the 951 runs in which the scene held is at most 1.22 m/s without sensor noise (a silence right after take-off), 0.4-1.1 m/s for a silence in a hover or a manual climb, and 2.08 m/s in the worst run with sensor noise n2 - much faster than a normal landing (about 0.3 m/s): avoid flying outdoors or near people when the ToF is unreliable. In ALT_HOLD / POS_HOLD the stick climb stops at 1.2 m (the altitude ceiling; the auto-takeoff target is 0.5 m), which bounds the fall height. SILS values; not validated on a real flight. **A craft that is ARMED on the ground (ARMED_GROUND) is disarmed automatically when the ToF goes silent, in every mode** (it is not flying: it is not launched blind). In ACRO / STABILIZE a silent ToF only WARNS (no forced landing). A craft left ARMED on the ground with spinning props whose estimate drifts ~10 deg or more from gravity for 0.5 s is disarmed automatically (the estimator is then reset to level; no recalibration, since the craft may be tilted); thresholds are provisional (`safety.tilt_check.*`).
+
+**Safety rules (API):** (1) Hold the paired transmitter at neutral (moving a stick releases the API guidance at once = pilot priority; mode switches are edge-applied, so a switch left in place does not hinder the API). (2) The comm-loss failsafe (auto-landing) is always active under the API. (3) A move is limited to 3 m per command and the target altitude to 0.2-1.2 m (the altitude ceiling `kAltitudeCeilingM`). A command that asks for more is **executed with the clamped value and still replies `ok`** (the move is shorter than asked, the height stops at the ceiling; the vehicle log carries one warning, `target altitude clamped to the 1.20 m ceiling`).
 
 **Flip is disabled by default (`flip.enable` = 0).** The first hardware flip (2026-10-02) failed and the analysis is still open. While disabled, the API `flip` replies `error flip: disabled` and the FLIP button is rejected too (vehicle log: `Flip button: rejected (Disabled)`). Enable it only for supervised tests over a safety net: `param set flip.enable 1` (applies immediately, no reboot; `param save` to persist) and set it back to 0 afterwards.
 

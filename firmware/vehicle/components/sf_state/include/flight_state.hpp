@@ -117,6 +117,7 @@ enum class AlertType : uint8_t {
     USB_POWER      = 4,   // USB power only, no LiPo / USB給電のみ
     ESKF_DIVERGED  = 5,   // State estimator diverged / 推定器発散
     GYRO_ANOMALY   = 6,   // Abnormal angular rate / 異常角速度
+    TOF_SILENT     = 7,   // Downward ToF produced no new sample (sensor stopped) / 下向き ToF が出力停止
 };
 
 /// Alert severity levels

@@ -32,6 +32,7 @@ namespace sf {
 void TakeoffLandingMgr::init()
 {
     config_ = TakeoffLandingConfig{};
+    configureBlindTouchdown();
     ESP_LOGI(TAG, "TakeoffLandingMgr initialized (ground=%.2fm, airborne=%.2fm)",
              config_.ground_tof_m, config_.airborne_tof_m);
 }
@@ -43,7 +44,18 @@ void TakeoffLandingMgr::init()
 void TakeoffLandingMgr::init(const TakeoffLandingConfig& config)
 {
     config_ = config;
+    configureBlindTouchdown();
     ESP_LOGI(TAG, "TakeoffLandingMgr initialized (custom config)");
+}
+
+// -----------------------------------------------------------------------------
+// reloadConfig — new configuration, detector state kept
+// 設定の再読込 — 検出器の状態は保持
+// -----------------------------------------------------------------------------
+void TakeoffLandingMgr::reloadConfig(const TakeoffLandingConfig& config)
+{
+    config_ = config;
+    blind_touchdown_.setConfig(blindTouchdownConfig());
 }
 
 // -----------------------------------------------------------------------------
@@ -64,13 +76,16 @@ void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_ve
         landing_start_ms_ = 0;
         stall_start_ms_   = 0;
         ground_streak_   = 0;
+        dead_zone_armed_ = false;
         evaluateHeld(tof);
         return;
     }
 
     held_ = false;   // armed: by definition not hand-held / armed 中は定義上手持ちでない
     evaluateToF(tof);
-    detectLanding(vertical_velocity, in_landing_descent);
+    const uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+    trackDeadZone(tof, in_landing_descent, now_ms);
+    detectLanding(vertical_velocity, in_landing_descent, now_ms);
 }
 
 // -----------------------------------------------------------------------------
@@ -139,13 +154,12 @@ void TakeoffLandingMgr::evaluateToF(const TofData& tof)
 // detectLanding — low altitude + low velocity sustained → landing event
 // 着陸検出 — 低高度＋低速度の持続 → 着陸イベント
 // -----------------------------------------------------------------------------
-void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_descent)
+void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_descent, uint32_t now_ms)
 {
-    uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
     float vz = std::fabs(vertical_velocity);  // injected, not a topic read / 注入値
     const bool at_rest = (vz < config_.landing_vel_mps);
 
-    // Two independent touchdown paths, each a sustained level condition. landing_detected_
+    // Three independent touchdown paths, each a sustained level condition. landing_detected_
     // is a LEVEL flag (true while the condition holds, cleared when it breaks) so a 50 Hz
     // consumer (StateTask) cannot miss it through a Latest topic.
     //   (1) FIRM GROUND: ToF confirms <5cm (on_ground_) + at rest, held landing_hold_ms.
@@ -155,11 +169,13 @@ void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_d
     //       float, where the craft holds altitude on reduced thrust and never reaches 5cm
     //       (so (1) never fires). Gated on in_landing_descent so a deliberate low hover is
     //       NOT a landing — only a STALLED descent is.
-    // 2つの独立した接地経路。各々が持続レベル条件。landing_detected_ はレベルフラグ。
+    //   (3) DEAD ZONE: invalid samples only after a valid one near the floor (deadZoneTouchdown()).
+    // 3つの独立した接地経路。各々が持続レベル条件。landing_detected_ はレベルフラグ。
     //   (1) 確実な接地: ToF が <5cm を確認（on_ground_）＋静止を landing_hold_ms 持続。
     //   (2) 降下停滞: 着陸降下が指令＋ToF が near_ground_tof_m 以内＋静止を stall_hold_ms 持続。
     //       地面効果フロート（低推力で高度保持、5cm に届かず (1) が成立しない）を捕捉。
     //       in_landing_descent で判定し、意図的な低ホバーは着陸でない（停滞降下のみ着陸）。
+    //   (3) 不感帯: 床の近くの有効な読みの後に無効サンプルだけ（deadZoneTouchdown()）。
     bool firm = false;
     if (on_ground_ && at_rest) {
         if (landing_start_ms_ == 0) landing_start_ms_ = now_ms;
@@ -176,12 +192,153 @@ void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_d
         stall_start_ms_ = 0;
     }
 
-    const bool detected = firm || stalled;
+    const bool dead_zone = deadZoneTouchdown(in_landing_descent, now_ms);   // path (3), see below / 経路 (3)、下記
+
+    const bool detected = firm || stalled || dead_zone;
     if (detected && !landing_detected_) {
-        ESP_LOGI(TAG, "Landing detected (%s)",   // log once on the rising edge / 立上りで1回
-                 firm ? "ground" : "stalled descent / ground effect");
+        logLandingDetected(firm, stalled, now_ms);   // once on the rising edge / 立上りで1回
     }
     landing_detected_ = detected;
+}
+
+// -----------------------------------------------------------------------------
+// deadZoneTouchdown — path (3) of detectLanding(): the touchdown seen as the sensor's dead zone
+// 不感帯での接地 — detectLanding() の経路 (3): センサの不感帯として見える接地
+//
+// A landing descent is commanded AND a valid reading inside dead_zone_band_m was followed by ONLY invalid samples for
+// dead_zone_hold_ms. The sensor reads "no target" below about 0.031 m, so a craft that reaches the floor leaves the
+// valid range; this is the touchdown of a soft contact (under 3 G) that the firm-ground path (1) and the stalled-descent
+// path (2) cannot see. No velocity condition: the craft's own velocity estimate is not reliable there.
+// 着陸降下が指令されている ∧ dead_zone_band_m 以内の有効な読みの後に、無効サンプルだけが dead_zone_hold_ms 続く。
+// センサは約 0.031 m より近いと「目標なし」を返すので、床に着いた機体は有効範囲を出る。確実な接地の経路 (1) と降下停滞
+// の経路 (2) では見えない柔らかい接触（3 G 未満）の接地。速度の条件は無い: そこでは機体自身の速度推定を信用できない。
+//
+// @design detailed_design.md §3 注7 — dead-zone touchdown, the third path of the landing detector [OK]
+// -----------------------------------------------------------------------------
+bool TakeoffLandingMgr::deadZoneTouchdown(bool in_landing_descent, uint32_t now_ms) const
+{
+    return in_landing_descent && dead_zone_armed_ &&
+           (now_ms - dead_zone_valid_ms_ >= config_.dead_zone_hold_ms);
+}
+
+// -----------------------------------------------------------------------------
+// logLandingDetected — say which path detected the landing
+// 着陸を検出した経路を記録する
+// -----------------------------------------------------------------------------
+void TakeoffLandingMgr::logLandingDetected(bool firm, bool stalled, uint32_t now_ms) const
+{
+    if (!firm && !stalled) {
+        ESP_LOGI(TAG, "Landing detected (ToF dead zone: only invalid samples for %lu ms after a valid %.3f m)",
+                 static_cast<unsigned long>(now_ms - dead_zone_valid_ms_), static_cast<double>(dead_zone_valid_m_));
+        return;
+    }
+    ESP_LOGI(TAG, "Landing detected (%s)", firm ? "ground" : "stalled descent / ground effect");
+}
+
+// -----------------------------------------------------------------------------
+// trackDeadZone — evidence for the dead-zone touchdown from one ToF sample
+// 不感帯での接地の証拠 — ToF サンプル 1 つから
+//
+// A valid reading inside the band (re)starts the count; an invalid sample keeps it; a valid reading ABOVE the band
+// (the craft is not at the floor, or the sensor sees something else) cancels it. Only the landing descent arms it.
+// 帯の中の有効な読みは数え直しを始める。無効サンプルは保持する。帯より「上」の有効な読み（機体は床にいない、または
+// センサが別のものを見ている）は取り消す。着陸降下の間だけ始める。
+// -----------------------------------------------------------------------------
+void TakeoffLandingMgr::trackDeadZone(const TofData& tof, bool in_landing_descent, uint32_t now_ms)
+{
+    if (!in_landing_descent) {
+        dead_zone_armed_ = false;
+        return;
+    }
+    if (!tof.valid) {
+        return;   // an invalid sample neither arms nor cancels / 無効サンプルは始めも取り消しもしない
+    }
+    if (tof.distance <= config_.dead_zone_band_m) {
+        dead_zone_armed_    = true;
+        dead_zone_valid_ms_ = now_ms;
+        dead_zone_valid_m_  = tof.distance;
+    } else {
+        dead_zone_armed_ = false;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// markAirborne — flip the raw ground-contact flag to the safe side (ToF-silence episode, armed)
+// 空中化 — 生の接地フラグを安全側へ倒す（ARM 中の ToF 出力停止エピソード）
+// -----------------------------------------------------------------------------
+void TakeoffLandingMgr::markAirborne()
+{
+    if (on_ground_) {
+        ESP_LOGW(TAG, "Ground contact unknown (ToF silent while armed): flag set to airborne");
+    }
+    on_ground_     = false;
+    ground_streak_ = 0;       // the air->ground debounce restarts from zero / 空中→接地のデバウンスはゼロから
+    near_ground_   = false;   // the near-ground band is also unknown / 接地近傍帯も不明
+    landing_start_ms_ = 0;    // a firm-ground landing timer must not survive the evidence it stood on
+    stall_start_ms_   = 0;    // 接地着陸・降下停滞のタイマーは、拠り所の証拠とともに破棄する
+    dead_zone_armed_  = false;   // the dead-zone evidence is also a ToF fact / 不感帯の証拠も ToF の事実
+}
+
+// -----------------------------------------------------------------------------
+// configureBlindTouchdown — apply the impact settings of the config to the detector
+// ToF なしの接地の設定 — config の衝撃の設定を検出器へ反映
+// -----------------------------------------------------------------------------
+void TakeoffLandingMgr::configureBlindTouchdown()
+{
+    blind_touchdown_.init(blindTouchdownConfig());
+}
+
+// -----------------------------------------------------------------------------
+// blindTouchdownConfig — the detector thresholds that config_ sets (the rest: sf::limits defaults)
+// 検出器の閾値のうち config_ が決めるもの（残りは sf::limits の既定）
+// -----------------------------------------------------------------------------
+BlindTouchdownConfig TakeoffLandingMgr::blindTouchdownConfig() const
+{
+    BlindTouchdownConfig detector_config;   // stillness settings: sf::limits defaults / 静止の設定は sf::limits の既定
+    detector_config.impact_accel_mps2 = config_.blind_touchdown_accel_mps2;
+    detector_config.impact_samples    = config_.blind_touchdown_samples;
+    detector_config.floor_s           = config_.blind_floor_s;
+    return detector_config;
+}
+
+// -----------------------------------------------------------------------------
+// updateBlindTouchdown — touchdown while the ToF is silent: impact, then stillness
+// ToF なしの接地 — ToF 出力停止中の接地: 衝撃のあとの静止
+//
+// Without ToF samples there is no height and no stalled-descent evidence. An impact alone (the old
+// rule: |accel| over 1.4 g for 4 samples) is not evidence: real flight logs show 1.56 g of vibration
+// in hover and 2.28 g in aggressive flight. A craft held up by the floor, after an impact, is not
+// accelerating, is not descending, and its commanded thrust cannot hold it: BlindTouchdownDetector
+// latches only when all of them hold for a set time (blind_touchdown.hpp). The latch stays until the
+// blind landing ends. The 3 G crash alert (Failsafe) still cuts the motors for a hard crash.
+// ToF のサンプルが無いと高さも降下停滞の証拠も無い。衝撃だけ（旧規則: |加速度| が 1.4 g を 4 サンプル超過）
+// では証拠にならない: 実機ログではホバーで 1.56 g、激しい飛行で 2.28 g の振動がある。床に支えられた機体は、
+// 衝撃の後、加速せず、降下せず、指令推力では支えられない。BlindTouchdownDetector はそれらが全部、一定時間
+// 成り立ったときだけラッチする（blind_touchdown.hpp）。ラッチはToF なしの着陸が終わるまで保持する。
+// 3 G の墜落アラート（Failsafe）は、激しい墜落ではこれまでどおりモータを止める。
+// -----------------------------------------------------------------------------
+void TakeoffLandingMgr::updateBlindTouchdown(const BlindTouchdownInput& input, bool blind_landing)
+{
+    if (!blind_landing) {
+        blind_touchdown_.reset();
+        return;
+    }
+    const bool was_latched = blind_touchdown_.touchdown();
+    blind_touchdown_.update(input);
+    if (blind_touchdown_.touchdown() && !was_latched) {
+        if (blind_touchdown_.byFloorSupport()) {
+            ESP_LOGI(TAG, "Touchdown detected (the floor holds the craft up for %.2f s, no impact; thrust ratio %.2f, "
+                          "vz %.2f m/s, ToF silent)",
+                     static_cast<double>(blind_touchdown_.floorSeconds()),
+                     static_cast<double>(input.thrust_ratio),
+                     static_cast<double>(input.vertical_velocity_up));
+        } else {
+            ESP_LOGI(TAG, "Touchdown detected (impact, then still %.2f s; thrust ratio %.2f, vz %.2f m/s, ToF silent)",
+                     static_cast<double>(blind_touchdown_.stillSeconds()),
+                     static_cast<double>(input.thrust_ratio),
+                     static_cast<double>(input.vertical_velocity_up));
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------

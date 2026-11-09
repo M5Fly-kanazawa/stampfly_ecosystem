@@ -985,6 +985,7 @@ TEST(wire_unified_worst_case_fits)
     constexpr size_t kCtrlOutput  = kEntryHeader + sizeof(WireControlOutput400) * kSamplesPerPacket;
     constexpr size_t kPhase       = kEntryHeader + sizeof(WireFlightPhase400) * kSamplesPerPacket;
     constexpr size_t kFlags       = kEntryHeader + sizeof(WireFlightFlags);
+    constexpr size_t kToFSilence  = kEntryHeader + sizeof(WireToFSilence);
     constexpr size_t kControl     = kEntryHeader + sizeof(WireControl);
     constexpr size_t kCtrlRef     = kEntryHeader + sizeof(WireCtrlRef);
     constexpr size_t kFlow        = (kEntryHeader + sizeof(WireFlow)) * 2;   // 2 per packet at 100 Hz
@@ -992,9 +993,76 @@ TEST(wire_unified_worst_case_fits)
     constexpr size_t kBaro        = kEntryHeader + sizeof(WireBaro);
     constexpr size_t kMag         = kEntryHeader + sizeof(WireMag);
     constexpr size_t kChecksum    = 1;
-    constexpr size_t kTotal = kFixedPart + kDuty + kCtrlOutput + kPhase + kFlags + kControl +
+    constexpr size_t kTotal = kFixedPart + kDuty + kCtrlOutput + kPhase + kFlags + kToFSilence + kControl +
                               kCtrlRef + kFlow + kTof + kBaro + kMag + kChecksum;
+    constexpr size_t kBeforeToFSilence = kTotal - kToFSilence;   // the worst case before the 0x4E entry was added / 0x4E の追加前の最悪値
+    printf("\n    worst-case unified packet: %zu B (before the 0x4E entry: %zu B), cap %zu B, margin %zu B\n",
+           kTotal, kBeforeToFSilence, kUnifiedMaxSize, kUnifiedMaxSize - kTotal);
     ASSERT_TRUE(kTotal <= kUnifiedMaxSize);
+
+    // The same worst case built through the real builder: every addEntry() must be accepted and the
+    // datagram must stay within the cap (an entry that does not fit is DROPPED, silently on the wire).
+    // 同じ最悪ケースを実際のビルダで組む: 全 addEntry() が受理され、データグラムが上限内に収まること
+    // （収まらないエントリは回線上では黙って落ちる）。
+    sf::LogStreamSample samples[kSamplesPerPacket] = {};
+    UnifiedPacketBuilder builder;
+    builder.begin(0, samples);
+    uint8_t payload[sizeof(WireControlOutput400) * kSamplesPerPacket] = {};
+    ASSERT_TRUE(builder.addEntry(kPktDuty400, payload, sizeof(WireDuty400) * kSamplesPerPacket));
+    ASSERT_TRUE(builder.addEntry(kPktCtrlOutput400, payload, sizeof(WireControlOutput400) * kSamplesPerPacket));
+    ASSERT_TRUE(builder.addEntry(kPktFlightPhase400, payload, sizeof(WireFlightPhase400) * kSamplesPerPacket));
+    ASSERT_TRUE(builder.addEntry(kPktFlightFlags, payload, sizeof(WireFlightFlags)));
+    ASSERT_TRUE(builder.addEntry(kPktToFSilence, payload, sizeof(WireToFSilence)));
+    ASSERT_TRUE(builder.addEntry(kPktControl, payload, sizeof(WireControl)));
+    ASSERT_TRUE(builder.addEntry(kPktCtrlRef, payload, sizeof(WireCtrlRef)));
+    ASSERT_TRUE(builder.addEntry(kPktFlow, payload, sizeof(WireFlow)));
+    ASSERT_TRUE(builder.addEntry(kPktFlow, payload, sizeof(WireFlow)));
+    ASSERT_TRUE(builder.addEntry(kPktTofBottom, payload, sizeof(WireTof)));
+    ASSERT_TRUE(builder.addEntry(kPktTofFront, payload, sizeof(WireTof)));
+    ASSERT_TRUE(builder.addEntry(kPktBaro, payload, sizeof(WireBaro)));
+    ASSERT_TRUE(builder.addEntry(kPktMag, payload, sizeof(WireMag)));
+    const size_t length = builder.finish();
+    ASSERT_TRUE(length == kTotal);
+    ASSERT_TRUE(length <= kUnifiedMaxSize);
+}
+
+// The 50 Hz ToF-silence entry (0x4E): 19 bytes, field order as the PC side (udp_capture.py FMT_TOF_SILENCE
+// '<I3f3B') decodes it, the flag bits distinct.
+// 50 Hz の ToF 出力停止エントリ（0x4E）: 19 バイト、フィールド順は PC 側（udp_capture.py の FMT_TOF_SILENCE
+// '<I3f3B'）のデコードと同じ。フラグのビットは互いに異なる。
+TEST(wire_tof_silence_entry)
+{
+    using namespace sf::datastream;
+    static_assert(sizeof(WireToFSilence) == 19, "wire drift");
+    static_assert((kToFFlagSilent | kToFFlagAltitudeReliable | kToFFlagInvalidStuck | kToFFlagStatusStale) == 0x0F,
+                  "the four flag bits must be distinct");
+
+    sf::LogStreamSample samples[kSamplesPerPacket] = {};
+    UnifiedPacketBuilder builder;
+    builder.begin(0, samples);
+    WireToFSilence entry = {};
+    entry.timestamp_us         = 654321;
+    entry.vertical_velocity_up = -0.4f;
+    entry.vertical_rise_m      = 0.25f;
+    entry.descent_thrust_ratio = 0.95f;
+    entry.tof_flags            = kToFFlagSilent | kToFFlagInvalidStuck;
+    entry.tof_reason           = 2;   // InvalidStuck
+    entry.mode_block           = 1;   // TofSilent
+    ASSERT_TRUE(builder.addEntry(kPktToFSilence, &entry, sizeof(entry)));
+    const size_t length = builder.finish();
+    const uint8_t* buf = builder.buffer();
+
+    ASSERT_TRUE(buf[916] == 1);   // entry_count / エントリ数
+    ASSERT_TRUE(buf[917] == kPktToFSilence && buf[918] == 19);
+    uint32_t timestamp;
+    float values[3];
+    memcpy(&timestamp, &buf[919], 4);
+    memcpy(values, &buf[923], 12);
+    ASSERT_TRUE(timestamp == 654321);
+    ASSERT_TRUE(values[0] == -0.4f && values[1] == 0.25f && values[2] == 0.95f);
+    ASSERT_TRUE(buf[935] == 0x05 && buf[936] == 2 && buf[937] == 1);
+    ASSERT_TRUE(length == 919 + 19 + 1);
+    ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
 }
 
 // =============================================================================
@@ -1118,6 +1186,269 @@ TEST(land_disarm_clears)
     ASSERT_TRUE(!mgr.isLandingDetected());
 }
 
+// Touchdown in the ToF DEAD ZONE: in a landing descent, a valid reading inside the band (kLandingDeadZoneBandM)
+// followed by ONLY invalid samples for kLandingDeadZoneHoldMs = on the floor. The sensor reads "no target"
+// below about 0.031 m, so the last centimetres of a soft landing are invalid samples.
+// 不感帯での接地: 着陸降下中、帯（kLandingDeadZoneBandM）の中の有効な読みの後、無効サンプルだけが
+// kLandingDeadZoneHoldMs 続いたら床の上。センサは約 0.031 m より近いと「目標なし」を返すので、柔らかい着陸の
+// 最後の数 cm は無効サンプルになる。
+static void landingApproach(sf::TakeoffLandingMgr& mgr, float last_valid_m)
+{
+    feed(mgr, 0.30f, true, true, 0.28f, true, 5, 33);          // descending, far above the band / 帯よりずっと上を降下中
+    feed(mgr, 0.08f, true, true, 0.28f, true, 1, 33);          // inside the band / 帯の中
+    feed(mgr, last_valid_m, true, true, 0.28f, true, 1, 33);   // the last valid reading / 最後の有効な読み
+}
+
+TEST(land_dead_zone_touchdown_after_a_valid_reading_near_the_floor)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    landingApproach(mgr, 0.039f);
+    feed(mgr, 0.0f, false, true, 0.28f, true, 5, 33);          // 5 invalid samples = 165 ms < 200 ms / 165 ms
+    ASSERT_TRUE(!mgr.isLandingDetected());
+    feed(mgr, 0.0f, false, true, 0.28f, true, 1, 33);          // 198 ms: still short / まだ足りない
+    ASSERT_TRUE(!mgr.isLandingDetected());
+    feed(mgr, 0.0f, false, true, 0.28f, true, 1, 33);          // 231 ms >= 200 ms: on the floor / 床の上
+    ASSERT_TRUE(mgr.isLandingDetected());
+    ASSERT_TRUE(!mgr.isOnGround());                            // on_ground_ is a different fact (valid < 5 cm) / on_ground_ は別の事実
+    feed(mgr, 0.0f, false, true, 0.28f, true, 30, 33);         // the level flag holds / レベルフラグは保持される
+    ASSERT_TRUE(mgr.isLandingDetected());
+}
+
+// One valid reading inside the band restarts the count (the real sensor flickers at 0.031 m): the
+// real log had a single invalid sample between two valid ones before it went invalid for good.
+// 帯の中の有効な読みが 1 つあれば数え直す（実機のセンサは 0.031 m でちらつく）: 実機ログでは、有効な読みの
+// 間に無効が 1 サンプル挟まった後、ずっと無効になった。
+TEST(land_dead_zone_flicker_restarts_the_count)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    landingApproach(mgr, 0.039f);
+    feed(mgr, 0.0f, false, true, 0.28f, true, 1, 33);          // the one invalid sample between two valid ones / 有効の間の無効 1 サンプル
+    feed(mgr, 0.031f, true, true, 0.28f, true, 1, 33);         // valid again at 0.031 m / 0.031 m で再び有効
+    feed(mgr, 0.0f, false, true, 0.28f, true, 6, 33);          // 198 ms since the last valid reading / 最後の有効な読みから 198 ms
+    ASSERT_TRUE(!mgr.isLandingDetected());
+    feed(mgr, 0.0f, false, true, 0.28f, true, 1, 33);          // 231 ms
+    ASSERT_TRUE(mgr.isLandingDetected());
+}
+
+// What must NOT count: invalid samples with no valid reading in the band before them (a ToF dropout high above
+// the floor), a valid reading ABOVE the band after them (not at the floor), and anything outside a landing
+// descent (a low hover, a take-off from the floor).
+// 数えてはならないもの: 帯の中の有効な読みが先に無い無効サンプル（床よりずっと上での ToF の途切れ）、その後に
+// 帯より「上」の有効な読みが来た場合（床にいない）、着陸降下の外（低いホバー、床からの離陸）。
+TEST(land_dead_zone_does_not_fire_without_the_evidence)
+{
+    {   // dropout high above the floor / 床よりずっと上での途切れ
+        sf::TakeoffLandingMgr mgr;
+        mgr.init();
+        feed(mgr, 0.50f, true, true, 0.28f, true, 5, 33);
+        feed(mgr, 0.0f, false, true, 0.28f, true, 30, 33);
+        ASSERT_TRUE(!mgr.isLandingDetected());
+    }
+    {   // a valid reading above the band cancels / 帯より上の有効な読みが取り消す
+        sf::TakeoffLandingMgr mgr;
+        mgr.init();
+        landingApproach(mgr, 0.039f);
+        feed(mgr, 0.0f, false, true, 0.28f, true, 3, 33);
+        feed(mgr, 0.40f, true, true, 0.28f, true, 1, 33);      // the craft is NOT at the floor / 床にいない
+        feed(mgr, 0.0f, false, true, 0.28f, true, 30, 33);
+        ASSERT_TRUE(!mgr.isLandingDetected());
+    }
+    {   // not a landing descent: a low hover with a dropout / 着陸降下でない
+        sf::TakeoffLandingMgr mgr;
+        mgr.init();
+        feed(mgr, 0.30f, true, true, 0.0f, false, 5, 33);
+        feed(mgr, 0.08f, true, true, 0.0f, false, 3, 33);
+        feed(mgr, 0.0f, false, true, 0.0f, false, 30, 33);
+        ASSERT_TRUE(!mgr.isLandingDetected());
+    }
+    {   // the evidence collected before the landing began is not used / 着陸が始まる前の証拠は使わない
+        sf::TakeoffLandingMgr mgr;
+        mgr.init();
+        feed(mgr, 0.08f, true, true, 0.0f, false, 3, 33);      // a low hover inside the band, not LANDING yet / 帯の中の低いホバー
+        feed(mgr, 0.0f, false, true, 0.28f, true, 1, 33);      // LANDING starts with an invalid sample (still descending, so not the stalled-descent path) / LANDING が無効サンプルで始まる（降下中なので降下停滞の経路ではない）
+        feed(mgr, 0.0f, false, true, 0.28f, true, 30, 33);
+        ASSERT_TRUE(!mgr.isLandingDetected());
+    }
+}
+
+// Disarming (the landing ended) and markAirborne() (a ToF silence episode) clear the evidence.
+// disarm（着陸が終わった）と markAirborne()（ToF 出力停止のエピソード）は証拠を消す。
+TEST(land_dead_zone_evidence_is_cleared_by_disarm_and_silence)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    landingApproach(mgr, 0.039f);
+    feed(mgr, 0.0f, false, false, 0.0f, false, 2, 33);         // disarmed / disarm
+    feed(mgr, 0.0f, false, true, 0.28f, true, 30, 33);         // armed again, invalid only / 再び ARM、無効のみ
+    ASSERT_TRUE(!mgr.isLandingDetected());
+
+    landingApproach(mgr, 0.039f);
+    mgr.markAirborne();                                        // ToF silence episode / ToF 出力停止
+    feed(mgr, 0.0f, false, true, 0.28f, true, 30, 33);
+    ASSERT_TRUE(!mgr.isLandingDetected());
+}
+
+// Blind touchdown (downward ToF silent): an IMPACT followed by STILLNESS (blind_touchdown.hpp). The
+// manager feeds the detector and clears it when the blind landing ends. Detailed cases of the
+// detector itself are in test_blind_landing; here: the wiring and the latch life cycle.
+// ToF なし接地（下向き ToF 出力停止）: 「衝撃」のあとの「静止」（blind_touchdown.hpp）。マネージャが検出器に
+// 供給し、ToF なし着陸が終わるとクリアする。検出器自体の細かいケースは test_blind_landing にあり、ここでは
+// 配線とラッチの寿命を検査する。
+static sf::BlindTouchdownInput blindSample(float accel_mps2, float thrust_ratio, float vz_up)
+{
+    sf::BlindTouchdownInput input{};
+    input.dt_s                 = 0.0025f;   // 400 Hz
+    input.accel_magnitude      = accel_mps2;
+    input.thrust_ratio         = thrust_ratio;
+    input.vertical_velocity_up = vz_up;
+    return input;
+}
+
+TEST(land_blind_touchdown_impact_then_stillness)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    const float kHigh = sf::limits::kBlindTouchdownAccelMps2 + 1.0f;   // over the impact threshold / 衝撃の閾値超
+    const float kRest = 9.8f;                                          // 1 g: at rest or hovering / 静止・ホバー
+    const int   kStillSamples = static_cast<int>(sf::limits::kBlindTouchdownStillS / 0.0025f) + 80;   // + low-pass settling / ローパスの整定分
+
+    // Not a blind landing: an impact and the stillness after it are ignored. / ToF なし着陸でなければ無視。
+    for (int i = 0; i < 20; ++i) mgr.updateBlindTouchdown(blindSample(kHigh, 0.2f, 0.0f), false);
+    for (int i = 0; i < kStillSamples; ++i) mgr.updateBlindTouchdown(blindSample(kRest, 0.2f, 0.0f), false);
+    ASSERT_TRUE(!mgr.isBlindTouchdown());
+
+    // Blind landing, steady descent (1 g, -0.4 m/s, thrust at the support thrust): never latches. / 定常の降下: ラッチしない。
+    for (int i = 0; i < kStillSamples; ++i) mgr.updateBlindTouchdown(blindSample(kRest, 1.0f, -0.4f), true);
+    ASSERT_TRUE(!mgr.isBlindTouchdown());
+
+    // An impact alone: not yet (the old rule latched here). / 衝撃だけ: まだ（旧規則はここでラッチした）。
+    for (int i = 0; i < sf::limits::kBlindTouchdownSamples; ++i) mgr.updateBlindTouchdown(blindSample(kHigh, 0.5f, -0.4f), true);
+    ASSERT_TRUE(!mgr.isBlindTouchdown());
+
+    // ... the stillness after it latches, and the latch holds while the blind landing lasts. / 静止が続くとラッチし、保持する。
+    for (int i = 0; i < kStillSamples; ++i) mgr.updateBlindTouchdown(blindSample(kRest, 0.4f, 0.0f), true);
+    ASSERT_TRUE(mgr.isBlindTouchdown());
+    mgr.updateBlindTouchdown(blindSample(kHigh, 0.4f, 0.0f), true);
+    ASSERT_TRUE(mgr.isBlindTouchdown());
+
+    // The blind landing ends (state left LANDING or the ToF is alive): cleared. / 終了でクリア。
+    mgr.updateBlindTouchdown(blindSample(kRest, 0.4f, 0.0f), false);
+    ASSERT_TRUE(!mgr.isBlindTouchdown());
+}
+
+// The impact settings of the config are honoured (the param safety.blind_touchdown.accel_g reaches here):
+// with a threshold of 30 m/s^2 a reading of 25 m/s^2 is not an impact, so the stillness alone never
+// latches (with 10 G the blind landing ends by its time limit: scenario tof_silent_hover_timed).
+// config の衝撃の設定が尊重される（param safety.blind_touchdown.accel_g がここに届く）: 閾値 30 m/s^2 の
+// とき 25 m/s^2 は衝撃でなく、静止だけではラッチしない（10 G にするとToF なし着陸は時間切れで終わる:
+// シナリオ tof_silent_hover_timed）。
+// (thrust ratio 0.85: above the floor path's 0.7, so the stillness alone is judged by the impact path)
+// （推力比 0.85: 床の経路の 0.7 より上なので、静止だけは衝撃の経路が判定する）
+TEST(land_blind_touchdown_threshold_is_configurable)
+{
+    sf::TakeoffLandingConfig config;
+    config.blind_touchdown_accel_mps2 = 30.0f;
+    config.blind_touchdown_samples    = 2;
+    sf::TakeoffLandingMgr mgr;
+    mgr.init(config);
+    const int kLong = static_cast<int>((sf::limits::kBlindTouchdownStillS + 0.6f) / 0.0025f);
+    for (int i = 0; i < 10; ++i) mgr.updateBlindTouchdown(blindSample(25.0f, 0.85f, 0.0f), true);   // below the configured threshold / 設定閾値未満
+    for (int i = 0; i < kLong; ++i) mgr.updateBlindTouchdown(blindSample(9.8f, 0.85f, 0.0f), true);
+    ASSERT_TRUE(!mgr.isBlindTouchdown());                                  // no impact seen / 衝撃なし
+    mgr.updateBlindTouchdown(blindSample(31.0f, 0.85f, 0.0f), true);
+    ASSERT_TRUE(!mgr.isBlindTouchdown());                                  // 1 of 2 / 2 個中 1 個
+    mgr.updateBlindTouchdown(blindSample(31.0f, 0.85f, 0.0f), true);
+    for (int i = 0; i < kLong; ++i) mgr.updateBlindTouchdown(blindSample(9.8f, 0.85f, 0.0f), true);
+    ASSERT_TRUE(mgr.isBlindTouchdown());
+}
+
+// A live parameter reload (reloadConfig): the new impact threshold reaches the touchdown detector, and a latch
+// that is already set is NOT cleared by it (init() would clear it).
+// パラメータのライブ再読込（reloadConfig）: 新しい衝撃の閾値は接地検出器に届き、すでにラッチしていれば消えない
+// （init() なら消える）。
+TEST(land_reload_config_reaches_the_detector_and_keeps_the_latch)
+{
+    const float kHigh = sf::limits::kBlindTouchdownAccelMps2 + 1.0f;
+    const int   kStillSamples = static_cast<int>(sf::limits::kBlindTouchdownStillS / 0.0025f) + 80;
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    for (int i = 0; i < sf::limits::kBlindTouchdownSamples; ++i) mgr.updateBlindTouchdown(blindSample(kHigh, 0.4f, 0.0f), true);
+    for (int i = 0; i < kStillSamples; ++i) mgr.updateBlindTouchdown(blindSample(9.8f, 0.85f, 0.0f), true);
+    ASSERT_TRUE(mgr.isBlindTouchdown());                       // latched with the default threshold / 既定の閾値でラッチ
+
+    sf::TakeoffLandingConfig config;
+    config.blind_touchdown_accel_mps2 = 30.0f;                 // the pilot raised safety.blind_touchdown.accel_g / 閾値を上げた
+    mgr.reloadConfig(config);
+    ASSERT_TRUE(mgr.isBlindTouchdown());                       // the latch survives the reload / ラッチは再読込で消えない
+
+    mgr.updateBlindTouchdown(blindSample(9.8f, 0.85f, 0.0f), false);   // the descent ended: cleared / 降下が終わる: クリア
+    ASSERT_TRUE(!mgr.isBlindTouchdown());
+    for (int i = 0; i < 10; ++i) mgr.updateBlindTouchdown(blindSample(kHigh, 0.85f, 0.0f), true);   // 21.6 m/s^2 < 30: no impact now / 衝撃でない
+    for (int i = 0; i < kStillSamples; ++i) mgr.updateBlindTouchdown(blindSample(9.8f, 0.85f, 0.0f), true);
+    ASSERT_TRUE(!mgr.isBlindTouchdown());                      // the NEW threshold is in force / 新しい閾値が効いている
+}
+
+// The floor holding the craft up (second path): a thrust below 0.7 of the support thrust with |accel| at 1 g for 0.5 s latches without an
+// impact; a thrust ratio at the ceiling of the descent (0.95) does not.
+// 床が機体を支えている（2 つ目の経路）: 支持推力の 0.7 倍未満の推力で |加速度| が 1 g の状態が 0.5 s 続くと、衝撃なしでラッチする。
+// 降下の上限の推力比（0.95）ではラッチしない。
+TEST(land_blind_touchdown_floor_holds_the_craft_up_without_an_impact)
+{
+    const float kRest = sf::math::kGravity;
+    const int kHalfSecond = static_cast<int>((sf::limits::kBlindFloorS + 0.15f) / 0.0025f);
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    for (int i = 0; i < kHalfSecond; ++i) mgr.updateBlindTouchdown(blindSample(kRest, sf::limits::kNoTofThrustCapRatio, -0.4f), true);
+    ASSERT_TRUE(!mgr.isBlindTouchdown());
+    for (int i = 0; i < kHalfSecond; ++i) mgr.updateBlindTouchdown(blindSample(kRest, 0.5f, 0.0f), true);
+    ASSERT_TRUE(mgr.isBlindTouchdown());
+}
+
+// D1 (2nd independent review): a ToF-silence episode while ARMED must not leave the raw ground flag
+// frozen at "ground". markAirborne() flips it to the safe side, and it returns to "ground" ONLY
+// through the existing air->ground debounce (consecutive VALID ground readings): neither an invalid
+// first sample after the silence nor a few valid ones fewer than the debounce count may restore it.
+// D1（2 回目の独立レビュー）: ARM 中の ToF 出力停止のエピソードで、生の接地フラグを「接地」のまま
+// 固定されたままにしてはならない。markAirborne() は安全側へ倒し、「接地」へ戻るのは既存の空中→接地デバウンス
+// （有効な地上読みの連続）だけ: 出力停止後の最初の無効サンプルでも、デバウンス回数に満たない有効
+// サンプルでも戻ってはならない。
+TEST(land_mark_airborne_returns_to_ground_only_by_the_debounce)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    ASSERT_TRUE(mgr.isOnGround());                            // boot: on the ground (frozen value) / 起動: 接地（固定されたままの値）
+    mgr.markAirborne();
+    ASSERT_TRUE(!mgr.isOnGround());
+    feed(mgr, 2.0f, false, true, 0.0f, false, 20, 30);        // invalid samples (out of range): no change / 無効サンプル: 変化なし
+    ASSERT_TRUE(!mgr.isOnGround());
+    feed(mgr, 0.03f, true, true, 0.0f, false, 1, 30);         // ONE valid ground reading: not enough / 有効な地上読み 1 個: 足りない
+    ASSERT_TRUE(!mgr.isOnGround());
+    feed(mgr, 0.03f, true, true, 0.0f, false, 1, 30);         // flip_confirm_samples (2) reached / 2 個で成立
+    ASSERT_TRUE(mgr.isOnGround());
+}
+
+/// The [TakeoffLanding] group (ground contact, stalled descent, blind touchdown, markAirborne).
+/// [TakeoffLanding] のグループ（接地、降下停滞、ToF なし接地、markAirborne）。
+static void runTakeoffLandingTests()
+{
+    printf("\n[TakeoffLanding]\n");
+    run_land_firm_ground();
+    run_land_stalled_descent_ground_effect();
+    run_land_low_hover_not_landing();
+    run_land_disarm_clears();
+    run_land_dead_zone_touchdown_after_a_valid_reading_near_the_floor();
+    run_land_dead_zone_flicker_restarts_the_count();
+    run_land_dead_zone_does_not_fire_without_the_evidence();
+    run_land_dead_zone_evidence_is_cleared_by_disarm_and_silence();
+    run_land_blind_touchdown_impact_then_stillness();
+    run_land_blind_touchdown_threshold_is_configurable();
+    run_land_reload_config_reaches_the_detector_and_keeps_the_latch();
+    run_land_blind_touchdown_floor_holds_the_craft_up_without_an_impact();
+    run_land_mark_airborne_returns_to_ground_only_by_the_debounce();
+}
+
 int main()
 {
     printf("=== vehicle Unit Tests ===\n\n");
@@ -1163,16 +1494,13 @@ int main()
     run_wire_ctrl_output400_entry();
     run_wire_flight_phase_and_flags_entries();
     run_wire_quantize_flip_phi_saturation();
+    run_wire_tof_silence_entry();
     run_wire_unified_worst_case_fits();
 
     printf("\n[Tello state]\n");
     run_tello_state_all_keys_present();
 
-    printf("\n[TakeoffLanding]\n");
-    run_land_firm_ground();
-    run_land_stalled_descent_ground_effect();
-    run_land_low_hover_not_landing();
-    run_land_disarm_clears();
+    runTakeoffLandingTests();
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

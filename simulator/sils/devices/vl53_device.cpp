@@ -88,6 +88,28 @@ constexpr int      AMBIENT_BIN_STRIP = 4;
 // 1630 は 2 bin 分割がバッファ内に収まる値(プローブで 1.63 m まで valid・誤差 17 mm 以内)。
 constexpr float    MAX_MM            = 1630.0f;
 
+// Close-range dead zone (2026-11-09). A real sensor on the floor reports NO target: the three real flight logs
+// (front_tof_poshold_yaw360, front_tof_poshold_yaw4x90, flip_test2) read status 254 with distance 0 in every
+// ground state (IDLE_GROUND, ARMED_GROUND) and, after the TAKEOFF state is entered, stay invalid for 186 ms and
+// 344 ms (the motors spool up while the craft is on the floor) until the FIRST valid sample at a distance of
+// 0.031-0.032 m (the smallest valid distance of all the real logs is 0.031 m; no invalid sample carries a distance).
+// Below that distance no return pulse can be ranged. Modelled the same way as the out-of-range case: a true
+// distance below MIN_MM emits an ambient-ONLY histogram (no peak), so the driver reports "no target" (invalid) on
+// the floor and the first valid sample comes after the craft has lifted off. The SILS plant rests with the sensor
+// 21 mm above the floor (Plant::tof(); the decoded reading is 35 mm), i.e. inside the dead zone as the real craft
+// is (its resting distance is below 31 mm), and leaves it after rising 10 mm. The scenario command `tof_deadzone 0`
+// turns the model off (the behaviour before 2026-11-09).
+// 近距離の不感帯（2026-11-09）。実機のセンサは床の上で「目標なし」を返す: 実機ログ 3 本（front_tof_poshold_yaw360、
+// front_tof_poshold_yaw4x90、flip_test2）は、全ての地上の状態（IDLE_GROUND、ARMED_GROUND）で status 254・距離 0 を返し、
+// TAKEOFF 状態に入った後も 186 ms と 344 ms（機体が床にいる間にモータが立ち上がる）無効のまま、距離 0.031〜0.032 m の
+// 「最初の」有効サンプルに至る（実機ログ全体で有効な距離の最小は 0.031 m。無効サンプルは距離を持たない）。それより
+// 近いと反射パルスは測距できない。範囲外の場合と同じ扱い: 真の距離が MIN_MM 未満なら ambient のみの histogram
+// （ピーク無し）を出し、ドライバは床の上で「目標なし」（無効）を報告し、最初の有効サンプルは機体が離床した後に来る。
+// SILS の機体モデルはセンサを床の 21 mm 上に置いて静止する（Plant::tof()。復号した読みは 35 mm）。つまり実機と同じく
+// 不感帯の内側にあり（実機の静止距離は 31 mm 未満）、10 mm 上がると不感帯を出る。シナリオのコマンド `tof_deadzone 0`
+// でモデルを切れる（2026-11-09 より前の挙動）。
+constexpr float    MIN_MM            = 31.0f;
+
 // Dual VCSEL-period wrap resolution (the key to DYNAMIC validity). The driver runs an
 // interleaved A/B ranging: it toggles ll_state.rd_timing_status every frame
 // (vl53lx_core.c:181) and decodes the histogram with vcsel_period_a (config A) or
@@ -129,6 +151,9 @@ struct State {
     uint8_t  stream     = 0xFF;       // stream_count; first MODE_START write wraps it to 0
     uint32_t frame      = 0xFFFFFFFF; // free-running frame index (first MODE_START -> 0); NON-wrapping
     float    pushed_mm  = -1.0f;      // board-pushed Plant distance [mm] (-1 = none)
+    bool     silent     = false;      // fault injection: never "data ready" / 故障注入: 常に未準備
+    bool     invalid    = false;      // fault injection: every sample is "no target" (invalid) / 故障注入: 全サンプルが「目標なし」（無効）
+    bool     deadzone   = true;       // close-range dead zone modelled (MIN_MM) / 近距離の不感帯を模擬する（MIN_MM）
 };
 State g_st;
 
@@ -160,6 +185,29 @@ void pack_bin(uint8_t* d, uint32_t v)
     d[2] = (uint8_t)(v & 0xFF);
 }
 
+// Is there NO return pulse for this true distance [mm]? Beyond the sensor's usable range, below its close-range
+// dead zone, or under the `tof_invalid` fault injection.
+// この真の距離 [mm] で反射パルスが「無い」か。センサの使える範囲の外、近距離の不感帯の内側、または故障注入
+// `tof_invalid` の間。
+bool has_no_return_pulse(float dist_mm)
+{
+    // Beyond the sensor's usable histogram range there is NO return pulse: a real
+    // VL53L3CX reports "no target" (range_status != 0 / NumberOfObjectsFound 0), it
+    // does NOT saturate to a constant distance reported as VALID. So out of range we
+    // emit an ambient-ONLY histogram (no peak) — gen4 finds no object and the driver
+    // flags the reading invalid, instead of feeding a bogus constant the ESKF would
+    // trust as a valid altitude (which corrupts the vertical estimate — see
+    // simulator/sils/docs/hover_resume.md / project_eskf_vertical_divergence).
+    // 真の histogram レンジ超ではピーク無し: 実センサは no-target(status!=0)を返し、飽和定数を
+    // valid と偽らない。ゆえにレンジ超では ambient のみ(ピーク無し)を出し gen4 に no-object 判定
+    // させる(ESKF が偽の一定高度を信頼して鉛直推定が腐敗するのを防ぐ)。
+    // Fault injection (scenario `tof_invalid`): behave as if nothing could be ranged (a floor the
+    // sensor cannot see), whatever the Plant distance. Samples keep arriving, all invalid.
+    // 故障注入（シナリオ `tof_invalid`）: Plant の距離に関わらず、何も測れない（センサが見えない床）かの
+    // ように振る舞う。サンプルは届き続け、全て無効。
+    return (dist_mm > MAX_MM) || (g_st.deadzone && dist_mm < MIN_MM) || g_st.invalid;
+}
+
 // Build the 83-byte histogram block at 0x0088 (offset = absreg - 0x0088) from the
 // target distance: an ambient floor + a sub-bin-resolved pulse whose gen4-decoded
 // centroid phase encodes the range. A TWO-BIN split (b0 / b0+1, weighted by the
@@ -178,17 +226,7 @@ void fill_histogram(uint8_t* d, size_t n)
     float dist_mm = target_mm();
     if (dist_mm < 0.0f) dist_mm = 0.0f;
 
-    // Beyond the sensor's usable histogram range there is NO return pulse: a real
-    // VL53L3CX reports "no target" (range_status != 0 / NumberOfObjectsFound 0), it
-    // does NOT saturate to a constant distance reported as VALID. So out of range we
-    // emit an ambient-ONLY histogram (no peak) — gen4 finds no object and the driver
-    // flags the reading invalid, instead of feeding a bogus constant the ESKF would
-    // trust as a valid altitude (which corrupts the vertical estimate — see
-    // simulator/sils/docs/hover_resume.md / project_eskf_vertical_divergence).
-    // 真の histogram レンジ超ではピーク無し: 実センサは no-target(status!=0)を返し、飽和定数を
-    // valid と偽らない。ゆえにレンジ超では ambient のみ(ピーク無し)を出し gen4 に no-object 判定
-    // させる(ESKF が偽の一定高度を信頼して鉛直推定が腐敗するのを防ぐ)。
-    const bool out_of_range = (dist_mm > MAX_MM);
+    const bool out_of_range = has_no_return_pulse(dist_mm);   // no peak: invalid / ピーク無し: 無効
 
     // Which interleaved config will the driver decode THIS frame with? rd_timing_status
     // starts 0 (config A) for the first two frames, then toggles EVERY frame, so the
@@ -267,6 +305,21 @@ void set_distance_mm(float mm)
     g_st.pushed_mm = mm;
 }
 
+void set_silent(bool silent)
+{
+    g_st.silent = silent;
+}
+
+void set_invalid(bool invalid)
+{
+    g_st.invalid = invalid;
+}
+
+void set_deadzone(bool enabled)
+{
+    g_st.deadzone = enabled;
+}
+
 // One VL53 I2C transaction. 16-bit BE register pointer in wbuf[0..1].
 // VL53 の1 I2Cトランザクション。16bit BE レジスタポインタは wbuf[0..1]。
 int xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
@@ -298,7 +351,9 @@ int xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
     if (g_st.ptr == REG_SYS_STATUS) {
         rbuf[0] = 0x01;                                       // boot complete (bit0=1)
     } else if (g_st.ptr == REG_GPIO_STAT) {
-        rbuf[0] = 0x00;                                       // data ready (ACTIVE_LOW: bit0=0)
+        // data ready (ACTIVE_LOW: bit0=0); bit0=1 = not ready, held forever while silent
+        // データ準備完了（ACTIVE_LOW: bit0=0）。bit0=1 は未準備で、出力停止中はずっとこれを返す。
+        rbuf[0] = g_st.silent ? 0x01 : 0x00;
     } else if (g_st.ptr == REG_OSC_CAL && rlen >= 2) {
         // RESULT__OSC_CALIBRATE_VAL (BE word) — MUST be non-zero or the driver's
         // set_inter_measurement_period_ms returns DIVISION_BY_ZERO during init. The

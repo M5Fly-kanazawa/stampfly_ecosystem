@@ -1,0 +1,38 @@
+# tof_silent_est_high.expect — downward ToF silent while climbing, hover-thrust estimate 19 % too high
+# ホバー推力の見積もりが 19 % 高いまま、上昇中に下向き ToF が出力停止
+#
+# Chain: estimate set 19 % above the true hover from boot (learning off) → auto-takeoff + stick climb →
+# ToF output stops at ~1.75 m while rising → FLYING → LANDING → the blind velocity loop starts from the
+# accelerometer-calibrated thrust and lands the craft by the touchdown detector (never by the time
+# limit) → ARM is refused.
+# 連鎖: 起動時から見積もりを真のホバーより 19 % 高く設定（学習なし）→ 自動離陸＋スティック上昇 →
+# 上昇中の約 1.75 m で ToF 出力停止 → FLYING → LANDING → 加速度計で較正した推力から始まる ToF なしの推力
+# プロファイルで降り、加速度計による接地で終わる（時間切れにはならない）→ ARM は拒否される。
+exit 0
+log_contains any "Takeoff complete → FLYING/ALT_HOLD"
+log_contains any "Downward ToF silent (>= 300 ms without a sample) in FLYING/ALT_HOLD → LANDING"
+# The start thrust is the calibrated one (0.33-0.35 N), not 0.95 x the 0.406 N estimate = 0.386 N.
+# 開始推力は較正した値（0.33〜0.35 N）で、0.95 × 見積もり 0.406 N = 0.386 N ではない。
+log_contains any "Blind landing: ToF silent, velocity loop around 0.3"
+log_absent any "velocity loop around 0.38"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_contains any "ARM rejected: downward ToF is silent"
+log_absent any "touchdown by time"
+order "in FLYING/ALT_HOLD → LANDING" "Blind landing: ToF silent"
+order "Blind landing: ToF silent" "Transition: LANDING → IDLE_GROUND"
+order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silent"
+# Peak height after the silence at 1.75 m (rising 0.5 m/s): measured 1.96 m (noise off; 2.15 m with the
+# open-loop ramp). Bound 2.2 m.
+# 1.75 m（0.5 m/s で上昇中）で出力停止した後の最大高度: 実測 1.96 m（ノイズなし。開ループのランプでは 2.15 m）。
+# 上限 2.2 m。
+metric alt_max < 2.2 in 15.6 25.0
+# Touchdown speed: measured 0.52 m/s (truth; 1.93 m/s with the open-loop ramp). Bound 0.7 m/s.
+# 接地速度: 実測 0.52 m/s（真値。開ループのランプでは 1.93 m/s）。上限 0.7 m/s。
+# 2026-11-09 (5th review): bound 0.7 -> 1.2 m/s (measured 0.43 -> 0.96 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
+# (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g) instead of by the PI.
+# 2026-11-09（5 回目の見直し）: 上限 0.7 → 1.2 m/s（実測 0.43 → 0.96 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
+# 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
+metric descent_speed_max < 1.2 in 15.6 25.0
+# On the floor and stopped after the blind descent.
+# ToF なしの降下の後は床の上で停止。
+metric alt_max < 0.05 in 22.0 28.0

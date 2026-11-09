@@ -71,6 +71,7 @@ private:
     void stopStream(const char* reason);
     void emitUnified();
     void appendEntries(datastream::UnifiedPacketBuilder& builder);
+    void appendToFSilenceEntry(datastream::UnifiedPacketBuilder& builder);   // 50Hz ToF-silence facts (0x4E) / 50Hz ToF 出力停止の事実
     void sendStatus();
     void sendDatagram(const uint8_t* data, size_t length);
     void countDrop(bool added);   // entry-overflow accounting / エントリ溢れの計数

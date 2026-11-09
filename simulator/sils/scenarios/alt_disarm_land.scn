@@ -14,9 +14,17 @@
 # 切ってはならない（落下する）。代わりに自動着陸（緩降下 ~0.3 m/s）を起動し、接地で本当の
 # DISARM（LANDING→IDLE_GROUND）。ACRO/STABILIZE・地上は即停止のまま、着陸中の再 DISARM は緊急カット。
 #
+# The ToF close-range dead zone (the default of a run since 2026-11-09) is turned OFF here (event 0): this scenario tests the
+# ROUTING of a pilot DISARM to the auto-landing, and with the sensor invalid on the floor the soft touchdown is not
+# detected (see landing_dead_zone.scn, the same run with the dead zone on: an open issue).
+# ToF の近距離の不感帯（2026-11-09 から走行の既定）はここでは切る（イベント 0）: 本シナリオが検証するのは、パイロットの
+# DISARM が自動着陸へ振り分けられること。床の上でセンサが無効だと柔らかい接地は検出されない
+# （不感帯を入れた同じ走行は landing_dead_zone.scn。未解決の課題）。
+#
 # Run: sf sils scenario simulator/sils/scenarios/alt_disarm_land.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    tof_deadzone 0                                                             # 0: dead zone model OFF (see above)
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
    +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
    +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (press) — props stop, spool, AUTO-takeoff fires

@@ -33,6 +33,16 @@
  *   <t> wind    <fx> <fy> <fz> [dur_ms]            external force NED [N]
  *   <t> fault   <motor 0-3> <gain 0-1>             degrade one motor's thrust health
  *   <t> bias    <ax> <ay> <az> <gx> <gy> <gz>      deterministic raw IMU bias (FRD)
+ *   <t> tof_silent <0|1>                           1 = stop the downward ToF's sample output
+ *                                                  (fault injection: no new sample, no bus error),
+ *                                                  0 = resume
+ *   <t> tof_invalid <0|1>                          1 = every downward-ToF sample is invalid ("no
+ *                                                  target"; samples keep arriving on time), 0 = restore
+ *   <t> tof_deadzone <0|1>                         0 = turn the downward ToF's close-range dead zone model off
+ *                                                  (the default of every run is 1: below 31 mm the floor reads "no target")
+ *   <t> param   <name> <value>                     set one firmware parameter mid-run (type-correct,
+ *                                                  range-validated; the change callback fires, so a
+ *                                                  controller parameter is reloaded)
  *   <t> api     "<command line>"                  Tello-style API command into the
  *                                                  firmware ApiTask parser
  *   <t> handle  <carry_alt> <px> <py> <lift_ms> <carry_ms> <place_ms>

@@ -25,6 +25,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import udp_capture  # noqa: E402
 from test_udp_capture_duty400 import build_unified  # noqa: E402
@@ -54,6 +56,14 @@ def _flags_entry(ts, buttons, flags, block_reason, arm_block):
     payload = struct.pack('<I4B', ts, buttons, flags, block_reason, arm_block)
     assert len(payload) == 8
     return bytes([udp_capture.PKT_FLIGHT_FLAGS, 8]) + payload
+
+
+def _tof_silence_entry(ts, velocity_up, rise_m, thrust_ratio, tof_flags, reason, mode_block):
+    """[id][size][payload] for kPktToFSilence (0x4E, 19 bytes)."""
+    payload = struct.pack('<I3f3B', ts, velocity_up, rise_m, thrust_ratio,
+                          tof_flags, reason, mode_block)
+    assert len(payload) == 19
+    return bytes([udp_capture.PKT_TOF_SILENCE, 19]) + payload
 
 
 def test_flight_phase_entry_decodes_8_samples_paired_with_imu_timestamps():
@@ -137,3 +147,53 @@ def test_old_firmware_packet_has_no_new_streams():
         log = sflog.load(bundle_path)
         assert 'flight_phase' not in log.streams
         assert 'flight_flags' not in log.streams
+
+
+def test_tof_silence_entry_decodes_values_and_flag_bits():
+    flags = udp_capture.TOF_FLAG_SILENT | udp_capture.TOF_FLAG_INVALID_STUCK
+    entry = _tof_silence_entry(777000, -0.5, 0.25, 0.9375, flags, 2, 1)
+    control_entry = bytes([udp_capture.PKT_CONTROL, 20]) + \
+        struct.pack('<I4f', 42, 0.5, 0.0, 0.0, 0.0)
+    pkt, _ = build_unified(1, entries=entry + control_entry, entry_count=2)
+
+    results = udp_capture.parse_packet(pkt)
+    got = [s for pid, s in results if pid == udp_capture.PKT_TOF_SILENCE]
+    assert len(got) == 1
+    row = got[0]
+    assert row['timestamp_us'] == 777000
+    assert (row['vertical_velocity_up'], row['vertical_rise_m'],
+            row['descent_thrust_ratio']) == (-0.5, 0.25, 0.9375)
+    assert (row['tof_silent'], row['tof_altitude_reliable'],
+            row['tof_invalid_stuck'], row['tof_status_stale']) == (1, 0, 1, 0)
+    assert (row['tof_reason'], row['mode_block']) == (2, 1)
+    # the entry after it is not corrupted / 後ろのエントリは壊れない
+    ctrl = next(s for pid, s in results if pid == udp_capture.PKT_CONTROL)
+    assert ctrl['timestamp_us'] == 42
+
+
+def test_save_bundle_writes_tof_silence_stream_and_old_firmware_has_none():
+    entry = _tof_silence_entry(3_000_000, 0.1, 0.0, 0.0, udp_capture.TOF_FLAG_ALTITUDE_RELIABLE, 0, 0)
+    pkt, _ = build_unified(1, entries=entry, entry_count=1)
+    cap = udp_capture.UDPTelemetryCapture()
+    cap._process_datagram(pkt)
+    with tempfile.TemporaryDirectory() as td:
+        bundle_path = Path(td) / "test.sflog.zip"
+        cap.start_time, cap.end_time = 0, 1.0
+        cap.save_bundle(str(bundle_path))
+        log = sflog.load(bundle_path)
+        silence = log.streams['tof_silence']
+        assert len(silence) == 1
+        assert silence.iloc[0]['tof_altitude_reliable'] == 1
+        assert silence.iloc[0]['vertical_velocity_up'] == pytest.approx(0.1, abs=1e-6)
+        # the structural check accepts the new optional stream / 構造検査は新しい任意ストリームを受け付ける
+        assert not [f for f in sflog.check_bundle(log) if f.level == 'error' and 'tof_silence' in str(f)]
+
+    old_pkt, _ = build_unified(1, entries=b'', entry_count=0)
+    cap = udp_capture.UDPTelemetryCapture()
+    cap._process_datagram(old_pkt)
+    with tempfile.TemporaryDirectory() as td:
+        bundle_path = Path(td) / "old.sflog.zip"
+        cap.start_time, cap.end_time = 0, 1.0
+        cap.save_bundle(str(bundle_path))
+        assert 'tof_silence' not in sflog.load(bundle_path).streams
+

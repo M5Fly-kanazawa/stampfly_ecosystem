@@ -1,0 +1,30 @@
+# tof_silent_armed_ground.scn — downward ToF goes silent right BEFORE ARM: the craft never launches
+#                               ARM の直前に下向き ToF が出力停止する: 機体は離陸しない
+#
+# The pre-arm gate judges silence only after 0.3 s without a sample, so an ARM pressed inside
+# that 0.3 s is still accepted. The state machine must then catch it in ARMED_GROUND (during
+# the 0.3 s spool before the auto-takeoff would start) and DISARM, so the craft never
+# climbs on an altitude nobody can see. Spec under test:
+#  1. ARM is accepted (the silence is only 0.2 s old).
+#  2. ARMED_GROUND -> IDLE_GROUND (DISARM) once the silence reaches 0.3 s; no TAKEOFF.
+#  3. The motors never spin up for a climb (the craft stays on the floor).
+#
+# 判定は、サンプルが 0.3 s 無いときに初めて出力停止とする。したがってその 0.3 s の内に押した ARM
+# は受理される。状態機械は ARMED_GROUND で（自動離陸が始まる前の 0.3 s のスプール中に）それを
+# 捕まえて DISARM しなければならず、誰も高度を見られないまま上昇しないようにする。
+# 検証する仕様:
+#  1. ARM は受理される（出力停止はまだ 0.2 s）。
+#  2. 出力停止が 0.3 s に達したら ARMED_GROUND → IDLE_GROUND（DISARM）。TAKEOFF には入らない。
+#  3. 上昇のためにモータが回り始めない（機体は床の上のまま）。
+#
+# Timeline (s): ToF stops 7.3 → ARM accepted 7.5 → silence reaches 0.3 s at 7.6 → DISARM ~7.6.
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_armed_ground.scn --target vehicle --duration 12000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1300      50        1              # B: ALT switch ON while DISARMED (to 7.3 s)
+   +    tof_silent 1                                                                   # C: 7.3 s — ToF output stops
+   +    rc         2048  2048   2048    2048  0     200       50        1              # D: 0.2 s of silence, still not judged silent
+   +    rc         2048  2048   2048    2048  1     1500      50        1              # E: ARM at 7.5 s → accepted; silence reaches 0.3 s → DISARM
+   +    rc         2048  2048   2048    2048  0     500       50        1              # F: release the ARM button
+   +    rc         2048  2048   2048    2048  0     600       50                       # G: settle

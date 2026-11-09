@@ -1,0 +1,33 @@
+# tof_silent_touchdown_detect.scn — the blind-landing touchdown detector ends the landing (impact, then stillness)
+#                                   ToF なしの着陸の接地検出器が着陸を終わらせる（衝撃のあとの静止）
+#
+# tof_silent_hover.scn (0.5 m hover, ALT_HOLD, ToF silent) with the 3 G impact cut disabled
+# (`--param safety.impact.accel_g=10`): without it the SILS contact (6-8 G at 0.4-0.5 m/s) always ends the
+# landing by the IMPACT emergency DISARM first, and the detector is never reached. Spec under test:
+#  1. After the impact (> 2 g, 2 samples) the detector waits for the craft to be still (not accelerating,
+#     commanded thrust below the support thrust, vertical velocity ~0) for 0.25 s, then latches:
+#     "Touchdown detected (impact, then still ..." -> LANDING -> IDLE_GROUND ~0.4 s after the contact.
+#  2. The landing does not end by the time limit, there is no IMPACT cut, and no touchdown is declared
+#     in the air (the motors stop on the floor: truth altitude below 0.05 m afterwards).
+#
+# tof_silent_hover.scn（0.5 m のホバー、ALT_HOLD、ToF 出力停止）で 3 G の衝撃カットを無効にする
+# （`--param safety.impact.accel_g=10`）: 無効にしないと SILS の接触（0.4〜0.5 m/s で 6〜8 G）が必ず先に IMPACT の
+# 非常 DISARM で着陸を終わらせ、検出器には届かない。検証する仕様:
+#  1. 衝撃（> 2 g、2 サンプル）の後、機体が 0.25 s 静止（加速していない・指令推力が支持推力未満・鉛直速度が
+#     ほぼ 0）するのを待ってラッチする: "Touchdown detected (impact, then still ..." → LANDING → IDLE_GROUND が
+#     接触の約 0.4 s 後。
+#  2. 着陸は時間切れで終わらず、IMPACT のカットも無く、空中で接地を宣言しない（モータは床の上で止まる:
+#     以後の真値の高度は 0.05 m 未満）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_touchdown_detect.scn --target vehicle --duration 25000000 --param safety.impact.accel_g=10
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (7.5 s) — spool, then the auto-takeoff climb
+   +    rc         2048  2048   2048    2048  1     5500      50        1              # D: stick centre — climb to 0.5 m and hold (to 14.0 s)
+   +    tof_silent 1                                                                   # E: 14.0 s — ToF output stops while hovering
+   +    rc         2048  2048   2048    2048  1     7000      50        1              # F: LANDING by silence, then blind landing by time
+   +    rc         2048  2048   2048    2048  0     200       50        1              # G: release the ARM button
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # H: press again (21.2 s) — landed, ToF still silent → ARM REFUSED
+   +    rc         2048  2048   2048    2048  0     600       50                       # I: settle

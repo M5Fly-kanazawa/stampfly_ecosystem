@@ -1,0 +1,13 @@
+# tof_silent_armed_ground.expect — ToF goes silent just before ARM: the craft never launches
+# ARM の直前に ToF が出力停止: 機体は離陸しない
+#
+# ARM pressed 0.2 s into the silence is accepted (not yet judged silent); when the silence
+# reaches 0.3 s the state machine DISARMs from ARMED_GROUND, before the auto-takeoff can start.
+# 出力停止 0.2 s 時点で押した ARM は受理される（まだ出力停止と判定されない）。出力停止が 0.3 s に達した
+# 時点で、自動離陸が始まる前に状態機械が ARMED_GROUND から DISARM する。
+exit 0
+log_contains any "ARM accepted"
+log_contains any "Downward ToF silent while armed on the ground → DISARM"
+log_absent any "Transition: ARMED_GROUND → TAKEOFF"
+order "ARM accepted" "Downward ToF silent while armed on the ground"
+metric alt_max < 0.05 in 7.0 12.0

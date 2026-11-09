@@ -1,0 +1,45 @@
+# tof_silent_est_high.scn — downward ToF silent while climbing, with the hover-thrust estimate 19 % TOO HIGH
+#                           ホバー推力の見積もりが 19 % 高いまま、上昇中に下向き ToF が出力停止する
+#
+# The blind landing used to start from min(low-passed thrust, 0.95 x the hover-thrust estimate): an
+# estimate too high, together with a high thrust history (a climb), left the thrust floor above the true
+# hover and the craft kept rising until the time limit cut the motors in the air. The start thrust is now
+# the commanded thrust calibrated by the accelerometer (thrust / mass), which does not depend on the
+# estimate, and the thrust keeps falling after 3 s (blind_landing.hpp). Here the estimate is set 20 %
+# above the true hover from boot (`param` events at t = 0: hover.thrust_corr 1.12, the default = 0.406 N against the
+# true 0.34 N, learning off so it stays wrong), then as tof_silent_alt_climb.scn: auto-takeoff, stick
+# climb, ToF output stops at ~1.75 m while rising. Spec under test:
+#  1. The ramp starts from the calibrated thrust (0.33-0.35 N), NOT from 0.95 x the estimate (0.39 N):
+#     the log line "velocity loop around 0.3...".
+#  2. The craft lands by the accelerometer touchdown, never by the time limit ("touchdown by time"
+#     absent), with a bounded peak height and touchdown speed (the numbers are the measured worst case).
+#  3. ARM is refused while the sensor is silent.
+#
+# ホバー推力の見積もりが高すぎる（＋上昇で推力の履歴が高い）と、旧設計の開始推力 min(ろ波した推力,
+# 0.95 × 見積もり) では推力の床が真のホバーより上に残り、時間切れで空中でモータを止めるまで上昇し続けた。
+# 開始推力は、加速度計（推力 ÷ 質量）で較正した指令推力になり、見積もりに依らない。さらに 3 s 後は推力が
+# 下がり続ける（blind_landing.hpp）。ここでは見積もりを起動時から真のホバー（0.34 N）より 19 % 高く設定し
+# （t = 0 の `param` 事象: hover.thrust_corr 1.12（既定値）= 0.406 N、真値は 0.34 N。学習は切って誤ったまま）、以後は
+# tof_silent_alt_climb.scn と同じ: 自動離陸、スティック上昇、上昇中の約 1.75 m で ToF 出力停止。検証する仕様:
+#  1. ランプは較正した推力（0.33〜0.35 N）から始まり、0.95 × 見積もり（0.39 N）からではない
+#     （ログ行 "velocity loop around 0.3..."）。
+#  2. 加速度計による接地で着陸し、時間切れには決してならない（"touchdown by time" が無い）。最大高度と
+#     接地速度は有界（数値は実測の最悪値）。
+#  3. センサが出力停止している間、ARM は拒否される。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_est_high.scn --target vehicle --duration 28000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    param      hover.thrust.learn 0                                                # P1: stop the hover-thrust learning, so the wrong estimate stays wrong
+   +    param      hover.thrust_corr 1.12                                              # P2: estimate 1.12 x mg = 0.406 N against the true hover 0.34 N (+19 %; the loop settles on 0.34)
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (7.5 s)
+   +    rc         2048  2048   2048    2048  1     4500      50        1              # D: auto-takeoff, hold 0.5 m (to 13.0 s)
+   +    rc         4095  2048   2048    2048  1     2600      50        1              # E: stick up 2.6 s — climbing past 1.5 m (13.0-15.6 s)
+   +    tof_silent 1                                                                   # F: 15.6 s — ToF output stops while still rising (1.55 m, 0.57 m/s)
+   +    rc         4095  2048   2048    2048  1     400       50        1              # G: the pilot keeps the stick up
+   +    rc         2048  2048   2048    2048  1     9000      50        1              # H: LANDING by silence (~15.9 s), blind descent, touchdown ~19.4 s (to 25.0 s)
+   +    rc         2048  2048   2048    2048  0     200       50        1              # I: release the ARM button
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # J: press again (25.2 s) -> ARM REFUSED
+   +    rc         2048  2048   2048    2048  0     600       50        1              # K: settle

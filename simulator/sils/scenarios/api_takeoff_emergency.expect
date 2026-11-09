@@ -1,0 +1,18 @@
+exit 0
+log_contains any "cmd: takeoff"
+log_contains any "Auto-takeoff engaged"
+log_contains any "cmd: emergency (during a blocking command)"
+log_contains any "reply: error interrupted by emergency"
+log_absent any "reply: error takeoff timeout"
+log_absent any "Transition: TAKEOFF → FLYING"
+order "Auto-takeoff engaged" "cmd: emergency"
+order "cmd: emergency" "reply: error interrupted by emergency"
+metric duty_max < 0.01 in 7.5 13.0
+# R2: the parked lines are cancelled (not replayed), the rc line is dropped, no second takeoff
+log_contains any "deferred line cancelled: takeoff"
+log_contains any "deferred line cancelled: height?"
+log_contains any "reply: error cancelled by emergency"
+log_absent any "cmd: height?"
+log_absent any "cmd: rc "
+log_absent any "reply: error not on ground"
+order "cmd: emergency" "reply: error cancelled by emergency"

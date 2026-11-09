@@ -42,6 +42,13 @@ static constexpr LedColor kMagenta     = {255, 0, 255};
 static constexpr LedColor kOrange      = {255, 128, 0};   // ALT_HOLD mode / 高度保持
 static constexpr LedColor kYellowGreen = {128, 255, 0};   // STABILIZE mode / 姿勢安定
 static constexpr LedColor kRed         = {255, 0, 0};     // autotune failed / autotune 失敗
+// Yellow: the one hue no flight state, mode or alert uses (white/green/cyan/blue/magenta/orange/
+// yellow-green/red/flip-orange are taken), so the ToF-silent warning is told apart by COLOUR, not only by
+// its blink speed (orange fast blink looked like ALT_HOLD's orange and LANDING's orange).
+// 黄: 飛行状態・モード・警告のどれも使っていない唯一の色相（白・緑・シアン・青・マゼンタ・オレンジ・
+// 黄緑・赤・宙返りの橙は使用済み）。ToF 出力停止の警告を点滅の速さだけでなく「色」で区別する
+// （オレンジ高速点滅は ALT_HOLD のオレンジや LANDING のオレンジと見分けにくかった）。
+static constexpr LedColor kYellow      = {255, 255, 0};   // downward ToF silent / 下向き ToF 出力停止
 // FLIP state colour — matches the original factory firmware's flip indicator
 // (0xFF9933), deliberately distinct from LANDING's kOrange (0xFF8000) so the two
 // sequence states are not confused at a glance (flip-maneuver-plan.md §4.1).
@@ -80,6 +87,11 @@ static constexpr LedPattern kCalibratingPattern= { kMagenta, kSlowOn, kSlowOff }
 // 赤の「低速」点滅 =「推定が重力と不一致: 持ち上げて水平に置き直す」。致命停止の赤「高速」
 // 点滅（sf_board）や autotune 失敗の赤高速点滅とは意図的に区別する。
 static constexpr LedPattern kTiltMismatchPattern = { kRed, kSlowOn, kSlowOff };
+// Yellow FAST blink = "the downward ToF is silent (sensor stopped): on the ground ARM is refused;
+// check the sensor / power-cycle; armed, the altitude is unknown". Yellow is used by nothing else.
+// 黄の「高速」点滅 =「下向き ToF が出力停止（センサ停止）: 地上では ARM は拒否される。センサ確認・
+// 電源再投入。ARM 中は高度が不明」。黄は他のどの表示にも使われない。
+static constexpr LedPattern kTofSilentPattern = { kYellow, kFastOn, kFastOff };
 
 // Below this voltage the sensor_power reading is "unknown" (power monitor absent or a
 // failed read publishes 0) — do NOT show the low-battery LED for it.
@@ -151,6 +163,14 @@ void Notify::init(const NotifyConfig& config)
              config.buzzer_gpio);
 }
 
+/// True while armed with the downward ToF silent (the guarded failsafe_status of this cycle).
+/// ARM 中に下向き ToF が出力停止しているとき true（この周期のガード済みの failsafe_status）。
+bool Notify::tofSilentWhileArmed() const
+{
+    const FlightState state = static_cast<FlightState>(system_mode.latest().state);
+    return isArmed(state) && tof_status_.tof_silent;
+}
+
 // -----------------------------------------------------------------------------
 // computeStatePattern — system-state channel (MCU LED) by priority overlay.
 // computeStatePattern — システム状態チャネル（MCU LED）。優先度オーバーレイ。
@@ -176,6 +196,26 @@ bool Notify::autotuneOverlay(LedPattern& out) const
     }
 }
 
+/// On the ground with ARM blocked (reason published by StateManager — read, never re-derived):
+/// tilt mismatch → red slow blink (act: place it level); calibrating / tilt check pending / bench
+/// re-level → magenta slow blink (wait, keep still); downward ToF silent → yellow fast blink (act:
+/// check the sensor). Returns true and fills `out` when one of them applies.
+/// 地上で ARM 阻害中（理由は StateManager が発行 — 読むだけで再導出しない）: 傾き不一致 → 赤低速点滅
+/// （操作: 水平に置き直す）、校正中/傾き判定待ち/ベンチ再水平化 → マゼンタ低速点滅（待つ・動かさない）、
+/// 下向き ToF が出力停止 → 黄高速点滅（操作: センサを確認）。当てはまれば true を返し out に入れる。
+bool Notify::armBlockOverlay(const SystemMode& mode, LedPattern& out) const
+{
+    if (static_cast<FlightState>(mode.state) != FlightState::IDLE_GROUND) return false;
+    switch (static_cast<ArmBlock>(mode.arm_block)) {
+        case ArmBlock::TiltMismatch:  out = kTiltMismatchPattern; return true;
+        case ArmBlock::TofSilent:     out = kTofSilentPattern;    return true;
+        case ArmBlock::Calibrating:
+        case ArmBlock::TiltPending:
+        case ArmBlock::BenchRelevel:  out = kCalibratingPattern;  return true;
+        default:                      return false;   // Pairing/Battery shown earlier; None → table
+    }
+}
+
 LedPattern Notify::computeStatePattern() const
 {
     LedPattern at;
@@ -188,29 +228,25 @@ LedPattern Notify::computeStatePattern() const
         return kLowBatteryPattern;
     }
 
+    // 1b. Armed (or flying) with the downward ToF silent: yellow fast blink, same cue as the
+    // on-ground ARM-blocked ToF case — the altitude is unknown. In ACRO/STABILIZE the pilot flies on.
+    // 1b. ARM 中（飛行中）に下向き ToF が出力停止: 黄高速点滅（地上の ARM 阻害の ToF と同じ合図）
+    // — 高度が不明。ACRO/STABILIZE ではパイロットは飛び続ける。
+    if (tofSilentWhileArmed()) {
+        return kTofSilentPattern;
+    }
+
     // 2. Pairing (blue fast blink) — searching for a transmitter.
     // 2. ペアリング（青高速点滅）— 送信機を探索中。
     if (pairing_state.latest().state == static_cast<uint8_t>(PairingState::Pairing)) {
         return kPairingPattern;
     }
 
-    // 3. On the ground, ARM blocked (reason published by StateManager — read, never re-derived):
-    //    tilt mismatch → red slow blink (act: place it level); calibrating / tilt check
-    //    pending / bench re-level → magenta slow blink (wait, keep still).
-    // 3. 地上で ARM 阻害中（理由は StateManager が発行 — 読むだけで再導出しない）:
-    //    傾き不一致 → 赤低速点滅（操作: 水平に置き直す）、校正中/傾き判定待ち/ベンチ再水平化
-    //    → マゼンタ低速点滅（待つ・動かさない）。
+    // 3. On the ground, ARM blocked (the reason is read, never re-derived), see armBlockOverlay().
+    // 3. 地上で ARM 阻害中（理由は読むだけで再導出しない）。armBlockOverlay() 参照。
     const SystemMode mode = system_mode.latest();
     const FlightState state = static_cast<FlightState>(mode.state);
-    if (state == FlightState::IDLE_GROUND) {
-        switch (static_cast<ArmBlock>(mode.arm_block)) {
-            case ArmBlock::TiltMismatch:  return kTiltMismatchPattern;
-            case ArmBlock::Calibrating:
-            case ArmBlock::TiltPending:
-            case ArmBlock::BenchRelevel:  return kCalibratingPattern;
-            default:                      break;   // Pairing/Battery shown above; None → table
-        }
-    }
+    if (armBlockOverlay(mode, at)) return at;
 
     // 4. Flight state (table). The flight-mode colour lives on the BODY LEDs
     // (computeModePattern) — here FLYING is plain green solid.
@@ -244,6 +280,12 @@ LedPattern Notify::computeModePattern() const
     const float voltage = sensor_power.latest().voltage;
     if (voltage > kVoltageValidMin && voltage <= low_v_threshold_) {
         return { kCyan, kFastOn, kFastOff };
+    }
+
+    // Urgent overlay: downward ToF silent while armed (the pilot sees the body LEDs in flight).
+    // 緊急オーバーレイ: ARM 中に下向き ToF が出力停止（飛行中にパイロットが見るのは本体 LED）。
+    if (tofSilentWhileArmed()) {
+        return kTofSilentPattern;
     }
 
     const SystemMode mode = system_mode.latest();
@@ -288,11 +330,9 @@ LedColor Notify::modeColor(FlightMode mode) const
     }
 }
 
-// -----------------------------------------------------------------------------
-// update — read system_mode topic, apply LED pattern
-// 更新 — system_modeトピックを読み、LEDパターンを適用
-// -----------------------------------------------------------------------------
-void Notify::update()
+/// Count down the boot mute window and play the deferred power-on chime once when it ends.
+/// 起動ミュート窓をカウントダウンし、終わったら遅延させた起動音を 1 回鳴らす。
+void Notify::playDeferredBootChime()
 {
     // Boot mute window (flash-safety, see notify.hpp): while it counts down, ALL
     // buzzer tones are suppressed (playEvent/playTone). When it reaches 0, play the
@@ -327,6 +367,19 @@ void Notify::update()
     if (boot_mute_countdown_ > 0 && --boot_mute_countdown_ == 0) {
         boot_melody_ == 1 ? buzzer_.schoolChimeTone() : buzzer_.startTone();
     }
+}
+
+// -----------------------------------------------------------------------------
+// update — read system_mode topic, apply LED pattern
+// 更新 — system_modeトピックを読み、LEDパターンを適用
+// -----------------------------------------------------------------------------
+void Notify::update()
+{
+    // The ToF-silence verdict of this cycle through the staleness guard (EVERY cycle).
+    // この周期の ToF 出力停止の判定。鮮度のガードを通す（「毎周期」）。
+    tof_status_ = tof_guard_.guard(static_cast<uint32_t>(esp_timer_get_time()), failsafe_status.latest());
+
+    playDeferredBootChime();   // boot mute window countdown, then the power-on chime / 起動ミュート窓のカウントダウンと起動音
 
     // Autotune LED cue countdown (~30Hz): clear the overlay when it elapses. Running
     // (1) has a long safety timeout; the ok/fail flash (2/3) lasts ~4s.
@@ -363,10 +416,15 @@ void Notify::update()
         playEvent(static_cast<NotifyEvent>(cmd.event));
     }
 
-    // UI commands (CLI → here): apply buzzer mute / LED brightness and persist to NVS.
+    applyUiCommands();   // CLI → buzzer mute / LED brightness / user LED override / 通知の UI コマンド
+}
+
+/// Drain the UI commands (CLI → here): apply buzzer mute / LED brightness and persist to NVS.
+/// UI コマンドを排出する（CLI → ここ）: ブザー mute / LED 輝度を適用し NVS に保存。
+void Notify::applyUiCommands()
+{
     // Topic-based so a future WiFi/UDP path can inject the same commands.
-    // UI コマンド（CLI → ここ）: ブザー mute / LED 輝度を適用し NVS に保存。トピック経由ゆえ
-    // 将来 WiFi/UDP からも同じコマンドを注入できる。
+    // トピック経由ゆえ将来 WiFi/UDP からも同じコマンドを注入できる。
     UiCommand uic;
     while (ui_command.read(uic)) {
         switch (static_cast<UiCmd>(uic.command)) {
@@ -433,6 +491,7 @@ void Notify::playEvent(NotifyEvent event)
         case NotifyEvent::PairingMode: buzzer_.pairingTone();       break;
         case NotifyEvent::ArmRejected: buzzer_.errorTone();         break;
         case NotifyEvent::FlipRejected: buzzer_.errorTone();        break;
+        case NotifyEvent::TofSilentWarn: buzzer_.errorTone();       break;
         // Buzzer + a parallel LED cue (LED is reliable over motor noise): white blink
         // while sweeping (safety timeout 30s), then green/red for ~4s. update() clears it.
         // ブザー＋並行 LED 合図（騒音に強い）: 掃引中は白点滅（安全 30s）、終了で緑/赤 約4s。

@@ -1,0 +1,41 @@
+# tof_silent_hover_timed.scn — ToF silent while hovering, landing ended by TIME (impact cut disabled)
+#                        ホバー中に ToF が出力停止し、着陸は「時間」で終わる（衝撃カットを無効化）
+#
+# Same as tof_silent_hover.scn, but the impact (3 G) cut AND the accelerometer touchdown detector are
+# raised to their maximum (10 G) and the second path of the detector (the floor holding the craft up) is switched off (100 s): three --param overrides applied
+# before boot, so the blind descent does not end at the floor by any acceleration. This exercises the BLIND-LANDING TIME: with no ToF no
+# touchdown can be detected by height, so the state machine ends LANDING by itself after 10 s and the
+# motors stop (the craft has been sitting on the floor since ~1.5 s after LANDING began).
+# tof_silent_hover.scn と同じだが、衝撃（3 G）カットと加速度計による接地検出の両方を最大の 10 G に
+# 上げる（起動前に適用する 2 つの --param 上書き）ので、ToF なしの降下はどんな加速度でも床で終わらない。
+# これは「ToF なしの着陸の時間」の検証: ToF が無いと高さで接地を検出できないので、状態機械が 10 s 後に
+# 自力で LANDING を終えてモータが止まる（機体は LANDING が始まって約 1.5 s 後から床の上にいる）。
+#
+# The craft has completed the auto-takeoff and holds 0.5 m. Then the downward ToF stops
+# delivering samples (no bus error). Spec under test:
+#  1. The state machine notices the silence by itself (no new ToF sample for 0.3 s) and
+#     moves FLYING → LANDING (the craft is flying on an altitude estimate nobody can check).
+#  2. LANDING ends by time (10 s, sf::limits::kBlindLandingTimeoutUs) and the motors stop (IDLE_GROUND).
+#  3. While the sensor is still silent, ARM is REFUSED with the reason shown (prearm).
+#
+# 自動離陸を終えて 0.5 m を保持している。その後、下向き ToF がサンプルを出さなくなる
+# （バスエラー無し）。検証する仕様:
+#  1. 状態機械が出力停止を自力で検知（0.3 s 新サンプル無し）し、FLYING → LANDING へ移る
+#     （誰も検証できない高度推定で飛んでいる状態のため）。
+#  2. LANDING が時間（10 s、sf::limits::kBlindLandingTimeoutUs）で終わり、モータが止まる（IDLE_GROUND）。
+#  3. センサが出力停止している間、ARM は理由つきで拒否される（prearm）。
+#
+# Timeline (s): ARM accepted 7.5 → takeoff complete ~9.3 → hover → ToF stops 14.0 → LANDING ~14.3
+#               → touchdown by time 24.3 (10 s of LANDING) → ARM attempt ~25.7 (refused).
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_hover_timed.scn --target vehicle --duration 29000000 --param safety.impact.accel_g=10 --param safety.blind_touchdown.accel_g=10 --param safety.blind_touchdown.floor_s=100
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (7.5 s) — spool, then the auto-takeoff climb
+   +    rc         2048  2048   2048    2048  1     5500      50        1              # D: stick centre — climb to 0.5 m and hold (to 14.0 s)
+   +    tof_silent 1                                                                   # E: 14.0 s — ToF output stops while hovering
+   +    rc         2048  2048   2048    2048  1     11500     50        1              # F: LANDING by silence, then blind landing by time (to 25.5 s)
+   +    rc         2048  2048   2048    2048  0     200       50        1              # G: release the ARM button
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # H: press again (25.7 s) — landed, ToF still silent → ARM REFUSED
+   +    rc         2048  2048   2048    2048  0     600       50                       # I: settle

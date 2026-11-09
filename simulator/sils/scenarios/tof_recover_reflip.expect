@@ -1,0 +1,9 @@
+exit 0
+log_contains any "IN FLIGHT the switch request is CONSUMED"
+log_contains any "ToF re-acquired after a flip window / ToF silence"
+log_absent any "Mode change: ALT_HOLD → STABILIZE"
+log_contains any "Mode change: STABILIZE → ALT_HOLD"
+order "IN FLIGHT the switch request is CONSUMED" "Mode change: STABILIZE → ALT_HOLD"
+metric alt_rmse < 0.04 in 9.6 14.6
+metric alt_max < 1.7 in 7.5 25.0
+log_contains any "Transition: LANDING → IDLE_GROUND"

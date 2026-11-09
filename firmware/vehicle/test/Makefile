@@ -53,6 +53,40 @@ TARGET_FLIP_SEQUENCER = test_flip_sequencer
 SRCS_TILT_CONSISTENCY = test_tilt_consistency.cpp ../components/sf_estimator/tilt_consistency.cpp
 TARGET_TILT_CONSISTENCY = test_tilt_consistency
 
+# Silence / freshness watch (sf::SilenceWatch: signed age of a new sample + saturating silent
+# time; sensor_health, comm loss, long-silence cases beyond 35.8 / 71.6 min).
+# Header-only logic — own binary, no extra sources.
+# 出力停止・鮮度の監視器（sf::SilenceWatch: 新サンプルの符号付き経過 + 飽和する停止時間。
+# sensor_health・通信断・35.8 / 71.6 分を超える長時間の出力停止）。
+# ヘッダのみのロジック — 独自バイナリで追加ソース不要。
+SRCS_SENSOR_FRESHNESS = test_sensor_freshness.cpp
+TARGET_SENSOR_FRESHNESS = test_sensor_freshness
+
+# Downward-ToF silence: the SilenceWatch judgement (threshold boundary, reversal, uint32 wrap,
+# silence > 36 min, never-seen, out-of-range is not silent) and the state machine's response
+# for every state (tof_silence_policy.hpp). Header-only logic — own binary, no extra sources.
+# 下向き ToF の出力停止: SilenceWatch の判定（しきい値境界・逆転・uint32 巻き戻り・36 分超・未到達・
+# 範囲外は出力停止でない）と、全状態に対する状態機械の応答（tof_silence_policy.hpp）。
+# ヘッダのみのロジック — 独自バイナリで追加ソース不要。
+SRCS_TOF_SILENCE = test_tof_silence.cpp
+TARGET_TOF_SILENCE = test_tof_silence
+
+# ToF re-acquisition judgement (sf::ToFHealthTracker, judgeToFSilenceReason, FailsafeStatusGuard,
+# decideToFModeRefusal): "the estimator has re-acquired the ToF", stuck-invalid while flying, the stale
+# failsafe_status guard, and the in-flight mode-request consumption. Header-only logic — own binary.
+# ToF 取り込み直しの判定（sf::ToFHealthTracker・judgeToFSilenceReason・FailsafeStatusGuard・
+# decideToFModeRefusal）: 「推定器が ToF を取り込み直した」、飛行中の無効の継続、古い failsafe_status の
+# ガード、飛行中のモード要求の消費。ヘッダのみのロジック — 独自バイナリ。
+SRCS_TOF_HEALTH = test_tof_health.cpp
+TARGET_TOF_HEALTH = test_tof_health
+
+# Blind landing thrust profile (blind_landing.hpp): time function, floor, late ramp, start thrust
+# calibrated by the accelerometer, upward specific force. Header-only logic — own binary.
+# ToF なしの着陸の推力プロファイル（blind_landing.hpp）: 時間関数・床・後半のランプ・加速度計で較正した
+# 開始推力・上向きの加速度計の測定値。ヘッダのみのロジック — 独自バイナリ。
+SRCS_BLIND_LANDING = test_blind_landing.cpp
+TARGET_BLIND_LANDING = test_blind_landing
+
 # NOTE: test_state_manager is temporarily disabled. It compiled the firmware
 # state_manager/failsafe through the now-removed simulator/sils/compat shim and
 # sils_topics.cpp (deleted in the SILS clean-slate, 2026-05-31). It will be
@@ -63,7 +97,7 @@ TARGET_TILT_CONSISTENCY = test_tilt_consistency
 
 .PHONY: all clean test
 
-all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY)
+all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
@@ -77,11 +111,27 @@ $(TARGET_FLIP_SEQUENCER): $(SRCS_FLIP_SEQUENCER)
 $(TARGET_TILT_CONSISTENCY): $(SRCS_TILT_CONSISTENCY)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+$(TARGET_SENSOR_FRESHNESS): $(SRCS_SENSOR_FRESHNESS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
+$(TARGET_TOF_SILENCE): $(SRCS_TOF_SILENCE)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
+$(TARGET_TOF_HEALTH): $(SRCS_TOF_HEALTH)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
+$(TARGET_BLIND_LANDING): $(SRCS_BLIND_LANDING)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
 test: all
 	./$(TARGET)
 	./$(TARGET_ESKF_FLIP)
 	./$(TARGET_FLIP_SEQUENCER)
 	./$(TARGET_TILT_CONSISTENCY)
+	./$(TARGET_SENSOR_FRESHNESS)
+	./$(TARGET_TOF_SILENCE)
+	./$(TARGET_TOF_HEALTH)
+	./$(TARGET_BLIND_LANDING)
 
 clean:
-	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) test_state_manager
+	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) test_state_manager

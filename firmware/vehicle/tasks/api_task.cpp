@@ -48,6 +48,7 @@
  * @design architecture.md §5 — コマンドフロー UDP/API                    [OK]
  * @design architecture.md §3 — R11 Guidance topic 契約 (command_target)  [OK]
  * @design docs/plans/flip-maneuver-plan.md §4.4 — API `flip l/r/f/b`     [OK]
+ * @design detailed_design.md §3 注13 — 待機中の emergency/stop 即時処理    [OK]
  */
 
 #include <atomic>
@@ -66,6 +67,7 @@
 
 #include "topics.hpp"
 #include "config.hpp"
+#include "flight_limits.hpp"   // sf::limits::kAltitudeCeilingM (shared altitude ceiling)
 #include "flight_state.hpp"
 #include "params.hpp"        // autotune applies gains live / 自動チューンのライブ適用
 #include "autotune.hpp"      // onboard fit + tune / オンボード同定＋設計
@@ -81,10 +83,35 @@ namespace {
 
 constexpr uint16_t kApiPort        = 8889;    // Tello SDK port / Tello SDK ポート
 constexpr int      kPollMs         = 20;      // main loop poll / 主ループ周期
+// Poll period inside waitUntil [ms]: how often the predicate is evaluated AND the command
+// sources are read, so an `emergency` / `stop` that arrives while a command blocks waits at
+// most this long plus the processing time. Kept at the pre-existing 50 ms predicate period:
+// 2.5 times the idle-loop latency (kPollMs = 20 ms), 1/240 of the 12 s takeoff timeout.
+// (SILS only: its socket shim yields one tick per recvfrom, so the period reads 51 ms there.
+// With 49 ms all 51 older scenarios were bit-identical to before; with 50 ms 11 API scenarios
+// move by that 1 ms per poll and still pass.)
+// waitUntil 内のポーリング周期 [ms]: 述語の評価とコマンド源の読み取りの周期。待機中に届いた
+// `emergency` / `stop` の待ち時間は最大でこれ＋処理時間。従来の述語周期 50 ms を維持:
+// 待機していないときの遅れ（kPollMs = 20 ms）の 2.5 倍、離陸タイムアウト 12 s の 1/240。
+// （SILS のみ: ソケットシムは recvfrom ごとに 1 tick 譲るので周期は 51 ms に見える。49 ms なら
+// 既存 51 シナリオが修正前と完全一致、50 ms だと API 系 11 本が 1 回あたり 1 ms ずれる。全て PASS。）
+constexpr int      kWaitPollMs     = 50;
+// Capacity of the deferred-command queue: commands that arrive while another command is
+// blocking, other than `emergency` / `stop`, wait here and run in arrival order afterwards.
+// 8 = the injection ring size (kInjectSlots), larger than the lwIP UDP receive mailbox
+// (default 6) the same commands would otherwise have queued in. CANDIDATE value.
+// 後回しコマンド待ち行列の容量: 別のコマンドが待機中に届いた `emergency` / `stop` 以外の
+// コマンドをここで待たせ、後で到着順に実行する。8 = 注入リングのサイズ（kInjectSlots）で、
+// 従来これらが溜まっていた lwIP の UDP 受信メールボックス（既定 6）より大きい。候補値。
+constexpr int      kDeferredSlots  = 8;
 constexpr float    kMoveMinCm      = 10.0f;   // Tello: 20; we allow finer indoor moves
 constexpr float    kMoveMaxCm      = 300.0f;  // single-move clamp [cm] / 1回の移動上限
 constexpr float    kAltMinM        = 0.2f;    // target altitude floor / 目標高度下限
-constexpr float    kAltMaxM        = 2.0f;    // target altitude ceiling (indoor) / 上限
+// Target altitude ceiling [m] — shared with the controller's auto-takeoff target through
+// sf::limits (was 2.0 m here). CANDIDATE value, basis in flight_limits.hpp.
+// 目標高度の上限 [m] — 制御器の自動離陸目標と sf::limits で共有（ここでは従来 2.0 m）。
+// 候補値、根拠は flight_limits.hpp。
+constexpr float    kAltMaxM        = sf::limits::kAltitudeCeilingM;
 constexpr float    kDefaultSpeed   = 0.3f;    // [m/s] guidance approach / 既定接近速度
 // Takeoff altitude is no longer an API constant: the auto-takeoff (controller-owned,
 // unified with manual RC) climbs to its target, and cmdTakeoff holds whatever altitude
@@ -142,12 +169,43 @@ bool popInjected(char* out, size_t out_len)
 }
 
 // =============================================================================
+// Deferred commands — lines read while another command is blocking in waitUntil.
+// 後回しコマンド — 別のコマンドが waitUntil で待機中に読み取った行。
+// =============================================================================
+// While a command blocks (takeoff / land / move ...), waitUntil keeps reading the command
+// sources so `emergency` and `stop` act at once. Every other line is parked here, in
+// arrival order, and the main loop runs it after the blocking command has replied — the
+// same order as before, when such lines waited in the socket / injection ring instead.
+// Single task only (ApiTask), so plain indices suffice.
+// コマンドが待機中（takeoff / land / move ...）も waitUntil はコマンド源を読み続け、
+// `emergency` と `stop` を即座に実行する。それ以外の行は到着順にここへ置き、待機中だった
+// コマンドの応答後に主ループが実行する — 従来ソケット/注入リングで待っていたときと同じ順序。
+// ApiTask 単独で使うので素の添字でよい。
+struct DeferredLine {
+    char        text[kInjectLen];
+    sockaddr_in from;        // sender, valid when from_udp / 送信元（from_udp のとき有効）
+    bool        from_udp;
+};
+DeferredLine g_deferred[kDeferredSlots];
+int          g_deferred_head = 0;   // write index / 書込位置
+int          g_deferred_tail = 0;   // read index  / 読出位置
+
+// What ended the last waitUntil early (None = it did not), read by waitFailureText().
+// 直近の waitUntil を途中で打ち切った原因（None = 打ち切られていない）。waitFailureText() が読む。
+enum class WaitInterrupt : uint8_t { None, Emergency, Stop };
+WaitInterrupt g_wait_interrupt = WaitInterrupt::None;
+
+// Forward declaration: defined after cmdStop (it needs cmdStop and cmdEmergency).
+// 前方宣言: cmdStop の後で定義（cmdStop と cmdEmergency を使うため）。
+bool servicePendingCommands();
+
+// =============================================================================
 // API session state / API セッション状態
 // =============================================================================
 
 bool        g_sdk_mode = false;       // "command" received / "command" 受信済み
 int         g_sock = -1;              // UDP socket (HW) / UDP ソケット（実機）
-sockaddr_in g_client = {};            // last sender (reply target) / 返信先
+sockaddr_in g_client = {};            // reply target of the line being processed / 処理中の行の返信先
 bool        g_have_client = false;
 
 // Guidance target bookkeeping — moves compose on the TARGET (Tello-style).
@@ -177,6 +235,39 @@ std::atomic<uint32_t> g_client_ip{0};       // network byte order / ネットワ
 std::atomic<bool>     g_client_known{false};
 std::atomic<int>      g_flight_time_s{0};
 
+// Receive one datagram without blocking (MSG_DONTWAIT: the loop must keep draining SILS
+// injections; a parked blocking receive would starve them) and mirror its sender for the
+// state stream. It does NOT touch the reply target (g_client): each line is answered at its own
+// sender (see ReplyTarget), so a line read while another command blocks cannot redirect that
+// command's reply. Returns false when nothing is pending or there is no socket.
+// 1 データグラムをブロックせず受信（MSG_DONTWAIT: ループは SILS 注入の drain を続ける必要があり、
+// ブロッキング受信のパークはそれを飢餓させる）し、送信元を状態ストリーム用にミラーする。返信先
+// （g_client）には触れない: 各行はその送信元へ返信する（ReplyTarget 参照）ので、別のコマンドの
+// 待機中に読んだ行が、そのコマンドの返信先を書き換えることはない。何も届いていない、またはソケットが
+// 無いとき false。
+bool receiveDatagram(char* line, size_t line_size, sockaddr_in& from)
+{
+    if (g_sock < 0) {
+        return false;
+    }
+    socklen_t from_len = sizeof(from);
+    const ssize_t received = ::recvfrom(g_sock, line, line_size - 1, MSG_DONTWAIT,
+                                        reinterpret_cast<sockaddr*>(&from), &from_len);
+    if (received <= 0) {
+        return false;
+    }
+    line[received] = '\0';
+    // Mirror the client IP for TelloStateTask (UDP:8890 state stream).
+    // Publishing it here means the stream starts the moment a client
+    // sends anything — exactly when djitellopy connect() waits for state.
+    // TelloStateTask 用にクライアント IP をミラー（UDP:8890 状態ストリーム）。
+    // ここで公開することで、クライアントが何か送った瞬間＝djitellopy connect() が
+    // 状態を待つ瞬間にストリームが始まる。
+    g_client_ip.store(from.sin_addr.s_addr, std::memory_order_relaxed);
+    g_client_known.store(true, std::memory_order_release);
+    return true;
+}
+
 // batteryPercent — 1S LiPo voltage → 0..100% (shared by `battery?` and the state
 // stream so the two never drift). 3.3V = 0%, 4.2V = 100%, clamped.
 // batteryPercent — 1S LiPo 電圧 → 0..100%（`battery?` と状態ストリームで共有しドリフト防止）。
@@ -201,6 +292,36 @@ void reply(const char* text)
                  reinterpret_cast<sockaddr*>(&g_client), sizeof(g_client));
     }
 }
+
+// Scope in which reply() answers the given sender instead of the current reply target; the
+// previous target is restored on exit. `from == nullptr` (an injected line) leaves it unchanged.
+// Used so that every line — executed at once, deferred or cancelled — is answered at its OWN
+// sender, and a command that blocks keeps answering its original sender.
+// このスコープの間、reply() は現在の返信先でなく指定の送信元へ返信し、抜けると元の返信先に戻す。
+// `from == nullptr`（注入行）は変更しない。実行・後回し・取り消しのどの行も「自分の」送信元へ
+// 返信し、待機中のコマンドは元の送信元へ返信し続けるようにするため。
+class ReplyTarget {
+public:
+    explicit ReplyTarget(const sockaddr_in* from)
+        : saved_client_(g_client), saved_have_client_(g_have_client)
+    {
+        if (from != nullptr) {
+            g_client      = *from;
+            g_have_client = true;
+        }
+    }
+    ~ReplyTarget()
+    {
+        g_client      = saved_client_;
+        g_have_client = saved_have_client_;
+    }
+    ReplyTarget(const ReplyTarget&)            = delete;
+    ReplyTarget& operator=(const ReplyTarget&) = delete;
+
+private:
+    sockaddr_in saved_client_;
+    bool        saved_have_client_;
+};
 
 // -----------------------------------------------------------------------------
 // Topic helpers / トピックヘルパ
@@ -238,69 +359,146 @@ void publishGuidance(float speed)
     sf::command_target.publish(t);
 }
 
-// Wait until `pred` returns true, polling at the loop period. Returns false on
-// timeout. The API task may block here — it owns no control-path deadline.
-// pred が真になるまでループ周期でポーリング。タイムアウトで false。本タスクは
-// 制御経路の締切を持たないためブロックしてよい。
+// Wait until `pred` returns true, polling at kWaitPollMs. Returns false on timeout OR when
+// an `emergency` / `stop` read during the wait ended it early (see g_wait_interrupt and
+// waitFailureText). The API task may block here — it owns no control-path deadline — but it
+// must stay reachable for the commands that cancel what it waits for.
+// pred が真になるまで kWaitPollMs 周期でポーリング。タイムアウト、または待機中に読んだ
+// `emergency` / `stop` で早期に打ち切られたとき false（g_wait_interrupt と waitFailureText
+// 参照）。本タスクは制御経路の締切を持たないためブロックしてよいが、待っている対象を
+// 取り消すコマンドには応答できる状態を保つ。
 template <typename Pred>
 bool waitUntil(uint32_t timeout_ms, Pred pred)
 {
+    g_wait_interrupt = WaitInterrupt::None;
     const uint32_t start = static_cast<uint32_t>(esp_timer_get_time() / 1000);
     while (static_cast<uint32_t>(esp_timer_get_time() / 1000) - start < timeout_ms) {
         if (pred()) {
             return true;
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        if (servicePendingCommands()) {
+            return false;   // emergency / stop took over / emergency か stop が引き取った
+        }
+        vTaskDelay(pdMS_TO_TICKS(kWaitPollMs));
     }
     return false;
+}
+
+// Reply text for a waitUntil that returned false: the interrupting command, else the
+// caller's timeout text.
+// false を返した waitUntil の応答文字列: 打ち切ったコマンド、なければ呼び出し側のタイムアウト文。
+const char* waitFailureText(const char* timeout_text)
+{
+    switch (g_wait_interrupt) {
+        case WaitInterrupt::Emergency: return "error interrupted by emergency";
+        case WaitInterrupt::Stop:      return "error interrupted by stop";
+        default:                       return timeout_text;
+    }
 }
 
 // -----------------------------------------------------------------------------
 // Flight verbs / 飛行 verb
 // -----------------------------------------------------------------------------
 
-void cmdTakeoff()
+// Yaw angle [rad] of an estimate (quaternion → ZYX yaw), the same formula the guidance
+// seed and the rotate predicate use.
+// 推定値のヨー角 [rad]（クォータニオン → ZYX ヨー）。cmdTakeoff・回頭の述語と同じ式。
+float estimateYaw(const sf::StateEstimate& est)
+{
+    const float w = est.attitude[0], x = est.attitude[1];
+    const float y = est.attitude[2], z = est.attitude[3];
+    return atan2f(2.0f * (w * z + x * y), 1.0f - 2.0f * (y * y + z * z));
+}
+
+// Seed the guidance target at the CURRENT pose (position and heading) and publish it, so the
+// craft holds where it is. Shared by cmdTakeoff (after the auto-takeoff) and cmdStop.
+// 誘導目標を「現在」の姿勢（位置と向き）で初期化して publish し、機体をその場に保持させる。
+// cmdTakeoff（自動離陸の後）と cmdStop が共有する。
+void seedGuidanceAtCurrentPose()
+{
+    const sf::StateEstimate est = sf::estimate_state.latest();
+    g_target_ned[0] = est.position[0];
+    g_target_ned[1] = est.position[1];
+    g_target_ned[2] = est.position[2];   // keep the current altitude / 現在の高度を保持
+    g_target_yaw    = estimateYaw(est);
+    g_target_valid  = true;
+    publishGuidance(g_default_speed);
+}
+
+// Reason text when a takeoff must be refused before the verb is published, else nullptr.
+// takeoff を verb の publish 前に拒否すべきときの理由文字列。なければ nullptr。
+const char* takeoffRefusalText()
 {
     const sf::FlightState st = currentState();
     if (st != sf::FlightState::IDLE_GROUND && st != sf::FlightState::ARMED_GROUND) {
-        reply("error not on ground");
-        return;
+        return "error not on ground";
     }
     if (!sf::system_status.latest().calibrated) {
-        reply("error calibrating - keep the craft still");
+        return "error calibrating - keep the craft still";
+    }
+    // The published pre-arm reason (single source, StateManager::evaluateArmBlock): do not
+    // start a climb whose altitude nobody can see — the downward ToF has stopped.
+    // 発行済みの ARM 前判定の理由（単一の情報源、StateManager::evaluateArmBlock）: 高度を誰も
+    // 見られない上昇を始めない — 下向き ToF が止まっている。
+    if (static_cast<sf::ArmBlock>(sf::system_mode.latest().arm_block) ==
+        sf::ArmBlock::TofSilent) {
+        return "error tof silent - check the sensor";
+    }
+    return nullptr;
+}
+
+// Wait for the auto-takeoff chain (ARM → TAKEOFF climb → FLYING). If the chain was entered
+// (ARMED_GROUND or TAKEOFF seen) and the craft is then back on the ground or landing, the
+// state machine aborted the climb (e.g. the ToF went silent): stop waiting. The abort can
+// last only a few ms in LANDING, so IDLE_GROUND counts too. Returns waitUntil's result.
+// 自動離陸の鎖（ARM → TAKEOFF 上昇 → FLYING）を待つ。鎖に入った（ARMED_GROUND か TAKEOFF を
+// 見た）後に地上復帰か LANDING になっていれば、状態機械が上昇を中止した（例: ToF が出力停止）:
+// 待つのをやめる。中止後の LANDING が数 ms で終わることがあるので IDLE_GROUND も数える。
+// waitUntil の結果を返す。
+bool waitTakeoffChain()
+{
+    bool chain_entered = false;
+    return waitUntil(kTakeoffTimeoutMs, [&chain_entered] {
+        const sf::FlightState now_state = currentState();
+        if (now_state == sf::FlightState::ARMED_GROUND ||
+            now_state == sf::FlightState::TAKEOFF) {
+            chain_entered = true;
+        }
+        const bool aborted = chain_entered &&
+                             (now_state == sf::FlightState::LANDING ||
+                              now_state == sf::FlightState::IDLE_GROUND);
+        return now_state == sf::FlightState::FLYING || aborted;
+    });
+}
+
+void cmdTakeoff()
+{
+    const char* refusal = takeoffRefusalText();
+    if (refusal != nullptr) {
+        reply(refusal);
         return;
     }
     publishApiVerb(sf::ApiCmd::Takeoff, sf::FlightMode::POS_HOLD);
 
-    // Wait for the auto-takeoff chain (ARM → TAKEOFF climb → FLYING).
-    // 自動離陸の鎖（ARM → TAKEOFF 上昇 → FLYING）を待つ。
-    if (!waitUntil(kTakeoffTimeoutMs,
-                   [] { return currentState() == sf::FlightState::FLYING; })) {
-        reply("error takeoff timeout");
+    if (!waitTakeoffChain()) {
+        reply(waitFailureText("error takeoff timeout"));
+        return;
+    }
+    if (currentState() != sf::FlightState::FLYING) {
+        reply("error takeoff aborted");
         return;
     }
 
-    // Seed the guidance target at the CURRENT pose — FLYING means the auto-takeoff
-    // has already climbed to and captured its target altitude, so we simply hold it.
-    // The climb routine and target altitude are now UNIFIED with manual RC takeoff
-    // (the controller owns both, decision ④); the API no longer commands its own
-    // takeoff height. Composing subsequent moves from the TARGET starts here.
-    // 誘導目標を「現在」の姿勢で初期化する — FLYING は自動離陸が既に目標高度まで上昇・
-    // 捕捉したことを意味するので、そのまま保持する。上昇ルーチンと目標高度は手動 RC 離陸と
-    // 統一された（制御器が両方を所有, 確定④）。API は自前の離陸高度を指令しない。以降の
-    // 移動合成はこの「目標」から始まる。
-    const sf::StateEstimate est = sf::estimate_state.latest();
-    g_target_ned[0] = est.position[0];
-    g_target_ned[1] = est.position[1];
-    g_target_ned[2] = est.position[2];   // hold the auto-takeoff altitude / 離陸後高度を保持
-    {
-        const float w = est.attitude[0], x = est.attitude[1];
-        const float y = est.attitude[2], z = est.attitude[3];
-        g_target_yaw = atan2f(2.0f * (w * z + x * y),
-                              1.0f - 2.0f * (y * y + z * z));
-    }
-    g_target_valid = true;
-    publishGuidance(g_default_speed);
+    // FLYING means the auto-takeoff has already climbed to and captured its target altitude,
+    // so seed the guidance target at the CURRENT pose and simply hold it. The climb routine
+    // and target altitude are UNIFIED with manual RC takeoff (the controller owns both,
+    // decision ④); the API no longer commands its own takeoff height. Composing subsequent
+    // moves from the TARGET starts here.
+    // FLYING は自動離陸が既に目標高度まで上昇・捕捉したことを意味するので、誘導目標を「現在」の
+    // 姿勢で初期化してそのまま保持する。上昇ルーチンと目標高度は手動 RC 離陸と統一された
+    // （制御器が両方を所有, 確定④）。API は自前の離陸高度を指令しない。以降の移動合成は
+    // この「目標」から始まる。
+    seedGuidanceAtCurrentPose();
     reply("ok");
 }
 
@@ -316,8 +514,39 @@ void cmdLand()
                   [] { return currentState() == sf::FlightState::IDLE_GROUND; })) {
         reply("ok");
     } else {
-        reply("error land timeout");
+        reply(waitFailureText("error land timeout"));
     }
+}
+
+// Altitude safety clamp of the guidance target. Same convention as the move-distance clamp in
+// cmdMove(): clamp to the limit and still let the caller reply "ok" (the move is shorter than
+// asked), log a warning.
+// 誘導目標の高度安全クランプ。cmdMove() の移動距離クランプと同じ流儀: 上限へクランプし、
+// 呼び出し側は "ok" を返せる（移動は要求より短くなる）。警告をログに出す。
+void clampTargetAltitude()
+{
+    if (-g_target_ned[2] < kAltMinM) {
+        g_target_ned[2] = -kAltMinM;
+    }
+    if (-g_target_ned[2] > kAltMaxM) {
+        g_target_ned[2] = -kAltMaxM;
+        ESP_LOGW(TAG, "target altitude clamped to the %.2f m ceiling",
+                 static_cast<double>(kAltMaxM));
+    }
+}
+
+// Block until the estimate is inside the tolerance sphere around the guidance target, or the
+// timeout expires. Returns true when reached.
+// 推定が誘導目標まわりの許容球に入るまで、またはタイムアウトまでブロックする。到達で true。
+bool waitTargetReached(uint32_t timeout_ms)
+{
+    return waitUntil(timeout_ms, [] {
+        const sf::StateEstimate e = sf::estimate_state.latest();
+        const float dn = e.position[0] - g_target_ned[0];
+        const float de = e.position[1] - g_target_ned[1];
+        const float dd = e.position[2] - g_target_ned[2];
+        return sqrtf(dn * dn + de * de + dd * dd) < kReachRadiusM;
+    });
 }
 
 // Relative move in the TELLO body frame (x fwd, y LEFT, z UP, cm), rotated into
@@ -356,9 +585,7 @@ void cmdMove(float fwd_cm, float left_cm, float up_cm, float speed_mps)
     g_target_ned[1] += sy * fwd_m + cy * (-left_m);   // E
     g_target_ned[2] -= up_m;                          // D (up = -D)
 
-    // Altitude safety clamp / 高度安全クランプ
-    if (-g_target_ned[2] < kAltMinM) g_target_ned[2] = -kAltMinM;
-    if (-g_target_ned[2] > kAltMaxM) g_target_ned[2] = -kAltMaxM;
+    clampTargetAltitude();
 
     publishGuidance(speed_mps);
 
@@ -368,14 +595,7 @@ void cmdMove(float fwd_cm, float left_cm, float up_cm, float speed_mps)
     // 許容球内に入ったか検証する。
     const uint32_t timeout_ms =
         static_cast<uint32_t>((dist * 0.01f / speed_mps) * 1000.0f) + 6000;
-    const bool reached = waitUntil(timeout_ms, [] {
-        const sf::StateEstimate e = sf::estimate_state.latest();
-        const float dn = e.position[0] - g_target_ned[0];
-        const float de = e.position[1] - g_target_ned[1];
-        const float dd = e.position[2] - g_target_ned[2];
-        return sqrtf(dn * dn + de * de + dd * dd) < kReachRadiusM;
-    });
-    reply(reached ? "ok" : "error move timeout");
+    reply(waitTargetReached(timeout_ms) ? "ok" : waitFailureText("error move timeout"));
 }
 
 void cmdRotate(float delta_yaw_rad, float speed_unused)
@@ -400,10 +620,12 @@ void cmdRotate(float delta_yaw_rad, float speed_unused)
         while (err < -3.14159265f) err += 6.2831853f;
         return fabsf(err) < kReachYawRad;
     });
-    reply(reached ? "ok" : "error rotate timeout");
+    reply(reached ? "ok" : waitFailureText("error rotate timeout"));
 }
 
-void cmdStop()
+// Returns true when the stop was accepted (the target was re-set), false when rejected.
+// 停止を受理した（目標を置き直した）とき true、拒否したとき false。
+bool cmdStop()
 {
     // Require an active API target, like move/rotate: once the pilot cancels
     // guidance (or a mode change does), the API must NOT silently re-grab control
@@ -413,17 +635,148 @@ void cmdStop()
     // takeoff/go で明示的に再係合する (M-3)。
     if (currentState() != sf::FlightState::FLYING || !g_target_valid) {
         reply("error not flying or guidance released - takeoff/go to re-engage");
+        return false;
+    }
+    // Halt: re-target the spot AND heading we are at right now (the cascade brakes for us).
+    // The heading matters when stop interrupts a rotate: left alone, the old target yaw
+    // would keep the craft turning.
+    // 停止: いまいる位置と向きを目標にし直す（ブレーキはカスケードが掛ける）。回頭中の stop
+    // では向きが要る: 放置すると古い目標ヨーが機体を回し続ける。
+    seedGuidanceAtCurrentPose();
+    reply("ok");
+    return true;
+}
+
+// Emergency: never behind any other gate — cut the motors through the state machine.
+// 緊急停止: 他の判定の後ろに置かない — 状態機械経由でモータを止める。
+void cmdEmergency()
+{
+    g_target_valid = false;
+    publishApiVerb(sf::ApiCmd::Emergency);
+    reply("ok");
+}
+
+// -----------------------------------------------------------------------------
+// Reading commands while another command blocks (waitUntil) / 待機中のコマンド読み取り
+// -----------------------------------------------------------------------------
+
+// Remove trailing whitespace/newlines in place; returns the new length.
+// 末尾の空白・改行をその場で除去し、新しい長さを返す。
+size_t trimLine(char* line)
+{
+    size_t n = std::strlen(line);
+    while (n > 0 && (line[n-1] == '\n' || line[n-1] == '\r' || line[n-1] == ' ')) {
+        line[--n] = '\0';
+    }
+    return n;
+}
+
+// Park a line for the main loop (see DeferredLine). A full queue refuses it with a reply.
+// 行を主ループ用に置く（DeferredLine 参照）。満杯なら応答で拒否する。
+void deferLine(const char* text, const sockaddr_in* from)
+{
+    if (g_deferred_head - g_deferred_tail >= kDeferredSlots) {
+        ESP_LOGW(TAG, "deferred queue full - dropped: %s", text);
+        const ReplyTarget target(from);
+        reply("error busy");
         return;
     }
-    // Halt: re-target the spot we are at right now (the cascade brakes for us).
-    // 停止: いまいる位置を目標にし直す（ブレーキはカスケードが掛ける）。
-    const sf::StateEstimate est = sf::estimate_state.latest();
-    g_target_ned[0] = est.position[0];
-    g_target_ned[1] = est.position[1];
-    g_target_ned[2] = est.position[2];
-    g_target_valid  = true;
-    publishGuidance(g_default_speed);
-    reply("ok");
+    DeferredLine& slot = g_deferred[g_deferred_head % kDeferredSlots];
+    std::strncpy(slot.text, text, kInjectLen - 1);
+    slot.text[kInjectLen - 1] = '\0';
+    slot.from_udp = (from != nullptr);
+    if (from != nullptr) {
+        slot.from = *from;
+    }
+    ++g_deferred_head;
+}
+
+// Discard every parked line without running it, answering each at its OWN sender with
+// `reason_text`. Called when an emergency / accepted stop ends a wait: the parked lines were
+// issued before it and belong to the operation it cancelled — replaying them afterwards could
+// take off again right after an emergency.
+// 後回しにした行を全て実行せずに捨て、それぞれ「自分の」送信元へ reason_text を返信する。
+// emergency / 受理された stop が待機を終わらせたときに呼ぶ: 後回しの行はそれより前に出されたもので、
+// 取り消された操作に属する — 後で再生すると emergency の直後に再離陸しうる。
+void cancelDeferredLines(const char* reason_text)
+{
+    while (g_deferred_tail < g_deferred_head) {
+        const DeferredLine& parked = g_deferred[g_deferred_tail % kDeferredSlots];
+        ESP_LOGW(TAG, "deferred line cancelled: %s", parked.text);
+        const ReplyTarget target(parked.from_udp ? &parked.from : nullptr);
+        reply(reason_text);
+        ++g_deferred_tail;
+    }
+}
+
+// True for a Tello `rc a b c d` line (continuous manual control, fire-and-forget).
+// Tello `rc a b c d` の行（連続マニュアル操作、撃ちっぱなし）なら true。
+bool isRcLine(const char* line)
+{
+    return std::strncmp(line, "rc ", 3) == 0;
+}
+
+// Handle one line read during a wait. `emergency` and `stop` run at once through the same
+// functions processLine uses, each answered at its own sender, and drop the parked lines
+// (cancelDeferredLines). An `rc` line is DROPPED, not parked: it is a stale operator input
+// the moment the wait ends, and replaying it would steer the craft with old sticks. Anything
+// else is deferred. Returns true when the line ended the wait (an emergency, or an accepted
+// stop). A rejected stop (not flying: it is takeoff / land / flip that is waiting) only gets
+// its error reply, the parked lines stay and the wait goes on.
+// 待機中に読んだ 1 行を処理する。`emergency` と `stop` は processLine と同じ関数で即実行し
+// （返信は各自の送信元へ）、後回しの行を捨てる（cancelDeferredLines）。`rc` の行は後回しにせず
+// 「捨てる」: 待機が終わった時点で古い操作入力であり、再生すると古いスティックで機体を操縦して
+// しまう。それ以外は後回し。その行が待機を終わらせたとき（emergency、または受理された stop）true。
+// 拒否された stop（飛行中でない: takeoff / land / flip の待機中）は拒否の応答だけ返し、後回しの行は
+// 残して待機を続ける。
+bool dispatchDuringWait(char* line, const sockaddr_in* from)
+{
+    if (trimLine(line) == 0) {
+        return false;
+    }
+    if (isRcLine(line)) {
+        return false;   // dropped: fire-and-forget, no reply / 破棄: 撃ちっぱなしで応答なし
+    }
+    const ReplyTarget target(from);
+    if (std::strcmp(line, "emergency") == 0) {
+        ESP_LOGI(TAG, "cmd: %s (during a blocking command)", line);
+        cmdEmergency();                       // cut the motors first / まずモータを止める
+        cancelDeferredLines("error cancelled by emergency");
+        g_wait_interrupt = WaitInterrupt::Emergency;
+        return true;
+    }
+    if (std::strcmp(line, "stop") == 0) {
+        ESP_LOGI(TAG, "cmd: %s (during a blocking command)", line);
+        if (cmdStop()) {
+            cancelDeferredLines("error cancelled by stop");
+            g_wait_interrupt = WaitInterrupt::Stop;
+            return true;
+        }
+        return false;
+    }
+    deferLine(line, from);
+    return false;
+}
+
+// Read every pending command line (injection ring, then UDP) without blocking; see
+// dispatchDuringWait. Returns true when the wait must end.
+// 保留中のコマンド行を全て（注入リング、次に UDP）ブロックせず読む。dispatchDuringWait
+// 参照。待機を終えるべきとき true。
+bool servicePendingCommands()
+{
+    char line[kInjectLen];
+    while (popInjected(line, sizeof(line))) {
+        if (dispatchDuringWait(line, nullptr)) {
+            return true;
+        }
+    }
+    sockaddr_in from = {};
+    while (receiveDatagram(line, sizeof(line), from)) {
+        if (dispatchDuringWait(line, &from)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // -----------------------------------------------------------------------------
@@ -531,11 +884,11 @@ bool flipPreflight(const char* direction_token, sf::FlipDirection& dir, sf::Flig
 void waitFlipOutcome()
 {
     if (!waitUntil(500, [] { return currentState() == sf::FlightState::FLIP; })) {
-        reply("error flip: rejected");
+        reply(waitFailureText("error flip: rejected"));
         return;
     }
     if (!waitUntil(3000, [] { return currentState() != sf::FlightState::FLIP; })) {
-        reply("error flip: timeout");
+        reply(waitFailureText("error flip: timeout"));
         return;
     }
     if (currentState() != sf::FlightState::FLYING) {
@@ -610,6 +963,15 @@ void cmdRc(float a, float b, float c, float d)
     t.vz   = (c >= 0.0f) ? (c / 100.0f) * vup     // up   [m/s] / 上昇
                          : (c / 100.0f) * vdn;    // down [m/s] / 降下
     t.vyaw = (d / 100.0f) * kRcYawRateMax;        // yaw rate cw+ [rad/s] / ヨーレート
+
+    // Altitude ceiling: at or above it, an upward command is dropped to zero climb (the
+    // craft holds; descending and horizontal motion stay available). Altitude = -NED z.
+    // 高度上限: 上限以上では上昇指令を上昇ゼロに落とす（保持。降下・水平移動は可能）。
+    // 高度 = −NED z。
+    const float altitude_m = -sf::estimate_state.latest().position[2];
+    if (t.vz > 0.0f && altitude_m >= kAltMaxM) {
+        t.vz = 0.0f;
+    }
     t.timestamp = static_cast<uint32_t>(esp_timer_get_time());
     sf::command_target.publish(t);
     // No reply — Tello rc is fire-and-forget. / 応答なし（rc は撃ちっぱなし）。
@@ -1104,11 +1466,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
 void processLine(char* line)
 {
     // Trim trailing whitespace/newlines / 末尾の空白・改行を除去
-    size_t n = std::strlen(line);
-    while (n > 0 && (line[n-1] == '\n' || line[n-1] == '\r' || line[n-1] == ' ')) {
-        line[--n] = '\0';
-    }
-    if (n == 0) return;
+    if (trimLine(line) == 0) return;
     ESP_LOGI(TAG, "cmd: %s", line);
 
     if (std::strcmp(line, "command") == 0) {
@@ -1123,15 +1481,10 @@ void processLine(char* line)
 
     // Emergency first — never behind any other gate.
     // emergency は最優先 — 他の判定の後ろに置かない。
-    if (std::strcmp(line, "emergency") == 0) {
-        g_target_valid = false;
-        publishApiVerb(sf::ApiCmd::Emergency);
-        reply("ok");
-        return;
-    }
+    if (std::strcmp(line, "emergency") == 0) { cmdEmergency(); return; }
     if (std::strcmp(line, "takeoff") == 0) { cmdTakeoff(); return; }
     if (std::strcmp(line, "land") == 0)    { cmdLand();    return; }
-    if (std::strcmp(line, "stop") == 0)    { cmdStop();    return; }
+    if (std::strcmp(line, "stop") == 0)    { (void)cmdStop(); return; }
     if (std::strchr(line, '?') != nullptr) { cmdQuery(line); return; }
 
     // Camera commands — StampFly has no camera, but reply "ok" so video-aware Tello
@@ -1272,6 +1625,23 @@ void processLine(char* line)
     reply("error unknown command");
 }
 
+// Run the commands parked by dispatchDuringWait, oldest first, before anything newer is read
+// (keeps the arrival order). A line may block and park more; those run in this same loop.
+// dispatchDuringWait が後回しにした行を、新しい行を読む前に古いものから実行する（到着順を
+// 保つ）。行が待機して更に後回しを積むことがあり、それも同じループで実行される。
+void runDeferredCommands()
+{
+    char line[kInjectLen];
+    while (g_deferred_tail < g_deferred_head) {
+        const DeferredLine& parked = g_deferred[g_deferred_tail % kDeferredSlots];
+        std::strncpy(line, parked.text, sizeof(line) - 1);
+        line[sizeof(line) - 1] = '\0';
+        const ReplyTarget target(parked.from_udp ? &parked.from : nullptr);   // own sender / 自分の送信元
+        ++g_deferred_tail;
+        processLine(line);
+    }
+}
+
 }  // namespace
 
 // =============================================================================
@@ -1380,6 +1750,10 @@ void ApiTask(void* /*pvParameters*/)
             }
         }
 
+        // 1a. Commands parked while a blocking command ran, oldest first.
+        // 1a. 待機コマンドの実行中に後回しにした行を古いものから。
+        runDeferredCommands();
+
         // 1. SILS/test injections / SILS・テスト注入
         while (popInjected(line, sizeof(line))) {
             processLine(line);
@@ -1387,31 +1761,12 @@ void ApiTask(void* /*pvParameters*/)
 
         // 2. UDP datagrams (one command per datagram, Tello-style)
         // 2. UDP データグラム（1 データグラム = 1 コマンド、Tello 流）
-        if (g_sock >= 0) {
-            sockaddr_in from = {};
-            socklen_t from_len = sizeof(from);
-            // MSG_DONTWAIT (per-call non-blocking): the loop must keep draining
-            // SILS injections; a parked blocking receive would starve them.
-            // MSG_DONTWAIT（呼び出し単位の非ブロッキング）: ループは SILS 注入の
-            // drain を続ける必要があり、ブロッキング受信のパークはそれを飢餓させる。
-            const ssize_t r = ::recvfrom(g_sock, line, sizeof(line) - 1, MSG_DONTWAIT,
-                                         reinterpret_cast<sockaddr*>(&from),
-                                         &from_len);
-            if (r > 0) {
-                line[r] = '\0';
-                g_client = from;          // reply to the latest sender / 最新送信者へ返信
-                g_have_client = true;
-                // Mirror the client IP for TelloStateTask (UDP:8890 state stream).
-                // Publishing it here means the stream starts the moment a client
-                // sends anything — exactly when djitellopy connect() waits for state.
-                // TelloStateTask 用にクライアント IP をミラー（UDP:8890 状態ストリーム）。
-                // ここで公開することで、クライアントが何か送った瞬間＝djitellopy connect() が
-                // 状態を待つ瞬間にストリームが始まる。
-                g_client_ip.store(from.sin_addr.s_addr, std::memory_order_relaxed);
-                g_client_known.store(true, std::memory_order_release);
-                processLine(line);
-                continue;                 // drain quickly when commands queue up
-            }
+        sockaddr_in from = {};
+        if (receiveDatagram(line, sizeof(line), from)) {
+            g_client      = from;     // reply to this line's sender / この行の送信元へ返信
+            g_have_client = true;
+            processLine(line);
+            continue;                 // drain quickly when commands queue up
         }
 
         vTaskDelay(pdMS_TO_TICKS(kPollMs));

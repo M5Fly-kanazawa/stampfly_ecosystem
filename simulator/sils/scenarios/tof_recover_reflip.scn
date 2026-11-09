@@ -1,0 +1,31 @@
+# tof_recover_reflip.scn — the pilot flips the ALT switch during a ToF silence, then again after the recovery
+#                         ToF 出力停止中に ALT スイッチを入れ、復帰後にもう一度入れ直す
+#
+# 2nd independent review, D3 (the ALT_HOLD twin of tof_recover_edge_consumed.scn) with a flight that stays in the
+# ToF range. STABILIZE flight, the ToF stops at 5.0 s, the ALT switch goes ON at 6.5 s (refused in flight, the edge is
+# CONSUMED), the ToF resumes at 7.5 s and the switch stays ON: nothing may happen by itself, even after the episode
+# ended (~8.6 s). The pilot switches OFF (9.0 s, a no-op in STABILIZE) and ON again (9.6 s): now ALT_HOLD engages and
+# holds the altitude (estimate within 0.04 m RMS of the truth). Before the fix the mode switched to ALT_HOLD by itself
+# at the return and the pilot's OFF then switched it back ("Mode change: ALT_HOLD -> STABILIZE").
+#
+# 2 回目の独立レビューの D3（tof_recover_edge_consumed.scn の ALT_HOLD 版）で、ToF のレンジ内に収まる飛行。
+# STABILIZE 飛行、5.0 s に ToF が停止、6.5 s に ALT スイッチを入れる（飛行中に拒否、エッジは消費）、7.5 s に ToF が
+# 復帰してもスイッチは入れたまま: エピソードが終わった後（約 8.6 s）でも、勝手には何も起きてはならない。パイロットが
+# 切り（9.0 s。STABILIZE では何も起きない）、入れ直す（9.6 s）: ここで ALT_HOLD が入り、高度を保持する（推定は真値の
+# RMS 0.04 m 以内）。修正前は復帰の瞬間にモードが勝手に ALT_HOLD になり、パイロットが切ると戻った
+# （"Mode change: ALT_HOLD -> STABILIZE"）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_recover_reflip.scn --target vehicle --duration 24000000
+#
+#  <t>      ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc         2048  2048   2048    2048  0     4000      50                 # A: boot at rest, calibration
+   +    rc         2048  2048   2048    2048  1     1000      50                 # B: ARM (4.0 s), STABILIZE
+   +    tof_silent 1                                                             # C: 5.0 s — ToF output stops
+   +    rc         3171  2048   2048    2048  1     1500      50                 # D: throttle up -> TAKEOFF -> FLYING (to 6.5 s)
+   +    rc         3070  2048   2048    2048  0     1000      50        1        # E: ALT switch ON (6.5 s) -> REFUSED in flight, edge CONSUMED
+   +    tof_silent 0                                                             # F: 7.5 s — ToF output resumes
+   +    rc         3070  2048   2048    2048  0     1500      50        1        # G: switch stays ON; the episode ends ~8.6 s; still STABILIZE
+   +    rc         3070  2048   2048    2048  0     600       50                 # H: switch OFF (9.0 s) — a no-op
+   +    rc         2048  2048   2048    2048  0     5000      50        1        # I: switch ON again (9.6 s) -> ALT_HOLD engages, altitude held
+   +    rc         2048  2048   2048    2048  1     300       50        1        # J: press -> DISARM in ALT_HOLD = auto-land
+   +    rc         2048  2048   2048    2048  0     8000      50        1        # K: touchdown

@@ -1,0 +1,16 @@
+# tof_recover_landing_invalid.expect — samples return during the blind landing, all invalid (C5)
+# ToF なしの着陸の最中にサンプルが戻るが全部無効（C5）
+#
+# Falsification: the same run on the build before this fix ends the episode ~1 s after the samples return
+# (no "only invalid samples while flying" episode in the log) because an invalid sample in LANDING counted as agreement.
+# 反証: この修正の前のビルドで同じ走行をすると、LANDING の無効サンプルが一致と数えられるので、サンプルが戻った約 1 s 後に
+# エピソードが終わる（ログに "only invalid samples while flying" のエピソードが出ない）。
+exit 0
+log_contains any "Downward ToF silent (>= 300 ms without a sample) in FLYING/ALT_HOLD → LANDING"
+log_contains any "Blind landing: ToF silent, velocity loop"
+log_contains any "Downward ToF silence episode: only invalid samples while flying"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+order "Blind landing: ToF silent" "Downward ToF silence episode: only invalid samples while flying"
+order "Downward ToF silence episode: only invalid samples while flying" "Transition: LANDING → IDLE_GROUND"
+metric descent_speed_max < 0.8 in 14.0 21.0
+metric alt_max < 0.05 in 18.0 22.0

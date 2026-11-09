@@ -173,6 +173,29 @@ sf log viz                  # ログ可視化
 | モータが回らない | ARM 状態か確認 (`ws::is_armed()`) |
 | テレメトリが来ない | WiFi AP に接続されているか確認 |
 
+## 7. 下向き ToF が止まったときの挙動
+
+### 何が効くか
+
+Workshop は vehicle の `StateTask`・`ImuTask`・`Failsafe`（ToF の出力が止まったことの判定）をそのまま使うので、下向き ToF（高度センサ）が止まる故障（新サンプルが 0.3 s 来ない、飛行中に無効サンプルだけが続く、サンプルは戻ったが推定器がまだ取り込み直していない）への備えのうち、制御器を持たなくても成り立つものがそのまま効く。LED の黄色の高速点滅と `status` の `tof` 行（CLI）で状態が分かる。
+
+| 場面 | Workshop での挙動 |
+|------|------------------|
+| 地上（ARM 前） | **ARM を拒否する**（ACRO を含む全モード。`ws::is_armed()` は偽のまま）。ToF が戻っても、推定器が取り込み直す（連続 10 サンプルが採用され、ToF が 1 s 生存）まで拒否が続くので、復帰後も約 1 s 待つ |
+| ARM 中・地上（ARMED_GROUND） | 自動で DISARM（モータ停止） |
+| 飛行中・ACRO / STABILIZE（既定） | **強制着陸しない**。LED と音で警告するだけで、学習者のコード（`loop_400Hz()`）はそのまま動き続ける |
+| 飛行中・ALT_HOLD / POS_HOLD（送信機のモードスイッチ） | LANDING に入り、**モータを止める**（下記） |
+
+### Workshop にないもの
+
+- **ToF なし降下がない。** vehicle は ToF が止まった ALT_HOLD / POS_HOLD で、加速度計だけを頼りに重さ未満の推力で降りる（自動着陸）。Workshop には制御器（`PidController`）がなく、学習者のコードがモータを駆動するので、その降下則は使えない。LANDING に入ると `WorkshopControlTask` が**モータを止める**（自由落下）。ALT_HOLD / POS_HOLD は Workshop では高度を保つ機能を持たない（学習者のコードが推力を決める）ので、ToF が故障する可能性のある場所では ACRO / STABILIZE で飛ばすこと。
+- **`controller_status` を出さない。** vehicle の制御器は、上昇量の推定（加速度の積分）などを `controller_status` に出し、`ImuTask` の ToF 健全性の判定が使う。Workshop はこれを出さないので上昇量は常に 0 と読まれ、**離陸中（TAKEOFF）の無効サンプルは TAKEOFF に入ってから 2 s 後にしか数えられない**（vehicle は上昇が 5 cm に達した 0.15 s 後）。つまり、離陸中に ToF が無効のままでも、判定が出るまでに最大で約 2.15 s かかる。FLYING に入った後は vehicle と同じ（0.5 s）。
+- 高度センサの値 `ws::tof_bottom()` / `ws::estimated_altitude()` は、ToF が止まっている間は古い値のまま、または無効な値になる。レッスンのコードで高度を使うときは、無効な値（範囲外）を前提にすること。
+
+### 確かめ方
+
+SILS（模擬飛行）で、ToF の出力停止を注入して挙動を再現できる。vehicle 用のシナリオを Workshop の機体モデルで走らせる: `sf sils scenario simulator/sils/scenarios/tof_silent_prearm.scn --target workshop --duration 12000000`（ARM の拒否）と、同じ形で `tof_silent_armed_ground.scn`（ARM 中・地上で ToF が止まると DISARM）。どちらも 2026-11-09 に PASS を確認した。飛行中の挙動（上の表の下 2 行）と、離陸中の無効の判定が 2 s 遅れる点は、SILS のシナリオでは未確認。
+
 ---
 
 <a id="english"></a>
@@ -229,3 +252,35 @@ See the Japanese section above for the complete API reference table.
 sf lesson list / switch / solution / build / flash
 sf competition hover-time / score
 ```
+
+## 6. Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Build error | Clean build with `sf lesson build -c` |
+| Port not found | Check the USB cable, diagnose with `sf doctor` |
+| Motors do not spin | Check the ARM state (`ws::is_armed()`); also see chapter 7 (a silent ToF refuses ARM) |
+| No telemetry | Check that you are connected to the WiFi AP |
+
+## 7. Behaviour when the downward ToF goes silent
+
+### What applies
+
+Workshop reuses vehicle's `StateTask`, `ImuTask` and `Failsafe` (the judgement that the ToF output has stopped) unchanged. So the protections against a failing downward ToF (the altitude sensor: no new sample for 0.3 s, only invalid samples while flying, or samples are back but the estimator has not re-acquired the ToF yet) that do not need a controller apply as they are. The state is shown by the fast yellow LED blink and by the `tof` line of the CLI `status`.
+
+| Situation | Behaviour in Workshop |
+|-----------|-----------------------|
+| On the ground (before ARM) | **ARM is refused** (every mode, ACRO included; `ws::is_armed()` stays false). The refusal lasts until the estimator has re-acquired the ToF (10 consecutive samples adopted and the ToF alive for 1 s), so wait about 1 s after it returns |
+| Armed on the ground (ARMED_GROUND) | Automatic DISARM (motors stop) |
+| In flight, ACRO / STABILIZE (default) | **No forced landing.** Only a LED and tone warning; the learner code (`loop_400Hz()`) keeps running |
+| In flight, ALT_HOLD / POS_HOLD (transmitter mode switch) | LANDING is entered and the **motors are stopped** (below) |
+
+### What Workshop does not have
+
+- **No descent without a ToF.** In ALT_HOLD / POS_HOLD with a silent ToF, vehicle descends on a thrust below the weight using only the accelerometer (auto-landing). Workshop has no controller (`PidController`); the learner code drives the motors, so that descent law cannot be used. When LANDING is entered, `WorkshopControlTask` **stops the motors** (a free fall). ALT_HOLD / POS_HOLD do not hold altitude in Workshop (the learner code sets the thrust), so fly in ACRO / STABILIZE wherever the ToF may fail.
+- **No `controller_status`.** Vehicle's controller publishes the rise estimate (an accelerometer integral) and more on `controller_status`, which the ToF health judgement in `ImuTask` uses. Workshop does not publish it, so the rise always reads 0 and **invalid samples in TAKEOFF are counted only 2 s after TAKEOFF was entered** (vehicle: 0.15 s after the rise reaches 5 cm). A ToF that stays invalid during take-off therefore takes up to about 2.15 s to be judged. After FLYING is entered it is the same as vehicle (0.5 s).
+- While the ToF is silent, `ws::tof_bottom()` and `ws::estimated_altitude()` keep an old value or become invalid. When lesson code uses the altitude, expect invalid (out-of-range) values.
+
+### How to check
+
+The ToF silence can be injected in SILS. Run the vehicle scenarios against the Workshop build: `sf sils scenario simulator/sils/scenarios/tof_silent_prearm.scn --target workshop --duration 12000000` (ARM refused) and, the same way, `tof_silent_armed_ground.scn` (a ToF that stops while armed on the ground gives a DISARM). Both PASSED on 2026-11-09. The in-flight behaviour (the last two rows of the table above) and the 2 s delay of the invalid-sample judgement in take-off are NOT confirmed by a SILS scenario.

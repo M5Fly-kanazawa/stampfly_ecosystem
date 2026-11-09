@@ -1,0 +1,22 @@
+# tof_silent_stabilize_commloss.expect — STABILIZE flown 21 s with the ToF silent, then comm loss: the descent without a ToF with an old velocity estimate
+# STABILIZE を ToF 出力停止のまま 21 s 飛び、通信が途絶: 古い速度推定のまま ToF なしの降下
+exit 0
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "Downward ToF silent in FLYING/STABILIZE: NO forced landing, fly on"
+log_contains any "Comm lost → LANDING (hover grace elapsed)"
+log_contains any "Blind landing: ToF silent, velocity loop"
+log_contains any ", calibrated (left floor"
+log_contains any "trusted -"
+log_contains any "Touchdown while the ToF is silent (impact) → landing complete, not an emergency"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_absent any "Transition: FLYING → LANDING (ToF)"
+log_absent any "touchdown by time"
+log_absent any "emergency DISARM"
+order "NO forced landing, fly on" "Comm lost → LANDING (hover grace elapsed)"
+order "Comm lost → LANDING (hover grace elapsed)" "Blind landing: ToF silent"
+order "Blind landing: ToF silent" "Touchdown while the ToF is silent (impact)"
+# The craft flies ~0.65-0.75 m for 21 s with the ToF silent, no rise after the landing starts (LANDING ~33.8 s), on the floor afterwards.
+# ToF 出力停止のまま約 0.65〜0.75 m を 21 s 飛び、着陸が始まった後は上昇せず（LANDING 約 33.8 s）、その後は床の上。
+metric alt_mean > 0.55 in 14.0 30.0
+metric alt_max < 1.2 in 9.5 40.0
+metric alt_max < 0.05 in 39.0 49.0

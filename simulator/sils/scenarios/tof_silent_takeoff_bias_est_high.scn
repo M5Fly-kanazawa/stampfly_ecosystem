@@ -1,0 +1,35 @@
+# tof_silent_takeoff_bias_est_high.scn — ToF silent early in the auto-takeoff climb, estimate 28 % too high AND an accelerometer offset error of +0.2 m/s^2
+#                                         自動離陸の上昇の初期に ToF が出力停止、見積もりが 28 % 高く、さらに加速度計のオフセット誤差 +0.2 m/s^2
+#
+# tof_silent_takeoff_est_high.scn plus `bias 0 0 0.2 0 0 0` 0.3 s after the ARM (the offset is learned at rest before that, so the error appears
+# with the take-off: the upward reading is 0.2 m/s^2 low and the integrated velocity drifts down). Two unknowns at once: the support thrust is
+# not calibrated (the silence comes in the climb, before a hover has been flown) and the velocity estimate is wrong. The thrust ceiling follows the early
+# estimate (the quotient over the airborne samples x 0.85, or 0.75 x the hover estimate) and stays below the weight, so the craft must NOT rise
+# again after LANDING starts, whatever the velocity says (the previous build: 4-6 m). Spec under test:
+#  1. LANDING aborts the climb; no rise beyond the stopping distance of the climb speed (peak below 1.2 m, the stopping distance at 1.7 m/s is ~0.8 m).
+#  2. The 3 G impact of the touchdown ends LANDING without an emergency DISARM; the motors stop only on the floor.
+#  3. ARM is refused while the sensor is silent.
+#
+# tof_silent_takeoff_est_high.scn に、ARM の 0.3 s 後の `bias 0 0 0.2 0 0 0` を足したもの（オフセットはその前の静止で学習済みなので、
+# 誤差は離陸とともに現れる: 上向きの読みが 0.2 m/s^2 低く、積分した速度が下へドリフトする）。未知が 2 つ同時: 支持推力は較正できておらず
+# （沈黙は上昇中で、ホバーを飛ぶ前に来る）、速度推定も誤っている。推力の上限は早い推定（空中の全サンプルでの商 × 0.85、または
+# ホバー推定の 0.75 倍）に従って重さを下回るので、LANDING が始まった後、速度が何であれ機体は再上昇してはならない（前のビルド: 4〜6 m）。
+# 検証する仕様:
+#  1. LANDING が上昇を中止する。上昇速度の停止距離を超える上昇はない（最高 1.2 m 未満。1.7 m/s での停止距離は約 0.8 m）。
+#  2. 接地の 3 G の衝撃は、非常の DISARM でなく LANDING を終わらせる。モータは床の上でだけ止まる。
+#  3. センサが出力停止している間、ARM は拒否される。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_takeoff_bias_est_high.scn --target vehicle --duration 21000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    param      hover.thrust_corr 1.2                                                 # P: hover-thrust estimate 1.2 x mg = 0.435 N against the true 0.34 N (+28 %)
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        0     0     1  # B: POS switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     300       50        0     0     1  # C1: ARM in POS_HOLD (7.5 s) — spool
+   +    bias 0 0 0.2 0 0 0                                                             # C2: 7.8 s — the accelerometer offset error appears with the take-off
+   +    rc         2048  2048   2048    2048  1     600       50        0     0     1  # C3: the auto-takeoff climb
+   +    tof_silent 1                                                                   # D: 8.4 s — ToF output stops (last sample, then nothing)
+   +    rc         2048  2048   2048    2048  1     8000      50        0     0     1  # E: stick centre — LANDING by silence, then blind landing by time
+   +    rc         2048  2048   2048    2048  0     200       50        0     0     1  # F: release the ARM button
+   +    rc         2048  2048   2048    2048  1     1000      50        0     0     1  # G: press again (17 s) — landed, ToF still silent → ARM REFUSED
+   +    rc         2048  2048   2048    2048  0     600       50                       # H: settle

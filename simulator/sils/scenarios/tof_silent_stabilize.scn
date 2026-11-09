@@ -1,0 +1,42 @@
+# tof_silent_stabilize.scn — downward ToF goes silent during a MANUAL STABILIZE flight: NO forced landing
+#                            手動の STABILIZE 飛行中に下向き ToF が出力停止する: 強制着陸は「しない」
+#
+# In ACRO / STABILIZE the pilot owns the vertical axis (the throttle stick is thrust), the control
+# law never used the altitude, so a silent ToF is no reason to take the craft away from the pilot.
+# Spec under test (detailed_design.md §3.1, ToF-silent rows, ACRO/STABILIZE):
+#  1. The state machine does NOT go to LANDING: the craft stays in FLYING and the pilot keeps the
+#     throttle (it climbs, hovers and descends under the pilot's stick).
+#  2. The warning is given (log "NO forced landing, fly on"; LED orange fast blink and the tone
+#     are driven from the same level, not observable in SILS).
+#  3. A switch to POS_HOLD while silent is REFUSED (the craft would fly on an altitude nobody sees):
+#     the mode stays STABILIZE.
+#  4. After the pilot has landed, the next ARM is REFUSED while the sensor is still silent.
+#
+# ACRO / STABILIZE では鉛直軸はパイロットのもの（スロットルスティックが推力）で、制御則はもともと高度を
+# 使わないので、ToF が止まっても機体をパイロットから取り上げる理由にならない。
+# 検証する仕様（detailed_design.md §3.1、ToF 出力停止の行、ACRO/STABILIZE）:
+#  1. 状態機械は LANDING に入らない: 機体は FLYING のままで、パイロットがスロットルを握り続ける
+#     （パイロットのスティックどおりに上昇・ホバー・降下する）。
+#  2. 警告が出る（ログ "NO forced landing, fly on"。LED のオレンジ高速点滅と音は同じレベルから駆動
+#     されるが、SILS では観測できない）。
+#  3. 出力停止中の POS_HOLD への切り替えは拒否される（誰も見られない高度で飛ぶことになる）: モードは
+#     STABILIZE のまま。
+#  4. パイロットが着陸した後、センサがまだ出力停止していれば次の ARM は拒否される。
+#
+# Timeline (s): ARM 4.0 -> takeoff 5.0 -> hover ~0.55 m -> ToF stops 7.5 (judged ~7.8) -> POS switch
+#               8.0-9.0 (refused) -> pilot descends 10.0-13.5 -> touchdown ~11.4 -> ARM attempt 14.0 (refused).
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_stabilize.scn --target vehicle --duration 17000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: disarmed 4 s — boot calibration
+   +    rc         2048  2048   2048    2048  1     1000      50                       # B: ARM (4.0 s), STABILIZE
+   +    rc         3171  2048   2048    2048  1     1000      50                       # C: throttle up (5.0 s) -> TAKEOFF -> FLYING
+   +    rc         3070  2048   2048    2048  1     1500      50                       # D: near-hover throttle (to 7.5 s)
+   +    tof_silent 1                                                                   # E: 7.5 s — ToF output stops
+   +    rc         3070  2048   2048    2048  1     500       50                       # F: keep flying; the silence is judged ~7.8 s -> warning only
+   +    rc         3070  2048   2048    2048  1     1000      50        0     0     1  # G: POS switch ON (8.0 s) while silent -> REFUSED
+   +    rc         3070  2048   2048    2048  1     1500      50                       # H: POS switch back OFF; still STABILIZE
+   +    rc         3030  2048   2048    2048  1     3500      50                       # I: the pilot descends (10.0 s) and lands (~11.4 s)
+   +    rc         2048  2048   2048    2048  0     300       50                       # J: release the ARM button
+   +    rc         2048  2048   2048    2048  1     300       50                       # K: press (14.0 s) — landed, ToF still silent -> ARM REFUSED
+   +    rc         2048  2048   2048    2048  0     800       50                       # L: settle

@@ -18,6 +18,8 @@
 
 #include "state_manager.hpp"
 #include "params.hpp"
+#include "sensor_freshness.hpp"
+#include "tof_silence_policy.hpp"
 #include "esp_log.h"
 #include "esp_timer.h"
 
@@ -96,78 +98,87 @@ void StateManager::notifyInitComplete()
 /// @design detailed_design.md §3 注9/注10 — single pre-arm reason          [OK]
 ArmBlock StateManager::evaluateArmBlock() const
 {
-    // --- Pre-arm gate 0: not actively pairing -----------------------------------------
-    // While searching for a transmitter (PairingState::Pairing) the link is not yet
-    // bound, so ARM is refused. A vehicle that boots unpaired auto-enters Pairing; it
-    // must complete pairing (→ Paired) before it can be armed. Paired and (the transient)
-    // NotPaired do not block — only the active search does.
-    // ARM 前判定0: 探索中でないこと。送信機を探索中（PairingState::Pairing）はリンクが
-    // 未バインドゆえ ARM を拒否する。未ペア起動は自動で Pairing に入り、ペア成立（→Paired）
-    // するまで ARM できない。Paired と（過渡的な）NotPaired は阻まない — 探索中のみ阻む。
+    // Gate 0: not searching for a transmitter (the link is not bound yet).
+    // 判定0: 送信機を探索中でないこと（リンクが未バインド）。
     if (pairing_state_ == PairingState::Pairing) {
         return ArmBlock::Pairing;
     }
 
-    // --- Pre-arm gate 1: battery / USB power (requirements §9) ------------------------
-    // Reject ARM if a VALID voltage reading is at or below the unsafe threshold — either
-    // running on the USB rail (no pack) or a critically low battery. A 0/unknown reading
-    // (power monitor absent → Optional, hardware_init.md §5) does NOT block. Threshold
-    // from the safety.battery.usb_v param.
-    // ARM 前判定1: 電池/USB 電源（要件§9）。有効な電圧読みが危険閾値以下なら ARM を拒否
-    // （USB レール=電池なし or 危険な低電圧）。0/不明（電源モニタ不在→Optional）は阻まない。
-    // 閾値は safety.battery.usb_v param から。
-    float usb_v = 3.3f;
-    params::get_float("safety.battery.usb_v", usb_v);
-    const float voltage = sensor_power.latest().voltage;
-    if (voltage > kVoltageValidMin && voltage <= usb_v) {
+    // Gate 1: battery / USB power (requirements §9). / 判定1: 電池/USB 電源（要件§9）。
+    if (isBatteryUnsafeForArm()) {
         return ArmBlock::Battery;
     }
 
-    // --- Pre-arm gate 2: boot calibration complete (requirements §9 / design §3) ------
-    // The boot gyro/accel bias calibration must no longer be pending (ImuTask publishes
-    // system_status.calibrated). Don't fly on a half-measured bias. Status via topic
-    // (R16-style), not a cross-task object.
-    // ARM 前判定2: 起動校正完了（要件§9 / 設計§3）。起動バイアス校正が保留中でないこと
-    // （ImuTask が system_status.calibrated を発行）。半端なバイアスで飛ばさない。状態は
-    // トピック経由（R16 流）。
+    // Gate 2: boot calibration complete (requirements §9 / design §3): no half-measured bias.
+    // 判定2: 起動校正完了（要件§9 / 設計§3）。半端なバイアスで飛ばさない。
     if (!system_status.latest().calibrated) {
         return ArmBlock::Calibrating;
     }
 
-    // --- Pre-arm gate 3: no bench motor test active / re-level pending ----------------
-    // A CLI bench motor test (DISARMED only) can shake the attitude estimate off; StateTask
-    // re-levels it (reset + recalibrate) once the motors have been quiet. Until then ARM is
-    // refused, otherwise the state would leave IDLE_GROUND, the owed re-level would be
-    // dropped and the craft would fly on a tilted estimate. Once the re-level is issued the
-    // flag clears and gate 2 (calibrated) covers the window until calibration finishes.
-    // ARM 前判定3: ベンチ用モータテストが実行中/再水平化待ちでないこと。CLI のモータテスト
-    // （disarmed 限定）は姿勢推定を外しうる。StateTask がモータ静穏後に再水平化（リセット＋
-    // 再キャリブ）する。それまで ARM を拒否しないと、状態が IDLE_GROUND を離れて再水平化が
-    // 破棄され、傾いた推定のまま飛ぶ。再水平化の発行でフラグは落ち、以後はキャリブ完了まで
-    // 判定2（calibrated）が担う。
+    // Gate 3: no bench motor test active / re-level pending (else the owed re-level is dropped
+    // and the craft flies on a tilted estimate).
+    // 判定3: ベンチ用モータテストが実行中/再水平化待ちでないこと（でないと再水平化が破棄され、
+    // 傾いた推定のまま飛ぶ）。
     // @design detailed_design.md §3 注9 — ARM rejected during bench test / re-level [OK]
     if (motor_test.latest().active || bench_relevel_pending_) {
         return ArmBlock::BenchRelevel;
     }
 
-    // --- Pre-arm gate 4: attitude estimate agrees with gravity ------------------------
-    // ImuTask detects (TiltConsistencyMonitor) that, on the ground, the estimated attitude
-    // disagrees with the gravity direction the accelerometer measures — the estimate was
-    // shaken off (e.g. ground-spin vibration) and the accel-attitude chi2 gate may have
-    // latched. Flying on that estimate tilts the takeoff. StateTask resets the estimator once
-    // per IDLE_GROUND stay; until the check passes ARM is refused (a craft that stays tilted
-    // needs a human to pick it up and place it down, which recalibrates).
-    // ARM 前判定4: 姿勢推定が重力と一致していること。地上で推定姿勢が加速度計の測る重力方向と
-    // 不一致（ImuTask の TiltConsistencyMonitor が検出）なら、推定が（地上回転の振動等で）
-    // 外れ、accel-attitude の χ² 判定が latch している可能性がある。その推定で飛ぶと離陸が
-    // 傾く。IDLE_GROUND 中は StateTask が滞在ごとに1回推定器を Reset し、判定が通るまで ARM を
-    // 拒否する（傾いたままの機体は人が持ち上げて置き直す＝再校正が要る）。
-    // @design detailed_design.md §3 注10 — ARM rejected on attitude/gravity mismatch [OK]
-    // ARM needs a POSITIVE verdict (attitude_verified), not just the absence of a mismatch:
-    // after boot or an estimator Reset the monitor needs ~lpf_s to judge, and that window
-    // must not let an unverified estimate through.
-    // ARM には「不一致でない」だけでなく肯定の判定（attitude_verified）が要る: 起動や推定器
-    // Reset の後、モニタが判定できるまで約 lpf_s かかり、その窓で未検証の推定を通してはならない。
+    // Gate 3b: no ToF-silence episode (the downward ToF produces samples AND the estimator has
+    // re-acquired it), in EVERY mode incl. ACRO, see isToFSilent(). Before the attitude gate on
+    // purpose: a silent ToF freezes the ground-contact flag (wrong TiltPending otherwise).
+    // 判定3b: ToF 出力停止のエピソード中でないこと（サンプルが来て、推定器が取り込み直した）。ACRO を含む
+    // 「全モード」。isToFSilent() 参照。姿勢判定より前に置くのは意図的: ToF が出力停止すると接地フラグが
+    // 凍結し、そうしないと誤って TiltPending を報告する。
+    // @design detailed_design.md §3.1 — ARM rejected while the downward ToF is silent [OK]
+    if (toFSilenceRefusesArm(isToFSilent())) {
+        return ArmBlock::TofSilent;
+    }
+
+    // Gate 4: attitude agrees with gravity. / 判定4: 姿勢推定が重力と一致していること。
+    const ArmBlock attitude_block = evaluateAttitudeGate();
+    if (attitude_block != ArmBlock::None) {
+        return attitude_block;
+    }
+
+    // Gate 6: general sensor health — DEFERRED until sf_board::sensor_present() (M2b) is wired.
+    // 判定6: センサ健全性（一般）— sf_board::sensor_present()（M2b）の配線まで繰延。
+    return ArmBlock::None;
+}
+
+/// Pre-arm gate 1: reject ARM if a VALID voltage reading is at or below the unsafe threshold
+/// — either running on the USB rail (no pack) or a critically low battery. A 0/unknown
+/// reading (power monitor absent → Optional, hardware_init.md §5) does NOT block. Threshold
+/// from the safety.battery.usb_v param.
+/// ARM 前判定1: 有効な電圧読みが危険閾値以下なら ARM を拒否（USB レール=電池なし or 危険な
+/// 低電圧）。0/不明（電源モニタ不在→Optional）は阻まない。閾値は safety.battery.usb_v param。
+bool StateManager::isBatteryUnsafeForArm() const
+{
+    float usb_v = 3.3f;
+    params::get_float("safety.battery.usb_v", usb_v);
+    const float voltage = sensor_power.latest().voltage;
+    return (voltage > kVoltageValidMin) && (voltage <= usb_v);
+}
+
+/// Pre-arm gate 4: ImuTask detects (TiltConsistencyMonitor) that, on the ground, the
+/// estimated attitude disagrees with the gravity direction the accelerometer measures — the
+/// estimate was shaken off (e.g. ground-spin vibration) and the accel-attitude chi2 gate may
+/// have latched. Flying on that estimate tilts the takeoff. StateTask resets the estimator
+/// once per IDLE_GROUND stay; until the check passes ARM is refused (a craft that stays
+/// tilted needs a human to pick it up and place it down, which recalibrates).
+/// ARM needs a POSITIVE verdict (attitude_verified), not just the absence of a mismatch:
+/// after boot or an estimator Reset the monitor needs ~lpf_s to judge, and that window must
+/// not let an unverified estimate through.
+/// ARM 前判定4: 地上で推定姿勢が加速度計の測る重力方向と不一致（ImuTask の
+/// TiltConsistencyMonitor が検出）なら、推定が外れ、accel-attitude の χ² 判定が latch して
+/// いる可能性がある。その推定で飛ぶと離陸が傾く。IDLE_GROUND 中は StateTask が滞在ごとに
+/// 1 回推定器を Reset し、判定が通るまで ARM を拒否する（傾いたままの機体は人が持ち上げて
+/// 置き直す＝再校正が要る）。ARM には「不一致でない」だけでなく肯定の判定（attitude_verified）
+/// が要る: 起動や Reset の後、モニタが判定できるまで約 lpf_s かかり、その窓で未検証の推定を
+/// 通してはならない。
+/// @design detailed_design.md §3 注10 — ARM rejected on attitude/gravity mismatch [OK]
+ArmBlock StateManager::evaluateAttitudeGate() const
+{
     const SystemStatus status = system_status.latest();
     if (status.attitude_mismatch) {
         return ArmBlock::TiltMismatch;
@@ -175,14 +186,6 @@ ArmBlock StateManager::evaluateArmBlock() const
     if (!status.attitude_verified) {
         return ArmBlock::TiltPending;
     }
-
-    // --- Pre-arm gate 5: sensor health — DEFERRED ------------------------------------
-    // A meaningful health gate needs sf_board::sensor_present() (the M2b per-sensor
-    // presence infrastructure, which still returns false today), so it is wired with
-    // that work, not here.
-    // ARM 前判定5: センサ健全性 — 繰延。意味ある判定には sf_board::sensor_present()
-    // （M2b の per-sensor presence、現状 false）が要るため、その作業で配線する。
-
     return ArmBlock::None;
 }
 
@@ -209,6 +212,10 @@ void StateManager::logArmRejected(ArmBlock reason) const
             break;
         case ArmBlock::TiltPending:
             ESP_LOGW(TAG, "ARM rejected: attitude check not passed yet");
+            break;
+        case ArmBlock::TofSilent:
+            ESP_LOGW(TAG, "ARM rejected: downward ToF is silent (%s)",
+                     toFSilenceReasonName(static_cast<ToFSilenceReason>(tof_status_.tof_reason)));
             break;
         case ArmBlock::None:
         default:
@@ -345,6 +352,9 @@ void StateManager::notifyLandingComplete()
         return;
     }
     ESP_LOGI(TAG, "Landing complete");
+    if (last_landing_end_ == LandingEnd::None) {
+        last_landing_end_ = LandingEnd::Detected;   // the two ToF-silent kinds are set by their callers / ToF 出力停止の 2 種類は呼び出し側が設定済み
+    }
     transition(FlightState::IDLE_GROUND);
 }
 
@@ -402,6 +412,19 @@ void StateManager::notifyFlipComplete()
         ESP_LOGE(TAG, "Deferred battery emergency → LANDING");
         transition(FlightState::LANDING);
     }
+
+    // A ToF-silence episode that began (or is still going) during the maneuver: the TOF_SILENT
+    // alerts of the FLIP window were ignored, so decide NOW from the standing level instead of
+    // flying on ALT_HOLD/POS_HOLD on the estimate until the next re-raised alert (up to ~1 s).
+    // handleToFSilenceAlert() reads state/mode/level and does nothing in LANDING (battery above).
+    // マニューバ中に始まった（または続いている）ToF 出力停止のエピソード: FLIP 窓の TOF_SILENT アラートは
+    // 無視されたので、次に再発報されるアラート（最大約 1 s）まで推定だけで ALT_HOLD/POS_HOLD を
+    // 飛ばさず、継続状態（レベル）から「今」判断する。handleToFSilenceAlert() は状態・モード・レベルを
+    // 読み、LANDING（上の電池）では何もしない。
+    if (isToFSilent()) {
+        ESP_LOGW(TAG, "ToF silence episode during the maneuver: decided now that FLIP is over");
+        handleToFSilenceAlert();
+    }
 }
 
 /// @design requirements.md §2 — IDLE_GROUND ↔ IDLE_HELD by ToF        [OK]
@@ -416,7 +439,56 @@ void StateManager::notifyIdleGroundHeld(bool is_held)
     }
 }
 
-bool StateManager::requestModeChange(FlightMode new_mode)
+/// While a downward-ToF silence episode is in progress, refuse a switch INTO ALT_HOLD / POS_HOLD
+/// (they would fly on an altitude nobody can vouch for; ACRO / STABILIZE stay available). Returns
+/// true when refused. The refusal is decided by sf::decideToFModeRefusal (tof_silence_policy.hpp):
+///  - on the ground the pilot's switch edge PERSISTS (StateTask re-applies it every cycle) and the
+///    mode switches by itself once the episode has ended (ModeBlock::TofSilent);
+///  - IN FLIGHT the edge is CONSUMED (StateTask drops it, see isModeRequestConsumed): the mode must
+///    not switch by itself at the instant the ToF recovers; the pilot flips the switch again
+///    (ModeBlock::TofSwitchConsumed, shown on CLI `status`).
+/// The reason is published on SystemMode.mode_block and logged once per refused request, not on
+/// each retry. An accepted request ends the refusal.
+/// 下向き ToF の出力停止エピソード中は、ALT_HOLD / POS_HOLD への切り替えを拒否する（保証できない高度で
+/// 飛ぶことになる。ACRO / STABILIZE は使える）。拒否したら true。拒否は sf::decideToFModeRefusal
+/// （tof_silence_policy.hpp）が決める:
+///  - 地上ではパイロットのスイッチのエッジは「持続」し（StateTask が毎周期再適用）、エピソードが終わると
+///    自動でモードが切り替わる（ModeBlock::TofSilent）。
+///  - 飛行中はエッジを「消費」する（StateTask が捨てる。isModeRequestConsumed 参照）: ToF が復帰した
+///    瞬間にモードが勝手に切り替わってはならない。パイロットがスイッチを入れ直す
+///    （ModeBlock::TofSwitchConsumed。CLI `status` に出す）。
+/// 理由は SystemMode.mode_block に出し、ログは再試行ごとでなく拒否した要求ごとに 1 回出す。
+/// 受理されれば拒否は終わる。
+/// @design detailed_design.md §3.1 — mode change refused while the ToF is silent [OK]
+bool StateManager::refuseModeForToFSilence(FlightMode new_mode)
+{
+    const ToFModeRefusal refusal = decideToFModeRefusal(state_, new_mode, isToFSilent());
+    if (refusal == ToFModeRefusal::None) {
+        clearModeBlock();   // an accepted request ends the refusal / 受理で拒否は終わる
+        return false;
+    }
+    const ModeBlock block = (refusal == ToFModeRefusal::Consume) ? ModeBlock::TofSwitchConsumed
+                                                                 : ModeBlock::TofSilent;
+    last_mode_request_consumed_ = (refusal == ToFModeRefusal::Consume);
+    if (mode_block_ != block) {
+        if (refusal == ToFModeRefusal::Consume) {
+            ESP_LOGW(TAG, "Mode change to %s refused: downward ToF is silent (no altitude). IN FLIGHT "
+                          "the switch request is CONSUMED: flip the switch again after the ToF has "
+                          "recovered", flightModeName(new_mode));
+        } else {
+            ESP_LOGW(TAG, "Mode change to %s refused: downward ToF is silent (no altitude). The "
+                          "request persists and applies when the silence episode ends",
+                     flightModeName(new_mode));
+        }
+        mode_block_ = block;
+        publishMode();
+    }
+    return true;
+}
+
+/// True in the states that accept a flight-mode change (see the rule below).
+/// フライトモード変更を受理する状態なら true（下の規則を参照）。
+bool StateManager::modeChangeAllowedInState() const
 {
     // Mode changes are accepted on the GROUND (disarmed or armed) and in FLYING.
     // Changing the mode while parked is the SAFEST time to do it (user spec,
@@ -426,26 +498,36 @@ bool StateManager::requestModeChange(FlightMode new_mode)
     // is applied on reaching FLYING/IDLE by the state task's per-cycle check)
     // and while held in the hand (IDLE_HELD). FLIP is rejected the same way as
     // TAKEOFF/LANDING (not listed explicitly — it is simply absent from
-    // mode_change_allowed below): a switch flip during the maneuver persists
+    // the list below): a switch flip during the maneuver persists
     // and applies once FLIP → FLYING (detailed_design.md §3.1 FLIP row).
     // モード変更は「地上」（DISARM/ARM とも）と FLYING で受理する。設置時の変更が
     // 最も安全（ユーザー仕様, 2026-06-11）— 制御器は判定され（ALT/POS は自動離陸
     // verb まで推力ゼロ）、本体 LED が選択モードを表示する。拒否は遷移中のみ
     // （INIT/TAKEOFF/LANDING — シーケンス途中のスイッチは FLYING/IDLE 到達時に
     // state task の周期チェックが適用する）と手持ち中（IDLE_HELD）。FLIP も
-    // TAKEOFF/LANDING と同じく拒否（下の mode_change_allowed に単に含めないだけ）:
+    // TAKEOFF/LANDING と同じく拒否（下の一覧に単に含めないだけ）:
     // マニューバ中のスイッチ反転は持続し、FLIP → FLYING 到達時に適用される
     // （detailed_design.md §3.1 FLIP 行）。
-    const bool mode_change_allowed = (state_ == FlightState::IDLE_GROUND ||
-                                      state_ == FlightState::ARMED_GROUND ||
-                                      state_ == FlightState::FLYING);
-    if (!mode_change_allowed) {
+    return state_ == FlightState::IDLE_GROUND ||
+           state_ == FlightState::ARMED_GROUND ||
+           state_ == FlightState::FLYING;
+}
+
+bool StateManager::requestModeChange(FlightMode new_mode)
+{
+    last_mode_request_consumed_ = false;   // set again only by a refusal that consumes the edge / エッジを消費する拒否だけが再び立てる
+    if (!modeChangeAllowedInState()) {
         ESP_LOGD(TAG, "Mode change rejected: state %s", flightStateName(state_));
         return false;
     }
 
     if (new_mode == mode_) {
+        clearModeBlock();   // the pilot asked for what we already fly: nothing is refused now / 既に飛んでいるモードの要求: 拒否中の要求は無い
         return true;  // Already in requested mode / 既にリクエストされたモード
+    }
+
+    if (refuseModeForToFSilence(new_mode)) {
+        return false;
     }
 
     FlightMode old_mode = mode_;
@@ -482,119 +564,26 @@ void StateManager::handleAlert(const SystemAlert& alert)
 
     switch (type) {
         case AlertType::GYRO_ANOMALY:
-            // FLIP window exception (plan §3.5/§3.7, detailed_design.md §3.1 FLIP
-            // row): a commanded flip legitimately spins past the 800 deg/s crash
-            // threshold, so the alert is IGNORED (logged only) while state_ ==
-            // FLIP. The detector (ImuAnomalyDetector) is unchanged — only the
-            // judgment here differs (INV-3: detection vs. judgment separation,
-            // architecture.md §4). Falls through to the same handling as IMPACT
-            // in every other state.
-            // FLIP 窓の例外（plan §3.5/§3.7、detailed_design.md §3.1 FLIP 行）:
-            // 指令された宙返りは正当に 800 deg/s の墜落しきい値を超えて回転するため、
-            // state_ == FLIP の間はアラートを無視する（ログのみ）。検出器
-            // （ImuAnomalyDetector）は変更せず、判断側のみが異なる（INV-3: 検出と
-            // 判断の分離、architecture.md §4）。それ以外の状態では IMPACT と同じ扱いに
-            // フォールスルーする。
-            if (state_ == FlightState::FLIP) {
-                ESP_LOGW(TAG, "Gyro anomaly ignored during %s (commanded rotation)",
-                         flightStateName(state_));
-                break;
-            }
-            [[fallthrough]];
         case AlertType::IMPACT:
-            // Crash / abnormal rate → immediate DISARM, unconditional on armed state
-            // (requirements §9: no airborne-only exception). Gate on isArmed, NOT
-            // isAirborne: ARMED_GROUND has idling props, and the detection layer
-            // (failsafe.cpp / imu_task.cpp) already feeds samples whenever isArmed,
-            // so a craft knocked over right after ARM on the ground must also DISARM.
-            // transition(IDLE_GROUND) from ARMED_GROUND zeroes the motors via the
-            // same DISARM path as from the air. IMPACT itself is NOT exempted during
-            // FLIP (plan §3.5: "既存どおり即 DISARM" — a real collision must still cut
-            // the motors mid-maneuver).
-            // 衝突 / 異常角速度 → 状態に依らず即時DISARM（要件§9: 空中限定の例外なし）。
-            // 判定条件は isAirborne でなく isArmed: ARMED_GROUND はプロペラがアイドル回転
-            // しており、検出層（failsafe.cpp / imu_task.cpp）も isArmed の間は常にサンプル
-            // を供給するため、ARM 直後に地上で倒した機体も DISARM する必要がある。
-            // ARMED_GROUND からの transition(IDLE_GROUND) は空中と同じ DISARM 経路で
-            // モータをゼロにする。IMPACT 自体は FLIP 中も例外にしない（plan §3.5:
-            // 「既存どおり即 DISARM」— マニューバ中の実衝突もモータを止める必要がある）。
-            if (sf::isArmed(state_)) {
-                ESP_LOGE(TAG, "Impact/anomaly → emergency DISARM");
-                transition(FlightState::IDLE_GROUND);
-            }
+            handleImpactAlert(type);
             break;
 
         case AlertType::COMM_LOST:
-            // Communication lost → keep hovering, then auto-land after the grace period
-            // (requirements §9: hover hold 3 s → auto landing). We do NOT land here:
-            // arm a timer (idempotent — only the first loss while airborne arms it) and
-            // let update() command FLYING → LANDING once kCommLossHoverUs elapses.
-            // Gate on isAirborne (TAKEOFF/FLYING/LANDING/FLIP), NOT on FLYING only: a
-            // link lost during TAKEOFF used to be consumed here and never re-evaluated,
-            // so the craft kept climbing on the stale setpoint with no failsafe at all.
-            // The failsafe also re-raises COMM_LOST periodically while the link stays
-            // lost (level, not edge), so a missed alert is not fatal either way. FLIP is
-            // included in isAirborne (flight_state.hpp), so a loss during FLIP arms the
-            // timer here but update() only fires the transition when state_ == FLYING —
-            // this naturally defers the auto-land until FLIP → FLYING, matching plan
-            // §3.5/§4.3 ("通信途絶は FLIP 完了後に既存則") with no extra state needed.
-            // 通信途絶 → ホバーを維持し、猶予経過後に自動着陸（要件§9: ホバー維持3秒→
-            // 自動着陸）。ここでは着陸しない: タイマを起動し（冪等 — 空中での最初の喪失
-            // のみ起動）、kCommLossHoverUs 経過で update() が FLYING → LANDING を指令する。
-            // 判定条件は FLYING 限定でなく isAirborne（TAKEOFF/FLYING/LANDING/FLIP）: 従来は
-            // TAKEOFF 中の喪失がここで消費されて二度と再評価されず、機体は stale な
-            // setpoint のままフェイルセーフなしで上昇し続けた。failsafe 側もリンク喪失中は
-            // COMM_LOST を周期的に再発報する（エッジでなくレベル）ので、取りこぼしても致命傷
-            // にならない。FLIP は isAirborne に含まれる（flight_state.hpp）ため、FLIP 中の
-            // 喪失もここでタイマは起動するが、update() は state_ == FLYING のときだけ遷移を
-            // 実行する — これにより FLIP → FLYING まで自動着陸が自然に保留される
-            // （plan §3.5/§4.3「通信途絶は FLIP 完了後に既存則」を追加の状態なしで満たす）。
-            if (isAirborne(state_) && !comm_lost_pending_) {
-                ESP_LOGW(TAG, "Comm lost → hover %lu ms then LANDING",
-                         static_cast<unsigned long>(kCommLossHoverUs / 1000));
-                comm_lost_pending_ = true;
-                comm_lost_time_us_ = alert.timestamp;
-            }
+            handleCommLostAlert(alert);
             break;
 
-        case AlertType::LOW_BATTERY: {
-            // WARNING (3.4V): notification only (buzzer via NotifyTask).
-            // EMERGENCY (3.0V): the pack is about to sag below the cutoff — land
-            // NOW. Same Landing-verb path as the comm-loss auto-land (the
-            // onEnter(LANDING) callback engages the controller's descent).
-            // FLIP window exception (plan §3.5/§9 item 2, §4.3 FLIP row): unlike
-            // COMM_LOST (a level alert re-raised by the failsafe, so isAirborne
-            // including FLIP + a FLYING-only firing condition in update() is enough
-            // to defer it), the EMERGENCY battery alert is an EDGE — the failsafe's
-            // batt_emergency_ latch (failsafe.cpp) raises it only ONCE. Transitioning
-            // FLIP → LANDING directly here would also skip the FLIP → FLYING onExit
-            // (position/altitude re-capture). So we defer explicitly: set a pending
-            // flag instead of transitioning, and notifyFlipComplete() re-applies this
-            // same rule once back in FLYING.
-            // WARNING（3.4V）: 通知のみ（ブザーは NotifyTask）。
-            // EMERGENCY（3.0V）: パックがカットオフ割れ寸前 — 即着陸。通信断の
-            // 自動着陸と同じ Landing verb 経路（onEnter(LANDING) コールバックが
-            // 制御器の降下を発動する）。
-            // FLIP 窓の例外（plan §3.5/§9 項目2、§4.3 FLIP 行）: COMM_LOST（failsafe が
-            // 再発報するレベルアラートゆえ、FLIP を含む isAirborne ＋ update() の
-            // FLYING 限定の成立条件だけで保留できる）と異なり、EMERGENCY 電池アラートは
-            // エッジ（failsafe.cpp の batt_emergency_ ラッチが一度しか発報しない）。
-            // ここで FLIP → LANDING に直接遷移すると FLIP → FLYING の onExit（位置/高度
-            // 目標の取り直し）も飛ばす。よって明示的に保留する: 遷移せずフラグを
-            // 立て、notifyFlipComplete() が FLYING 復帰後に同じ規則を再適用する。
-            const bool emergency =
-                static_cast<AlertSeverity>(alert.severity) == AlertSeverity::EMERGENCY;
-            if (emergency && state_ == FlightState::FLIP) {
-                battery_emergency_pending_ = true;
-                ESP_LOGW(TAG, "Battery emergency deferred (FLIP in progress)");
-            } else if (emergency && isAirborne(state_) && state_ != FlightState::LANDING) {
-                ESP_LOGE(TAG, "Battery emergency → LANDING");
-                transition(FlightState::LANDING);
-            } else {
-                ESP_LOGW(TAG, "Low battery warning");
-            }
+        case AlertType::LOW_BATTERY:
+            handleLowBatteryAlert(alert);
             break;
-        }
+
+        case AlertType::TOF_SILENT:
+            // The downward ToF stopped producing samples (Failsafe raised this while armed and
+            // re-raises it about once a second). The response depends on state and mode, see
+            // handleToFSilenceAlert / tof_silence_policy.hpp.
+            // 下向き ToF がサンプルを出さなくなった（Failsafe が ARM 中に発報し、約 1 秒ごとに再発報する）。
+            // 応答は状態とモードによる。handleToFSilenceAlert / tof_silence_policy.hpp 参照。
+            handleToFSilenceAlert();
+            break;
 
         case AlertType::USB_POWER:
             // USB power → ARM prohibited (checked in requestArm)
@@ -602,21 +591,166 @@ void StateManager::handleAlert(const SystemAlert& alert)
             break;
 
         case AlertType::ESKF_DIVERGED:
-            // ESKF diverged → command an estimator reset (not a state change).
-            // ImuTask consumes estimator_command and applies it to the active
-            // IEstimator (architecture §4: ESKF divergence → ESKF reset).
-            // ESKF発散 → 推定器リセットを指令（状態変更なし）。ImuTask が
-            // estimator_command を消費しアクティブな IEstimator に適用する
-            // （architecture §4: ESKF発散 → ESKFリセット）。
-            ESP_LOGW(TAG, "ESKF diverged → estimator reset commanded");
-            estimator_command.publish({static_cast<uint8_t>(EstimatorCmd::Reset),
-                                       static_cast<uint32_t>(esp_timer_get_time()),
-                                       0});
+            handleEskfDivergedAlert();
             break;
 
         default:
             break;
     }
+}
+
+/// The 3 G impact while LANDING with a silent ToF IS the touchdown (a descent without a ToF meets the floor at 0.5-1 m/s, 6-9 g in SILS;
+/// no other detector sees it first): the landing is complete, not an emergency. The crash threshold itself (Failsafe) is unchanged, and
+/// GYRO_ANOMALY stays an emergency. Returns true when it handled the alert.
+/// ToF 出力停止中の LANDING での 3 G の衝撃は接地そのもの（ToF なしの降下は 0.5〜1 m/s で床に当たり、SILS で 6〜9 g。他の検出器が先に
+/// 見ることはない）: 非常でなく着陸の完了。墜落検出の閾値そのもの（Failsafe）は変えず、GYRO_ANOMALY は非常のまま。処理したら true。
+/// @design detailed_design.md §3.1 — ToF silent, LANDING row: the impact is the touchdown [OK]
+bool StateManager::completeBlindLandingByImpact(AlertType type)
+{
+    if (type != AlertType::IMPACT || state_ != FlightState::LANDING || !isToFSilent()) {
+        return false;
+    }
+    ESP_LOGW(TAG, "Touchdown while the ToF is silent (impact) → landing complete, not an emergency");
+    last_landing_end_ = LandingEnd::ToFSilentImpact;
+    notifyLandingComplete();
+    return true;
+}
+
+/// GYRO_ANOMALY and IMPACT: crash / abnormal rate → immediate DISARM.
+/// GYRO_ANOMALY と IMPACT: 衝突 / 異常角速度 → 即時 DISARM。
+void StateManager::handleImpactAlert(AlertType type)
+{
+    // FLIP window exception (plan §3.5/§3.7, detailed_design.md §3.1 FLIP
+    // row): a commanded flip legitimately spins past the 800 deg/s crash
+    // threshold, so the alert is IGNORED (logged only) while state_ ==
+    // FLIP. The detector (ImuAnomalyDetector) is unchanged — only the
+    // judgment here differs (INV-3: detection vs. judgment separation,
+    // architecture.md §4). Falls through to the same handling as IMPACT
+    // in every other state.
+    // FLIP 窓の例外（plan §3.5/§3.7、detailed_design.md §3.1 FLIP 行）:
+    // 指令された宙返りは正当に 800 deg/s の墜落しきい値を超えて回転するため、
+    // state_ == FLIP の間はアラートを無視する（ログのみ）。検出器
+    // （ImuAnomalyDetector）は変更せず、判断側のみが異なる（INV-3: 検出と
+    // 判断の分離、architecture.md §4）。それ以外の状態では IMPACT と同じ扱いに
+    // フォールスルーする。
+    if (type == AlertType::GYRO_ANOMALY && state_ == FlightState::FLIP) {
+        ESP_LOGW(TAG, "Gyro anomaly ignored during %s (commanded rotation)",
+                 flightStateName(state_));
+        return;
+    }
+    // Crash / abnormal rate → immediate DISARM, unconditional on armed state
+    // (requirements §9: no airborne-only exception). Gate on isArmed, NOT
+    // isAirborne: ARMED_GROUND has idling props, and the detection layer
+    // (failsafe.cpp / imu_task.cpp) already feeds samples whenever isArmed,
+    // so a craft knocked over right after ARM on the ground must also DISARM.
+    // transition(IDLE_GROUND) from ARMED_GROUND zeroes the motors via the
+    // same DISARM path as from the air. IMPACT itself is NOT exempted during
+    // FLIP (plan §3.5: "既存どおり即 DISARM" — a real collision must still cut
+    // the motors mid-maneuver).
+    // 衝突 / 異常角速度 → 状態に依らず即時DISARM（要件§9: 空中限定の例外なし）。
+    // 判定条件は isAirborne でなく isArmed: ARMED_GROUND はプロペラがアイドル回転
+    // しており、検出層（failsafe.cpp / imu_task.cpp）も isArmed の間は常にサンプル
+    // を供給するため、ARM 直後に地上で倒した機体も DISARM する必要がある。
+    // ARMED_GROUND からの transition(IDLE_GROUND) は空中と同じ DISARM 経路で
+    // モータをゼロにする。IMPACT 自体は FLIP 中も例外にしない（plan §3.5:
+    // 「既存どおり即 DISARM」— マニューバ中の実衝突もモータを止める必要がある）。
+    if (completeBlindLandingByImpact(type)) {
+        return;
+    }
+    if (sf::isArmed(state_)) {
+        ESP_LOGE(TAG, "Impact/anomaly → emergency DISARM");
+        transition(FlightState::IDLE_GROUND);
+    }
+}
+
+/// COMM_LOST: arm the hover-then-land timer. / COMM_LOST: ホバーしてから着陸するタイマを起動する。
+void StateManager::handleCommLostAlert(const SystemAlert& alert)
+{
+    // Communication lost → keep hovering, then auto-land after the grace period
+    // (requirements §9: hover hold 3 s → auto landing). We do NOT land here:
+    // arm a timer (idempotent — only the first loss while airborne arms it) and
+    // let update() command FLYING → LANDING once kCommLossHoverUs elapses.
+    // Gate on isAirborne (TAKEOFF/FLYING/LANDING/FLIP), NOT on FLYING only: a
+    // link lost during TAKEOFF used to be consumed here and never re-evaluated,
+    // so the craft kept climbing on the stale setpoint with no failsafe at all.
+    // The failsafe also re-raises COMM_LOST periodically while the link stays
+    // lost (level, not edge), so a missed alert is not fatal either way. FLIP is
+    // included in isAirborne (flight_state.hpp), so a loss during FLIP arms the
+    // timer here but update() only fires the transition when state_ == FLYING —
+    // this naturally defers the auto-land until FLIP → FLYING, matching plan
+    // §3.5/§4.3 ("通信途絶は FLIP 完了後に既存則") with no extra state needed.
+    // 通信途絶 → ホバーを維持し、猶予経過後に自動着陸（要件§9: ホバー維持3秒→
+    // 自動着陸）。ここでは着陸しない: タイマを起動し（冪等 — 空中での最初の喪失
+    // のみ起動）、kCommLossHoverUs 経過で update() が FLYING → LANDING を指令する。
+    // 判定条件は FLYING 限定でなく isAirborne（TAKEOFF/FLYING/LANDING/FLIP）: 従来は
+    // TAKEOFF 中の喪失がここで消費されて二度と再評価されず、機体は stale な
+    // setpoint のままフェイルセーフなしで上昇し続けた。failsafe 側もリンク喪失中は
+    // COMM_LOST を周期的に再発報する（エッジでなくレベル）ので、取りこぼしても致命傷
+    // にならない。FLIP は isAirborne に含まれる（flight_state.hpp）ため、FLIP 中の
+    // 喪失もここでタイマは起動するが、update() は state_ == FLYING のときだけ遷移を
+    // 実行する — これにより FLIP → FLYING まで自動着陸が自然に保留される
+    // （plan §3.5/§4.3「通信途絶は FLIP 完了後に既存則」を追加の状態なしで満たす）。
+    if (isAirborne(state_) && !comm_lost_pending_) {
+        ESP_LOGW(TAG, "Comm lost → hover %lu ms then LANDING",
+                 static_cast<unsigned long>(kCommLossHoverUs / 1000));
+        comm_lost_pending_ = true;
+        comm_lost_time_us_ = alert.timestamp;
+    }
+}
+
+/// LOW_BATTERY: warning is a notification, emergency lands (deferred during FLIP).
+/// LOW_BATTERY: 警告は通知のみ、危険電圧は着陸（FLIP 中は保留）。
+void StateManager::handleLowBatteryAlert(const SystemAlert& alert)
+{
+    // WARNING (3.4V): notification only (buzzer via NotifyTask).
+    // EMERGENCY (3.0V): the pack is about to sag below the cutoff — land
+    // NOW. Same Landing-verb path as the comm-loss auto-land (the
+    // onEnter(LANDING) callback engages the controller's descent).
+    // FLIP window exception (plan §3.5/§9 item 2, §4.3 FLIP row): unlike
+    // COMM_LOST (a level alert re-raised by the failsafe, so isAirborne
+    // including FLIP + a FLYING-only firing condition in update() is enough
+    // to defer it), the EMERGENCY battery alert is an EDGE — the failsafe's
+    // batt_emergency_ latch (failsafe.cpp) raises it only ONCE. Transitioning
+    // FLIP → LANDING directly here would also skip the FLIP → FLYING onExit
+    // (position/altitude re-capture). So we defer explicitly: set a pending
+    // flag instead of transitioning, and notifyFlipComplete() re-applies this
+    // same rule once back in FLYING.
+    // WARNING（3.4V）: 通知のみ（ブザーは NotifyTask）。
+    // EMERGENCY（3.0V）: パックがカットオフ割れ寸前 — 即着陸。通信断の
+    // 自動着陸と同じ Landing verb 経路（onEnter(LANDING) コールバックが
+    // 制御器の降下を発動する）。
+    // FLIP 窓の例外（plan §3.5/§9 項目2、§4.3 FLIP 行）: COMM_LOST（failsafe が
+    // 再発報するレベルアラートゆえ、FLIP を含む isAirborne ＋ update() の
+    // FLYING 限定の成立条件だけで保留できる）と異なり、EMERGENCY 電池アラートは
+    // エッジ（failsafe.cpp の batt_emergency_ ラッチが一度しか発報しない）。
+    // ここで FLIP → LANDING に直接遷移すると FLIP → FLYING の onExit（位置/高度
+    // 目標の取り直し）も飛ばす。よって明示的に保留する: 遷移せずフラグを
+    // 立て、notifyFlipComplete() が FLYING 復帰後に同じ規則を再適用する。
+    const bool emergency =
+        static_cast<AlertSeverity>(alert.severity) == AlertSeverity::EMERGENCY;
+    if (emergency && state_ == FlightState::FLIP) {
+        battery_emergency_pending_ = true;
+        ESP_LOGW(TAG, "Battery emergency deferred (FLIP in progress)");
+    } else if (emergency && isAirborne(state_) && state_ != FlightState::LANDING) {
+        ESP_LOGE(TAG, "Battery emergency → LANDING");
+        transition(FlightState::LANDING);
+    } else {
+        ESP_LOGW(TAG, "Low battery warning");
+    }
+}
+
+/// ESKF_DIVERGED: command an estimator reset (not a state change).
+/// ESKF_DIVERGED: 推定器リセットを指令する（状態変更なし）。
+void StateManager::handleEskfDivergedAlert()
+{
+    // ESKF diverged → command an estimator reset. ImuTask consumes estimator_command and applies it
+    // to the active IEstimator (architecture §4: ESKF divergence → ESKF reset).
+    // ESKF発散 → 推定器リセットを指令。ImuTask が estimator_command を消費しアクティブな
+    // IEstimator に適用する（architecture §4: ESKF発散 → ESKFリセット）。
+    ESP_LOGW(TAG, "ESKF diverged → estimator reset commanded");
+    estimator_command.publish({static_cast<uint8_t>(EstimatorCmd::Reset),
+                               static_cast<uint32_t>(esp_timer_get_time()),
+                               0});
 }
 
 // =============================================================================
@@ -681,15 +815,158 @@ void StateManager::notifyPairingComplete()
     publishPairingState();
 }
 
+bool StateManager::isToFSilent() const
+{
+    // The verdict is Failsafe's: a silence EPISODE (no new sample for kTofSilenceUs / only invalid
+    // samples while flying / the estimator has not re-acquired the ToF yet), published every
+    // 100 ms. It is read through this task's FailsafeStatusGuard (D5): a status that nobody
+    // refreshes reads as silent, so a stalled Failsafe can never leave the last "not silent" in
+    // force; before the first Failsafe publish it reads silent too (the safe side). Read FRESH at
+    // every call, not cached per update(): an alert handled earlier in the same StateTask cycle must
+    // see the level that raised it, or the one-shot response is lost (found by SILS
+    // tof_silent_armed_ground). The guard's watch is observed on every call (same task, same clock).
+    // 判定は Failsafe のもの: ToF 出力停止の「エピソード」（kTofSilenceUs の間新サンプル無し／飛行中に
+    // 無効サンプルだけ／推定器がまだ ToF を取り込み直していない）を 100 ms ごとに発行する。このタスクの
+    // FailsafeStatusGuard を通して読む（D5）: 誰も更新しない状態は出力停止と読むので、Failsafe が停滞
+    // しても最後の「出力停止でない」が効き続けることはない。Failsafe の最初の発行の前も出力停止と読む
+    // （安全側）。update() ごとのキャッシュでなく、呼ぶたびに「最新」を読む: 同じ StateTask 周期の中で
+    // 先に処理したアラートは、それを発報したレベルを見なければならず、さもないと 1 回限りの応答が
+    // 失われる（SILS の tof_silent_armed_ground が発見）。ガードの監視器は呼ぶたびに観測する
+    // （同じタスク、同じ時計）。
+    tof_status_ = tof_guard_.guard(static_cast<uint32_t>(esp_timer_get_time()), failsafe_status.latest());
+    return tof_status_.tof_silent;
+}
+
+/// Execute one decided ToF-silence action (the verbs of tof_silence_policy.hpp).
+/// 判断済みの ToF 出力停止の動作 1 つを実行する（tof_silence_policy.hpp の動詞）。
+/// @design detailed_design.md §3.1 — ToF silent rows (ARMED_GROUND / TAKEOFF / FLYING) [OK]
+/// @design architecture.md INV-3 — decision in tof_silence_policy.hpp, execution here  [OK]
+void StateManager::handleToFSilenceAlert()
+{
+    // Warning tone: the first WarnOnly alert and then every kToFWarnToneEveryN-th (the failsafe
+    // re-raises about once a second; a tone each second over motor noise would be a nuisance).
+    // 警告音: 最初の WarnOnly アラートと、以後 kToFWarnToneEveryN 回に 1 回（failsafe は約 1 秒ごとに
+    // 再発報する。モータ騒音の中で毎秒の音は邪魔になる）。
+    constexpr uint8_t kToFWarnToneEveryN = 5;
+
+    switch (decideToFSilenceAction(state_, mode_, isToFSilent(), 0u)) {
+        case ToFSilenceAction::Disarm:
+            ESP_LOGE(TAG, "Downward ToF silent while armed on the ground → DISARM");
+            transition(FlightState::IDLE_GROUND);
+            break;
+        case ToFSilenceAction::StartLanding:
+            logToFSilenceLanding();
+            transition(FlightState::LANDING);
+            break;
+        case ToFSilenceAction::WarnOnly:
+            ESP_LOGW(TAG, "Downward ToF silent in %s/%s: NO forced landing, fly on "
+                          "(altitude is unknown; ARM will be refused after landing)",
+                     flightStateName(state_), flightModeName(mode_));
+            if (tof_warn_count_ % kToFWarnToneEveryN == 0) {
+                notify_command.publish({static_cast<uint8_t>(NotifyEvent::TofSilentWarn),
+                                        static_cast<uint32_t>(esp_timer_get_time())});
+            }
+            ++tof_warn_count_;
+            break;
+        case ToFSilenceAction::CompleteLanding:   // timed by handleBlindLandingTimeout() / 時間は別関数
+        case ToFSilenceAction::None:
+        default:
+            break;
+    }
+}
+
+/// Log why an altitude mode lands on a ToF-silence episode (the reason decides the wording).
+/// 高度モードが ToF 出力停止のエピソードで着陸する理由をログに出す（理由で文言が変わる）。
+void StateManager::logToFSilenceLanding() const
+{
+    const auto reason = static_cast<ToFSilenceReason>(tof_status_.tof_reason);
+    if (reason == ToFSilenceReason::NoSample) {
+        ESP_LOGE(TAG, "Downward ToF silent (>= %lu ms without a sample) in %s/%s → LANDING",
+                 static_cast<unsigned long>(limits::kTofSilenceUs / 1000),
+                 flightStateName(state_), flightModeName(mode_));
+        return;
+    }
+    ESP_LOGE(TAG, "Downward ToF unusable (%s) in %s/%s → LANDING",
+             toFSilenceReasonName(reason), flightStateName(state_), flightModeName(mode_));
+}
+
+/// @design detailed_design.md §3.1 — ToF silent, LANDING row: ended by time           [OK]
+void StateManager::handleBlindLandingTimeout(uint32_t now_us)
+{
+    const bool silent = isToFSilent();
+
+    // LANDING clock: counted from the moment the state ENTERED LANDING, whether the ToF is alive or silent, and
+    // cleared only when LANDING ends. A ToF that returns and stops again therefore does not extend it.
+    // LANDING の時計: 状態が LANDING に「入った」時刻から、ToF が生きていても出力停止でも数え、LANDING が終わる
+    // ときだけクリアする。ToF が戻ってまた止まっても延びない。
+    landing_clock_.update(state_ == FlightState::LANDING, now_us);
+    const uint32_t blind_elapsed_us = landing_clock_.elapsedUs();
+
+    if (decideToFSilenceAction(state_, mode_, silent, blind_elapsed_us) ==
+        ToFSilenceAction::CompleteLanding) {
+        ESP_LOGW(TAG, "Downward ToF silent after %lu ms of LANDING → touchdown by time",
+                 static_cast<unsigned long>(blind_elapsed_us / 1000));
+        last_landing_end_ = LandingEnd::ToFSilentTimeout;
+        notifyLandingComplete();
+    }
+
+    // The warning counter restarts with every silence (tone on the first alert of the next one).
+    // 警告の回数は出力停止ごとに数え直す（次の出力停止の最初のアラートで音を鳴らす）。
+    if (!silent) {
+        tof_warn_count_ = 0;
+    }
+}
+
 void StateManager::update(uint32_t now_us)
 {
+    // Observe the ToF-silence verdict through the staleness guard EVERY cycle (isToFSilent() also
+    // does at every call; this keeps the watch observed when nothing else asks).
+    // ToF 出力停止の判定を鮮度のガードを通して「毎周期」観測する（isToFSilent() も呼ぶたびに観測する。
+    // 他に誰も尋ねなくても監視器が観測され続けるようにする）。
+    (void)isToFSilent();
+
     // Keep the published ARM-block reason current (LED / CLI read it).
     // 発行済みの ARM 阻害理由を最新に保つ（LED/CLI が読む）。
     refreshArmBlock();
 
-    // Comm-loss failsafe: deferred FLYING → LANDING (requirements §9). Nothing pending
-    // → nothing to do (the common case).
-    // 通信断フェイルセーフ: 遅延 FLYING → LANDING（要件§9）。保留なしなら何もしない（通常）。
+    // The mode-refusal reasons end: TofSilent (ground; the switch edge persists and is re-applied by
+    // StateTask) when the episode ends; TofSwitchConsumed (in flight; the edge is gone) when the
+    // craft is back on the ground, or when a mode request is accepted (requestModeChange).
+    // モード拒否の理由が終わる: TofSilent（地上。スイッチのエッジは持続し StateTask が再適用する）は
+    // エピソードが終わったとき。TofSwitchConsumed（飛行中。エッジはもう無い）は地上に戻ったとき、
+    // またはモード要求が受理されたとき（requestModeChange）。
+    if ((mode_block_ == ModeBlock::TofSilent && !isToFSilent()) ||
+        (mode_block_ == ModeBlock::TofSwitchConsumed && !isAirborne(state_))) {
+        clearModeBlock();
+    }
+
+    // Downward-ToF silence: the landing that the TOF_SILENT alert started ends by time when no
+    // ToF can detect the touchdown (level-triggered, so it runs every cycle).
+    // 下向き ToF の出力停止: TOF_SILENT アラートが始めた着陸は、ToF が接地を検出できないとき時間で
+    // 終わる（レベル駆動なので毎周期実行する）。
+    handleBlindLandingTimeout(now_us);
+
+    // Comm-loss failsafe: deferred FLYING → LANDING (requirements §9).
+    // 通信断フェイルセーフ: 遅延 FLYING → LANDING（要件§9）。
+    handleCommLossGrace(now_us);
+}
+
+/// Comm-loss grace timer: lands once the hover grace after COMM_LOST has elapsed (see update()).
+/// 通信断の猶予タイマ: COMM_LOST から猶予が経過したら着陸させる（update() 参照）。
+void StateManager::handleCommLossGrace(uint32_t now_us)
+{
+    // The grace timer runs from the alert stamp, which the failsafe task wrote: it can be a few
+    // us newer than now_us, and a pending loss can in principle outlast 35.8 min. comm_lost_watch_
+    // takes the signed age and saturates, so neither case lands early or never. It is observed
+    // EVERY cycle, pending or not, so the watch never sees a long gap between observations.
+    // 猶予タイマは failsafe タスクが書いたアラートの時刻印から計る: now_us より数 us 新しいことが
+    // あり、保留が 35.8 分を超えることも原理的にはある。comm_lost_watch_ は符号付きの経過で
+    // 飽和するので、早すぎる着陸も、着陸しないままも起きない。保留中か否かに関わらず「毎周期」
+    // 観測するので、観測の間に長い空きが生じない。
+    comm_lost_watch_.observe(now_us, comm_lost_time_us_);
+
+    // Nothing pending → nothing to do (the common case).
+    // 保留なしなら何もしない（通常）。
     if (!comm_lost_pending_) {
         return;
     }
@@ -709,12 +986,10 @@ void StateManager::update(uint32_t now_us)
 
     // Grace period elapsed and we are FLYING → land. During TAKEOFF/LANDING keep the
     // flag pending (LANDING is already what we want; TAKEOFF transitions to FLYING).
-    // Modular uint32_t subtraction is correct for any age far below the ~71 min wrap.
     // 猶予経過かつ FLYING → 着陸。TAKEOFF/LANDING 中はフラグを保留のまま維持
     // （LANDING なら既に目的の状態、TAKEOFF はやがて FLYING へ遷移）。
-    // uint32_t の剰余差分は ~71分の巻き戻りより遥かに小さい経過（3秒）で正しい。
     if (state_ == FlightState::FLYING &&
-        now_us - comm_lost_time_us_ >= kCommLossHoverUs) {
+        comm_lost_watch_.isSilent(kCommLossHoverUs)) {
         ESP_LOGW(TAG, "Comm lost → LANDING (hover grace elapsed)");
         comm_lost_pending_ = false;
         transition(FlightState::LANDING);
@@ -786,6 +1061,9 @@ void StateManager::transition(FlightState new_state)
     // Update state
     // 状態を更新
     state_ = new_state;
+    if (new_state == FlightState::LANDING) {
+        last_landing_end_ = LandingEnd::None;   // the next landing's end is not known yet / 次の着陸の終わり方はまだ分からない
+    }
 
     // Clear a battery emergency deferred during FLIP (handleAlert, LOW_BATTERY/
     // EMERGENCY case) when FLIP is left WITHOUT returning to FLYING — DISARM/
@@ -857,6 +1135,17 @@ void StateManager::refreshArmBlock()
     publishMode();
 }
 
+/// Clear the published mode-refusal reason (republish only when it was set).
+/// 発行済みのモード拒否理由を下ろす（立っていたときだけ再発行）。
+void StateManager::clearModeBlock()
+{
+    if (mode_block_ == ModeBlock::None) {
+        return;
+    }
+    mode_block_ = ModeBlock::None;
+    publishMode();
+}
+
 void StateManager::publishMode()
 {
     SystemMode mode_msg = {};
@@ -864,6 +1153,7 @@ void StateManager::publishMode()
     mode_msg.sub_mode = static_cast<uint8_t>(mode_);
     mode_msg.armed = sf::isArmed(state_);
     mode_msg.arm_block = static_cast<uint8_t>(arm_block_);
+    mode_msg.mode_block = static_cast<uint8_t>(mode_block_);
     mode_msg.timestamp = static_cast<uint32_t>(esp_timer_get_time());
 
     system_mode.publish(mode_msg);

@@ -326,6 +326,49 @@ TEST(resume_tof_suspension_times_out)
     ASSERT_NEAR(-eskf.getPosition().z, 1.0f, 0.05f);   // still 1.0m — the 2.0m sample was rejected
 }
 
+// ToF-silence re-acquisition (detailed_design.md §3.1 注 12): the estimator's altitude is 1.2 m off
+// after a blind period (here: pinned at 1.0 m while the true height is 2.2 m). Without
+// reacquireVertical() the 0.5 m innovation gate rejects every sample forever; with it the very same
+// mechanism as the end of a flip lifts the gate for the next sample and the estimate converges.
+// lastToFObservation() reports the rejected samples as not adopted (D2 of the 2nd review).
+// ToF 出力停止の取り込み直し（detailed_design.md §3.1 注 12）: ToF なしの期間の後、推定器の高度が
+// 1.2 m ずれている（ここでは 1.0 m に固定されたまま、真の高さは 2.2 m）。reacquireVertical() が無いと
+// 0.5 m のイノベーション判定がサンプルを永久に棄却する。有れば、宙返りの終わりと「同じ」仕組みが次の
+// サンプルの判定を外し、推定が収束する。lastToFObservation() は棄却されたサンプルを「未採用」と報告する。
+TEST(silence_reacquire_lifts_the_gate_and_reports_adoption)
+{
+    sf::EskfConfig cfg = quietConfig();
+    cfg.use_tof = true;
+
+    sf::EskfCore eskf;
+    eskf.init(cfg);
+    eskf.setFreezeAccelBias(true);
+    convergeTofHeight(eskf, 1.0f, 0.3f, 60);
+    ASSERT_NEAR(-eskf.getPosition().z, 1.0f, 0.05f);
+
+    const sf::math::Vec3 level_accel(0.0f, 0.0f, -sf::math::kGravity);
+    const sf::math::Vec3 zero_gyro(0.0f, 0.0f, 0.0f);
+
+    // (a) A sample 1.2 m away is gated out, and it is reported as such.
+    // (a) 1.2 m 離れたサンプルは棄却され、そのとおり報告される。
+    eskf.predict(level_accel, zero_gyro, 0.0025f);
+    eskf.updateToF(2.2f);
+    ASSERT_TRUE(!eskf.lastToFObservation().adopted);
+    ASSERT_NEAR(eskf.lastToFObservation().innovation_m, 1.2f, 0.05f);
+    ASSERT_NEAR(-eskf.getPosition().z, 1.0f, 0.05f);
+
+    // (b) After reacquireVertical() the next sample is adopted and the estimate converges.
+    // (b) reacquireVertical() の後は、次のサンプルが採用され推定が収束する。
+    eskf.reacquireVertical();
+    for (int i = 0; i < 40; i++) {
+        eskf.predict(level_accel, zero_gyro, 0.0025f);
+        eskf.updateToF(2.2f);
+    }
+    ASSERT_NEAR(-eskf.getPosition().z, 2.2f, 0.1f);
+    ASSERT_TRUE(eskf.lastToFObservation().adopted);
+    ASSERT_TRUE(eskf.lastToFObservation().innovation_m < 0.1f);   // converged: small innovations / 収束済み: 小さなイノベーション
+}
+
 int main()
 {
     printf("=== ESKF Flip Hold/Resume Unit Tests ===\n\n");
@@ -335,6 +378,7 @@ int main()
     run_resume_reconverges_attitude();
     run_resume_reacquires_tof_after_altitude_drift();
     run_resume_tof_suspension_times_out();
+    run_silence_reacquire_lifts_the_gate_and_reports_adoption();
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

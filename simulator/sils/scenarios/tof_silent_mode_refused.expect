@@ -1,0 +1,17 @@
+# tof_silent_mode_refused.expect — ALT_HOLD / POS_HOLD are refused while the downward ToF is silent
+# 下向き ToF の出力停止中は ALT_HOLD / POS_HOLD を拒否する
+#
+# On the ground, ToF silent: a POS_HOLD switch is refused with the reason logged (and published in
+# SystemMode.mode_block, shown by the CLI `status`); ACRO (no altitude needed) is accepted; the refused
+# POS_HOLD edge persists, so when the ToF delivers samples again the mode switches by itself.
+# 地上で ToF が出力停止: POS_HOLD スイッチは理由をログに出して拒否される（SystemMode.mode_block に発行
+# され、CLI `status` に出る）。ACRO（高度不要）は受理される。拒否した POS_HOLD のエッジは持続するので、
+# ToF が再びサンプルを出すとモードは自動で切り替わる。
+exit 0
+log_contains any "Mode change to POS_HOLD refused: downward ToF is silent (no altitude)"
+log_contains any "Mode change: STABILIZE → ACRO"
+log_contains any "Mode change: ACRO → POS_HOLD"
+order "Mode change to POS_HOLD refused" "Mode change: STABILIZE → ACRO"
+order "Mode change: STABILIZE → ACRO" "Mode change: ACRO → POS_HOLD"
+log_absent any "Mode change: STABILIZE → POS_HOLD"
+log_absent any "Transition: IDLE_GROUND → ARMED_GROUND"

@@ -1,0 +1,51 @@
+# landing_dead_zone.scn — a soft ToF landing with the sensor's close-range dead zone modelled (fixed 2026-11-09, was KNOWN-FAIL)
+#                         センサの近距離の不感帯を模擬した、柔らかい接地の ToF 着陸（2026-11-09 に修正。以前は KNOWN-FAIL）
+#
+# Spec (user request 2026-06-14): in ALT_HOLD/POS_HOLD a pilot DISARM must NOT cut the
+# motors mid-air (the craft would drop). Instead it starts an AUTO-LANDING — a gradual
+# descent (computeLanding, ~0.3 m/s) — and touchdown does the real DISARM (LANDING →
+# IDLE_GROUND). ACRO/STABILIZE and the ground states still cut immediately, and a DISARM
+# pressed AGAIN while landing is the emergency cut.
+#   C/D: ARM in ALT_HOLD → auto-takeoff → hover at 0.5 m.
+#   F:   press DISARM while FLYING → auto-land. Motors keep running through a gradual
+#        descent (duty > 0.3), then touchdown DISARMs. NOT an instant motor cut / drop.
+#
+# 仕様（ユーザー要望 2026-06-14）: ALT_HOLD/POS_HOLD のパイロット DISARM は空中でモータを
+# 切ってはならない（落下する）。代わりに自動着陸（緩降下 ~0.3 m/s）を起動し、接地で本当の
+# DISARM（LANDING→IDLE_GROUND）。ACRO/STABILIZE・地上は即停止のまま、着陸中の再 DISARM は緊急カット。
+#
+# alt_disarm_land.scn with the ToF close-range dead zone modelled (the default of a run since 2026-11-09; the real
+# sensor reads "no target" below ~3 cm, so it is invalid on the floor). The descent reaches the floor at 0.26 m/s and
+# the sensor goes invalid while the craft is still moving (its reading lags the truth: 0.085 m reported at a truth
+# height of 0.038 m), so `on_ground_` (two valid readings below 5 cm) is never set, the estimator is not pinned to the
+# ground, the stalled-descent test (`|vz| < 0.05 m/s`) never holds, and the 3 G impact cut does not fire either (this
+# contact is below 3 G). Before the fix LANDING never ended (backlog #23, KNOWN-FAIL). Fixed by the dead-zone touchdown
+# (TakeoffLandingMgr::deadZoneTouchdown(), detailed_design.md §3.1 note 7): during the LANDING descent, a valid reading at or
+# below 0.10 m followed by ONLY invalid samples for 0.2 s means the craft is on the floor. Here the last valid reading is
+# 0.085 m and "Landing detected (ToF dead zone ...)" comes 0.2 s after it, with the craft at rest on the floor (truth
+# height 0.021 m, vertical speed 0.001 m/s); LANDING -> IDLE_GROUND follows at once. The real log (front_tof_poshold_yaw360,
+# 0.28 m/s) went invalid for good after valid readings of 0.039 and 0.031 m; replaying it, the rule does not fire during the
+# descent and fires 0.23 s after the last valid reading (detailed_design.md §3.1 note 7).
+#
+# alt_disarm_land.scn に ToF の近距離の不感帯を加えたもの（2026-11-09 から走行の既定。実機のセンサは約 3 cm より近いと
+# 「目標なし」を返すので、床の上では無効）。降下は 0.26 m/s で床に着き、機体がまだ動いている間にセンサが無効になる
+# （読みは真値に遅れる: 真の高さ 0.038 m で 0.085 m と報告）。そのため `on_ground_`（5 cm 未満の有効な読み 2 回）は立たず、
+# 推定器は地面に固定されず、降下停滞の判定（`|vz| < 0.05 m/s`）は成り立たず、3 G の衝撃カットも働かない（この接触は
+# 3 G 未満）。修正前は LANDING が終わらなかった（バックログ #23、KNOWN-FAIL）。不感帯での接地（
+# TakeoffLandingMgr::deadZoneTouchdown()、detailed_design.md §3.1 注7）で修正: LANDING の降下中に、0.10 m 以下の有効な
+# 読みの後、無効サンプルだけが 0.2 s 続いたら、機体は床の上にある。ここでは最後の有効な読みが 0.085 m で、その 0.2 s 後に
+# 「Landing detected (ToF dead zone ...)」が出る。機体は床の上で静止（真の高さ 0.021 m、鉛直速度 0.001 m/s）。続けて
+# LANDING → IDLE_GROUND。実機ログ（front_tof_poshold_yaw360、0.28 m/s）は 0.039 m と 0.031 m の有効な読みの後、ずっと
+# 無効になった。それを再生すると、この規則は降下中には作動せず、最後の有効な読みの 0.23 s 後に作動する
+# （detailed_design.md §3.1 注7）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/landing_dead_zone.scn --target vehicle
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (press) — props stop, spool, AUTO-takeoff fires
+   +    rc   2048  2048   2048    2048  1     4000      50        1              # D: throttle CENTER → climb to 0.5 m, reach Airborne, hover
+   +    rc   2048  2048   2048    2048  0     500       50        1              # E: release the ARM button (so the next press is an edge)
+   +    rc   2048  2048   2048    2048  1     6000      50        1              # F: press DISARM while FLYING → AUTO-LAND (gradual descent → touchdown → DISARM)
+   +    rc   2048  2048   2048    2048  0     600       50                       # G: settle (disarmed after touchdown)

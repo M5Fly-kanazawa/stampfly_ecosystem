@@ -1,0 +1,13 @@
+# tof_silent_prearm.expect — ARM refused while the downward ToF is silent, accepted after recovery
+# 下向き ToF が出力停止している間 ARM は拒否され、復帰後は受理される
+#
+# The first ARM attempt (ToF silent since 3.0 s) is refused with the ToF-silent reason and the
+# craft stays on the floor; after the ToF delivers samples again (9.0 s) a fresh ARM is accepted.
+# 最初の ARM 試行（ToF は 3.0 s から出力停止）は ToF 出力停止の理由で拒否され機体は床に残る。ToF が
+# 再びサンプルを出した（9.0 s）後の新しい ARM は受理される。
+exit 0
+log_contains any "ARM rejected: downward ToF is silent"
+log_contains any "ARM accepted"
+order "ARM rejected: downward ToF is silent" "ARM accepted"
+log_absent any "Transition: ARMED_GROUND → TAKEOFF"
+metric alt_max < 0.05 in 0.0 15.0

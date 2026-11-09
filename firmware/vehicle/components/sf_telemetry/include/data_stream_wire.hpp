@@ -84,6 +84,9 @@ inline constexpr uint8_t kPktFlightPhase400 = 0x4C;  // 400Hz flight state + fli
                                                       // (8 samples/entry)
 inline constexpr uint8_t kPktFlightFlags    = 0x4D;  // 50Hz pilot buttons + pre-arm/flip readiness
                                                       // flags and block reasons
+inline constexpr uint8_t kPktToFSilence      = 0x4E;  // 50Hz downward-ToF silence facts: vertical velocity
+                                                      // estimate, rise, ToF-less descent thrust ratio,
+                                                      // failsafe verdict, ToF health, mode block
 inline constexpr uint8_t kPktStatus    = 0x4F;  // standalone 1Hz packet
 inline constexpr uint8_t kPktUnified   = 0x50;  // 50Hz batched packet
 
@@ -119,6 +122,12 @@ inline constexpr int    kSamplesPerPacket = 8;
 /// 128B = float4 × 8サンプル）= 1237B、旧 1300B 上限に対して ~63B しか余白が
 /// 無かったため、WiFi MTU（1472）・PC 受信バッファ（2048）に対する余白を
 /// ~163B に戻す。
+/// The 50Hz ToF-silence entry (kPktToFSilence, 2B + 19B = 21B) raised the worst case from 1296B to 1317B,
+/// which still leaves 83B under this cap (test_main.cpp, wire_unified_worst_case_fits builds that worst
+/// case through the real builder and asserts that every entry is accepted).
+/// 50Hz の ToF 出力停止エントリ（kPktToFSilence、2B + 19B = 21B）で最悪ケースは 1296B から 1317B に
+/// 増えたが、この上限まで 83B の余裕が残る（test_main.cpp の wire_unified_worst_case_fits が、実際の
+/// ビルダでこの最悪ケースを組み、全エントリが受理されることを検査する）。
 inline constexpr size_t kUnifiedMaxSize   = 1400;
 
 // Quantization scales (PC side divides by these to restore physical units)
@@ -139,6 +148,13 @@ inline constexpr uint8_t kPilotButtonFlip = 0x02;   // FLIP button  / FLIP ボ�
 inline constexpr uint8_t kFlagFlipReady          = 0x01;   // ControllerStatus.flip_ready
 inline constexpr uint8_t kFlagAttitudeMismatch   = 0x02;   // SystemStatus.attitude_mismatch
 inline constexpr uint8_t kFlagAttitudeVerified   = 0x04;   // SystemStatus.attitude_verified
+
+// WireToFSilence::tof_flags bits (failsafe verdict + ToF health facts)
+// WireToFSilence::tof_flags のビット（フェイルセーフの判定と ToF 健全状態の事実）
+inline constexpr uint8_t kToFFlagSilent           = 0x01;   // FailsafeStatus.tof_silent (a silence episode is in progress)
+inline constexpr uint8_t kToFFlagAltitudeReliable = 0x02;   // ToFHealth.altitude_reliable
+inline constexpr uint8_t kToFFlagInvalidStuck     = 0x04;   // ToFHealth.invalid_stuck
+inline constexpr uint8_t kToFFlagStatusStale      = 0x08;   // failsafe_status itself is no longer refreshed (display test)
 
 // =============================================================================
 // Wire structs (packed; little-endian on both ESP32 and the host PC)
@@ -286,6 +302,32 @@ struct WireFlightFlags {
     uint8_t  arm_block;           // ArmBlock (0 = pre-arm gates pass)
 };
 static_assert(sizeof(WireFlightFlags) == 8, "wire drift");
+
+/// 50Hz downward-ToF silence entry — what the ToF-silence protection saw and did, so that a flight with a
+/// failing ToF can be reconstructed: the accelerometer-based vertical velocity estimate, the estimated rise, the
+/// commanded / support thrust of the descent without a ToF, the failsafe verdict and its reason, the ToF
+/// health facts, and why the latest flight-mode request was refused. Floats are not quantized (a ratio, a
+/// velocity and a height have no natural fixed scale). Slow facts (the verdicts change at 10 Hz), so one record
+/// per unified packet is enough. Entry id 0x4E; a parser that does not know the id skips it by size.
+/// controller_status is not republished while disarmed: read the three controller fields together with
+/// flight_phase.flight_state.
+/// 50Hz 下向き ToF 出力停止エントリ — ToF の出力停止の保護が何を見て何をしたか。ToF が壊れた飛行を再構成できる
+/// ようにする: 加速度計に基づく鉛直速度の推定、上昇量の推定、ToF なし降下の指令推力 ÷ 支持推力、フェイルセーフの
+/// 判定とその理由、ToF の健全状態、直近のモード要求が拒否された理由。float は量子化しない（比・速度・高さに固定の
+/// 自然なスケールが無い）。遅い事実（判定は 10 Hz で変わる）なので統合パケットあたり 1 件で足りる。エントリ id 0x4E。
+/// id を判別できないパーサは size でスキップする。controller_status は disarm 中は再発行されない: 制御器由来の
+/// 3 つの値は flight_phase.flight_state と合わせて読むこと。
+/// @design requirements.md §7 — Data Stream; protocol/spec/flight_log.yaml stream tof_silence [OK]
+struct WireToFSilence {
+    uint32_t timestamp_us;
+    float    vertical_velocity_up;   // [m/s] accelerometer-based vertical velocity estimate, up positive / 加速度計に基づく鉛直速度の推定（上が正）
+    float    vertical_rise_m;        // [m]   estimated rise since the craft last rested (0 at rest)       / 静止からの上昇量の推定
+    float    descent_thrust_ratio;   // [-]   commanded / support thrust of the descent without a ToF (0 = none) / ToF なし降下の指令÷支持推力（0=なし）
+    uint8_t  tof_flags;              // kToFFlag* bits
+    uint8_t  tof_reason;             // ToFSilenceReason (0 = no episode)
+    uint8_t  mode_block;             // ModeBlock (0 = no refused mode request pending)
+};
+static_assert(sizeof(WireToFSilence) == 19, "wire drift");
 
 /// 50Hz pilot input entry — FMT_CONTROL '<I 4f' (20B)
 struct WireControl {

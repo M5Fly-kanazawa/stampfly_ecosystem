@@ -1,0 +1,8 @@
+exit 0
+log_contains any "Downward ToF silence episode: estimator has not re-acquired the ToF yet"
+log_contains any "ToF re-acquired after a flip window / ToF silence"
+log_absent any "Landing complete"
+metric alt_max < 3.0 in 8.6 20.0
+log_contains any "Takeoff complete → FLYING/ALT_HOLD"
+metric alt_max < 1.0 in 17.0 25.0
+metric alt_rmse < 0.1 in 18.0 25.0

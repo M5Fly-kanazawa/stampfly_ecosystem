@@ -1,0 +1,24 @@
+# api_wait_deferred.scn — other commands arriving while `takeoff` waits are NOT dropped or reordered
+#                         `takeoff` の待機中に届いた他のコマンドは捨てず、順序も変えない
+#
+# Only `emergency` and `stop` are acted on during a wait. Everything else must behave exactly as
+# before the fix: it waits and runs, in arrival order, after the blocking command has answered.
+# Here a `height?` and a second `takeoff` arrive while the first `takeoff` waits: `height?` must
+# be answered after FLYING, and the second `takeoff` must then be refused ("not on ground"),
+# i.e. it must not start a second takeoff chain in the middle of the first.
+# 待機中に動くのは `emergency` と `stop` だけ。他は修正前と全く同じ振る舞い — 待機中のコマンドが
+# 応答した後に、到着順で実行される。ここでは 1 回目の `takeoff` の待機中に `height?` と 2 回目の
+# `takeoff` が届く: `height?` は FLYING の後に応答し、2 回目の `takeoff` は "not on ground" で
+# 拒否される（1 回目の途中で 2 回目の離陸の鎖を始めない）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_wait_deferred.scn --target vehicle --duration 20000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff (t=6)
+   +    rc         2048  2048   2048    2048  0     500       50      # D: climb (to t=6.5)
+   +    api        "height?"                                          # E: arrives during the wait
+   +    rc         2048  2048   2048    2048  0     300       50      # F: (to t=6.8)
+   +    api        "takeoff"                                          # G: second takeoff, arrives during the wait
+   +    rc         2048  2048   2048    2048  0     10000     50      # H: the first takeoff finishes, then the queued lines run (to t=16.8)

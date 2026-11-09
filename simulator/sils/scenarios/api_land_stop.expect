@@ -1,0 +1,7 @@
+exit 0
+log_contains any "cmd: stop (during a blocking command)"
+log_contains any "reply: error not flying or guidance released"
+log_absent any "reply: error interrupted by stop"
+log_absent any "reply: error land timeout"
+order "Autonomous landing engaged" "cmd: stop"
+order "reply: error not flying or guidance released" "Transition: LANDING → IDLE_GROUND"

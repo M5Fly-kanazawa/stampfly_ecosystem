@@ -1,0 +1,33 @@
+# disarm_long_idle.scn — a LONG silent DISARM (38 min) must not break the next flight
+#                        長い無音の DISARM（38 分）が次の飛行を壊さない
+#
+# The stamp watchers (sf::SilenceWatch: link liveness in the controller, comm loss in the
+# failsafe / state manager, sensor health) judge silence from 32-bit microsecond stamps, which
+# are ambiguous beyond 2^31 us (35.8 min). Here the RC link goes silent while DISARMED for
+# 38 min (> 35.8 min; virtual time, so the run takes a few minutes of wall time), then resumes
+# and the pilot flies a normal ALT_HOLD auto-takeoff / hover / auto-land.
+# What this guards: after the long gap the watchers must neither stay stuck "silent"
+# (no ARM, no spurious COMM_LOST → LANDING, level-forced landing) nor misjudge the stamps.
+# The dangerous opposite (a dead link read as alive) is covered by the host unit tests
+# (test_sensor_freshness.cpp: observation gaps of 36 / 40 / 60 min, first observation with a
+# 40 min old stamp) — a SILS flight cannot expose it, since the first packet that resumes the
+# link also refreshes the stamp.
+# タイムスタンプ監視器（sf::SilenceWatch: 制御器のリンク生存、failsafe・状態機械の通信断、
+# sensor_health）は 32bit マイクロ秒の時刻印で無音を判定し、2^31 us（35.8 分）を超えると曖昧になる。
+# ここでは DISARM のまま RC リンクを 38 分（> 35.8 分。仮想時間なので実時間は数分）無音にし、
+# 再開後に通常の ALT_HOLD 自動離陸・ホバー・自動着陸を行う。守るもの: 長い空きのあとで監視器が
+# 「停止」に固着せず（ARM 不可・誤った COMM_LOST→LANDING・水平強制の着陸が起きない）、時刻印を
+# 誤判定しないこと。逆の危険側（途絶したリンクを生存と読む）はホスト単体試験
+# （test_sensor_freshness.cpp: 36/40/60 分の観測の空き、40 分前の時刻印の初回観測）が担う —
+# リンクを再開する最初のパケットが時刻印も更新するため、SILS の飛行では顕在化しない。
+#
+# Run: sf sils scenario simulator/sils/scenarios/disarm_long_idle.scn --target vehicle --duration 2300000000
+#
+#  <t>      ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0        rc   2048  2048   2048    2048  0     6000      50              # A: boot at rest — calibration completes
+   +2280000 rc   2048  2048   2048    2048  0     1500      50              # B: 38 min of SILENCE before this (t = 6 s → 2286 s), link resumes DISARMED
+   +        rc   2048  2048   2048    2048  1     1000      50        1     # C: ARM in ALT_HOLD (press) → auto-takeoff (t = 2287.5 s)
+   +        rc   2048  2048   2048    2048  1     4000      50        1     # D: hover (to t = 2292.5 s)
+   +        rc   2048  2048   2048    2048  0     500       50        1     # E: release the ARM button
+   +        rc   2048  2048   2048    2048  1     6000      50        1     # F: press DISARM while FLYING → auto-land (t = 2293 s)
+   +        rc   2048  2048   2048    2048  0     600       50                # G: settle on the ground (ends t = 2299.6 s)

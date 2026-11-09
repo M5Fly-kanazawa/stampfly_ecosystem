@@ -1,0 +1,12 @@
+# tof_recover_invalid_first.expect — samples return but all invalid, then valid: the estimator re-acquires the ToF
+# サンプルは戻るが全て無効、その後に有効: 推定器が ToF を取り込み直す
+exit 0
+log_contains any "Downward ToF silence episode: only invalid samples while flying"
+log_contains any "ToF re-acquired after a flip window / ToF silence"
+order "Downward ToF silence episode: only invalid samples while flying" "ToF re-acquired after a flip window / ToF silence"
+order "ToF re-acquired after a flip window / ToF silence" "Mode change: STABILIZE → ALT_HOLD"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+# The estimate agrees with the truth from the return of the valid samples (10.0 s) to the auto-landing, ALT_HOLD included.
+# 有効なサンプルが戻った（10.0 s）後は、ALT_HOLD を含め、自動着陸まで推定が真値と一致する。
+metric alt_rmse < 0.05 in 10.5 19.0
+metric alt_max < 1.5 in 8.5 27.0

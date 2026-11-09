@@ -189,6 +189,36 @@ public:
     virtual void holdAttitudeCorrection(bool hold) { (void)hold; }
 
     // =========================================================================
+    // ToF re-acquisition (after a silence of the downward ToF)
+    // ToF の取り込み直し（下向き ToF の出力停止の後）
+    // =========================================================================
+
+    /// Re-acquire the vertical channel from the ToF: the estimator may hold an altitude that is
+    /// metres off (position/velocity pinned or integrated blind while the ToF was silent), and its
+    /// innovation gate would reject the very samples that correct it. Inflate the vertical
+    /// confidence and lift the ToF innovation gate for the next accepted sample. It is the SAME
+    /// mechanism the end of a flip uses (holdAttitudeCorrection(false)); there is one
+    /// implementation, not a parallel one. Called by ImuTask before the first valid ToF sample
+    /// after a loss. Default no-op for estimators without an innovation gate.
+    /// 鉛直チャネルを ToF から取り込み直す: 推定器は数 m ずれた高度を保持しているかもしれず（ToF の
+    /// 出力停止中に位置・速度が固定された、または ToF なしで積分された）、そのイノベーション判定は
+    /// 直すはずのサンプルをまさに棄却する。鉛直の自信を広げ、次に採用するサンプルだけ ToF の
+    /// イノベーション判定を外す。宙返りの終わり（holdAttitudeCorrection(false)）と「同じ」仕組みで、
+    /// 実装は 1 つ（並列に作らない）。喪失後の最初の有効な ToF サンプルの前に ImuTask が呼ぶ。
+    /// イノベーション判定を持たない推定器では既定で何もしない。
+    ///
+    /// @design detailed_design.md §3.1 注 12 — ToF re-acquisition after a silence [OK]
+    virtual void reacquireAltitude() {}
+
+    /// What happened to the last ToF sample passed to updateTof(): adopted or not, and how far the
+    /// estimate was from it. Default: every valid sample is adopted with a zero innovation (an
+    /// estimator without an innovation gate trusts the ToF as it comes).
+    /// 直近に updateTof() へ渡した ToF サンプルがどうなったか: 採用されたか、推定がどれだけ離れて
+    /// いたか。既定: 有効なサンプルは全て、イノベーション 0 で採用（イノベーション判定を持たない
+    /// 推定器は ToF をそのまま信じる）。
+    virtual ToFObservation lastToFObservation() const { return ToFObservation{true, 0.0f}; }
+
+    // =========================================================================
     // Calibration
     // キャリブレーション
     // =========================================================================

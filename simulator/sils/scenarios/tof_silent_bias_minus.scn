@@ -1,0 +1,53 @@
+# tof_silent_bias_minus.scn — downward ToF goes silent while hovering at ~1.1 m with an accelerometer offset error of -0.2 m/s^2 (ALT_HOLD)
+#                       約 1.1 m でホバー中に、加速度計のオフセット誤差 −0.2 m/s^2 のまま下向き ToF が出力停止する（ALT_HOLD）
+#
+# tof_silent_hover_1p2.scn plus `bias 0 0 -0.2 0 0 0` at the moment the ToF stops (body z, FRD: the upward reading is off by +0.2 m/s^2). The velocity of the descent is an accelerometer integral, so its error
+# grows with the time since its last reset (0.2 m/s^2 for 3 s is 0.6 m/s); the thrust must stay below the weight whatever it says
+# (kNoTofThrustCapRatio x support thrust): the craft must NOT rise again (the previous build rose to 2.7 m at 5 m/s with +0.2). Spec under test: no rise after
+# the silence, touchdown by the impact (the 3 G impact while LANDING with a silent ToF is the touchdown, not an emergency), bounded speed.
+# tof_silent_hover_1p2.scn に、ToF が止まる瞬間の `bias 0 0 -0.2 0 0 0`（機体 z、FRD: 上向きの読みが +0.2 m/s^2 ずれる）を足したもの。降下の速度は
+# 加速度の積分なので、誤差は最後のリセットからの時間とともに増える（0.2 m/s^2 で 3 s なら 0.6 m/s）。速度推定が何であれ推力は重さを下回らなければ
+# ならない（kNoTofThrustCapRatio × 支持推力）: 機体は再上昇してはならない（前のビルドは +0.2 で 2.7 m まで上昇し 5 m/s で接地した）。検証する仕様: 沈黙の後に
+# 上昇しない、衝撃で接地する（ToF 出力停止中の LANDING での 3 G の衝撃は非常でなく接地）、有界の速度。
+#
+# Original header of tof_silent_hover_1p2.scn follows. tof_silent_hover_1p2.scn の元の説明:
+#
+#
+# Same chain as tof_silent_hover.scn, from the highest altitude the auto-takeoff / API allow
+# (sf::limits::kAltitudeCeilingM = 1.2 m). The pilot climbs from the 0.5 m auto-takeoff hover to
+# about 1.15 m with the throttle stick and lets go (ALT_HOLD holds the altitude reached); then the
+# downward ToF stops. Timeline (s): ARM 7.5 -> hover 0.5 m ~9.3 -> stick up 13.0-18.0 -> hover 1.15 m -> ToF stops 20.5 -> LANDING ~20.8
+# -> touchdown ~22.4 -> ARM attempt 27.7 (refused). Since 2026-11-09 the stick climb is tapered toward the ceiling
+# (speed = 0.45 1/s x the distance to it, alt_ceiling_stick.scn), so the climb to 1.15 m takes 5 s, not 1.9 s. Spec under test:
+#  1. FLYING -> LANDING within ~0.3-0.4 s of the silence (the altitude cannot be checked).
+#  2. The descent is BLIND: a velocity loop on an accelerometer-based estimate (no altitude, no ToF landing detection).
+#  3. The craft touches down at a bounded speed, the accelerometer touchdown ends LANDING (motors
+#     stop) well before the 10 s blind-landing time limit.
+#  4. ARM is REFUSED while the sensor is still silent.
+#
+# tof_silent_hover.scn と同じ連鎖を、自動離陸・API が許す最も高い高度（sf::limits::kAltitudeCeilingM
+# = 1.2 m）から行う。パイロットは自動離陸の 0.5 m ホバーからスロットルスティックで約 1.2 m まで上げて
+# 離す（ALT_HOLD が到達高度を保持）。その後、下向き ToF が止まる。2026-11-09 から、スティック上昇は上限へ向けて
+# 絞られる（速さ = 0.45 1/s × 上限までの距離、alt_ceiling_stick.scn）ので、1.15 m までの上昇は 1.9 s でなく 5 s かかる。
+# 検証する仕様:
+#  1. 出力停止から約 0.3〜0.4 s 以内に FLYING -> LANDING（高度を確認できないため）。
+#  2. 降下は「ToF なし」: 加速度計に基づく速度推定の速度ループ（高度も ToF の着地判定も使わない）。
+#  3. 有界の速度で接地し、加速度計による接地で LANDING が終わる（モータ停止）。ToF なしの着陸の
+#     時間切れ（10 s）よりずっと前。
+#  4. センサが出力停止したままなら ARM は拒否される。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_bias_minus.scn --target vehicle --duration 31100000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (7.5 s) — spool, then the auto-takeoff climb
+   +    rc         2048  2048   2048    2048  1     4500      50        1              # D: stick centre — climb to 0.5 m and hold (to 13.0 s)
+   +    rc         4095  2048   2048    2048  1     5000      50        1              # E: stick up 5 s (tapered toward the ceiling) — to about 1.15 m (to 18.0 s)
+   +    rc         2048  2048   2048    2048  1     2500      50        1              # F: stick centre — ALT_HOLD holds the altitude reached, 1.15 m (to 20.5 s)
+   +    bias 0 0 -0.2 0 0 0                                                           # G0: the accelerometer offset error appears with the silence
+   +    tof_silent 1                                                                   # G: 20.5 s — ToF output stops while hovering at ~1.15 m
+   +    rc         2048  2048   2048    2048  1     7000      50        1              # H: LANDING by silence (~20.8 s), then the blind descent, touchdown ~22.4 s (to 27.5 s)
+   +    rc         2048  2048   2048    2048  0     200       50        1              # I: release the ARM button
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # J: press again (27.7 s) — landed, ToF still silent -> ARM REFUSED
+   +    rc         2048  2048   2048    2048  0     600       50        1              # K: settle

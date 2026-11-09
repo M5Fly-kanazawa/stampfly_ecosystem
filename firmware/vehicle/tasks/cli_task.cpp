@@ -52,6 +52,7 @@
 #include "topics.hpp"
 #include "params.hpp"
 #include "flight_state.hpp"
+#include "failsafe_status_guard.hpp"   // a stale failsafe_status reads as ToF silent
 #include "config.hpp"
 
 static const char* TAG = "CLITask";
@@ -228,8 +229,22 @@ const char* armBlockDescription(sf::ArmBlock block)
         case sf::ArmBlock::BenchRelevel: return "bench motor test / re-level - wait";
         case sf::ArmBlock::TiltPending:  return "tilt check pending - keep still";
         case sf::ArmBlock::TiltMismatch: return "tilt mismatch - place level";
+        case sf::ArmBlock::TofSilent:    return "downward ToF silent / not re-acquired - check the sensor, wait ~1 s after it returns";
         case sf::ArmBlock::None:
         default:                         return "none";
+    }
+}
+
+/// Short operator-facing description of a flight-mode refusal reason (for `status`).
+/// フライトモード拒否理由の操作者向け短い説明（`status` 用）。
+const char* modeBlockDescription(sf::ModeBlock block)
+{
+    switch (block) {
+        case sf::ModeBlock::TofSilent: return "ALT_HOLD/POS_HOLD need the downward ToF - silence episode in progress; applies by itself when it ends";
+        case sf::ModeBlock::TofSwitchConsumed:
+            return "ALT_HOLD/POS_HOLD refused IN FLIGHT (ToF silence) - the switch request was consumed: flip the switch again after the ToF recovers";
+        case sf::ModeBlock::None:
+        default:                       return "none";
     }
 }
 
@@ -252,13 +267,10 @@ const char* flipBlockDescription(sf::FlipBlockReason reason)
     }
 }
 
-/// `status` — flight state / mode / arm, pairing, attitude, altitude, battery, sensors.
-/// `status` — フライト状態/モード/ARM、ペアリング、姿勢、高度、電池、センサ。
-int cmd_status(int argc, char** argv)
+/// `status`, first part: state, mode, armed, pairing, attitude, altitude, battery, sensors.
+/// `status` の前半: 状態、モード、ARM、ペアリング、姿勢、高度、電池、センサ。
+static void printStatusBasics(const sf::SystemMode& mode)
 {
-    (void)argc;
-    (void)argv;
-    const sf::SystemMode mode = sf::system_mode.latest();
     const sf::PowerData power = sf::sensor_power.latest();
     const sf::SensorHealth health = sf::sensor_health.latest();
     const sf::PairingStatus pairing = sf::pairing_state.latest();
@@ -276,7 +288,12 @@ int cmd_status(int argc, char** argv)
     std::printf("battery : %.2f V, %.0f mA\n", power.voltage, power.current);
     std::printf("sensors : present=0x%02X healthy=0x%02X\n",
                 health.present_mask, health.healthy_mask);
+}
 
+/// `status`, second part: why ARM / a mode request / the downward ToF is refused or silent.
+/// `status` の中盤: ARM・モード要求・下向き ToF が拒否または出力停止の理由。
+static void printStatusRefusals(const sf::SystemMode& mode)
+{
     // Pre-arm: the ESP_LOGW "ARM rejected" lines go to the serial console only, so show the
     // published reason (StateManager::evaluateArmBlock, SystemMode.arm_block) — what a WiFi
     // (TCP) CLI user sees to understand why ARM is refused. Read-only fact display.
@@ -289,6 +306,43 @@ int cmd_status(int argc, char** argv)
     } else {
         std::printf("prearm  : BLOCKED (%s)\n", armBlockDescription(block));
     }
+
+    // Flight-mode refusal reason (SystemMode.mode_block): shown only while a refused request is
+    // pending (an ALT_HOLD/POS_HOLD request while the downward ToF is silent).
+    // フライトモード拒否の理由（SystemMode.mode_block）: 拒否された要求があるときだけ表示する
+    // （下向き ToF の出力停止中の ALT_HOLD・POS_HOLD 要求）。
+    const auto mode_block = static_cast<sf::ModeBlock>(mode.mode_block);
+    if (mode_block != sf::ModeBlock::None) {
+        std::printf("modeblock: REFUSED (%s)\n", modeBlockDescription(mode_block));
+    }
+    // The ToF-silence episode, with the age of the failsafe_status stamp (a status nobody refreshes reads
+    // as silent). Stateless: the stamp's age is computed here, so this command observes nothing and the two
+    // CLI tasks (serial, TCP) share no guard state.
+    // ToF 出力停止のエピソードと、failsafe_status の時刻印の経過（誰も更新しない状態は出力停止と読む）。
+    // 状態を持たない: 時刻印の経過をここで計算するので、このコマンドは何も観測せず、2 つの CLI タスク
+    // （シリアル・TCP）は保護の状態を共有しない。
+    const sf::FailsafeStatus tof_status = sf::failsafe_status.latest();
+    const uint32_t now_us = static_cast<uint32_t>(esp_timer_get_time());
+    const bool stale = sf::isFailsafeStatusStaleForDisplay(now_us, tof_status.timestamp);
+    if (tof_status.tof_silent || stale) {
+        const sf::ToFSilenceReason reason = stale ? sf::ToFSilenceReason::StatusStale
+                                                  : static_cast<sf::ToFSilenceReason>(tof_status.tof_reason);
+        std::printf("tof     : SILENT - %s (altitude not vouched for; status stamp age %d ms)\n",
+                    sf::toFSilenceReasonName(reason),
+                    static_cast<int>(sf::timestampAgeUs(now_us, tof_status.timestamp) / 1000));
+    }
+}
+
+/// `status` — flight state / mode / arm, pairing, attitude, altitude, battery, sensors, the
+/// refusal reasons and the flip gate.
+/// `status` — フライト状態/モード/ARM、ペアリング、姿勢、高度、電池、センサ、拒否の理由、宙返りの判定。
+int cmd_status(int argc, char** argv)
+{
+    (void)argc;
+    (void)argv;
+    const sf::SystemMode mode = sf::system_mode.latest();
+    printStatusBasics(mode);
+    printStatusRefusals(mode);
 
     // Flip gate: the controller's published fact (ControllerStatus.flip_ready /
     // flip_block_reason, C2-C8) — the same one the FLIP button and the API read, so

@@ -85,6 +85,30 @@ void sils_board_set_motor_health(int motor, float gain);
 // オフセットを模擬し、ファーム起動校正に除去対象を与える（P2-3 対照試験）。Plant 未接続なら no-op。
 void sils_board_set_imu_bias(float ax, float ay, float az, float gx, float gy, float gz);
 
+// Fault injection (scenario `tof_silent`): stop (1) or resume (0) the downward ToF's
+// sample output. While stopped the chip model never reports "data ready" (no new sample, no
+// I2C error), so the firmware sees the sensor go silent. Independent of the Plant.
+// 故障注入（シナリオ `tof_silent`）: 下向き ToF のサンプル出力を停止（1）/再開（0）する。
+// 停止中はチップモデルが「データ準備完了」を返さない（新サンプル無し・I2C エラー無し）ので、
+// ファームからはセンサが出力停止したように見える。Plant には依存しない。
+void sils_board_set_tof_silent(int silent);
+
+// Fault injection (scenario `tof_invalid`): make every sample of the downward ToF invalid ("no
+// target", 1) or restore it (0). Samples keep arriving on time, so this is NOT a silence: it is the
+// sensor that cannot range the surface below. Independent of the Plant.
+// 故障注入（シナリオ `tof_invalid`）: 下向き ToF の全サンプルを無効（「目標なし」、1）にする、または
+// 元に戻す（0）。サンプルは時間どおり届き続けるので出力停止ではない: 下の面を測れないセンサ。
+// Plant には依存しない。
+void sils_board_set_tof_invalid(int invalid);
+
+// Scenario `tof_deadzone`: model (1, the default) or ignore (0) the close-range dead zone of the downward
+// ToF (vl53_device.cpp MIN_MM): below it the sensor has no return pulse and reads "no target", as the real
+// sensor does on the floor. Independent of the Plant.
+// シナリオ `tof_deadzone`: 下向き ToF の近距離の不感帯（vl53_device.cpp の MIN_MM）を模擬する（1、既定）/
+// しない（0）。この距離より近いとセンサは反射パルスが無く「目標なし」を返す（実機が床の上でそうなるのと同じ）。
+// Plant には依存しない。
+void sils_board_set_tof_deadzone(int enabled);
+
 // P8 handling hook (scenario `handle` event → Plant). Begin a physical handling maneuver:
 // the hand lifts the (crashed) craft to carry_alt [m up], rights it to level, carries it to
 // place_x/place_y [NED m] and sets it back on the ground, over lift/carry/place seconds.

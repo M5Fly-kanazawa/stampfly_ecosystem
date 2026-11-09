@@ -8,8 +8,8 @@
 
 /**
  * @file failsafe.hpp
- * @brief Failsafe monitor — impact, comm timeout, voltage checks
- *        フェイルセーフモニター — 衝撃検出、通信タイムアウト、電圧監視
+ * @brief Failsafe monitor — impact, comm timeout, downward-ToF silence, voltage checks
+ *        フェイルセーフモニター — 衝撃検出、通信タイムアウト、下向き ToF 出力停止、電圧監視
  *
  * Monitors safety-critical conditions and publishes SystemAlert
  * to the system_alert topic when thresholds are exceeded.
@@ -25,6 +25,7 @@
 #pragma once
 
 #include "flight_state.hpp"
+#include "sensor_freshness.hpp"
 #include <cstdint>
 
 namespace sf {
@@ -76,12 +77,34 @@ private:
     /// 通信タイムアウトをチェックする
     void checkCommTimeout();
 
+    /// Raise COMM_LOST on the rising edge and re-raise it while the link stays lost
+    /// 通信途絶の立ち上がりで COMM_LOST を発報し、途絶が続く間は再発報する
+    void raiseCommLost(uint32_t age_ms);
+
+    /// Judge the downward-ToF silence EPISODE (no NEW sample for sf::limits::kTofSilenceUs, only
+    /// invalid samples while flying, or the estimator has not re-acquired the ToF: facts from
+    /// tof_health), publish the level on failsafe_status every update and raise
+    /// AlertType::TOF_SILENT while armed.
+    /// 下向き ToF の出力停止「エピソード」（sf::limits::kTofSilenceUs の間新サンプル無し、飛行中に
+    /// 無効サンプルだけ、または推定器が ToF を取り込み直していない: tof_health の事実）を判定し、
+    /// 毎回 failsafe_status にレベルを発行し、ARM 中は AlertType::TOF_SILENT を発報する。
+    void checkTofSilence();
+
     /// Check battery voltage
     /// バッテリー電圧をチェックする
     void checkBattery();
 
+    /// Re-raise period of a standing alert: the checks run at 10 Hz, so 10 updates = about once a
+    /// second (level semantics: an alert consumed in a state that ignores it is not lost).
+    /// 継続中のアラートの再発報周期: 監視は 10 Hz なので 10 回 = 約 1 秒ごと（レベル意味論:
+    /// 無視する状態で消費されたアラートが失われない）。
+    static constexpr uint8_t kReraiseEveryNUpdates = 10;
+
     FailsafeConfig config_;
     bool comm_lost_        = false;   // Comm lost flag / 通信途絶フラグ
+    sf::SilenceWatch comm_watch_;     // Time since the last new setpoint / 最後の新 setpoint からの経過
+    sf::SilenceWatch tof_watch_;      // Time since the downward ToF last produced a NEW sample / 下向き ToF の最後の新サンプルからの経過
+    uint8_t tof_alert_cooldown_ = 0;  // updates until the next TOF_SILENT (re-)raise; 0 = raise now / 次の TOF_SILENT 発報までの更新回数（0=今発報）
     // Separate warning/emergency battery latches: a shared latch meant that once
     // the 3.4V warning fired, the 3.0V emergency could never escalate. Both clear
     // on voltage recovery (with hysteresis) so a later sag re-raises.

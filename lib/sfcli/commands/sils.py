@@ -1220,6 +1220,10 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
         if spin.empty:
             return None
         return float((first["timestamp_us"] - spin.iloc[0]["timestamp_us"]) * 1e-6)
+    if name == "descent_speed_max":   # max downward truth speed in the window [m/s], >=0 (touchdown speed)
+        # truth vel_z is NED (down positive), so the largest vel_z is the fastest descent; a
+        # climb-only window gives 0. / 真値の vel_z は NED（下が正）なので最大値が最速の降下。上昇のみなら 0。
+        return float(max(0.0, np.max(truth["vel_z"].to_numpy())))
     if name == "alt_drop_max":   # max altitude LOSS from the window's start [m], >=0
         return float(max(0.0, alt[0] - np.min(alt)))
     if name == "alt_rise_max":   # max altitude GAIN from the window's start [m], >=0
@@ -1318,7 +1322,7 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               duty_max, duty_spread_max, yaw_band, flip_roll_deg,
                                               flip_pitch_deg, flip_gyro_abort_phi_deg,
                                               flip_gyro_abort_after_spin_s, alt_drop_max,
-                                              alt_rise_max, settle_time_s
+                                              alt_rise_max, descent_speed_max, settle_time_s
     """
     merged = out_text + err_text
     streams = {"out": out_text, "err": err_text, "any": merged}

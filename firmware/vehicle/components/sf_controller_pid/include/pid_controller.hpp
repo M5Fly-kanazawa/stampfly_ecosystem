@@ -24,10 +24,14 @@
 
 #pragma once
 
+#include "blind_descent.hpp"   // sf::BlindDescent (velocity loop of the descent without a ToF)
 #include "controller.hpp"
+#include "flight_limits.hpp"   // sf::limits::kAltitudeCeilingM
 #include "flip_sequencer.hpp"
 #include "pid.hpp"
+#include "sensor_freshness.hpp"
 #include "sf_math.hpp"
+#include "vertical_velocity_estimator.hpp"   // sf::VerticalVelocityEstimator
 
 namespace sf {
 
@@ -40,12 +44,19 @@ public:
         const CommandSetpoint& setpoint,
         float dt) override;
 
+    /// Feed the link / guidance staleness watches (every cycle, armed or not; idempotent).
+    /// リンク・誘導の鮮度監視器へ観測を与える（ARM 中か否かに関わらず毎周期。冪等）。
+    void observeLinks(const StateEstimate& state, const CommandSetpoint& setpoint) override;
+
     void reset() override;
     void onModeChange(FlightMode new_mode) override;
     void onLanding() override;
     void onTakeoff() override;
     void onTakeoffComplete() override;
     bool isTakeoffComplete() const override { return takeoff_reached_; }
+    float verticalVelocityUp() const override { return vertical_velocity_.velocityUp(); }
+    float blindThrustRatio() const override { return blind_descent_.thrustRatio(); }
+    float verticalRiseM() const override { return vertical_velocity_.riseM(); }
     void setGuidanceTarget(const GuidanceTarget& target,
                            const CommandSetpoint& current_sticks) override;
     bool isGuidanceActive() const override { return guidance_active_; }
@@ -86,7 +97,12 @@ private:
     /// held while Grounded. Called once per compute() cycle.
     /// 現在のフェーズに応じて姿勢・レート積分器を保持（または解放）する: Grounded では保持。
     /// compute() の毎周期に1回呼ぶ。
+    void loadBlindDescentParams();   // ToF-silent descent settings / ToF なしの降下の設定
     void applyGroundIntegratorHold();
+    float stickClimbRate(float throttle_axis) const;                      // climb rate the throttle stick commands / スロットルスティックが指令する上昇率
+    float altitudeHoldClimbRate(float throttle_axis, float altitude);   // stick / rc-guidance climb rate, limited at the altitude ceiling / スティック・rc 誘導の上昇率（高度上限で制限）
+    float limitClimbAboveCeiling(float velocity_setpoint, float altitude);
+    float brakeAboveCeiling(float thrust, float altitude, float vel_up) const;   // thrust at most kAltitudeCeilingBrakeFrac x hover while still rising above the ceiling + margin / 上限 + 余裕を超えて上昇中は推力を hover の kAltitudeCeilingBrakeFrac 倍以下に   // no climb command above the ceiling + margin; the target returns to the ceiling / 上限 + 余裕を超えたら上昇の指令を出さず、目標を上限へ戻す
 
     /// POS_HOLD cascade: position/velocity error → tilt setpoints (roll/pitch).
     /// Writes roll_sp/pitch_sp [rad], overriding the stick values in the caller.
@@ -344,6 +360,8 @@ private:
     float guide_vz_          = 0;          // [m/s] climb rate up+ (mode 2) / 上昇率
     float guide_vyaw_        = 0;          // [rad/s] yaw rate cw+ (mode 2) / ヨーレート
     uint32_t guide_stamp_    = 0;          // [us] last velocity-target stamp / 最終速度目標時刻
+    SilenceWatch guide_watch_;             // time since guide_stamp_ changed / 時刻印の更新からの経過
+    SilenceWatch link_watch_;              // time since the setpoint stamp changed / setpoint 時刻印の更新からの経過
     float stick_snapshot_[4] = {0, 0, 0, 0};  // r,p,y,thr at engage / 設定時スティック
     float guide_yaw_kp_      = 2.0f;       // [1/s] yaw P gain / ヨー P ゲイン
     float guide_yaw_rate_max_ = 1.0f;      // [rad/s] yaw turn rate limit / ヨー回頭率上限
@@ -653,6 +671,42 @@ private:
     static constexpr float kLandingSettleRampS     = 1.0f;   // [s] ramp duration hover→floor / ランプ時間
     float landing_settle_t_ = 0.0f;       // [s] time below the settle altitude / アシスト高度未満の経過時間
 
+    // Descent without a ToF (Landing phase while state.tof_silent): the altitude estimate and the ToF
+    // touchdown detection cannot be trusted, and the ESKF vertical velocity is not usable either
+    // (no altitude observation; pinned at zero below the ToF handoff height). The thrust is bounded by
+    // kNoTofThrustCapRatio x the SUPPORT thrust (the commanded thrust that held the craft, calibrated by the
+    // accelerometer over a window that opens when the craft leaves the floor: support_filter_), below the weight:
+    // the craft cannot climb whatever the velocity estimate says. While the vertical velocity of vertical_velocity_
+    // (an accelerometer integral that follows the ESKF while the ToF is healthy, vertical_velocity_estimator.hpp) is
+    // trusted (kVerticalVelocityTrustS after its last reset) sf::BlindDescent tracks -kBlindDescentRateMps by PI around
+    // the support thrust; after that the thrust is the constant ceiling. The late fall (blind_landing.hpp) is the last
+    // safety for an integral that has drifted. The loop starts when the descent begins (silence detected, or LANDING
+    // entered while already silent). The end of LANDING is not decided here: the touchdown detector (ImuTask: impact,
+    // then stillness, or the floor holding the craft up) or the time limit (StateManager). All the numbers live in
+    // sf::limits (one place) so the barometer stage can feed the same estimator.
+    // ToF なしの降下（state.tof_silent の間の Landing フェーズ）: 高度推定と ToF の接地検出を信用できず、
+    // ESKF の鉛直速度も使えない（高度の観測が無い。ToF の引き継ぎ高さより下では 0 に固定）。推力は
+    // kNoTofThrustCapRatio × 「支持推力」（機体を支えていた指令推力を、機体が床を離れたときに開く窓で加速度計により
+    // 較正した値: support_filter_）で上から抑える。これは重さより小さく、速度推定が何であれ機体は上昇できない。
+    // vertical_velocity_（ToF が健全な間は ESKF に従う加速度積分、vertical_velocity_estimator.hpp）の鉛直速度を
+    // 信用できる間（最後のリセットから kVerticalVelocityTrustS）は、sf::BlindDescent が支持推力を中心にした PI で
+    // −kBlindDescentRateMps を追従する。それを過ぎたら推力は上限の一定値。後半の低下（blind_landing.hpp）が、
+    // 積分がドリフトした場合の最後の安全策になる。ループは降下が始まる時点（出力停止を検知、または既に出力停止中に
+    // LANDING へ入った時点）から動く。LANDING の終わりはここでは決めない: 接地検出器（ImuTask: 衝撃のあとの静止、または
+    // 床が機体を支えている）か時間切れ（StateManager）。数値はすべて sf::limits（1 か所）にあり、気圧計の
+    // 段階で同じ推定器へ速度を融合できる。
+    float blindLandingThrust(float dt);
+    float closedLoopLandingThrust(const StateEstimate& state, float dt);   // the ToF-alive descent / ToF 生存中の降下
+    float last_thrust_            = 0.0f;    // [-] thrust commanded last cycle (all phases) / 前周期の指令推力（全フェーズ）
+    SupportThrustFilter support_filter_;     // means of the commanded thrust and of the upward specific force over the window that opens when the craft
+                                             // has left the floor (the support thrust = their quotient x g; blind_landing.hpp)
+                                             // 機体が床を離れたときに開く窓での、指令推力と上向きの加速度計の測定値の平均（支持推力 = その商 × g）
+    void  updateBlindStartFilters(const StateEstimate& state, float thrust, float dt);   // feed support_filter_ / support_filter_ を進める
+    BlindDescent blind_descent_;             // the velocity loop of the blind descent / ToF なしの降下の速度ループ
+    BlindDescentGains blind_gains_;          // its gains (params safety.blind_descent.*; defaults sf::limits) / そのゲイン
+    VerticalVelocityEstimator vertical_velocity_;   // accelerometer-based vertical velocity (every armed cycle) / 加速度計に基づく鉛直速度（ARM 中は毎周期）
+    void  updateVerticalVelocity(const StateEstimate& state, float dt);   // feed vertical_velocity_ / vertical_velocity_ を進める
+
     // Landing steerability gate: the pilot keeps roll/pitch/yaw during a landing
     // ONLY while the command link is live. Link-liveness = setpoint freshness
     // (R16): if (state.timestamp − setpoint.timestamp) exceeds this, the link is
@@ -687,7 +741,15 @@ private:
     // この制御目標ではない）。離陸高度の SSOT: コア部品は main/config.hpp に依存できないため、
     // 他の鉛直定数（hover_thrust_, takeoff_climb_rate_）と並べてここに置く。ネットワーク
     // API の離陸は離陸後の高度を保持することでこれを継承する。
-    float takeoff_target_alt_ = 0.5f;     // [m] / 目標高度
+    // The altitude ceiling (sf::limits::kAltitudeCeilingM, shared with the API) bounds this
+    // target: the build fails if the target is ever raised above it, so the ceiling holds
+    // for the auto-takeoff without a runtime check in the climb path.
+    // 高度上限（sf::limits::kAltitudeCeilingM、API と共有）がこの目標を縛る: 目標が上限を
+    // 超えるとビルドが失敗するので、上昇経路に実行時の検査を置かなくても自動離陸で上限が守られる。
+    static constexpr float kTakeoffTargetAltM = 0.5f;   // [m] / 目標高度
+    static_assert(kTakeoffTargetAltM <= limits::kAltitudeCeilingM,
+                  "auto-takeoff target must not exceed the altitude ceiling");
+    float takeoff_target_alt_ = kTakeoffTargetAltM;     // [m] / 目標高度
 
     // Auto-takeoff complete (TakeoffClimb → Airborne, the controller-side TAKEOFF→FLYING
     // signal isTakeoffComplete). ROBUST one-sided "reached" + timeout backstop:

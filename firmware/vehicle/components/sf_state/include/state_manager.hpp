@@ -32,6 +32,9 @@
 
 #include <functional>
 #include "flight_state.hpp"
+#include "sensor_freshness.hpp"
+#include "failsafe_status_guard.hpp"   // FailsafeStatusGuard: a stale failsafe_status reads as ToF silent
+#include "tof_silence_policy.hpp"      // LandingClock: time since the state entered LANDING
 #include "topics.hpp"
 
 namespace sf {
@@ -166,6 +169,18 @@ public:
     /// 着陸完了通知（LANDING → IDLE_GROUND）
     void notifyLandingComplete();
 
+    /// How the last LANDING ended (set when it ends, cleared when the next LANDING begins). The two ToF-silent
+    /// kinds are logged and kept here so that a touchdown without a ToF is not mistaken for a crash.
+    /// 直近の LANDING の終わり方（終わるときに設定し、次の LANDING の開始でクリアする）。ToF 出力停止中の 2 種類は、
+    /// ToF なしの接地が墜落と取り違えられないよう、ログに出し、ここに残す。
+    enum class LandingEnd : uint8_t {
+        None = 0,            ///< LANDING has not ended yet / まだ終わっていない
+        Detected,            ///< touchdown detector (ToF alive: ground / stalled; silent: impact-then-still or the floor) / 接地検出器
+        ToFSilentImpact,     ///< "ToF なし接地（衝撃）": the 3 G impact while the ToF was silent / ToF 出力停止中の 3 G の衝撃
+        ToFSilentTimeout,    ///< time limit while the ToF was silent / ToF 出力停止中の時間切れ
+    };
+    LandingEnd lastLandingEnd() const { return last_landing_end_; }   ///< see LandingEnd / LandingEnd 参照
+
     /// Notify soft landing (FLYING → ARMED_GROUND)
     /// ソフトランディング通知（FLYING → ARMED_GROUND）
     ///
@@ -290,8 +305,15 @@ public:
     /// 指令する（要件§9「ホバー維持3秒→自動着陸」）。failsafe は COMM_LOST を立ち上がり
     /// エッジで1回だけ発報するので、経過判定にはアラートでなく独立した周期ティックが要る。
     ///
+    /// Also runs the downward-ToF silence response every call (handleToFSilence): a ToF
+    /// that stops while armed aborts the auto-takeoff / lands the craft, and ARM is refused
+    /// on the ground (ArmBlock::TofSilent).
+    /// 毎回、下向き ToF の出力停止への応答（handleToFSilence）も実行する: 武装中に ToF が止まれば
+    /// 自動離陸を中止/着陸させ、地上では ARM を拒否する（ArmBlock::TofSilent）。
+    ///
     /// @param now_us  current time [us] (esp_timer_get_time) supplied by the caller
     /// @design requirements.md §9 — comm loss: hover 3 s → LANDING     [OK]
+    /// @design detailed_design.md §3.1 — ToF silent rows               [OK]
     /// @design architecture.md §4 — FAILSAFE as event                 [OK]
     void update(uint32_t now_us);
 
@@ -322,6 +344,15 @@ public:
     /// フライトモード変更コールバックを登録する
     void onModeChange(OnModeChangeCallback callback);
 
+    /// True when the latest requestModeChange() call was refused IN FLIGHT because of a ToF-silence
+    /// episode and its switch edge was therefore CONSUMED (ModeBlock::TofSwitchConsumed): StateTask
+    /// must drop the edge instead of retrying it, so the mode never switches by itself when the ToF
+    /// recovers; the pilot flips the switch again.
+    /// 直近のモード変更要求が、ToF 出力停止のエピソードのため「飛行中」に拒否され、そのスイッチの
+    /// エッジが「消費」されたとき true（ModeBlock::TofSwitchConsumed）: StateTask はエッジを再試行
+    /// せずに捨てる。ToF が復帰してもモードが勝手に切り替わらず、パイロットがスイッチを入れ直す。
+    bool isModeRequestConsumed() const { return last_mode_request_consumed_; }
+
 private:
     /// Execute state transition with callbacks
     /// コールバック付きで状態遷移を実行する
@@ -337,8 +368,70 @@ private:
     /// （requestArm が従い、update が発行する）。
     ArmBlock evaluateArmBlock() const;
 
+    /// Pre-arm gate 1: a valid voltage reading at or below the USB / unsafe threshold.
+    /// ARM 前判定1: 有効な電圧読みが USB / 危険閾値以下。
+    bool isBatteryUnsafeForArm() const;
+
+    /// Pre-arm gate 4: attitude/gravity mismatch (TiltMismatch) or not yet verified (TiltPending).
+    /// ARM 前判定4: 姿勢と重力の不一致（TiltMismatch）または未検証（TiltPending）。
+    ArmBlock evaluateAttitudeGate() const;
+
     /// Log the refusal reason / 拒否理由をログ出力
     void logArmRejected(ArmBlock reason) const;
+
+    /// True while a downward-ToF silence EPISODE is in progress: no new sample for
+    /// sf::limits::kTofSilenceUs (or never one), only invalid samples while flying, or the estimator
+    /// has not re-acquired the ToF yet. The judgement is Failsafe's (R16); this reads the published
+    /// level (failsafe_status.tof_silent) through this task's FailsafeStatusGuard, FRESH at every
+    /// call, so a status nobody refreshes reads as silent (D5).
+    /// 下向き ToF の出力停止の「エピソード」が進行中なら true: sf::limits::kTofSilenceUs の間新サンプル
+    /// 無し（または一度も無い）、飛行中に無効サンプルだけ、または推定器がまだ ToF を取り込み直して
+    /// いない。判定は Failsafe のもの（R16）で、ここでは発行済みのレベル（failsafe_status.tof_silent）を
+    /// このタスクの FailsafeStatusGuard を通して、呼ぶたびに「最新」を読む。誰も更新しない状態は
+    /// 出力停止と読む（D5）。
+    bool isToFSilent() const;
+
+    /// Execute the state machine's response to an AlertType::TOF_SILENT alert (see
+    /// tof_silence_policy.hpp): disarm on the ground / land from an altitude mode / warn only in
+    /// ACRO and STABILIZE. Same form as the COMM_LOST handling: Failsafe detects, this decides.
+    /// AlertType::TOF_SILENT アラートに対する状態機械の応答を実行する（tof_silence_policy.hpp 参照）:
+    /// 地上なら DISARM・高度モードなら着陸・ACRO と STABILIZE では警告のみ。COMM_LOST の扱いと同じ形:
+    /// Failsafe が検出し、ここが判断する。
+    void handleToFSilenceAlert();
+
+    /// True in the states that accept a flight-mode change (IDLE_GROUND, ARMED_GROUND, FLYING).
+    /// フライトモード変更を受理する状態（IDLE_GROUND・ARMED_GROUND・FLYING）なら true。
+    bool modeChangeAllowedInState() const;
+
+    /// Log why an altitude mode lands on a ToF-silence episode / 高度モードが ToF 出力停止で着陸する理由をログ出力
+    void logToFSilenceLanding() const;
+
+    // Per-alert responses of handleAlert() (one function per alert, each short)
+    // handleAlert() のアラート別の応答（アラートごとに 1 関数、いずれも短い）
+    void handleImpactAlert(AlertType type);
+    bool completeBlindLandingByImpact(AlertType type);   // IMPACT while LANDING with a silent ToF = touchdown, not an emergency / ToF 出力停止中の LANDING での IMPACT は接地（非常でない）
+    void handleCommLostAlert(const SystemAlert& alert);
+    void handleLowBatteryAlert(const SystemAlert& alert);
+    void handleEskfDivergedAlert();
+
+    /// End the LANDING by time while the ToF is silent (no ToF → no touchdown by height; the
+    /// impact-based touchdown is detected by ImuTask). Called every update().
+    /// ToF が出力停止している間の LANDING を時間で終える（ToF が無いと高さでは接地を検出できない。
+    /// 衝撃による接地は ImuTask が検出する）。毎回の update() から呼ぶ。
+    void handleBlindLandingTimeout(uint32_t now_us);
+
+    /// Land (FLYING → LANDING) once the hover grace after a COMM_LOST alert has elapsed.
+    /// COMM_LOST アラートからのホバー猶予が経過したら着陸（FLYING → LANDING）させる。
+    void handleCommLossGrace(uint32_t now_us);
+
+    /// Refuse a switch into ALT_HOLD / POS_HOLD while the downward ToF is silent; true = refused.
+    /// 下向き ToF が出力停止中の ALT_HOLD / POS_HOLD への切り替えを拒否する。true = 拒否。
+    bool refuseModeForToFSilence(FlightMode new_mode);
+
+
+    /// Clear SystemMode.mode_block (republish only if it was set).
+    /// SystemMode.mode_block を下ろす（立っていたときだけ再発行）。
+    void clearModeBlock();
 
     /// Re-evaluate evaluateArmBlock() and republish system_mode if it changed
     /// evaluateArmBlock() を再評価し、変化があれば system_mode を再発行
@@ -375,6 +468,47 @@ private:
     // 着陸させる。着陸時または FLYING を外れた時にクリアする。
     bool     comm_lost_pending_ = false;
     uint32_t comm_lost_time_us_ = 0;
+    // Time since comm_lost_time_us_ (signed age, saturating); isSilent(grace) = grace elapsed.
+    // comm_lost_time_us_ からの経過（符号付き、飽和）。isSilent(猶予) = 猶予経過。
+    SilenceWatch comm_lost_watch_;
+
+    // Why the latest flight-mode change request was refused (SystemMode.mode_block); republished
+    // on change only. Set by requestModeChange() when it refuses an altitude mode while the ToF
+    // is silent, cleared when a request is accepted or the ToF is alive again.
+    // 直近のモード変更要求が拒否された理由（SystemMode.mode_block）。変化時のみ再発行。ToF が出力
+    // 停止中に高度モードを拒否したとき requestModeChange() が立て、要求が受理されるか ToF が
+    // 復帰すると下ろす。
+    ModeBlock mode_block_ = ModeBlock::None;
+
+    // The latest ToF-silence verdict, read through the staleness guard (this task's own instance).
+    // Starts silent: before the first reading nothing is vouched for.
+    // 最新の ToF 出力停止の判定。鮮度のガード（このタスク自身のインスタンス）を通して読む。
+    // 出力停止から始まる: 最初の読みの前は何も保証されていない。
+    // `mutable`: isToFSilent() is a const query that refreshes them (a cache of the latest reading).
+    // `mutable`: isToFSilent() は const の問い合わせで、これらを更新する（最新の読みのキャッシュ）。
+    // True only when the LATEST requestModeChange() call was refused and consumed (not a standing
+    // block: a later request that the state merely defers, e.g. during FLIP, must keep its edge).
+    // 「直近の」requestModeChange() 呼び出しが拒否され消費されたときだけ true（継続する block では
+    // ない: 状態が単に保留する後の要求、例えば FLIP 中のものは、エッジを保たねばならない）。
+    bool last_mode_request_consumed_ = false;
+
+    mutable FailsafeStatusGuard tof_guard_;
+    mutable FailsafeStatus      tof_status_ = {true, static_cast<uint8_t>(ToFSilenceReason::StatusStale), 0};
+
+    // Counts TOF_SILENT alerts handled as WarnOnly, so the warning tone sounds on the first one and
+    // then only every kToFWarnToneEveryN-th (the alert is re-raised about once a second).
+    // WarnOnly として処理した TOF_SILENT アラートの数。警告音は最初の 1 回と、以後 kToFWarnToneEveryN
+    // 回に 1 回だけ鳴らす（アラートは約 1 秒ごとに再発報される）。
+    uint8_t tof_warn_count_ = 0;
+
+    // LANDING timer: how long the state has been LANDING, from the moment it entered LANDING (no ToF → no touchdown
+    // detection by height, so a landing that meets a silent ToF is ended by time, see
+    // sf::limits::kBlindLandingTimeoutUs). Runs while LANDING, whether the ToF is alive or silent.
+    // LANDING のタイマ: 状態が LANDING に入った時刻からの経過時間（ToF が無いと高さで接地を検出できないため、
+    // 出力停止した ToF に出会った着陸は時間で終える。sf::limits::kBlindLandingTimeoutUs 参照）。
+    // ToF が生きていても出力停止でも、LANDING の間は計時する。
+    LandingClock landing_clock_;   // time since the state entered LANDING (tof_silence_policy.hpp) / 状態が LANDING に入ってからの時間
+    LandingEnd last_landing_end_     = LandingEnd::None;
 
     // Direction captured by the most recent accepted requestFlip() — read by the
     // onEnter(FLYING, FLIP) callback (state_task.cpp) to publish

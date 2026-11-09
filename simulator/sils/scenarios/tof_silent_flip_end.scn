@@ -1,0 +1,30 @@
+# tof_silent_flip_end.scn — the ToF goes silent DURING a flip: the response is applied the moment the flip ends
+#                           宙返りの「最中」に ToF が出力停止: 宙返りが終わった瞬間に応答を適用する
+#
+# 2nd independent review, D6. The TOF_SILENT alerts raised while the state is FLIP are ignored (the maneuver is not
+# interrupted), and the failsafe re-raises the alert only about once a second, so after FLIP -> FLYING the craft
+# flew on in POS_HOLD on the estimate for up to ~1 s. Spec under test: StateManager::notifyFlipComplete() looks at
+# the standing level at once and lands from FLYING / POS_HOLD in the same step (log "ToF silence episode during the
+# maneuver: decided now that FLIP is over", then "in FLYING/POS_HOLD -> LANDING"), with the blind landing as for any
+# silence. The flip itself is not interrupted (flip_pitch_deg about -350 deg).
+# Requires the flip enabled: --param flip.enable=1.
+#
+# 2 回目の独立レビューの D6。状態が FLIP の間に発報された TOF_SILENT アラートは無視され（マニューバは中断しない）、
+# Failsafe はアラートを約 1 秒に 1 回しか再発報しないので、FLIP -> FLYING の後、機体は推定だけで POS_HOLD のまま
+# 最大約 1 s 飛んだ。検証する仕様: StateManager::notifyFlipComplete() が継続状態（レベル）をその場で見て、同じ段で
+# FLYING / POS_HOLD から着陸させる（ログ "ToF silence episode during the maneuver: decided now that FLIP is
+# over"、続いて "in FLYING/POS_HOLD -> LANDING"）。着陸は他の出力停止と同じ ToF なしの着陸。宙返り自体は
+# 中断されない（flip_pitch_deg は約 -350 deg）。宙返りを有効にして実行する: --param flip.enable=1。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_flip_end.scn --target vehicle --duration 33000000 --param flip.enable=1
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    api  "command"                                                           # B: enter SDK mode (t=6)
+   +    api  "takeoff"                                                           # C: take off -> POS_HOLD hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC while the API flies (t=6-18)
+   +    api  "up 60"                                                             # E: climb +60 cm to ~1.1 m (t=18)
+   +    rc   2048  2048   2048    2048  0     5000      50                       # F: neutral RC while climbing + settling (t=18-23)
+   +    api  "flip f"                                                            # G: pitch forward 360 deg (t=23)
+   +    tof_silent 1                                                             # H: 23.0 s — the ToF stops delivering during the flip
+   +    rc   2048  2048   2048    2048  0     9000      50                       # I: FLIP ends ~23.6 s -> LANDING at once, blind descent

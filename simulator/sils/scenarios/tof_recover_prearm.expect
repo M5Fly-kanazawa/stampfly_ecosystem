@@ -1,0 +1,4 @@
+exit 0
+log_contains any "ARM rejected: downward ToF is silent (estimator has not re-acquired the ToF yet)"
+log_contains any "ARM accepted"
+order "ARM rejected: downward ToF is silent (estimator has not re-acquired the ToF yet)" "ARM accepted"

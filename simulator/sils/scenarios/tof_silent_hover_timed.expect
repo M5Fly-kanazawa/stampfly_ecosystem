@@ -1,0 +1,30 @@
+# tof_silent_hover_timed.expect — downward ToF silent while hovering; landing ended by TIME
+# ホバー中に下向き ToF が出力停止し、着陸は「時間」で終わる
+#
+# Same chain as tof_silent_hover, but the impact cut and the accelerometer touchdown are disabled
+# (safety.impact.accel_g=10, safety.blind_touchdown.accel_g=10), so the ONLY way LANDING can end is
+# the blind-landing time: 10 s after LANDING starts the state
+# machine declares touchdown ("touchdown by time") and the motors stop.
+# tof_silent_hover と同じ連鎖だが、衝撃カットと加速度計による接地を無効化（safety.impact.accel_g=10、
+# safety.blind_touchdown.accel_g=10）しているので、
+# LANDING が終わる方法はToF なしの着陸の時間だけ: LANDING 開始の 10 s 後に状態機械が接地を宣言
+# （"touchdown by time"）してモータが止まる。
+exit 0
+log_contains any "Takeoff complete → FLYING/ALT_HOLD"
+log_contains any "Downward ToF silent (>= 300 ms without a sample) in FLYING/ALT_HOLD → LANDING"
+log_contains any "Blind landing: ToF silent, velocity loop"
+log_contains any "Downward ToF silent after 100"
+log_contains any "ms of LANDING → touchdown by time"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_contains any "ARM rejected: downward ToF is silent"
+log_absent any "Impact detected"
+log_absent any "Touchdown detected by accelerometer"
+order "in FLYING/ALT_HOLD → LANDING" "touchdown by time"
+order "touchdown by time" "Transition: LANDING → IDLE_GROUND"
+order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silent"
+metric alt_mean > 0.40 in 13.0 14.0
+metric alt_max < 0.60 in 13.0 14.5
+# LANDING 14.302 s -> IDLE_GROUND ~24.3 s; the craft is down (on the floor since ~16 s) and stays there.
+# LANDING 14.302 s -> IDLE_GROUND 約 24.3 s。機体は降りて（約 16 s から床の上）、以後そこにとどまる。
+metric alt_max < 0.05 in 21.0 22.5
+metric alt_max < 0.05 in 26.0 28.5

@@ -1,0 +1,33 @@
+# tof_silent_mode_refused.scn — ALT_HOLD / POS_HOLD are refused while the downward ToF is silent
+#                               下向き ToF の出力停止中は ALT_HOLD / POS_HOLD を拒否する
+#
+# On the ground the ToF stops delivering samples (no bus error). The pilot flips the mode switch to
+# POS_HOLD, then to ACRO, then to POS_HOLD again; then the ToF delivers samples again. Spec under test
+# (detailed_design.md §3.1, mode arbitration, ToF-silent column):
+#  1. POS_HOLD (needs the altitude) is REFUSED while silent; the reason is logged and published
+#     (SystemMode.mode_block, shown by the CLI `status`). The mode stays STABILIZE.
+#  2. ACRO (no altitude needed) is accepted.
+#  3. The refused POS_HOLD switch edge persists: once the ToF is alive the mode switches by itself.
+#
+# 地上で ToF がサンプルを出さなくなる（バスエラー無し）。パイロットはモードスイッチを POS_HOLD、ACRO、
+# 再び POS_HOLD に倒し、その後 ToF が再びサンプルを出す。検証する仕様（detailed_design.md §3.1、
+# モード調停、ToF 出力停止の列）:
+#  1. POS_HOLD（高度が必要）は出力停止中は「拒否」される。理由はログに出て発行される
+#     （SystemMode.mode_block、CLI `status` で表示）。モードは STABILIZE のまま。
+#  2. ACRO（高度不要）は受理される。
+#  3. 拒否された POS_HOLD スイッチのエッジは持続する: ToF が復帰するとモードは自動で切り替わる。
+#
+# Timeline (s): ToF stops 4.0 -> POS switch 5.5 (refused) -> ACRO 6.0 -> POS again 6.5 (refused) -> ToF
+#               resumes 7.0 -> POS_HOLD applied ~7.1.
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_mode_refused.scn --target vehicle --duration 12000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot
+   +    tof_silent 1                                                                   # B: ToF stops
+   +    rc         2048  2048   2048    2048  0     1500      50                       # C: judged silent
+   +    rc         2048  2048   2048    2048  0     500       50        0     0     1  # D: POS switch
+   +    rc         2048  2048   2048    2048  0     500       50        0     1     0  # E: ACRO switch
+   +    rc         2048  2048   2048    2048  0     500       50        0     0     1  # F: POS switch again
+   +    tof_silent 0                                                                   # G: ToF resumes
+   +    rc         2048  2048   2048    2048  0     1500      50        0     0     1  # H
+   +    rc         2048  2048   2048    2048  0     500       50

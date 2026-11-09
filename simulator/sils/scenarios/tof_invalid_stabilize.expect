@@ -1,0 +1,20 @@
+# tof_invalid_stabilize.expect — only invalid ToF samples in a manual STABILIZE flight: warning only, NO forced landing
+# 手動 STABILIZE 飛行中に無効な ToF サンプルだけが続く: 警告のみ・強制着陸しない
+exit 0
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "Downward ToF silence episode: only invalid samples while flying"
+log_contains any "Downward ToF silent in FLYING/STABILIZE: NO forced landing, fly on"
+log_contains any "Mode change to POS_HOLD refused: downward ToF is silent (no altitude). IN FLIGHT the switch request is CONSUMED"
+log_absent any "→ LANDING"
+log_absent any "Blind landing"
+log_absent any "Mode change: STABILIZE → POS_HOLD"
+order "NO forced landing, fly on" "Mode change to POS_HOLD refused"
+# The pilot keeps the craft in the air after the run of invalid samples is judged (8.1 s): no forced descent until
+# the pilot lowers the throttle at 11.0 s (truth alt_min 0.41 m in 8.6-10.5 s).
+# 無効サンプルの連続が判定された（8.1 s）後もパイロットは機体を空中に保つ: 11.0 s にパイロットがスロットルを
+# 下げるまで強制降下は起きない（8.6〜10.5 s の真値 alt_min 0.41 m）。
+metric alt_min > 0.35 in 8.6 10.5
+# On the floor after the pilot's landing; on the ground an invalid ToF is normal, so the next ARM (14.8 s) is accepted
+# and the craft stays on the floor.
+# パイロットの着陸の後は床の上。地上では無効な ToF は正常なので、次の ARM（14.8 s）は受理され、機体は床に留まる。
+metric alt_max < 0.05 in 12.5 17.0

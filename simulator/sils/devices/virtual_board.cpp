@@ -432,6 +432,21 @@ void sils_board_set_imu_bias(float ax, float ay, float az, float gx, float gy, f
     g_plant->setImuBias(sf::math::Vec3{ax, ay, az}, sf::math::Vec3{gx, gy, gz});
 }
 
+void sils_board_set_tof_silent(int silent)
+{
+    sils_vl53::set_silent(silent != 0);
+}
+
+void sils_board_set_tof_invalid(int invalid)
+{
+    sils_vl53::set_invalid(invalid != 0);
+}
+
+void sils_board_set_tof_deadzone(int enabled)
+{
+    sils_vl53::set_deadzone(enabled != 0);
+}
+
 void sils_board_handle_place(float carry_alt_m, float place_x_ned, float place_y_ned,
                             float lift_s, float carry_s, float place_s)
 {

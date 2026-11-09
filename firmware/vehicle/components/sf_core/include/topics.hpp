@@ -87,6 +87,8 @@ extern Topic<FlowData,        RingBuffer, 8>  log_flow;          // ImuTask flow
 extern Topic<SystemMode,      Latest, 1>      system_mode;
 extern Topic<SystemAlert,     Queue, 4>       system_alert;
 extern Topic<SystemStatus,    Latest, 1>      system_status;   // boot readiness (ImuTask → pre-arm checks)
+extern Topic<FailsafeStatus,  Latest, 1>      failsafe_status; // failsafe LEVEL facts, e.g. ToF silent (Failsafe → StateMgr/ImuTask/ControlTask)
+extern Topic<ToFHealth,       Latest, 1>      tof_health;      // downward-ToF facts known to the estimator side (ImuTask → Failsafe)
 
 // =============================================================================
 // Pairing Topics — transmitter↔vehicle binding (crosstalk prevention)

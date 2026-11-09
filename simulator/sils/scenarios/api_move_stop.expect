@@ -1,0 +1,13 @@
+exit 0
+log_contains any "cmd: forward 150"
+log_contains any "cmd: stop (during a blocking command)"
+log_contains any "reply: error interrupted by stop"
+log_absent any "reply: error move timeout"
+order "cmd: forward 150" "cmd: stop"
+order "cmd: stop" "reply: error interrupted by stop"
+order "reply: error interrupted by stop" "cmd: land"
+# R2: the parked line is cancelled by the accepted stop and never replayed
+log_contains any "deferred line cancelled: left 50"
+log_contains any "reply: error cancelled by stop"
+log_absent any "cmd: left 50"
+order "cmd: stop" "reply: error cancelled by stop"

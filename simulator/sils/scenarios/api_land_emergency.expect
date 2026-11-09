@@ -1,0 +1,15 @@
+exit 0
+log_contains any "cmd: land"
+log_contains any "Autonomous landing engaged"
+log_contains any "cmd: emergency (during a blocking command)"
+log_contains any "reply: error interrupted by emergency"
+log_absent any "reply: error land timeout"
+order "Autonomous landing engaged" "cmd: emergency"
+order "cmd: emergency" "reply: error interrupted by emergency"
+metric duty_max < 0.01 in 17.1 20.6
+# R2: the parked lines are cancelled, never replayed (no second takeoff / move)
+log_contains any "deferred line cancelled: takeoff"
+log_contains any "deferred line cancelled: left 100"
+log_contains any "reply: error cancelled by emergency"
+log_absent any "cmd: left 100"
+order "cmd: emergency" "reply: error cancelled by emergency"

@@ -1,0 +1,38 @@
+# tof_silent_takeoff_est_high.scn — ToF silent early in the auto-takeoff climb, hover-thrust estimate 28 % TOO HIGH
+#                                   ホバー推力の見積もりが 28 % 高いまま、自動離陸の上昇の初期に ToF が出力停止
+#
+# The 2026-11-09 independent review found this case fatal: with the estimate too high the auto-takeoff
+# climbs faster (1.3 m/s at the moment of the silence), and the old open-loop blind landing started from
+# 0.95 x the estimate (the accelerometer calibration is not used in the first 2 s of a flight) and kept
+# that climb: truth peak 4.1 m with hover.thrust_corr 1.1, 11 m with 1.2 (the ceiling of the room).
+# The descent is now a CLOSED LOOP on the vertical velocity (accelerometer integral, reset to the ESKF
+# value while the ToF is healthy), so it does not depend on the estimate or on the climb speed.
+# Same chain and timeline as tof_silent_takeoff.scn, with `hover.thrust_corr 1.2` set at t = 0
+# (learning stays on, as in the review). Spec under test:
+#  1. LANDING aborts the climb (TAKEOFF -> LANDING) and the craft comes down by the velocity loop.
+#  2. The truth peak stays below 1.0 m (old build: 11 m), the touchdown speed below 0.6 m/s, and the
+#     motors stop only on the floor.
+#  3. ARM is refused while the sensor is silent.
+#
+# 2026-11-09 の独立レビューが致命的とした場合: 見積もりが高いと自動離陸は速く上昇し（出力停止の瞬間に
+# 1.3 m/s）、旧設計の開ループの ToF なしの着陸は 0.95 × 見積もり（飛行の最初の 2 s は加速度計の較正を使わ
+# ない）から始めてその上昇を残した: 真値の最高が hover.thrust_corr 1.1 で 4.1 m、1.2 で 11 m（部屋の天井）。
+# 降下は鉛直速度の「閉ループ」（加速度計の積分。ToF が健全な間は ESKF の値に合わせ直す）になり、見積もりにも
+# 上昇速度にも依らない。tof_silent_takeoff.scn と同じ連鎖・時刻で、t = 0 に `hover.thrust_corr 1.2` を設定
+# （学習は入れたまま。レビューと同じ）。検証する仕様:
+#  1. LANDING が上昇を中止（TAKEOFF → LANDING）し、機体は速度ループで降りる。
+#  2. 真値の最高は 1.0 m 未満（旧ビルド: 11 m）、接地速度は 0.6 m/s 未満、モータは床の上でだけ止まる。
+#  3. センサが出力停止している間、ARM は拒否される。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_takeoff_est_high.scn --target vehicle --duration 21000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    param      hover.thrust_corr 1.2                                                 # P: hover-thrust estimate 1.2 x mg = 0.435 N against the true 0.34 N (+28 %)
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        0     0     1  # B: POS switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     900       50        0     0     1  # C: ARM in POS_HOLD (7.5 s) — spool, then the auto-takeoff climb
+   +    tof_silent 1                                                                   # D: 8.4 s — ToF output stops (last sample, then nothing)
+   +    rc         2048  2048   2048    2048  1     8000      50        0     0     1  # E: stick centre — LANDING by silence, then blind landing by time
+   +    rc         2048  2048   2048    2048  0     200       50        0     0     1  # F: release the ARM button
+   +    rc         2048  2048   2048    2048  1     1000      50        0     0     1  # G: press again (17 s) — landed, ToF still silent → ARM REFUSED
+   +    rc         2048  2048   2048    2048  0     600       50                       # H: settle

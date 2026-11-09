@@ -1,0 +1,42 @@
+# tof_silent_alt_climb.scn — downward ToF goes silent while CLIMBING with the ALT_HOLD stick (~0.8 m, ~0.3 m/s)
+#                            ALT_HOLD のスティックで上昇中（約 0.8 m、約 0.3 m/s）に下向き ToF が出力停止する
+#
+# Since 2026-11-09 the 1.2 m altitude ceiling bounds the ALT_HOLD stick climb too (alt_ceiling_stick.scn): a pilot can no longer
+# climb to the ToF's range limit (about 1.6 m), and the stick climb is tapered toward the ceiling (speed = 0.45 1/s x the
+# distance to it), so it is fastest low down. This scenario used to climb to 1.55 m (still rising at 0.57 m/s) when the sensor stopped;
+# it now stops the sensor while the stick climb is UNDER WAY at ~0.8 m (~0.3 m/s): the worst case left for a manual climb.
+# Timeline (s): ARM 7.5 -> hover 0.5 m -> stick up 13.0-14.4 -> ToF stops 14.4 (~0.8 m, rising) -> LANDING ~14.7
+# -> peak ~1.0 m -> touchdown ~17.3 -> ARM attempt 24.0 (refused). Spec under test:
+#  1. FLYING -> LANDING; the climb momentum is stopped by the blind velocity loop (the craft overshoots the
+#     silence altitude by a bounded amount) and the pilot's stick is ignored from then on.
+#  2. The blind descent ends by the touchdown (impact cut or detector) or, at the latest, by the 10 s limit; the
+#     motors stop and nothing is left spinning.
+#  3. ARM is refused while the sensor is silent.
+# The fastest climb at a silence is the auto-takeoff (tof_silent_takeoff.scn, 1.3 m/s); this one records the peak and the
+# touchdown speed after a stick climb.
+#
+# 2026-11-09 から 1.2 m の高度上限は ALT_HOLD のスティック上昇も縛る（alt_ceiling_stick.scn）: パイロットはもう ToF の
+# レンジの限界（約 1.6 m）まで上げられず、スティック上昇は上限へ向けて絞られる（速さ = 0.45 1/s × 上限までの距離）ので、
+# 低いところが一番速い。このシナリオは以前、1.55 m（なお 0.57 m/s で上昇中）でセンサが止まった。今は、スティック上昇の
+# 「最中」の約 0.8 m（約 0.3 m/s）でセンサが止まる: 手動上昇で残る最悪ケース。検証する仕様:
+#  1. FLYING -> LANDING。上昇の勢いは ToF なしの速度ループで止まり（出力停止高度からの行き過ぎは有界）、以後
+#     パイロットのスティックは無視される。
+#  2. ToF なしの降下は加速度計による接地、遅くとも 10 s の時間切れで終わり、モータが止まる。
+#  3. センサが出力停止している間、ARM は拒否される。
+# 出力停止の時点で最も速い上昇は自動離陸（tof_silent_takeoff.scn、1.3 m/s）で、これはスティック上昇の後の最大高度と
+# 接地速度を記録する。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_silent_alt_climb.scn --target vehicle --duration 26500000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (7.5 s)
+   +    rc         2048  2048   2048    2048  1     4500      50        1              # D: auto-takeoff, hold 0.5 m (to 13.0 s)
+   +    rc         4095  2048   2048    2048  1     1400      50        1              # E: stick up 1.4 s — climbing at ~0.3 m/s (13.0-14.4 s)
+   +    tof_silent 1                                                                   # F: 14.4 s — ToF output stops while still rising (~0.8 m, ~0.3 m/s)
+   +    rc         4095  2048   2048    2048  1     400       50        1              # G: the pilot keeps the stick up
+   +    rc         2048  2048   2048    2048  1     9000      50        1              # H: LANDING by silence (~14.7 s), blind descent, touchdown ~17.3 s (to 23.8 s)
+   +    rc         2048  2048   2048    2048  0     200       50        1              # I: release the ARM button
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # J: press again (24.0 s) -> ARM REFUSED
+   +    rc         2048  2048   2048    2048  0     600       50        1              # K: settle

@@ -232,6 +232,20 @@ void EskfEstimator::holdAttitudeCorrection(bool hold)
     core_.holdAttitudeCorrection(hold);
 }
 
+void EskfEstimator::reacquireAltitude()
+{
+    // Thin pass-through, like holdAttitudeCorrection(): the shared mechanism (vertical covariance
+    // inflation + ToF innovation-gate suspension) lives in EskfCore.
+    // holdAttitudeCorrection() と同じく素通し: 共通の仕組み（鉛直共分散の膨張 + ToF イノベーション
+    // 判定の一時停止）は EskfCore にある。
+    core_.reacquireVertical();
+}
+
+ToFObservation EskfEstimator::lastToFObservation() const
+{
+    return core_.lastToFObservation();
+}
+
 void EskfEstimator::applyCalibration(const float gyro_bias[3], const float accel_bias[3])
 {
     // Seed the filter's bias states with the rest-measured biases. The ESKF predict

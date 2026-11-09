@@ -81,6 +81,21 @@ public:
         float dt
     ) = 0;
 
+    /// Observe link liveness for ONE cycle, in every flight state (armed or not)
+    /// 1 周期分のリンク生存の観測。飛行状態（ARM 中か否か）に関わらず毎周期呼ぶ
+    ///
+    /// The control task calls this every cycle BEFORE the arm gate, because compute() runs
+    /// only while armed: a stamp watcher that is fed only by compute() would see nothing
+    /// during a long DISARM and could misjudge a dead link as alive (stamps wrap every
+    /// 71.6 min). Default no-op for controllers that do no staleness judgement.
+    /// 制御タスクは ARM の gate より「前」に毎周期これを呼ぶ。compute() は ARM 中しか走らず、
+    /// compute() だけが与える時刻印の監視器は長い DISARM の間なにも見られず、途絶したリンクを
+    /// 生存と誤判定しうる（時刻印は 71.6 分で巻き戻る）ため。鮮度判定をしない制御器は既定 no-op。
+    ///
+    /// @param state    Current state estimate (its timestamp is "now") / 現在の推定値（時刻印が「今」）
+    /// @param setpoint Latest setpoint / 最新のセットポイント
+    virtual void observeLinks(const StateEstimate& state, const CommandSetpoint& setpoint) {}
+
     // =========================================================================
     // Reset
     // リセット
@@ -155,6 +170,27 @@ public:
     /// ハンドオフ専用とは分離 — 2026-06-14 再設計）。既定 false（高度ループを持たない制御器は
     /// ToF 空中検知にフォールバック）。
     virtual bool isTakeoffComplete() const { return false; }
+
+    /// Vertical velocity estimate [m/s], up positive, from the controller's own estimator (short
+    /// accelerometer integral while the ToF is silent; while the ToF is healthy a second-order observer that
+    /// follows the ESKF vertical velocity). The task layer publishes it on controller_status for the touchdown
+    /// detector of the descent without a ToF. Default 0.
+    /// 制御器自身の推定器による鉛直速度 [m/s]（上が正。ToF が出力停止の間は加速度計の積分、ToF が健全な間は
+    /// ESKF の鉛直速度に追従する 2 次のオブザーバ）。タスク層が ToF なし降下の接地検出器のために controller_status で
+    /// publish する。既定 0。
+    virtual float verticalVelocityUp() const { return 0.0f; }
+
+    /// Commanded thrust / support thrust while the blind descent runs, 0 otherwise. Published like
+    /// verticalVelocityUp(). Default 0.
+    /// ToF なし降下の間は 指令推力 ÷ 支持推力、それ以外は 0。verticalVelocityUp() と同様に publish する。既定 0。
+    virtual float blindThrustRatio() const { return 0.0f; }
+
+    /// Estimated rise since the craft last rested on the ground [m] (integral of the vertical velocity
+    /// estimate; 0 at rest). Published like verticalVelocityUp(); the ToF health tracker uses it to tell a craft
+    /// that has left the floor from one still in the sensor's dead zone. Default 0.
+    /// 機体が地上に最後に静止してからの上昇量の推定 [m]（鉛直速度の推定の積分。静止中は 0）。verticalVelocityUp()
+    /// と同様に publish する。ToF 健全性トラッカーが、床を離れた機体とセンサの不感帯にまだいる機体を区別するのに使う。既定 0。
+    virtual float verticalRiseM() const { return 0.0f; }
 
     /// Guidance/API position+yaw target (R11). Only meaningful in POS_HOLD —
     /// implementations may ignore it in other modes. Pilot stick MOVEMENT

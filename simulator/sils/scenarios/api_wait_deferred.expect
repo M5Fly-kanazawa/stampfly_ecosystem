@@ -1,0 +1,9 @@
+exit 0
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "cmd: height?"
+log_contains any "reply: error not on ground"
+log_absent any "during a blocking command"
+log_absent any "reply: error takeoff timeout"
+log_absent any "reply: error busy"
+order "Transition: TAKEOFF → FLYING" "cmd: height?"
+order "cmd: height?" "reply: error not on ground"

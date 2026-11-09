@@ -6,3 +6,7 @@ test_state_manager
 *.o
 *.out
 test_tilt_consistency
+test_sensor_freshness
+test_tof_silence
+test_tof_health
+test_blind_landing

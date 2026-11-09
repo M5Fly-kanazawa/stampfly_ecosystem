@@ -1,0 +1,29 @@
+# tof_silent_stabilize.expect — downward ToF silent in a manual STABILIZE flight: NO forced landing
+# 手動 STABILIZE 飛行中に下向き ToF が出力停止: 強制着陸しない
+#
+# Chain: ARM -> TAKEOFF -> FLYING/STABILIZE -> ToF output stops (7.5 s) -> Failsafe raises TOF_SILENT ->
+# the state machine only WARNS (no LANDING) and the pilot keeps flying -> a POS_HOLD switch is refused
+# while silent -> the pilot descends and lands by the stick -> the next ARM is refused (ToF silent).
+# 連鎖: ARM -> TAKEOFF -> FLYING/STABILIZE -> ToF 出力停止（7.5 s）-> Failsafe が TOF_SILENT を発報 ->
+# 状態機械は警告のみ（LANDING にしない）でパイロットは飛び続ける -> 出力停止中の POS_HOLD スイッチは
+# 拒否される -> パイロットがスティックで降下・着陸 -> 次の ARM は拒否される（ToF 出力停止）。
+exit 0
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "Downward ToF silent in FLYING/STABILIZE: NO forced landing, fly on"
+log_contains any "Mode change to POS_HOLD refused: downward ToF is silent"
+log_contains any "ARM rejected: downward ToF is silent"
+log_absent any "→ LANDING"
+log_absent any "Blind landing"
+log_absent any "Mode change: STABILIZE → POS_HOLD"
+order "NO forced landing, fly on" "Mode change to POS_HOLD refused"
+order "Mode change to POS_HOLD refused" "ARM rejected: downward ToF is silent"
+# The pilot keeps the craft in the air after the silence is judged (7.8 s): the hover holds ~0.5 m
+# (measured alt_min 0.47 m in 8.0-10.0 s) and no forced descent happens until the pilot lowers the
+# throttle at 10.0 s. Without the fix of this stage a LANDING would have cut the pilot out.
+# 出力停止の判定（7.8 s）の後もパイロットは機体を空中に保つ: ホバーは約 0.5 m を保ち
+# （8.0〜10.0 s の alt_min 実測 0.47 m）、パイロットが 10.0 s にスロットルを下げるまで強制降下は
+# 起きない。この段階の修正が無ければ LANDING がパイロットを締め出す。
+metric alt_min > 0.35 in 8.0 10.0
+# On the floor after the pilot's landing (truth 0.021 m resting).
+# パイロットの着陸の後は床の上（真値 0.021 m で静止）。
+metric alt_max < 0.05 in 12.5 17.0

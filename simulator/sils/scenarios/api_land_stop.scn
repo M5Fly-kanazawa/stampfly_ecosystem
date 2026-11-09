@@ -1,0 +1,21 @@
+# api_land_stop.scn — `stop` while `land` is waiting for touchdown
+#                     `land` が接地を待っている最中の `stop`
+#
+# `stop` means "hover here", which is meaningless during a landing (the state is LANDING, not
+# FLYING). It must still be answered AT ONCE with its usual refusal, instead of waiting for the
+# touchdown, and it must NOT cancel the landing: `land` runs on and the craft touches down.
+# `stop` は「ここでホバー」の意味で、着陸中（状態は FLYING でなく LANDING）には意味を持たない。
+# それでも接地を待たず、通常どおりの拒否を「直ちに」返さねばならず、着陸を取り消してはならない:
+# `land` は続行し、機体は接地する。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_land_stop.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> hover at 0.5 m
+   +    rc         2048  2048   2048    2048  0     10000     50      # D: the takeoff finishes, hover (to t=16)
+   +    api        "land"                                             # E: t=16.0 s — autonomous landing
+   +    rc         2048  2048   2048    2048  0     600       50      # F: descending (to t=16.6)
+   +    api        "stop"                                             # G: t=16.6 s — stop while land waits
+   +    rc         2048  2048   2048    2048  0     6000      50      # H: the landing completes (to t=22.6)
