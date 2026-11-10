@@ -121,3 +121,4 @@
 | 日付 | 変更対象 | 変更内容 | 理由 |
 |------|---------|---------|------|
 | 2026-05-31 | SILS 全体（旧 `quad_model`／`sils_main`／`flight_scenario_test` 等）と関連設計記述 | 旧 SILS を**完全削除**し、物理ベース・MuJoCo・アルゴリズム非依存で**クリーンスレートから再構築**する方針に転換。`development_roadmap.md`・`noise_and_vibration_model.md` を RESET_PLAN 準拠にリライト、`control/validation/sils_control_validation.md`（旧 SILS の検証レポート）を削除 | 旧 SILS が M7 調査で約4,500行＋多数ツールに肥大化し進捗追跡が不能に。旧コードが AI を引っ張るため凍結でなく削除。詳細は `simulator/sils/RESET_PLAN.md` |
+| 2026-11-10 | architecture.md §6、detailed_design.md §8、topic_reference.md、operation_manual.md §6 | ログシンク（`ESP_LOG` の出力関数を LogTask が差し替え、各タスクは行をリングへコピーするだけ）と、400Hz ループ周期の監視（`imu_loop_timing`・`control_loop_timing`、CLI の `status` の `loop` 行）を追加。LogTask のスタックを 4 KB から 6 KB に変更 | ARM の遷移で ControlTask・ImuTask が `ESP_LOG` を数行出し、USB コンソールへの書き込みの待ち（送信バッファ 256 バイト、最悪 50 ms）で 400Hz の周期が 5〜50 ms 止まっていたため |

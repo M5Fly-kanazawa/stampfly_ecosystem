@@ -89,6 +89,8 @@ extern Topic<SystemAlert,     Queue, 4>       system_alert;
 extern Topic<SystemStatus,    Latest, 1>      system_status;   // boot readiness (ImuTask → pre-arm checks)
 extern Topic<FailsafeStatus,  Latest, 1>      failsafe_status; // failsafe LEVEL facts, e.g. ToF silent (Failsafe → StateMgr/ImuTask/ControlTask)
 extern Topic<ToFHealth,       Latest, 1>      tof_health;      // downward-ToF facts known to the estimator side (ImuTask → Failsafe, StateTask)
+extern Topic<LoopTiming,      Latest, 1>      imu_loop_timing;     // how well ImuTask keeps its 400 Hz period, 1 Hz (ImuTask → CLI status)
+extern Topic<LoopTiming,      Latest, 1>      control_loop_timing; // the same for ControlTask, 1 Hz (ControlTask → CLI status)
 
 // =============================================================================
 // Pairing Topics — transmitter↔vehicle binding (crosstalk prevention)

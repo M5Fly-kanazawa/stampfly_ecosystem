@@ -568,6 +568,29 @@ struct SystemStatus {
                           // 時刻印の大小に関わらず一致しない。「新しいか」でなく、等しいかで比べる。
 };
 
+/// How well one 400 Hz task keeps its period — published by ImuTask (imu_loop_timing) and by ControlTask
+/// (control_loop_timing) once a second, read by the CLI `status`. A fact about the task, not a decision.
+/// The "armed_" members count only the cycles that begin while the craft is armed (ARM, flight, DISARM),
+/// so the ground idle before the flight does not dilute them. The sums are since boot.
+/// 400 Hz タスク 1 本が周期をどれだけ守れているか — ImuTask（imu_loop_timing）と ControlTask
+/// （control_loop_timing）が毎秒発行し、CLI の `status` が読む。タスクについての事実であって判断ではない。
+/// 「armed_」の項目は ARM 中（ARM・飛行・DISARM）に始まった周期だけを数えるので、飛行前の地上待機で薄まらない。
+/// 数え方は起動以降の累計。
+struct LoopTiming {
+    uint32_t timestamp;                 // [us] when published / 発行時刻
+    uint32_t cycles;                    // wakes counted / 数えた起床の回数
+    uint32_t period_max_us;             // [us] longest interval between two wakes / 連続する 2 回の起床の間隔の最大
+    uint32_t late_count;                // intervals longer than 1.5 periods (at least one 400 Hz tick was missed) / 間隔が 1.5 周期を超えた回数（400 Hz のティックを 1 つ以上取りこぼした）
+    uint32_t busy_max_us;               // [us] longest time from a wake to the next wait (preemption by higher-priority tasks included) / 起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）
+    uint32_t over_budget_count;         // cycles whose busy time exceeded one period / 処理が 1 周期を超えた周期の数
+    uint32_t last_late_us;              // [us] esp_timer time of the latest late wake (0 = none yet) / 最後に遅れた起床の esp_timer 時刻（0 = まだ無い）
+    uint32_t armed_cycles;              // the same measures, armed cycles only / 同じ測り方で、ARM 中の周期だけ
+    uint32_t armed_period_max_us;       // [us]
+    uint32_t armed_late_count;
+    uint32_t armed_busy_max_us;         // [us]
+    uint32_t armed_over_budget_count;
+};
+
 /// Controller state fact for the API/guidance source (ControlTask → ApiTask).
 /// guidance_active is whether an API/Navigator position+yaw target is engaged in
 /// the controller. It goes false when the controller self-cancels guidance (pilot

@@ -773,7 +773,7 @@ storage,   data, spiffs,  0x310000, 0x200000,          # 2MB  — Blackbox
 
 ### RAMメモリ（ESP32-S3 512KB）
 
-タスクスタックの合計: 約102KB
+タスクスタックの合計: 約104KB
 
 | タスク | スタック |
 |--------|---------|
@@ -792,10 +792,40 @@ storage,   data, spiffs,  0x310000, 0x200000,          # 2MB  — Blackbox
 | ApiTask | 6KB |
 | TelloStateTask | 4KB |
 | CLITask | 8KB |
-| LogTask | 4KB |
-| **合計** | **102KB** |
+| LogTask | 6KB |
+| **合計** | **104KB** |
 
-残り約410KBでPub-Subバッファ、ESKF行列、ヒープ等を賄う。
+残り約408KBでPub-Subバッファ、ESKF行列、ヒープ等を賄う。
+
+### ログシンクとループ周期の監視（400Hz タスクの周期を守る）
+
+#### 原因と対策
+
+| 項目 | 内容 |
+|------|------|
+| 症状 | ARM の瞬間に ControlTask・ImuTask の 400Hz の周期が 5〜50 ms 止まる |
+| 原因 | ARM の遷移で両タスクが `ESP_LOG` を数行出す。`ESP_LOG` は USB コンソールへ書き、送信バッファが満ちると書き手を待たせる（USB のホストが取り出しを止めると最大 50 ms） |
+| 対策 | `ESP_LOG` の出力関数を LogTask が差し替える（ログシンク: 出力の待ちを呼び出し側から切り離す受け渡しの仕組み）。呼び出し側は行をリング（円環状に使い回すバッファ。`sf::LogRing`、`log_ring.hpp`、4 KB、1 行は最大 384 文字）へコピーするだけで待たない。コンソールへ書くのは LogTask だけ |
+| 変わらないもの | メッセージの文言・出る条件。`ESP_LOG` どうしの順序も保つ |
+| 変わるもの（順序・時刻） | `printf`（CLI の応答・プロンプト）との前後は変わりうる（ログは最大 10 ms 程度遅れる）。TCP の CLI では、`CLITask` が `stdout` をソケットへ差し替えているので、`CLITask` が出す `ESP_LOG`（コマンド処理中の警告など）はリングを通さず、従来どおりそのソケットへ直接書く（`CLITask` は締切を持たないので待ってよい）。この行は USB には出ない。それ以外のタスクのログは USB へ出る |
+| 変わるもの | 満杯で行を捨てたときは、捨てた直後に入った最初の行の前に「log sink full: N lines dropped」を出す（どこで抜けたか分かる）。LogTask 自身がコンソールで最大 50 ms 待ちうるので、その間 Blackbox 有効時の記録が 1 周期抜けうる。リングの取り出しは排他（`reboot` の出し切りと LogTask が同時に取り出しても順序は入れ替わらない）。LogTask のスタックを 4 KB から 6 KB にした（コンソールの `printf` が約 1.5 KB 要る）。クリティカルセクションはリングへのコピーの間だけ（数 µs） |
+| 範囲 | どのタスクの `ESP_LOG` も対象（400Hz の ImuTask・ControlTask が呼ぶ推定器・制御器・校正・離着陸判定・アクチュエータ・モータ HAL の各ログを含む）。呼び出し側のコードは変えない |
+
+#### ループ周期の監視
+
+`sf::LoopTimingMonitor`（`loop_timing.hpp`、純粋なロジック）が、ImuTask と ControlTask のそれぞれについて次を数える。タスク側の薄い包み（`tasks/loop_timing_scope.hpp`）が起床の直後と待つ直前に呼び、毎秒（400 周期）`imu_loop_timing`・`control_loop_timing`（型 `LoopTiming`）へ発行する。CLI の `status` が表示する。
+
+| 項目 | 意味 |
+|------|------|
+| `period_max_us` | 連続する 2 回の起床の間隔の最大。2500 µs 前後が健全、5000 µs 前後はティックを 1 つ取りこぼした |
+| `late_count` | 間隔が 1.5 周期（3750 µs）を超えた回数 = 400Hz の合図（2.5 ms ごとにタイマが出すティック）の取りこぼし。通常のジッタ（前後数百 µs）は数えない |
+| `busy_max_us`、`over_budget_count` | 起床から次の待ちまでの時間（壁時計。上位タスクに割り込まれた時間を含む）の最大と、1 周期（2500 µs）を超えた回数 |
+| `armed_*` | 上の 5 項目を ARM 中に始まった周期だけで数えたもの。飛行前の地上待機で薄まらない |
+
+数え方は起動以降の累計。ControlTask の起床は ImuTask の通知に同期するので、ImuTask が遅れると ControlTask の間隔も伸びる（両方に出る）。ControlTask だけに出るなら、制御の計算が 1 周期を超えているか、BMI270 の読み出しに失敗して ImuTask が通知を飛ばした（ControlTask は起こされない）。`imu` の遅れには 400Hz の合図を出す `esp_timer` タスクの遅れも含む。ホスト試験は `test/test_log_ring.cpp`・`test/test_loop_timing.cpp`。
+
+対象外（未解決）: ARM 中に 13〜22% の周期で続く 5 ms 級の遅れが実機ログ（front_tof_poshold_yaw4x90・yaw360）にある。大半は IMU 標本の時刻が前の行と同じ、つまり標本の取り違えである。ログシンクが直す ARM の瞬間の 50 ms 級の停止とは別の現象で、候補は、400Hz の合図を出す `esp_timer` タスクがコア 0 で Wi-Fi のタスクより低い優先度であること、または ARM 中の処理時間が 2.5 ms 近いことである。別件として扱い、この症状の対策の範囲に含めない。
+
 
 ## 9. Guidance / Navigation 層の予約設計（v3）
 
@@ -1084,4 +1114,30 @@ storage,   data, spiffs,  0x310000, 0x200000,   # 2MB Blackbox
 
 ### Task Stack Summary
 
-Total task stacks: ~102KB out of 512KB RAM. Remaining ~410KB for Pub-Sub buffers, ESKF matrices, heap, etc.
+Total task stacks: ~104KB out of 512KB RAM (LogTask 6KB, since it writes the log sink to the console). Remaining ~408KB for Pub-Sub buffers, ESKF matrices, heap, etc.
+
+### Log Sink and Loop Timing Monitor (keeping the 400 Hz period)
+
+#### Cause and fix
+
+| Item | Content |
+|------|---------|
+| Symptom | At the ARM instant the 400 Hz period of ControlTask and ImuTask stops for 5-50 ms |
+| Cause | At the ARM transition both tasks emit several `ESP_LOG` lines. `ESP_LOG` writes to the USB console, which makes the writer wait once the transmit buffer (256 bytes) is full (the host takes 64 bytes per millisecond; up to 50 ms when the host has stalled) |
+| Fix | LogTask replaces the output function of `ESP_LOG` (the log sink). A caller only copies its line into a ring (`sf::LogRing`, `log_ring.hpp`, 4 KB, at most 384 characters per line) and never waits; only LogTask writes to the console |
+| Unchanged | The wording, order and conditions of every message; the console output is up to 10 ms later |
+| Changed | When a full ring drops a line, "log sink full: N lines dropped" is printed once. LogTask stack 4 KB -> 6 KB (the console `printf` needs about 1.5 KB). The critical section lasts only for the copy into the ring (a few microseconds) |
+| Scope | The `ESP_LOG` of every task, including the logs of the estimator, controller, calibration, takeoff/landing detector, actuator and motor HAL called from the 400 Hz ImuTask and ControlTask. The calling code is unchanged |
+
+#### Loop timing monitor
+
+`sf::LoopTimingMonitor` (`loop_timing.hpp`, pure logic) counts the following for ImuTask and ControlTask each. A thin task-side wrapper (`tasks/loop_timing_scope.hpp`) calls it right after the wake and just before the wait, and publishes `imu_loop_timing` / `control_loop_timing` (type `LoopTiming`) every second (400 cycles). The CLI `status` shows them.
+
+| Item | Meaning |
+|------|---------|
+| `period_max_us` | Longest interval between two consecutive wakes. About 2500 us is healthy; about 5000 us means a tick was missed |
+| `late_count` | Wakes whose interval exceeded 1.5 periods (3750 us) = missed 400 Hz ticks. Ordinary jitter (a few hundred microseconds) is not counted |
+| `busy_max_us`, `over_budget_count` | Longest time from a wake to the next wait (wall clock, preemption by higher-priority tasks included) and the number of cycles longer than one period (2500 us) |
+| `armed_*` | The five items above, counted only for cycles that began while armed, so the ground idle before the flight does not dilute them |
+
+Counts are since boot. ControlTask wakes on ImuTask's notification, so a late ImuTask lengthens ControlTask's interval too (both show it). If only ControlTask shows it, the control computation takes longer than one period. Host tests: `test/test_log_ring.cpp`, `test/test_loop_timing.cpp`.

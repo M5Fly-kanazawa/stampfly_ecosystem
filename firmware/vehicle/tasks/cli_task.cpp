@@ -50,6 +50,7 @@
 #include <cerrno>
 
 #include "topics.hpp"
+#include "tasks.hpp"      // flush_log_sink()
 #include "params.hpp"
 #include "flight_state.hpp"
 #include "failsafe_status_guard.hpp"   // a stale failsafe_status reads as ToF silent
@@ -333,6 +334,49 @@ static void printStatusRefusals(const sf::SystemMode& mode)
     }
 }
 
+/// Microseconds per millisecond (the loop timing is kept in microseconds, shown in milliseconds).
+/// 1 ミリ秒あたりのマイクロ秒（周期は µs で保持し、ms で表示する）。
+static constexpr double kMicrosecondsPerMillisecond = 1000.0;
+
+/// One line of the 400Hz loop timing: the cycles counted, the longest period between two wakes, the
+/// wakes later than 1.5 periods (a missed 400Hz tick), and the longest/over-budget busy time.
+/// 400Hz ループ周期の 1 行: 数えた周期、連続する起床の最長の間隔、1.5 周期を超えた起床（400Hz ティックの
+/// 取りこぼし）、最長の処理時間と 1 周期を超えた回数。
+static void printLoopTimingLine(const char* task_name, const char* scope_name, uint32_t cycles,
+                                uint32_t period_max_us, uint32_t late_count, uint32_t busy_max_us,
+                                uint32_t over_budget_count)
+{
+    std::printf("          %-7s %-5s: cycles %lu, period max %.2f ms, late %lu, busy max %.2f ms, over budget %lu\n",
+                task_name, scope_name, static_cast<unsigned long>(cycles),
+                static_cast<double>(period_max_us) / kMicrosecondsPerMillisecond, static_cast<unsigned long>(late_count),
+                static_cast<double>(busy_max_us) / kMicrosecondsPerMillisecond, static_cast<unsigned long>(over_budget_count));
+}
+
+/// `status`, loop part: how well ImuTask and ControlTask keep the 2.5 ms period (since boot; the
+/// "armed" row counts only the cycles that began while armed).
+/// `status` のループ部分: ImuTask と ControlTask が 2.5 ms の周期をどれだけ守れているか（起動以降。
+/// 「armed」の行は ARM 中に始まった周期だけ）。
+static void printLoopTiming()
+{
+    const sf::LoopTiming imu     = sf::imu_loop_timing.latest();
+    const sf::LoopTiming control = sf::control_loop_timing.latest();
+    if (imu.cycles == 0 && control.cycles == 0) {
+        std::printf("loop    : no timing published yet\n");
+        return;
+    }
+    std::printf("loop    : 400Hz period %lu us; late = a wake more than 1.5 periods after the previous one\n",
+                static_cast<unsigned long>(config::IMU_PERIOD_US));
+    printLoopTimingLine("imu", "all", imu.cycles, imu.period_max_us, imu.late_count,
+                        imu.busy_max_us, imu.over_budget_count);
+    printLoopTimingLine("imu", "armed", imu.armed_cycles, imu.armed_period_max_us, imu.armed_late_count,
+                        imu.armed_busy_max_us, imu.armed_over_budget_count);
+    printLoopTimingLine("control", "all", control.cycles, control.period_max_us, control.late_count,
+                        control.busy_max_us, control.over_budget_count);
+    printLoopTimingLine("control", "armed", control.armed_cycles, control.armed_period_max_us,
+                        control.armed_late_count, control.armed_busy_max_us,
+                        control.armed_over_budget_count);
+}
+
 /// `status` — flight state / mode / arm, pairing, attitude, altitude, battery, sensors, the
 /// refusal reasons and the flip gate.
 /// `status` — フライト状態/モード/ARM、ペアリング、姿勢、高度、電池、センサ、拒否の理由、宙返りの判定。
@@ -357,6 +401,7 @@ int cmd_status(int argc, char** argv)
         std::printf("flip    : BLOCKED (%s)\n", flipBlockDescription(
                     static_cast<sf::FlipBlockReason>(controller.flip_block_reason)));
     }
+    printLoopTiming();
     return 0;
 }
 
@@ -1168,6 +1213,7 @@ int cmd_reboot(int argc, char** argv)
 {
     (void)argc;
     (void)argv;
+    sf::tasks::flush_log_sink();   // the messages logged just before reach the console / 直前までのログをコンソールへ出す
     std::printf("rebooting...\n");
     std::fflush(stdout);
     esp_restart();

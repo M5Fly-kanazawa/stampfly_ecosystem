@@ -11,3 +11,5 @@ test_tof_silence
 test_tof_health
 test_blind_landing
 test_takeoff_policy
+test_log_ring
+test_loop_timing

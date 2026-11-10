@@ -48,6 +48,7 @@
 #include "takeoff_policy.hpp"           // TakeoffFloorWatch: the positive evidence that an auto-takeoff is still on the floor
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
+#include "loop_timing_scope.hpp"      // period / busy-time monitor of this 400Hz loop
 #include "params.hpp"
 #include "sf_math.hpp"      // sf::math::kGravity/Quat/Vec3 (used directly below;
                             // previously reached transitively via the removed
@@ -1124,6 +1125,12 @@ void ImuTask(void* pvParameters)
         return;
     }
 
+    // Period monitor of this loop (imu_loop_timing, read by the CLI `status`): counts the wakes that
+    // arrive more than 1.5 periods after the previous one, i.e. the missed 400 Hz ticks.
+    // このループの周期監視（imu_loop_timing、CLI の `status` が読む）: 前回から 1.5 周期を超えて来た
+    // 起床、つまり取りこぼした 400 Hz ティックを数える。
+    sf::tasks::LoopTimingScope loop_timing(sf::imu_loop_timing);
+
     uint32_t cycle_count = 0;          // For temperature/log throttling
                                        // 温度・ログ抑制カウンタ
     uint32_t last_fail_log_cycle = 0;  // Last cycle a read-fail warning was logged
@@ -1132,10 +1139,13 @@ void ImuTask(void* pvParameters)
     while (true) {
         // Block until the 400Hz esp_timer ticks (it notifies this task).
         // 400Hz の esp_timer がティック（このタスクに通知）するまでブロック。
+        loop_timing.endCycle();   // close the previous cycle before waiting / 待つ前に前の周期を閉じる
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
         uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
         ++cycle_count;
+        const sf::SystemMode mode_at_wake = sf::system_mode.latest();   // read once per cycle / 周期ごとに 1 回だけ読む
+        loop_timing.beginCycle(now, mode_at_wake.armed);
 
         // =====================================================================
         // Step 1: Read IMU sensor data
@@ -1188,7 +1198,7 @@ void ImuTask(void* pvParameters)
         // 判断は StateManager。
         g_imu_anomaly.feedSample(
             imu.accel, imu.gyro,
-            sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state)));
+            sf::isArmed(static_cast<sf::FlightState>(mode_at_wake.state)));
 
         // Process estimator commands from the StateManager transition callbacks
         // (reset / pos-vel reset / bias freeze / recalibrate). Done before predict so a

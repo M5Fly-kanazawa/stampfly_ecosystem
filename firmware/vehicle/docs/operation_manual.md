@@ -309,7 +309,7 @@ TAB で補完。
 | コマンド | 引数 | 説明 |
 |---------|------|------|
 | `param` | `[list\|get <name>\|set <name> <val>\|save]` | パラメータ読み書き（範囲検証・NVS 保存）|
-| `status` | — | 状態/モード/ARM・ペアリング・姿勢・高度・電池・センサ |
+| `status` | — | 状態/モード/ARM・ペアリング・姿勢・高度・電池・センサ・400Hz ループの周期（`loop` 行） |
 | `sensor` | `[imu\|mag\|baro\|tof\|flow\|power\|all]` | センサ最新値表示 |
 | `version` | — | ファーム名・ビルド日時 |
 | `mac` | — | 自 MAC とラベル用の下4桁を表示（機体ラベル用） |
@@ -320,6 +320,16 @@ TAB で補完。
 | `motor` | `[test <1-4> <0-100> [秒]\|all <0-100> [秒]\|stop]` | **モータ単体テスト（disarmed 限定・要プロペラ除去）**。M1=FR M2=RR M3=RL M4=FL。最後の引数で回転時間（秒、0.1〜60、省略時 2 秒）。例: `motor test 1 30 5`。講習用ファームでも使える |
 | `magcal` | `[start\|stop\|status\|save\|clear]` | 地磁気のハード/ソフトアイアン校正（下記手順）|
 | `reboot` | — | 再起動 |
+
+**400Hz ループの周期の見方**（`status` の `loop` 行）: ImuTask と ControlTask が 2.5 ms の周期を守れているかを、起動以降の累計で表示する。`armed` の行は ARM 中に始まった周期だけの数え方で、飛行の評価にはこちらを見る。
+
+| 見る値 | 健全 | 意味 |
+|--------|------|------|
+| `late` | ARM の瞬間に増えない（地上は 0） | 前の起床から 1.5 周期（3.75 ms）を超えて起きた回数。400Hz の合図（2.5 ms ごとにタイマが出すティック）の取りこぼし |
+| `period max` | 地上は 2.5 ms 付近（ジッタで 3 ms 程度まで）。ARM の瞬間の停止が直っていれば 10 ms 未満 | 連続する起床の間隔の最大。5 ms 付近なら 1 ティック、7.5 ms 付近なら 2 ティックを落とした |
+| `busy max`、`over budget` | `busy max` が 2.5 ms 未満、`over budget` が 0 | 1 周期の処理時間（上位タスクに割り込まれた時間を含む）の最大と、2.5 ms を超えた回数 |
+
+確かめ方: ① 起動して `status` で `imu all`・`control all` の `late` が小さいことを見る。② ARM して数秒おいてから DISARM し、`status` で `armed` 行の `late` と `period max` を見る（ARM の瞬間の 50 ms 級の停止が直っていれば `period max` は 10 ms 未満になる。ARM 中に 13〜22% の周期で続く 5 ms 級の遅れは別件（未解決）で、`late` が 0 にならなくても本対策の不合格ではない）。③ `imu` に出て `control` に出ない遅れは ImuTask の側、`control` だけに出る遅れは制御の計算が 1 周期を超えたか、BMI270 の読み出し失敗で ImuTask が通知を飛ばしたことを示す。`imu` の遅れには 400Hz の合図を出す `esp_timer` タスクの遅れも含む。④ ログ（USB コンソール）は最大 10 ms 遅れて出る（400Hz タスクを待たせないため）。満杯で捨てたときは、抜けた位置の直後に `log sink full: N lines dropped` と出る。TCP の CLI では、コマンド処理中の警告は従来どおりその接続へ直接出る。
 
 **テレメトリの受信**: 機体は 50Hz のモニタ用テレメトリ（104B バイナリ、UDP ブロードキャスト :5005）を常時放送している。機体と同一ネットワークの PC で:
 
@@ -610,7 +620,7 @@ completes.
 | Command | Args | Description |
 |---------|------|-------------|
 | `param` | `[list\|get <name>\|set <name> <val>\|save]` | Read/write parameters (validated, NVS) |
-| `status` | — | State/mode/arm, pairing, attitude, altitude, battery, sensors |
+| `status` | — | State/mode/arm, pairing, attitude, altitude, battery, sensors, the 400 Hz loop period (`loop` lines) |
 | `sensor` | `[imu\|mag\|baro\|tof\|flow\|power\|all]` | Print sensor readings |
 | `version` | — | Firmware name / build date |
 | `mac` | — | Show this vehicle's MAC and its 4-hex-digit label (for the vehicle sticker) |
@@ -621,6 +631,16 @@ completes.
 | `motor` | `[test <1-4> <0-100> [sec]\|all <0-100> [sec]\|stop]` | **Bench motor test (DISARMED only — props off!)**. M1=FR M2=RR M3=RL M4=FL. Optional last argument = run time in seconds (0.1–60, default 2). Example: `motor test 1 30 5`. Also works on the workshop firmware |
 | `magcal` | `[start\|stop\|status\|save\|clear]` | Magnetometer hard/soft-iron calibration: `start` → rotate the craft in all orientations (figure-8, ~100+ samples) → `stop` (sphere fit) → `save` (NVS). Yaw aiding engages at the next boot; enable fusion with `param set eskf.use_mag 1`. Uncalibrated mag is automatically kept OUT of the fusion |
 | `reboot` | — | Restart the flight controller |
+
+**Reading the 400 Hz loop period** (the `loop` lines of `status`): shows, as totals since boot, whether ImuTask and ControlTask keep the 2.5 ms period. The `armed` rows count only the cycles that began while armed; use them to judge a flight.
+
+| Value | Healthy | Meaning |
+|-------|---------|---------|
+| `late` | does not grow at the ARM instant (0 on the ground) | Wakes that came more than 1.5 periods (3.75 ms) after the previous one = missed 400 Hz ticks |
+| `period max` | about 2.5 ms on the ground (up to about 3 ms with jitter); below 10 ms once the ARM-instant stall is fixed | Longest interval between two consecutive wakes. About 5 ms means one tick was dropped, about 7.5 ms two |
+| `busy max`, `over budget` | `busy max` below 2.5 ms, `over budget` 0 | Longest time of one cycle (preemption by higher-priority tasks included) and the number of cycles longer than 2.5 ms |
+
+How to check: (1) After boot, run `status` and see that `late` of `imu all` and `control all` is small. (2) ARM, wait a few seconds, DISARM, run `status` and read `late` and `period max` of the `armed` rows (if the 50 ms-class stall at the ARM instant is fixed, `period max` stays below 10 ms; a 5 ms-class delay that continues in 13-22% of the cycles while armed is a separate, unresolved issue, and `late` not reaching 0 is not a failure of this fix). (3) A delay that shows on `imu` and not on `control` is on the ImuTask side; a delay on `control` only means the control computation takes longer than one period or ImuTask skipped the notification after a failed BMI270 read. A delay on `imu` also includes delay of the `esp_timer` task that issues the 400 Hz tick. (4) Log lines on the USB console appear up to 10 ms late (so that the 400 Hz tasks never wait); a burst the ring could not hold prints `log sink full: N lines dropped` where the lines went missing. In the TCP CLI, warnings raised while a command runs still go straight to that connection.
 
 Every command publishes a FACT on a topic and the owning task applies it (e.g. `motor` → `motor_test`
 → ControlTask; `sound`/`led` → `ui_command` → NotifyTask; `unpair` → `button_event` → StateTask). So a

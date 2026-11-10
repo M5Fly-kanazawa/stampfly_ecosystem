@@ -57,6 +57,8 @@ Topic<SystemAlert,     Queue, 4>       system_alert;
 Topic<SystemStatus,    Latest, 1>      system_status;
 Topic<FailsafeStatus,  Latest, 1>      failsafe_status;
 Topic<ToFHealth,       Latest, 1>      tof_health;
+Topic<LoopTiming,      Latest, 1>      imu_loop_timing;
+Topic<LoopTiming,      Latest, 1>      control_loop_timing;
 Topic<PairingStatus,   Latest, 1>      pairing_state;
 Topic<PairingComplete, Latest, 1>      pairing_complete;
 Topic<PairingDiag,     Latest, 1>      pairing_diag;
@@ -98,6 +100,8 @@ void topics_init()
     system_status.init();
     failsafe_status.init();
     tof_health.init();
+    imu_loop_timing.init();
+    control_loop_timing.init();
     pairing_state.init();
     pairing_complete.init();
     pairing_diag.init();

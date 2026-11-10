@@ -52,6 +52,16 @@ typedef uint32_t TickType_t;
 // SILS の仮想時計では 1 tick = 1 ms。
 #define pdMS_TO_TICKS(ms)    ((TickType_t)(ms))
 
+// Critical sections (ESP-IDF spinlock + interrupt mask). The SILS scheduler is cooperative with a
+// single running token: nothing can interrupt a task between two statements, so the lock is a
+// no-op by construction.
+// クリティカルセクション（ESP-IDF のスピンロック＋割り込みマスク）。SILS のスケジューラは単一トークンの
+// 協調型で、タスクは文と文の間で割り込まれない — ロックは構造的に何もしなくてよい。
+typedef struct { int unused; } portMUX_TYPE;
+#define portMUX_INITIALIZER_UNLOCKED  { 0 }
+#define portENTER_CRITICAL_SAFE(mux)  ((void)(mux))
+#define portEXIT_CRITICAL_SAFE(mux)   ((void)(mux))
+
 // Pull in the passive data-structure primitives so any C++ file including
 // FreeRTOS.h gets the semaphore/queue surface (as on ESP-IDF in practice).
 // These are std::-backed (C++ only); the C sensor drivers that include

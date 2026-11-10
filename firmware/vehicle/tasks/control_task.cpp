@@ -41,6 +41,7 @@
 #include "flight_state.hpp"
 #include "failsafe_status_guard.hpp"   // a stale failsafe_status reads as ToF silent
 #include "config.hpp"
+#include "loop_timing_scope.hpp"      // period / busy-time monitor of this 400Hz loop
 
 static const char* TAG = "ControlTask";
 
@@ -309,7 +310,14 @@ void ControlTask(void* pvParameters)
 
     sf::FailsafeStatusGuard failsafe_guard;   // this task's guard: a stale status reads as ToF silent / このタスクのガード: 古い状態は ToF 出力停止と読む
 
+    // Period monitor of this loop (control_loop_timing, read by the CLI `status`): the wakes that
+    // arrive more than 1.5 periods after the previous one, and the time one cycle takes.
+    // このループの周期監視（control_loop_timing、CLI の `status` が読む）: 前回から 1.5 周期を超えて
+    // 来た起床と、1 周期にかかる時間。
+    sf::tasks::LoopTimingScope loop_timing(sf::control_loop_timing);
+
     while (true) {
+        loop_timing.endCycle();   // close the previous cycle before waiting / 待つ前に前の周期を閉じる
         // =====================================================================
         // Wait for IMU task notification (400Hz sync) — WITH TIMEOUT.
         // ControlTask is the only entity that can zero the motors, but it only
@@ -341,6 +349,8 @@ void ControlTask(void* pvParameters)
         }
         imu_pipeline_seen = true;
         stall_count = 0;
+        sf::SystemMode mode = sf::system_mode.latest();   // read once; the loop timing and this cycle share it / 1 回だけ読む（周期監視とこの周期で共有）
+        loop_timing.beginCycle(static_cast<uint32_t>(esp_timer_get_time()), mode.armed);
 
         // Consume controller reset/mode commands from the StateManager transition
         // callbacks (architecture §4). Done first so a reset / mode change applies
@@ -356,7 +366,6 @@ void ControlTask(void* pvParameters)
 
         sf::StateEstimate state = sf::estimate_state.latest();
         sf::CommandSetpoint setpoint = sf::command_setpoint.latest();
-        sf::SystemMode mode = sf::system_mode.latest();
 
         // Inject the two facts the estimator itself does not populate
         // (core components — the controller — may not touch Pub-Sub topics)

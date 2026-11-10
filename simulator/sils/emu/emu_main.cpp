@@ -48,6 +48,7 @@
 #include "rc_stdin.hpp"          // P6 stage 1: live RC-over-stdin (SILS_EMU_RC_STDIN)
 #include "flight_state.hpp"      // sf::flightStateName / sf::flightModeName (STATE HUD line)
 #include "sf_math.hpp"           // sf::math::Quat (STATE HUD line: attitude → Euler)
+#include "tasks.hpp"             // sf::tasks::flush_log_sink() before _Exit
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -145,6 +146,7 @@ void on_advance(int64_t now_us)
     sils_rc_stdin_tick(now_us);
     if (sils_rc_stdin_quit_requested()) {
         std::printf("[emu] 'quit' received via RC-over-stdin — shutting down\n");
+        sf::tasks::flush_log_sink();   // lines still in the log sink would be lost by _Exit / シンクに残る行は _Exit で失われる
         std::fflush(stdout);
         std::fflush(stderr);
         // Same rationale as the normal end-of-run _Exit(0) below: the firmware's
@@ -599,6 +601,7 @@ int main(int argc, char** argv)
     // する（実行自体は正しく完了し、この時点で全判定/ログアサーションは既に合格
     // 済み）。_Exit は「MCU の電源断」を模し、emu_main_generic.cpp と同じくクリーン
     // かつ忠実。
+    sf::tasks::flush_log_sink();   // lines still in the log sink would be lost by _Exit / シンクに残る行は _Exit で失われる
     std::fflush(stdout);
     std::fflush(stderr);
     std::_Exit(0);

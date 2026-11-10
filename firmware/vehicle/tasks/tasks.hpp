@@ -62,6 +62,16 @@ TaskHandle_t control_handle();
 /// 初期化の直列化で競合を構造的に排除する。
 bool imu_spi_init_done();
 
+/// Write every line waiting in the log sink to the console now (blocks until done). Call
+/// it before something that ends the program (esp_restart) so the last messages are not
+/// lost. Not for the 400 Hz tasks: a console write can wait. Does nothing until LogTask has
+/// installed the sink (before that, ESP_LOG already writes straight to the console).
+/// ログシンクで待っている行をすべて今コンソールへ書く（終わるまで待つ）。プログラムを終わらせる
+/// 処理（esp_restart）の前に呼び、最後のメッセージを失わないようにする。400 Hz のタスクからは
+/// 呼ばない: コンソールへの書き込みは待たされうる。LogTask がシンクを入れるまでは何もしない
+/// （それ以前の ESP_LOG は既に直接コンソールへ出ている）。
+void flush_log_sink();
+
 }  // namespace tasks
 }  // namespace sf
 

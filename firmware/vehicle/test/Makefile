@@ -94,6 +94,20 @@ TARGET_BLIND_LANDING = test_blind_landing
 SRCS_TAKEOFF_POLICY = test_takeoff_policy.cpp
 TARGET_TAKEOFF_POLICY = test_takeoff_policy
 
+# Log sink line buffer (sf::LogRing, log_ring.hpp): FIFO order, wrap-around, overflow counting, the
+# longest line. Header-only logic — own binary, no extra sources.
+# ログシンクの行バッファ（sf::LogRing、log_ring.hpp）: FIFO の順序・一周・溢れの計数・最長の行。
+# ヘッダのみのロジック — 独自バイナリで追加ソース不要。
+SRCS_LOG_RING = test_log_ring.cpp
+TARGET_LOG_RING = test_log_ring
+
+# 400 Hz loop timing monitor (sf::LoopTimingMonitor, loop_timing.hpp): late-wake threshold (1.5 periods),
+# busy budget, armed split, uint32 wrap. Header-only logic — own binary, no extra sources.
+# 400 Hz ループ周期の監視器（sf::LoopTimingMonitor、loop_timing.hpp）: 遅れの境界（1.5 周期）・処理時間の
+# 予算・ARM 中の別計上・uint32 の桁あふれ。ヘッダのみのロジック — 独自バイナリで追加ソース不要。
+SRCS_LOOP_TIMING = test_loop_timing.cpp
+TARGET_LOOP_TIMING = test_loop_timing
+
 # NOTE: test_state_manager is temporarily disabled. It compiled the firmware
 # state_manager/failsafe through the now-removed simulator/sils/compat shim and
 # sils_topics.cpp (deleted in the SILS clean-slate, 2026-05-31). It will be
@@ -104,7 +118,7 @@ TARGET_TAKEOFF_POLICY = test_takeoff_policy
 
 .PHONY: all clean test
 
-all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY)
+all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
@@ -133,6 +147,12 @@ $(TARGET_BLIND_LANDING): $(SRCS_BLIND_LANDING)
 $(TARGET_TAKEOFF_POLICY): $(SRCS_TAKEOFF_POLICY)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+$(TARGET_LOG_RING): $(SRCS_LOG_RING)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
+$(TARGET_LOOP_TIMING): $(SRCS_LOOP_TIMING)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
 test: all
 	./$(TARGET)
 	./$(TARGET_ESKF_FLIP)
@@ -143,6 +163,8 @@ test: all
 	./$(TARGET_TOF_HEALTH)
 	./$(TARGET_BLIND_LANDING)
 	./$(TARGET_TAKEOFF_POLICY)
+	./$(TARGET_LOG_RING)
+	./$(TARGET_LOOP_TIMING)
 
 clean:
-	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) test_state_manager
+	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) test_state_manager

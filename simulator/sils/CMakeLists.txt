@@ -66,6 +66,7 @@ if(SILS_BUILD_CORES_SMOKE OR SILS_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_core/params.cpp
     ${SILS_COMPAT}/nvs_shim.cpp
     ${SILS_COMPAT}/clock_shim.cpp
+    ${SILS_COMPAT}/log_shim.cpp
     # Windows/MinGW-only compat TU (empty translation unit elsewhere): defines the
     # stdout/stderr shadow globals declared by esp_idf_host/cstdio, which is on
     # sf_cores's PUBLIC include path just below — so it reaches every consumer
@@ -370,6 +371,7 @@ if(SILS_BUILD_EMU)
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp
     compat/clock_shim.cpp
+    compat/log_shim.cpp
     compat/nvs_shim.cpp
     ${EMU_WIN_COMPAT_SRCS})
   # esp_idf_host + compat FIRST so the shim headers win over anything else.
@@ -474,6 +476,7 @@ if(SILS_BUILD_EMU)
     rtos/scheduler.cpp
     rtos/esp_timer_shim.cpp
     compat/clock_shim.cpp
+    compat/log_shim.cpp
     compat/nvs_shim.cpp
     ${EMU_WIN_COMPAT_SRCS})
   # esp_idf_host + compat FIRST (shim headers win), then EMU_FW_INCS (vehicle

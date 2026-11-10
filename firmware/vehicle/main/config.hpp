@@ -117,7 +117,7 @@ inline constexpr uint32_t STACK_POWER     = 4096;
 inline constexpr uint32_t STACK_BUTTON    = 4096;
 inline constexpr uint32_t STACK_NOTIFY    = 4096;
 inline constexpr uint32_t STACK_CLI       = 8192;
-inline constexpr uint32_t STACK_LOG       = 4096;
+inline constexpr uint32_t STACK_LOG       = 6144;   // writes the log sink to the console (printf needs ~1.5 KB) / ログシンクをコンソールへ書く（printf は約 1.5 KB 要る）
 inline constexpr uint32_t STACK_API       = 6144;   // Tello-style network API
 inline constexpr uint32_t STACK_TELLO_STATE = 4096; // Tello UDP:8890 state stream
 
