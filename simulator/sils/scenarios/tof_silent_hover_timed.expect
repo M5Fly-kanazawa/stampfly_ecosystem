@@ -7,7 +7,7 @@
 # machine declares touchdown ("touchdown by time") and the motors stop.
 # tof_silent_hover と同じ連鎖だが、衝撃カットと加速度計による接地を無効化（safety.impact.accel_g=10、
 # safety.blind_touchdown.accel_g=10）しているので、
-# LANDING が終わる方法はToF なしの着陸の時間だけ: LANDING 開始の 10 s 後に状態機械が接地を宣言
+# LANDING が終わる方法はToF なしの着陸の時間だけ: LANDING 開始の 10 s 後に状態機械が接地を判定
 # （"touchdown by time"）してモータが止まる。
 exit 0
 log_contains any "Takeoff complete → FLYING/ALT_HOLD"

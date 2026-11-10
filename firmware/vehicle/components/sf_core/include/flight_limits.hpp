@@ -265,7 +265,7 @@ inline constexpr float    kTakeoffAirborneBandM     = 0.15f;     // [m]
 /// 打ち切り、ToF なしの離陸では止まらなかった）。候補値。根拠（SILS、`hover.thrust_corr` 1.0、モータの健全度 0.85〜1.0、ノイズ n0 / n2）: 浮けない機体（健全度 0.85）は SILS の床を 21 mm と読み、
 /// 不感帯 31 mm より下なので、サンプルは「無効」で、離陸は上の ToF 無効の規則（kTofInvalidTakeoffMaxUs）が LANDING で終わらせる。この中止の対象は、ToF が有効に読める床（実センサの 31 mm 超: マット、傾き）に
 /// 載ったまま最大の補正を出し続ける機体。5 s は、普通の離陸が帯を出る時間（0.4〜0.9 s）の 5 倍以上で、制御器自身の時間切れの備え（3 s）より長い。そのため制御器の備えは、
-/// 証拠が無いときだけ離陸完了を宣言する（takeoff_policy.hpp）。帯は離着陸マネージャの地上の閾値（kTakeoffGroundBandM）。上昇の余裕 0.02 m は ToF ノイズ（0.5 cm）の 4 倍、保持 1 s は ToF の 30 サンプル。
+/// 証拠が無いときだけ離陸完了を判定する（takeoff_policy.hpp）。帯は離着陸マネージャの地上の閾値（kTakeoffGroundBandM）。上昇の余裕 0.02 m は ToF ノイズ（0.5 cm）の 4 倍、保持 1 s は ToF の 30 サンプル。
 /// 「実センサ」では、上昇の余裕は帯の中では働かない: 有効な最小の読みは 0.031 m なので、帯の読みの幅は 0.031〜0.050 = 0.019 m で 0.02 m に届かない。そこで区間を終わらせるのは帯を出ること
 /// （kTakeoffGroundBandM より上の読み）で、余裕が効くのは 0.031 m より近くを読むセンサだけ（不感帯の無い SILS の床は 0.021 m）。そして実機の床は「無効」を返す（status 254。実機ログ 3 本の TAKEOFF の最初の
 /// 0.19〜0.34 s）ので、実機の床ではこの証拠そのものがほとんど立たない（ToF が有効に読める床: マット、傾き、が要る）。証拠が一度立ったらラッチする:
@@ -378,6 +378,13 @@ inline constexpr uint32_t kFailsafeStatusStaleUs = 1000000;   // 1 s
 ///     比とともに下がる（0.95: 1.17 m/s、0.97: 1.02、0.98: 0.93、0.99: 0.84、1.00: 0.72）: 0.95（採用）は上の 2 つの実測誤差（窓の ±1 %、バイアス
 ///     0.5〜0.9 %）を合わせた値の約 3 倍の余裕を保ち、0.99 に比べて接地速度が約 0.3 m/s 高くなる。
 inline constexpr float kNoTofThrustCapRatio   = 0.95f;   // [-]   thrust ceiling = ratio x support thrust (< 1: cannot climb) / 推力の上限 = 比 × 支持推力（1 未満: 上昇できない）
+/// Largest value the parameter safety.blind_descent.cap_ratio accepts [-]. It must stay below 1: the guarantee that the descent without a ToF cannot climb
+/// is "thrust ceiling = ratio x support thrust < weight". A stored or set value above this is rejected (params.cpp). CANDIDATE.
+/// safety.blind_descent.cap_ratio パラメータが受け付ける最大値 [-]。1 未満でなければならない: ToF なしの降下が上昇できないという保証は
+/// 「推力の上限 = 比 × 支持推力 < 重さ」だから。これを超える値は設定も保存からの読み込みも受け付けない（params.cpp）。候補値。
+inline constexpr float kNoTofThrustCapRatioMax = 0.99f;   // [-]
+static_assert(kNoTofThrustCapRatio <= kNoTofThrustCapRatioMax && kNoTofThrustCapRatioMax < 1.0f,
+              "the default must be within the accepted range and the range must stay below 1 (cannot climb)");
 /// Support thrust before ANY airborne sample exists (the craft has not left the floor, or fewer than kSupportClimbMinS of airborne samples), as a
 /// fraction of the hover-thrust ESTIMATE: that [-]. CANDIDATE. Basis: the ceiling is then 0.95 x 0.75 = 0.71 x the estimate, below the weight while the
 /// estimate is below 1 / 0.71 = 1.40 x the true hover thrust (SILS with `hover.thrust_corr` 1.2: the estimate is 1.29 x the true one; the first choice 0.9

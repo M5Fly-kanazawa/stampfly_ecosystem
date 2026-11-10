@@ -29,7 +29,7 @@
 # The pulse stops the craft about 0.3 m lower (1.15 m -> ~0.8 m), below the default flip.min_height_m (1.0 m), so the run
 # sets flip.min_height_m = 0.75 m: the subject here is the latch of a NotSteady press, not the minimum height.
 # パルスは機体を約 0.3 m 下で止める（1.15 m → 約 0.8 m）。これは既定の flip.min_height_m（1.0 m）を下回るので、
-# 走行は flip.min_height_m = 0.75 m にする: ここで見るのは NotSteady の押下の保持であって、最低高度ではない。
+# この実行では flip.min_height_m = 0.75 m にする: ここで見るのは NotSteady の押下の保持であって、最低高度ではない。
 #
 # Run: sf sils scenario simulator/sils/scenarios/rc_flip_latch.scn --target vehicle --duration 30500000 --param flip.enable=1 --param flip.min_height_m=0.75
 #

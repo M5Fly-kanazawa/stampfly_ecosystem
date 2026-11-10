@@ -375,7 +375,7 @@ public:
     /// recovers; the pilot flips the switch again.
     /// 直近のモード変更要求が、ToF 出力停止のエピソードのため「飛行中」に拒否され、そのスイッチの
     /// エッジが「消費」されたとき true（ModeBlock::TofSwitchConsumed）: StateTask はエッジを再試行
-    /// せずに捨てる。ToF が復帰してもモードが勝手に切り替わらず、パイロットがスイッチを入れ直す。
+    /// せずに捨てる。ToF が復帰してもモードがパイロットの操作なしに切り替わらず、パイロットがスイッチを入れ直す。
     bool isModeRequestConsumed() const { return last_mode_request_consumed_; }
 
     /// True while a downward-ToF silence EPISODE is in progress: no new sample for

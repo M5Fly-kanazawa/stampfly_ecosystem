@@ -115,7 +115,7 @@ enum class ToFModeRefusal : uint8_t {
     Consume,    // refused IN FLIGHT: the edge is CONSUMED. The mode must not switch by itself at the
                 // instant the ToF recovers (the pilot may have moved on); the pilot flips the switch
                 // again. Shown in the log and on CLI `status` (ModeBlock::TofSwitchConsumed).
-                // 飛行中に拒否: エッジは「消費」する。ToF が復帰した瞬間にモードが勝手に切り替わっては
+                // 飛行中に拒否: エッジは「消費」する。ToF が復帰した瞬間にモードがパイロットの操作なしに切り替わっては
                 // ならない（パイロットはもう別のことをしているかもしれない）。パイロットがスイッチを
                 // 入れ直す。ログと CLI `status` に出す（ModeBlock::TofSwitchConsumed）。
 };

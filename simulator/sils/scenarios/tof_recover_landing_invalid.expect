@@ -3,7 +3,7 @@
 #
 # Falsification: the same run on main as of 2026-11-08 ends the episode ~1 s after the samples return
 # (no "only invalid samples while flying" episode in the log) because an invalid sample in LANDING counted as agreement.
-# 反証: main（2026-11-08 時点）で同じ走行をすると、LANDING の無効サンプルが一致と数えられるので、サンプルが戻った約 1 s 後に
+# 反証: main（2026-11-08 時点）で同じ実行をすると、LANDING の無効サンプルが一致と数えられるので、サンプルが戻った約 1 s 後に
 # エピソードが終わる（ログに "only invalid samples while flying" のエピソードが出ない）。
 exit 0
 log_contains any "Downward ToF silent (>= 300 ms without a sample) in FLYING/ALT_HOLD → LANDING"

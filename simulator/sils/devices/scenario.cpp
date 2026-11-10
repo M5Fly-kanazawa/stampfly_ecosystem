@@ -17,7 +17,7 @@
 #include "console_feeder.hpp"
 #include "emu_record.hpp"
 #include "virtual_board.hpp"     // P7: sils_board_set_wind / sils_board_set_motor_health
-#include "params.hpp"            // scenario `param`: set a firmware parameter mid-run / 走行中のパラメータ設定
+#include "params.hpp"            // scenario `param`: set a firmware parameter mid-run / 実行中のパラメータ設定
 
 #include <cstdint>
 #include <cstdio>
@@ -106,11 +106,11 @@ struct Event {
     int   tof_invalid = 0;
 
     // tof_deadzone: model (1, the default of a run) / ignore (0) the downward ToF's close-range dead zone.
-    // tof_deadzone: 下向き ToF の近距離の不感帯を模擬する（1、走行の既定）/ しない（0）。
+    // tof_deadzone: 下向き ToF の近距離の不感帯を模擬する（1、どの実行でも既定）/ しない（0）。
     int   tof_deadzone = 1;
 
     // param: firmware parameter name (text) and value, applied mid-run (fault / error injection).
-    // param: ファームのパラメータ名（text）と値。走行中に適用する（故障・誤差の注入）。
+    // param: ファームのパラメータ名（text）と値。実行中に適用する（故障・誤差の注入）。
     double param_value = 0.0;
 
     // handle (P8): physical handling maneuver — carry altitude [m up], placement
@@ -259,7 +259,7 @@ int parseTofChannel(const std::string& ch, std::istringstream& iss, Event& e, co
         // there is no return pulse: the floor reads "no target"; the default of every run), 0 turns the
         // model off (the sensor then reads the true distance down to the floor, as before 2026-11-09).
         // tof_deadzone <0|1> — 1 で下向き ToF の近距離の不感帯を模擬する（約 4 cm より近いと反射パルスが
-        // 無く、床は「目標なし」を返す。どの走行でも既定）、0 でモデルを切る（2026-11-09 より前と同じく、
+        // 無く、床は「目標なし」を返す。どの実行でも既定）、0 でモデルを切る（2026-11-09 より前と同じく、
         // 床まで真の距離を読む）。
         e.ch = Channel::TofDeadZone;
         if (!(iss >> e.tof_deadzone) || (e.tof_deadzone != 0 && e.tof_deadzone != 1)) {
@@ -282,7 +282,7 @@ int parseParamChannel(const std::string& ch, std::istringstream& iss, Event& e, 
         // controller parameter is reloaded exactly as `param set` on the console would). Used to
         // inject an ERROR into a value the firmware relies on without changing the flight before
         // it (e.g. hover.thrust_corr: the hover-thrust estimate is wrong from here on).
-        // param <name> <value> — 走行のこの時点でファームのパラメータを 1 つ、型に正しいセッタで
+        // param <name> <value> — 実行のこの時点でファームのパラメータを 1 つ、型に正しいセッタで
         // 設定する（範囲検証あり。変更コールバックが呼ばれるので、制御器のパラメータはコンソールの
         // `param set` と同じく再読込される）。ファームが頼る値に「誤差」を、それ以前の飛行を
         // 変えずに注入するのに使う（例: hover.thrust_corr: 以後ホバー推力の見積もりが違う）。

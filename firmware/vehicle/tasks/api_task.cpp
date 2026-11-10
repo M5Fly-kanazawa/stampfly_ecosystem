@@ -2043,7 +2043,7 @@ void ApiTask(void* /*pvParameters*/)
             g_client      = from;     // reply to this line's sender / この行の送信元へ返信
             g_have_client = true;
             processLine(line);
-            continue;                 // drain quickly when commands queue up
+            continue;                 // drain quickly when commands queue up / コマンドが溜まっているときは素早く処理する
         }
 
         vTaskDelay(pdMS_TO_TICKS(kPollMs));

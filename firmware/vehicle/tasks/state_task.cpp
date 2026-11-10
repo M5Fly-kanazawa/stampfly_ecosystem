@@ -642,7 +642,7 @@ static void arbitrateFlightMode(sf::FlightMode want)
         // pilot flips it again (CLI `status` shows modeblock: TofSwitchConsumed).
         // 飛行中に ToF 出力停止のエピソードで拒否: エッジは再試行せず「消費」する。
         // 再試行すると、パイロットがスイッチを入れてからずっと後の ToF 復帰の瞬間に
-        // ALT_HOLD/POS_HOLD へ勝手に切り替わる。パイロットが入れ直す（CLI `status` が
+        // ALT_HOLD/POS_HOLD へパイロットの操作なしに切り替わる。パイロットが入れ直す（CLI `status` が
         // modeblock: TofSwitchConsumed を示す）。
         prev_want = want;
     }

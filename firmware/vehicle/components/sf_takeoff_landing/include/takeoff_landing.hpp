@@ -198,7 +198,7 @@ public:
     /// ToF なしの接地検出器へ IMU サンプル 1 つ（400 Hz）を与える。`blind_landing` は状態が LANDING
     /// かつ下向き ToF が出力停止のとき true で、そうでなければ検出器をクリアする。ToF なしの間、
     /// 衝撃の後の静止（blind_touchdown.hpp）が揃うと、`blind_landing` が終わるまでフラグをラッチする。
-    /// update() と違い毎 IMU 周期に走る — 出力停止した ToF は update() を駆動するサンプルを届けないため。
+    /// update() と違い毎 IMU 周期に実行される — 出力停止した ToF は update() を駆動するサンプルを届けないため。
     /// @param input Sample: cycle time, |accel|, thrust ratio, vertical velocity (blind_touchdown.hpp)
     ///              サンプル: 周期・|加速度|・推力比・鉛直速度（blind_touchdown.hpp）
     void updateBlindTouchdown(const BlindTouchdownInput& input, bool blind_landing);

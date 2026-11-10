@@ -284,6 +284,32 @@ TEST(stuck_on_the_ground_is_not_started_and_a_started_one_survives_the_landing)
     ASSERT_TRUE(!rig.tracker.invalidStuck());
 }
 
+TEST(trust_returns_after_an_invalid_only_flight_even_when_the_stream_is_older_than_the_clock_range)
+{
+    // The ToF has been alive for longer than 2^31 us (35.8 min), and than 2^32 us (71.6 min) in the second case, with
+    // continuous samples. A flight then ends in the "invalid only" verdict, the craft is disarmed, and the ground samples
+    // agree again: the trust must return with them (a stream that is alive stays alive; no new silence happened).
+    // ToF は連続したサンプルで 2^31 us（35.8 分）より長く、2 つ目の場合は 2^32 us（71.6 分）より長く生存している。その後の飛行が
+    // 「無効サンプルだけ」の判定で終わり、DISARM し、地上のサンプルがまた一致する: 信頼は一緒に戻らなければならない
+    // （生存しているストリームは生存のまま。新しい出力停止は起きていない）。
+    constexpr uint32_t kChunkUs = 100000000u;   // [us] 100 s per step, so the end time never wraps inside run() / 1 回 100 s（run() の中で終了時刻が巻き戻らないように）
+    for (uint32_t chunks : {22u, 43u, 44u}) {   // 2200 s > 2^31 us; 4300 s and 4400 s straddle 2^32 us (4295 s) / 2200 s は 2^31 us 超、4300・4400 s は 2^32 us（4295 s）をまたぐ
+        Rig rig;
+        rig.agree(1500000);
+        ASSERT_TRUE(rig.tracker.altitudeReliable());
+        for (uint32_t i = 0; i < chunks; ++i) {
+            rig.agree(kChunkUs);
+            ASSERT_TRUE(rig.tracker.altitudeReliable());   // continuous samples: never a loss / 連続したサンプル: 喪失にならない
+        }
+        rig.run(700000, true, false, false, 0.0f, true);   // flying, invalid samples only / 飛行中、無効サンプルだけ
+        ASSERT_TRUE(rig.tracker.invalidStuck());
+        ASSERT_TRUE(!rig.tracker.altitudeReliable());
+        rig.tracker.onDisarm();
+        rig.run(1500000, true, false, false, 0.0f, false);   // on the ground: invalid = below the minimum range = agreement / 地上: 無効 = 最小レンジ未満 = 一致
+        ASSERT_TRUE(rig.tracker.altitudeReliable());
+    }
+}
+
 // ----------------------------------------------------------------------------
 // 1b. What an invalid sample means by phase / 無効サンプルの意味（フェーズ別）
 // ----------------------------------------------------------------------------
@@ -363,7 +389,7 @@ TEST(a_loss_then_invalid_only_samples_in_landing_is_stuck_not_reliable)
     // The case: a silence while flying, then LANDING with samples back but ALL invalid. They must
     // not count as agreement (the estimator would be declared reliable after ~1 s).
     // この場合: 飛行中の出力停止の後、サンプルは戻ったが LANDING で「全部」無効。一致と数えてはならない
-    // （約 1 s で推定器が信頼できると宣言されてしまう）。
+    // （約 1 s で推定器が信頼できる状態と判定されてしまう）。
     Rig rig;
     Scene flying = sceneOf(ToFFlightPhase::Flying);
     rig.runIn(flying, 1500000, true, true, true, 0.01f);                      // healthy flight at 0.5 m / 0.5 m で健全な飛行
@@ -581,6 +607,7 @@ int main()
     run_a_valid_sample_inside_the_invalid_run_restarts_the_timer();
     run_stuck_ends_with_a_valid_sample_and_the_altitude_must_be_re_acquired();
     run_stuck_on_the_ground_is_not_started_and_a_started_one_survives_the_landing();
+    run_trust_returns_after_an_invalid_only_flight_even_when_the_stream_is_older_than_the_clock_range();
     run_classify_invalid_sample_covers_every_phase();
     run_takeoff_before_the_rise_or_the_time_limit_never_becomes_stuck();
     run_takeoff_counts_after_the_rise_and_at_the_latest_after_the_time_limit();

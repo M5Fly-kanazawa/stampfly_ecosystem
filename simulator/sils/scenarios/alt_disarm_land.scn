@@ -17,9 +17,9 @@
 # The ToF close-range dead zone (the default of a run since 2026-11-09) is turned OFF here (event 0): this scenario tests the
 # ROUTING of a pilot DISARM to the auto-landing, and with the sensor invalid on the floor the soft touchdown is not
 # detected (see landing_dead_zone.scn, the same run with the dead zone on: an open issue).
-# ToF の近距離の不感帯（2026-11-09 から走行の既定）はここでは切る（イベント 0）: 本シナリオが検証するのは、パイロットの
+# ToF の近距離の不感帯（2026-11-09 から、どの実行でも既定）はここでは切る（イベント 0）: 本シナリオが検証するのは、パイロットの
 # DISARM が自動着陸へ振り分けられること。床の上でセンサが無効だと柔らかい接地は検出されない
-# （不感帯を入れた同じ走行は landing_dead_zone.scn。未解決の課題）。
+# （不感帯を入れた同じ実行は landing_dead_zone.scn。未解決の課題）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/alt_disarm_land.scn --target vehicle
 #

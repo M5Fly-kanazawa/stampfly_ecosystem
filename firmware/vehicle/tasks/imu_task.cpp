@@ -894,12 +894,12 @@ static void reseedCalibration()
 /// （StateIdx）: 位置0-2, 速度3-5, 姿勢6-8, ジャイロbias9-11, 加速度bias12-14。state_task を推定器内部インデックスから切り離す。
 static void inflateEstimatorCovariance(const sf::EstimatorCommand& cmd)
 {
-    uint16_t mask = 0x7FFF;   // CovScope::All
+    uint16_t mask = 0x7FFF;   // CovScope::All / 全状態
     switch (static_cast<sf::CovScope>(cmd.arg)) {
-    case sf::CovScope::PosVel:     mask = 0x003F; break;  // pos+vel
-    case sf::CovScope::PosVelBias: mask = 0x7E3F; break;  // pos+vel+bias (keep att)
-    case sf::CovScope::Attitude:   mask = 0x01C0; break;  // attitude only
-    case sf::CovScope::All:        mask = 0x7FFF; break;  // all 15
+    case sf::CovScope::PosVel:     mask = 0x003F; break;  // pos+vel / 位置+速度
+    case sf::CovScope::PosVelBias: mask = 0x7E3F; break;  // pos+vel+bias (keep att) / 位置+速度+バイアス（姿勢は残す）
+    case sf::CovScope::Attitude:   mask = 0x01C0; break;  // attitude only / 姿勢のみ
+    case sf::CovScope::All:        mask = 0x7FFF; break;  // all 15 / 全 15 状態
     }
     g_estimator->inflateCovariance(mask);
     ESP_LOGI(TAG, "Estimator covariance inflated (scope=%u mask=0x%04X)",

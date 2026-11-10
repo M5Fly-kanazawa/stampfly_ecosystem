@@ -28,5 +28,5 @@ order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silen
 # 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
 metric descent_speed_max < 0.8 in 14.0 18.0
 # Landed and stays on the floor: the touchdown was real, not declared in the air (truth 0.021 m resting).
-# 着地して床の上に留まる: 接地は本物で、空中で宣言したのではない（真値 0.021 m で静止）。
+# 着地して床の上に留まる: 接地は本物で、空中で判定したのではない（真値 0.021 m で静止）。
 metric alt_max < 0.05 in 17.0 22.0

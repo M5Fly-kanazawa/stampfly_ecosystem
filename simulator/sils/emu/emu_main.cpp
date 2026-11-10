@@ -503,7 +503,7 @@ int main(int argc, char** argv)
     // ファイル（1行1個、'#' コメント可）。各行を型に正しいセッタで適用（型は SSOT テーブル
     // params::entry で引く）→ float/bool/int を正しい呼び出しで範囲検証付き設定。上の env
     // 上書きと同じタイミング窓。未設定なら既定のまま。GUI のパラメータパネルが再ビルド無しで
-    // 走行に値を渡す経路。
+    // 実行に値を渡す経路。
     if (const char* path = std::getenv("SILS_EMU_PARAMS_FILE")) {
         std::ifstream pf(path);
         if (!pf) {

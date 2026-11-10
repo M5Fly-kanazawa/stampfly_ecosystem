@@ -1067,10 +1067,10 @@ static const ParamEntry table[] = {
     {"safety.vvel.tau_s",             ParamType::FLOAT, &safety_vvel_tau,           limits::kVerticalVelocityEskfTauS, 0.2f, 20.0f, &notifyControllerReload},
     {"safety.blind_descent.ti_s",     ParamType::FLOAT, &safety_blind_descent_ti,   limits::kBlindDescentTiS,     0.2f, 20.0f, &notifyControllerReload},
     // Thrust ceiling / support thrust of the descent without a ToF, and how long the PI trusts the velocity estimate [s] (CANDIDATES;
-    // SILS sweeps them. A ratio of 1 or more lets the craft climb: only for reproducing the old behavior).
+    // SILS sweeps them. The upper bound kNoTofThrustCapRatioMax is below 1 so that the ceiling stays below the weight and the craft cannot climb).
     // ToF なしの降下の「推力の上限 ÷ 支持推力」と、PI が速度推定を信用する時間 [s]（候補値。SILS が掃引する。
-    // 比が 1 以上だと機体は上昇しうる: 旧挙動の再現専用）。
-    {"safety.blind_descent.cap_ratio", ParamType::FLOAT, &safety_blind_cap_ratio,   limits::kNoTofThrustCapRatio, 0.3f, 1.5f, &notifyControllerReload},
+    // 上限の kNoTofThrustCapRatioMax は 1 未満で、上限が重さを下回り機体が上昇できないことを保つ）。
+    {"safety.blind_descent.cap_ratio", ParamType::FLOAT, &safety_blind_cap_ratio,   limits::kNoTofThrustCapRatio, 0.3f, limits::kNoTofThrustCapRatioMax, &notifyControllerReload},
     {"safety.vvel.trust_s",           ParamType::FLOAT, &safety_vvel_trust,         limits::kVerticalVelocityTrustS, 0.0f, 120.0f, &notifyControllerReload},
 
     // Calibration — boot gyro/accel bias calibration on/off

@@ -64,7 +64,7 @@ inline constexpr uint8_t kPktFlow      = 0x43;
 inline constexpr uint8_t kPktTofBottom = 0x44;
 inline constexpr uint8_t kPktBaro      = 0x45;
 inline constexpr uint8_t kPktMag       = 0x46;
-inline constexpr uint8_t kPktTofFront  = 0x47;  // forward ToF, same layout as WireTof (optional sensor)
+inline constexpr uint8_t kPktTofFront  = 0x47;  // forward ToF, same layout as WireTof (optional sensor) / 前方 ToF。WireTof と同じ並び（任意のセンサ）
 inline constexpr uint8_t kPktCtrlRef   = 0x48;  // outer-loop refs + duty (50Hz entry)
 // NOTE: 0x49 is NOT free -- tools/log_analyzer/udp_capture.py already reserves
 // it as PKT_ESKF_PDIAG (64B ESKF P-diagonal, unimplemented by any firmware
@@ -87,6 +87,9 @@ inline constexpr uint8_t kPktFlightFlags    = 0x4D;  // 50Hz pilot buttons + pre
 inline constexpr uint8_t kPktToFSilence      = 0x4E;  // 50Hz downward-ToF silence facts: vertical velocity
                                                       // estimate, rise, ToF-less descent thrust ratio,
                                                       // failsafe verdict, ToF health, mode block
+                                                      // 50Hz 下向き ToF 出力停止の事実: 鉛直速度の推定、
+                                                      // 上昇量、ToF なし降下の推力比、フェイルセーフの判定、
+                                                      // ToF の健全状態、モード拒否
 inline constexpr uint8_t kPktStatus    = 0x4F;  // standalone 1Hz packet
 inline constexpr uint8_t kPktUnified   = 0x50;  // 50Hz batched packet
 
@@ -151,10 +154,10 @@ inline constexpr uint8_t kFlagAttitudeVerified   = 0x04;   // SystemStatus.attit
 
 // WireToFSilence::tof_flags bits (failsafe verdict + ToF health facts)
 // WireToFSilence::tof_flags のビット（フェイルセーフの判定と ToF 健全状態の事実）
-inline constexpr uint8_t kToFFlagSilent           = 0x01;   // FailsafeStatus.tof_silent (a silence episode is in progress)
-inline constexpr uint8_t kToFFlagAltitudeReliable = 0x02;   // ToFHealth.altitude_reliable
-inline constexpr uint8_t kToFFlagInvalidStuck     = 0x04;   // ToFHealth.invalid_stuck
-inline constexpr uint8_t kToFFlagStatusStale      = 0x08;   // failsafe_status itself is no longer refreshed (display test)
+inline constexpr uint8_t kToFFlagSilent           = 0x01;   // FailsafeStatus.tof_silent (a silence episode is in progress) / 出力停止のエピソード中
+inline constexpr uint8_t kToFFlagAltitudeReliable = 0x02;   // ToFHealth.altitude_reliable / 推定器が ToF を取り込み直し済み
+inline constexpr uint8_t kToFFlagInvalidStuck     = 0x04;   // ToFHealth.invalid_stuck / 無効サンプルだけが続いている
+inline constexpr uint8_t kToFFlagStatusStale      = 0x08;   // failsafe_status itself is no longer refreshed (display test) / failsafe_status 自体が更新されていない（表示用の判定）
 
 // =============================================================================
 // Wire structs (packed; little-endian on both ESP32 and the host PC)
@@ -323,9 +326,9 @@ struct WireToFSilence {
     float    vertical_velocity_up;   // [m/s] accelerometer-based vertical velocity estimate, up positive / 加速度計に基づく鉛直速度の推定（上が正）
     float    vertical_rise_m;        // [m]   estimated rise since the craft last rested (0 at rest)       / 静止からの上昇量の推定
     float    descent_thrust_ratio;   // [-]   commanded / support thrust of the descent without a ToF (0 = none) / ToF なし降下の指令÷支持推力（0=なし）
-    uint8_t  tof_flags;              // kToFFlag* bits
-    uint8_t  tof_reason;             // ToFSilenceReason (0 = no episode)
-    uint8_t  mode_block;             // ModeBlock (0 = no refused mode request pending)
+    uint8_t  tof_flags;              // kToFFlag* bits / kToFFlag* のビット
+    uint8_t  tof_reason;             // ToFSilenceReason (0 = no episode) / ToFSilenceReason（0 = エピソードなし）
+    uint8_t  mode_block;             // ModeBlock (0 = no refused mode request pending) / ModeBlock（0 = 拒否されたモード要求なし）
 };
 static_assert(sizeof(WireToFSilence) == 19, "wire drift");
 

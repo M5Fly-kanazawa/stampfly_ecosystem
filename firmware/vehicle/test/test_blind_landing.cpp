@@ -401,7 +401,7 @@ struct DescentResult {
 // 1 次元の鉛直プラント: 推力は指令に 1 次遅れ（モータ、50 ms）で追従し、a = g × (推力 ÷ 真のホバー推力 − 1)。
 // support_over_hover は支持推力（ループの開始と推力の上限の基準）の真のホバー推力に対する誤差、
 // hover_estimate_ratio は PI のゲインが比例する hover 推力の見積もりの誤差、velocity_bias はループが見る速度に足す誤差、
-// h0・v0 は開始、age0_s は開始時の速度推定の最後のリセットからの時間（走行とともに増える）。
+// h0・v0 は開始、age0_s は開始時の速度推定の最後のリセットからの時間（実行とともに増える）。
 static DescentResult descend(float support_over_hover, float hover_estimate_ratio, float velocity_bias, float h0, float v0,
                              float run_s = 40.0f, float age0_s = 0.3f)
 {
@@ -439,6 +439,17 @@ TEST(loop_thrust_never_exceeds_the_ceiling_below_the_weight)
             ASSERT_TRUE(r.landed);
         }
     }
+}
+
+TEST(the_largest_accepted_cap_ratio_still_keeps_the_ceiling_below_the_support_thrust)
+{
+    // The parameter safety.blind_descent.cap_ratio is limited to kNoTofThrustCapRatioMax; at that value the ceiling must still be below the support
+    // thrust, and the default must lie inside the accepted range.
+    // パラメータ safety.blind_descent.cap_ratio は kNoTofThrustCapRatioMax までに限られる。その値でも上限は支持推力を下回り、既定値は受け付ける範囲の内側にある。
+    constexpr float kSupportThrustN = 0.36f;   // [N] any positive support thrust / 正の支持推力なら何でもよい
+    ASSERT_TRUE(lim::kNoTofThrustCapRatioMax < 1.0f);
+    ASSERT_TRUE(lim::kNoTofThrustCapRatio <= lim::kNoTofThrustCapRatioMax);
+    ASSERT_TRUE(sf::blindThrustCeiling(kSupportThrustN, lim::kNoTofThrustCapRatioMax) < kSupportThrustN);
 }
 
 TEST(loop_lands_gently_for_a_support_thrust_error_up_to_the_margin)
@@ -1120,6 +1131,7 @@ int main()
     run_estimator_align_to_the_eskf_drops_the_integral_of_the_episode();
     run_estimator_time_since_reset_counts_the_integral_only();
     run_loop_thrust_never_exceeds_the_ceiling_below_the_weight();
+    run_the_largest_accepted_cap_ratio_still_keeps_the_ceiling_below_the_support_thrust();
     run_loop_lands_gently_for_a_support_thrust_error_up_to_the_margin();
     run_loop_after_the_trust_time_the_thrust_is_the_constant_ceiling();
     run_loop_with_an_old_estimate_descends_at_the_ceiling_and_lands();

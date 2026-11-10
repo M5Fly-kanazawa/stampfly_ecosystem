@@ -183,7 +183,7 @@ enum class SensorId : uint8_t {
     Flow,       ///< PMW3901 optical flow
     Baro,       ///< BMP280 barometer
     Power,      ///< INA3221 power monitor
-    FrontToF,   ///< VL53L3CX forward-facing ToF (optional, log only; managed by TofTask)
+    FrontToF,   ///< VL53L3CX forward-facing ToF (optional, log only; managed by TofTask) / VL53L3CX 前方 ToF（任意、ログ専用。TofTask が管理）
 };
 
 /**

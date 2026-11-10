@@ -178,17 +178,16 @@ public:
     {
         last_stamp_us_ = stamp_us;
         if (!alive_) {
-            alive_ = true;
-            alive_since_us_ = sample.now_us;
+            startAliveEpisode(sample.now_us);
             agreement_streak_ = 0;
         }
+        latchAliveLongEnough(sample.now_us);
         if (sample.valid) {
             onValidSample(sample);
         } else {
             onInvalidSample(sample);
         }
-        if (!reliable_ && !stuck_ && agreement_streak_ >= limits::kTofReacquireSamples &&
-            timestampAgeUs(sample.now_us, alive_since_us_) >= static_cast<int32_t>(limits::kTofAliveMinUs)) {
+        if (!reliable_ && !stuck_ && agreement_streak_ >= limits::kTofReacquireSamples && alive_long_enough_) {
             reliable_ = true;
         }
     }
@@ -213,8 +212,31 @@ private:
     {
         reliable_ = false;
         alive_ = false;
+        alive_long_enough_ = false;
         agreement_streak_ = 0;
         reacquire_pending_ = true;
+    }
+
+    // A new alive episode starts at this sample: the stream has to run for kTofAliveMinUs again.
+    // 新しい「生存」の区間がこのサンプルから始まる: ストリームがもう一度 kTofAliveMinUs 続く必要がある。
+    void startAliveEpisode(uint32_t now_us)
+    {
+        alive_ = true;
+        alive_since_us_ = now_us;
+        alive_long_enough_ = false;
+    }
+
+    // Once the stream has been alive for kTofAliveMinUs, remember it as a flag instead of re-reading the age:
+    // a signed 32-bit age turns negative after 2^31 us (35.8 min), which would un-establish it. The flag is cleared
+    // only when the stream breaks (beginLoss) or a new alive episode starts, like the saturating SilenceWatch.
+    // ストリームが kTofAliveMinUs 生存したら、経過時間を読み直さずフラグとして覚える: 符号付き 32 ビットの経過は
+    // 2^31 us（35.8 分）を過ぎると負になり、成立が取り消されてしまう。フラグは、ストリームが途切れたとき（beginLoss）か
+    // 新しい生存の区間が始まるときにだけ下ろす（飽和する SilenceWatch と同じ考え方）。
+    void latchAliveLongEnough(uint32_t now_us)
+    {
+        if (!alive_long_enough_ && timestampAgeUs(now_us, alive_since_us_) >= static_cast<int32_t>(limits::kTofAliveMinUs)) {
+            alive_long_enough_ = true;
+        }
     }
 
     void onValidSample(const ToFSampleFacts& sample)
@@ -222,10 +244,9 @@ private:
         invalid_run_active_ = false;
         last_valid_height_m_ = sample.distance_m;
         if (stuck_) {
-            stuck_ = false;   // a valid sample ends the stuck verdict, but the altitude must be re-acquired
+            stuck_ = false;   // a valid sample ends the stuck verdict, but the altitude must be re-acquired / 有効サンプルで継続判定は終わるが、高度は取り込み直しが要る
             beginLoss();
-            alive_ = true;
-            alive_since_us_ = sample.now_us;
+            startAliveEpisode(sample.now_us);
         }
         const bool agrees = sample.adopted && (std::fabs(sample.innovation_m) <= limits::kTofReacquireInnovationM);
         agreement_streak_ = agrees ? bumpStreak(agreement_streak_) : 0;
@@ -286,6 +307,7 @@ private:
     float    last_valid_height_m_ = 0.0f;   // [m] height of the last valid sample / 最後の有効サンプルの高さ
     uint16_t agreement_streak_ = 0;
     bool     alive_              = false;
+    bool     alive_long_enough_  = false;   // alive for kTofAliveMinUs, latched until the stream breaks / kTofAliveMinUs 生存した事実。ストリームが途切れるまで保持
     bool     reliable_           = false;
     bool     stuck_              = false;
     bool     invalid_run_active_ = false;

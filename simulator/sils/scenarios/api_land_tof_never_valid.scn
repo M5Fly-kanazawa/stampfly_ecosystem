@@ -9,7 +9,7 @@
 #
 # ToF は最初から無効サンプルだけを返し（`tof_invalid 1`。床を測れないセンサ）、ホバー推力の見積もりが 20 % 高く（`hover.thrust_corr 1.2`）、加速度計にオフセットがあり、センサノイズが有効（n2）。API の `takeoff` が ARM して
 # 自動離陸を始め、0.7 s 後、機体がまだ上昇している間に `land` が届く。`land` は後回しになる（StateManager::notifyLandingRequest は TAKEOFF を受け付けない。detailed_design.md §3 注13）。離陸を終わらせるのは ToF の規則:
-# 有効なサンプルが無いまま kTofInvalidTakeoffRiseM 上昇した機体は ToF なしで上昇している（tof_health_tracker.hpp）ので、Failsafe が ToF の出力停止を宣言し、StateManager が TAKEOFF を LANDING で終わらせる
+# 有効なサンプルが無いまま kTofInvalidTakeoffRiseM 上昇した機体は ToF なしで上昇している（tof_health_tracker.hpp）ので、Failsafe が ToF の出力停止を判定し、StateManager が TAKEOFF を LANDING で終わらせる
 # （detailed_design.md §3 注12）。降下は ToF なしの降下（上昇できない推力）で、ToF なしの降下の接地で終わる。
 # 検証する仕様: TAKEOFF 中の `land` は LANDING を始めない。LANDING に入る道は ToF の規則で、機体は空中で止められない。
 #

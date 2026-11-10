@@ -292,8 +292,8 @@ void TakeoffLandingMgr::markAirborne()
     on_ground_     = false;
     ground_streak_ = 0;       // the air->ground debounce restarts from zero / 空中→接地のデバウンスはゼロから
     near_ground_   = false;   // the near-ground band is also unknown / 接地近傍帯も不明
-    landing_start_ms_ = 0;    // a firm-ground landing timer must not survive the evidence it stood on
-    stall_start_ms_   = 0;    // 接地着陸・降下停滞のタイマーは、拠り所の証拠とともに破棄する
+    landing_start_ms_ = 0;    // a firm-ground landing timer must not survive the evidence it stood on / 接地着陸のタイマーは、拠り所の証拠とともに破棄する
+    stall_start_ms_   = 0;    // the descent-stall timer likewise / 降下停滞のタイマーも同様
     dead_zone_armed_  = false;   // the dead-zone evidence is also a ToF fact / 不感帯の証拠も ToF の事実
 }
 

@@ -295,7 +295,7 @@ private:
     VerticalVelocityConfig config_;
     float velocity_up_ = 0.0f;                                  // [m/s] up positive
     float rise_m_      = 0.0f;                                  // [m] integral of velocity_up_ since the last rest / 最後の静止からの velocity_up_ の積分
-    float offset_up_   = 0.0f;                                  // [m/s^2] accelerometer offset B (raw reading minus truth, up)
+    float offset_up_   = 0.0f;                                  // [m/s^2] accelerometer offset B (raw reading minus truth, up) / 加速度計のオフセット B（読み − 真値、上向き）
     float trusted_s_   = 0.0f;                                  // [s]
     float since_reset_s_ = 0.0f;                                // [s] time as an integral since the last reset / 最後のリセットから積分であり続けた時間
     bool  rest_primed_ = false;                                 // the offset holds a rest measurement / オフセットが静止の測定値を持つ

@@ -370,7 +370,7 @@ void StateManager::notifyLandingRequest()
     // the floor has nothing to land from). In a manual mode (ACRO / STABILIZE) the pilot holds the throttle and the craft can lift off from ARMED_GROUND (a throttle of 0.499 is enough), so it is not known to be on
     // the floor: the request is refused, as it was before.
     // 高度モード（ALT_HOLD / POS_HOLD）の ARMED_GROUND: モータは床の上でスプールを始めただけで、自動離陸も始まっていないので、即時のモータ停止が安全（床の上には、そこから降りる高さが無い）。
-    // 手動モード（ACRO / STABILIZE）ではスロットルをパイロットが握り、ARMED_GROUND からでも浮ける（スロットル 0.499 で足りる）ので、床の上とは限らない: 要求は従来どおり拒否する。
+    // 手動モード（ACRO / STABILIZE）ではスロットルをパイロットが操作し、ARMED_GROUND からでも浮ける（スロットル 0.499 で足りる）ので、床の上とは限らない: 要求は従来どおり拒否する。
     if (state_ == FlightState::ARMED_GROUND) {
         if (!flightModeNeedsAltitude(mode_)) {
             return;
@@ -506,7 +506,7 @@ void StateManager::notifyIdleGroundHeld(bool is_held)
 ///  - 地上ではパイロットのスイッチのエッジは「持続」し（StateTask が毎周期再適用）、エピソードが終わると
 ///    自動でモードが切り替わる（ModeBlock::TofSilent）。
 ///  - 飛行中はエッジを「消費」する（StateTask が捨てる。isModeRequestConsumed 参照）: ToF が復帰した
-///    瞬間にモードが勝手に切り替わってはならない。パイロットがスイッチを入れ直す
+///    瞬間にモードがパイロットの操作なしに切り替わってはならない。パイロットがスイッチを入れ直す
 ///    （ModeBlock::TofSwitchConsumed。CLI `status` に出す）。
 /// 理由は SystemMode.mode_block に出し、ログは再試行ごとでなく拒否した要求ごとに 1 回出す。
 /// 受理されれば拒否は終わる。

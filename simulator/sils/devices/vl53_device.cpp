@@ -200,7 +200,7 @@ bool has_no_return_pulse(float dist_mm)
     // simulator/sils/docs/hover_resume.md / project_eskf_vertical_divergence).
     // 真の histogram レンジ超ではピーク無し: 実センサは no-target(status!=0)を返し、飽和定数を
     // valid と偽らない。ゆえにレンジ超では ambient のみ(ピーク無し)を出し gen4 に no-object 判定
-    // させる(ESKF が偽の一定高度を信頼して鉛直推定が腐敗するのを防ぐ)。
+    // させる(ESKF が偽の一定高度を信頼して鉛直推定が誤った値になるのを防ぐ)。
     // Fault injection (scenario `tof_invalid`): behave as if nothing could be ranged (a floor the
     // sensor cannot see), whatever the Plant distance. Samples keep arriving, all invalid.
     // 故障注入（シナリオ `tof_invalid`）: Plant の距離に関わらず、何も測れない（センサが見えない床）かの

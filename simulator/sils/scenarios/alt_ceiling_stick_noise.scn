@@ -1,7 +1,7 @@
 # alt_ceiling_stick_noise.scn — alt_ceiling_stick.scn with sensor noise n2 (the realistic bound of the ceiling)
 #                               alt_ceiling_stick.scn にセンサノイズ n2 を加えたもの（上限の現実的な範囲）
 #
-# The altitude ceiling (sf::limits::kAltitudeCeilingM = 1.2 m, user decision 2026-11-09) used to bound only the
+# The altitude ceiling (sf::limits::kAltitudeCeilingM = 1.2 m) used to bound only the
 # auto-takeoff target and the API: a pilot could climb with the ALT_HOLD stick as high as the ToF sees. The
 # controller now applies the same ceiling to the stick climb (and to the rc velocity guidance): at or above it a
 # climb command becomes 0 and the altitude target is clamped to it. Timeline (s): ARM 7.5 -> auto-takeoff, hold 0.5 m
@@ -13,7 +13,7 @@
 #     chatter around it (a plain cut of a full-rate climb gave 1.13-1.44 m).
 #  3. Releasing the stick holds the altitude near the ceiling, and a stick DOWN still descends.
 #
-# 高度上限（sf::limits::kAltitudeCeilingM = 1.2 m、2026-11-09 のユーザー決定）は従来、自動離陸の目標と API だけを縛り、
+# 高度上限（sf::limits::kAltitudeCeilingM = 1.2 m）は従来、自動離陸の目標と API だけを縛り、
 # ALT_HOLD のスティックでは ToF が見える高さまで上げられた。制御器はこの上限をスティック上昇（と rc 速度誘導）にも
 # 適用する: 上限以上では上昇指令が 0 になり、高度目標は上限にクランプされる。検証する仕様:
 #  1. 真値の高度は上限で止まる: 約 1.2 m まで上がり、それ以上は上がらない（推定と真値の数 cm のずれは

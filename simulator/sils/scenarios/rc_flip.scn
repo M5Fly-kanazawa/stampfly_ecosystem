@@ -161,7 +161,7 @@
 # for the real flips, which started at 1.41 / 1.70 m; with the ceiling those are flown from STABILIZE / ACRO, which have no ceiling).
 # 2026-11-09: 高度上限（sf::limits::kAltitudeCeilingM = 1.2 m）が ALT_HOLD のスティック上昇も縛り、上限へ向けて上昇を絞るので、
 # 上のスロットルパルスはもう約 1.5 m に届かない: 機体は各押下の前に 1.0〜1.15 m（真値）でホバーする。既定の
-# flip.min_height_m = 1.0 m だと押下が `TooLow` で拒否されたので、走行は flip.min_height_m = 0.8 m にする: ここで見るのは
+# flip.min_height_m = 1.0 m だと押下が `TooLow` で拒否されたので、この実行では flip.min_height_m = 0.8 m にする: ここで見るのは
 # ボタンの経路と方向の規則で、最低高度ではない（flip.min_height_m は実機の宙返りの安全余裕で、実機は 1.41 / 1.70 m で
 # 始めた。上限があるので、それらは上限の無い STABILIZE / ACRO から飛ばす）。
 #

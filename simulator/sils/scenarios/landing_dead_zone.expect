@@ -10,7 +10,7 @@
 #                                                  drop from 0.5 m hits ground in ~0.32 s)
 #   • alt_max < 0.05 at the end                 ⇒ the craft actually landed
 #   • tilt_max < 15°                            ⇒ attitude stays bounded through the descent
-# 仕様（ユーザー要望 2026-06-14）: ALT_HOLD の FLYING 中 DISARM はモータを切らず（落下せず）、
+# 仕様: ALT_HOLD の FLYING 中 DISARM はモータを切らず（落下せず）、
 # 緩降下（~0.3 m/s, モータ稼働）の自動着陸を開始し、接地で初めて DISARM。
 #
 # Added 2026-11-09: with the ToF close-range dead zone modelled, the touchdown is seen as the dead zone (the sensor goes invalid

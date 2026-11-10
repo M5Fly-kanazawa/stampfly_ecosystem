@@ -1,5 +1,5 @@
 # tof_recover_edge_consumed.scn — a mode switch refused in flight during a ToF silence must NOT apply itself at recovery
-#                                 ToF 出力停止中に飛行中に拒否したモード切替が、復帰の瞬間に勝手に適用されてはならない
+#                                 ToF 出力停止中に飛行中に拒否したモード切替が、復帰の瞬間にパイロットの操作なしに適用されてはならない
 #
 # STABILIZE flight, the ToF stops at 7.5 s, the
 # pilot flips the POS_HOLD switch at 9.0 s (refused: no usable altitude), the ToF resumes at 11.0 s. Before the fix the
@@ -14,9 +14,9 @@
 #
 # STABILIZE 飛行、7.5 s に ToF が出力停止、
 # 9.0 s にパイロットが POS_HOLD スイッチを入れる（拒否: 使える高度が無い）、11.0 s に ToF が復帰。main（2026-11-08 時点）は拒否した
-# スイッチの「エッジ」が持続して毎周期再試行され、ToF が戻った瞬間に、2 s 前にスイッチを入れたきりの機体が勝手に
+# スイッチの「エッジ」が持続して毎周期再試行され、ToF が戻った瞬間に、2 s 前にスイッチを入れたきりの機体がパイロットの操作なしに
 # POS_HOLD に入った。検証する仕様: (1) 飛行中の拒否はエッジを「消費」し、そう記録する（ログ "IN FLIGHT the switch
-# request is CONSUMED"、CLI `status` は modeblock TofSwitchConsumed）。モードは勝手に切り替わらず、パイロットが
+# request is CONSUMED"、CLI `status` は modeblock TofSwitchConsumed）。モードはパイロットの操作なしに切り替わらず、パイロットが
 # スイッチを入れ直す。(2) 地上（約 11.1 s のパイロットの墜落の後）では同じ拒否は先送りにすぎず、スイッチのエッジは
 # 持続し、エピソードが終わるとモードがスイッチに追従する（モード変更が最も安全な時）。墜落はパイロット（STABILIZE で
 # スロットルを最下端）のもので、判定には含めない。

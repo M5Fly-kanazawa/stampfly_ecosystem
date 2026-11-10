@@ -368,12 +368,12 @@ struct SensorHealth {
 | 2026-06-14 | 追加 | controller_status | 誘導解除（パイロット介入/モード変更）を API へ同期する guidance_active 事実（ControlTask → ApiTask, code-review M-3） |
 | 2026-11-09 | 追加 | failsafe_status | 下向き ToF 出力停止のレベルを Failsafe から StateManager・ImuTask・ControlTask・NotifyTask へ渡す（通信断と同じ形: イベントは system_alert、継続状態は failsafe_status。R16）。`system_alert` に `TOF_SILENT`、`system_mode` に `mode_block` を追加 |
 | 2026-11-09 | 追加・変更 | tof_health / failsafe_status | 出力停止の判定の拡張（サンプルが届くだけでは健全と見なさない）。`tof_health`（ImuTask → Failsafe）を追加し、`failsafe_status.tof_silent` を「サンプルが届かない」から「出力停止のエピソード（取り込み直すまで）」に拡張、`tof_reason` を追加。読む側は `FailsafeStatusGuard` を通す（古い状態は出力停止）。`ModeBlock::TofSwitchConsumed` を追加 |
+| 2026-11-09 | 変更 | controller_status / StateEstimate | ToF なしの降下を鉛直速度の閉ループにした。`controller_status` に `vertical_velocity_up`・`blind_thrust_ratio` を追加（制御器 → ImuTask の接地検出器）、制御器の入力 `StateEstimate` に `airborne`（`system_status.airborne`。推定器の鉛直状態が接地ホールドで固定されていない）を追加（ControlTask が注入） |
+| 2026-11-09 | 変更 | controller_status | `vertical_rise_m`（地上で最後に静止してからの上昇量の推定 [m]）を追加（制御器 → ImuTask の ToF 健全性トラッカー。TAKEOFF の無効サンプルを数え始める条件に使う） |
 | 2026-11-10 | 追加 | tof_health / system_mode | `tof_health.floor_seen`（ImuTask → StateTask。`floor_stays` のラッチで、自動離陸の完了を止め、解けないラッチを LANDING で終わらせる）、`tof_health.floor_leaving`（ImuTask → StateTask。機体が床を離れつつある区間。この間は LANDING で終わらせない）と `system_mode.state_since_us`（StateManager → ImuTask・StateTask。「この状態にいる時間」の唯一の時計。ImuTask と StateTask が別々に数えていた TAKEOFF の経過時間を 1 か所にした）を追加 |
 | 2026-11-10 | 追加 | system_status | `system_status.verdict_state_since_us`（ImuTask → StateTask。着陸の判定が属する状態の刻印。LANDING の突入で、以前から残った判定を数えないための、等しいかの比較）を追加。`tof_health.floor_seen` の解除の条件（5 cm 超の有効な読みが 1 s、または 15 cm 超が 1 つ）と、`system_mode` の読み手（`state_since_us` を読む ImuTask・StateTask）を明記 |
 | 2026-11-10 | 追加 | tof_health | 床の積極的な証拠。`tof_health.floor_stays`（ImuTask → StateTask。健全な ToF が床の近くの有効な高さを読み続ける間 true。自動離陸の中止の判断に読む）を追加。加速度計だけの「床を離れた」は、状態機械の安全判断の判定条件にしない（制御器の内部の `SupportThrustFilter::leftFloor()` は、支持推力の窓を開く内部の判定で、推力の上限の基準値（較正した値、早い推定、低くしたホバー推力の見積もりのどれか）の選択にだけ使う。制御器の中だけにあり、判断の条件ではない。blind_landing.hpp） |
 | 2026-11-10 | 追加 | imu_loop_timing, control_loop_timing | 400Hz タスクの周期の監視（ImuTask・ControlTask が毎秒発行、CLI の `status` が表示）。型 `LoopTiming`（`data_types.hpp`）を追加。ARM の遷移で ESP_LOG が 400Hz の周期を 5〜50 ms 止めた原因（USB コンソールの待ち）への対策（ログシンク）の効果を、実機で数で確かめるため |
-| 2026-11-09 | 変更 | controller_status / StateEstimate | ToF なしの降下を鉛直速度の閉ループにした。`controller_status` に `vertical_velocity_up`・`blind_thrust_ratio` を追加（制御器 → ImuTask の接地検出器）、制御器の入力 `StateEstimate` に `airborne`（`system_status.airborne`。推定器の鉛直状態が接地ホールドで固定されていない）を追加（ControlTask が注入） |
-| 2026-11-09 | 変更 | controller_status | `vertical_rise_m`（地上で最後に静止してからの上昇量の推定 [m]）を追加（制御器 → ImuTask の ToF 健全性トラッカー。TAKEOFF の無効サンプルを数え始める条件に使う） |
 
 ---
 

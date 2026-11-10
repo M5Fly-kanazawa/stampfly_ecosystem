@@ -87,10 +87,10 @@ extern Topic<FlowData,        RingBuffer, 8>  log_flow;          // ImuTask flow
 extern Topic<SystemMode,      Latest, 1>      system_mode;
 extern Topic<SystemAlert,     Queue, 4>       system_alert;
 extern Topic<SystemStatus,    Latest, 1>      system_status;   // boot readiness (ImuTask → pre-arm checks)
-extern Topic<FailsafeStatus,  Latest, 1>      failsafe_status; // failsafe LEVEL facts, e.g. ToF silent (Failsafe → StateMgr/ImuTask/ControlTask)
-extern Topic<ToFHealth,       Latest, 1>      tof_health;      // downward-ToF facts known to the estimator side (ImuTask → Failsafe, StateTask)
-extern Topic<LoopTiming,      Latest, 1>      imu_loop_timing;     // how well ImuTask keeps its 400 Hz period, 1 Hz (ImuTask → CLI status)
-extern Topic<LoopTiming,      Latest, 1>      control_loop_timing; // the same for ControlTask, 1 Hz (ControlTask → CLI status)
+extern Topic<FailsafeStatus,  Latest, 1>      failsafe_status; // failsafe LEVEL facts, e.g. ToF silent (Failsafe → StateMgr/ImuTask/ControlTask) / 非常の水準の事実（例: ToF 出力停止。Failsafe → StateMgr・ImuTask・ControlTask）
+extern Topic<ToFHealth,       Latest, 1>      tof_health;      // downward-ToF facts known to the estimator side (ImuTask → Failsafe, StateTask) / 推定器側が知る下向き ToF の事実（ImuTask → Failsafe・StateTask）
+extern Topic<LoopTiming,      Latest, 1>      imu_loop_timing;     // how well ImuTask keeps its 400 Hz period, 1 Hz (ImuTask → CLI status) / ImuTask が 400 Hz の周期をどれだけ守れているか、1 Hz（ImuTask → CLI status）
+extern Topic<LoopTiming,      Latest, 1>      control_loop_timing; // the same for ControlTask, 1 Hz (ControlTask → CLI status) / ControlTask について同じ内容、1 Hz（ControlTask → CLI status）
 
 // =============================================================================
 // Pairing Topics — transmitter↔vehicle binding (crosstalk prevention)

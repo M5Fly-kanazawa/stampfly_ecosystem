@@ -11,7 +11,7 @@
 # 検証する仕様: 飛行中に 0.5 s の間無効サンプルだけが続いた後（約 8.1 s に判定）、状態機械は警告だけを出し（ログ
 # "NO forced landing, fly on"。LED・音は同じレベルから駆動）、パイロットは鉛直軸を握ったまま（スロットルを下げる
 # まで機体は約 0.5 m に留まる）。8.5 s の POS_HOLD スイッチは飛行中に拒否されエッジは消費される（9.5 s にスイッチは
-# 切られ、その後は勝手には何も起きない）。
+# 切られ、その後はパイロットの操作なしには何も起きない）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/tof_invalid_stabilize.scn --target vehicle --duration 17000000
 #

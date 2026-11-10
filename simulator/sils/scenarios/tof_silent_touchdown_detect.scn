@@ -16,7 +16,7 @@
 #  1. 衝撃（> 2 g、2 サンプル）の後、機体が 0.25 s 静止（加速していない・指令推力が支持推力未満・鉛直速度が
 #     ほぼ 0）するのを待ってラッチする: "Touchdown detected (impact, then still ..." → LANDING → IDLE_GROUND が
 #     接触の約 0.4 s 後。
-#  2. 着陸は時間切れで終わらず、IMPACT のカットも無く、空中で接地を宣言しない（モータは床の上で止まる:
+#  2. 着陸は時間切れで終わらず、IMPACT のカットも無く、空中で接地を判定しない（モータは床の上で止まる:
 #     以後の真値の高度は 0.05 m 未満）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/tof_silent_touchdown_detect.scn --target vehicle --duration 25000000 --param safety.impact.accel_g=10
