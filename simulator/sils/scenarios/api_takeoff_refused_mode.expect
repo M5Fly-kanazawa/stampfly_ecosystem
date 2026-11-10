@@ -1,0 +1,25 @@
+# api_takeoff_refused_mode.expect — a refused API takeoff restores the flight mode
+# ARM が拒否された API 離陸は飛行モードを元に戻す
+#
+# MUST be run with --unpaired (see api_takeoff_refused_mode.scn). Asserts:
+#   - the API `takeoff` changes the ground mode to POS_HOLD and its ARM is refused by the open pairing handshake;
+#   - the previous mode (STABILIZE) is restored, and that happens before the transmitter binds (nothing but the API acted);
+#   - no mode re-arbitration from a transmitter packet was needed (no "Mode re-leveled");
+#   - the later ARM press is accepted, but no auto-takeoff starts and the craft stays on the floor.
+# --unpaired 必須（api_takeoff_refused_mode.scn 参照）。API の `takeoff` が地上のモードを POS_HOLD にし、その ARM は
+# 開いたままのペアリングで拒否される。以前のモード（STABILIZE）は、送信機が bind する前に戻る（API 以外は何も働いていない）。
+# 送信機の電文によるモードの調停し直し（"Mode re-leveled"）は要らない。後の ARM 押下は受理されるが、自動離陸は始まらず機体は床の上にいる。
+exit 0
+log_contains any "cmd: takeoff"
+log_contains any "Mode change: STABILIZE → POS_HOLD"
+log_contains any "ARM rejected: pairing in progress"
+log_contains any "API takeoff refused: mode restored to STABILIZE"
+log_contains any "Mode change: POS_HOLD → STABILIZE"
+log_contains any "Pairing complete"
+log_contains any "ARM accepted"
+log_absent any "Mode re-leveled to switch position"
+log_absent any "Auto-takeoff engaged"
+order "ARM rejected: pairing in progress" "API takeoff refused: mode restored to STABILIZE"
+order "API takeoff refused: mode restored to STABILIZE" "Pairing complete"
+order "Pairing complete" "ARM accepted"
+metric alt_max < 0.05 in 11.0 15.0

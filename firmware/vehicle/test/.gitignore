@@ -13,3 +13,5 @@ test_blind_landing
 test_takeoff_policy
 test_log_ring
 test_loop_timing
+test_battery_alert_policy
+test_api_arguments

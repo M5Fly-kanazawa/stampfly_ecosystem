@@ -1,0 +1,15 @@
+# api_emergency_without_command.expect — `emergency` before the command-mode gate
+# コマンドモードの判定より前の `emergency`
+exit 0
+log_contains any "ARM accepted"
+log_contains any "cmd: land"
+log_contains any "reply: error not in command mode"
+log_contains any "cmd: emergency"
+log_contains any "EMERGENCY STOP (ARMED_GROUND → IDLE_GROUND)"
+order "ARM accepted" "cmd: land"
+order "cmd: land" "reply: error not in command mode"
+order "reply: error not in command mode" "cmd: emergency"
+order "cmd: emergency" "EMERGENCY STOP (ARMED_GROUND → IDLE_GROUND)"
+# no `command` was ever sent, and the emergency was not refused as "not in command mode" (that reply appears once, for the `land`)
+log_absent any "cmd: command"
+metric duty_max < 0.01 in 8.5 10.0

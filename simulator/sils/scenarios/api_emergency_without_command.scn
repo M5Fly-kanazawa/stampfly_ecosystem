@@ -1,0 +1,20 @@
+# api_emergency_without_command.scn — `emergency` is served without `command`; every other verb still needs it
+#                                     `command` なしでも `emergency` に応える。他の verb は引き続き `command` が要る
+#
+# The craft is ARMed by the transmitter (ARMED_GROUND, motors idling). No `command` has been sent, so the API is not in SDK mode.
+# An `emergency` is the last-resort motor cut and sits before the command-mode gate: it cuts the motors and answers ok. A `land` sent
+# the same way is still refused ("error not in command mode").
+#
+# 送信機が機体を ARM する（ARMED_GROUND、モータはアイドル）。`command` は送っておらず、API は SDK モードでない。
+# `emergency` は最後の手段のモータ停止で、コマンドモードの判定より前に置かれる: モータを止めて ok を返す。同じ形で送った
+# `land` は引き続き拒否される（"error not in command mode"）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_emergency_without_command.scn --target vehicle --duration 12000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  1     1500      50      # B: t=6 s — ARM press: ARMED_GROUND, idle motors (to t=7.5)
+   +    api        "land"                                             # C: no `command` yet: refused
+   +    rc         2048  2048   2048    2048  1     500       50      # D: (to t=8)
+   +    api        "emergency"                                        # E: t=8 s — served without `command`: motors cut
+   +    rc         2048  2048   2048    2048  1     2000      50      # F: motors stay off (to t=10)

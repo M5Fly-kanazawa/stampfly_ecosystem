@@ -1,0 +1,23 @@
+# api_takeoff_refused_mode.scn — an API `takeoff` whose ARM is refused leaves no trace: the flight mode is put back
+#                                ARM が拒否された API `takeoff` は痕跡を残さない: 飛行モードは元に戻る
+#
+# RUN WITH --unpaired so the vehicle boots UNPAIRED (the pairing handshake is then still open and refuses every ARM):
+#   sf sils scenario simulator/sils/scenarios/api_takeoff_refused_mode.scn --target vehicle --unpaired --duration 16000000
+#
+# Only the API talks to the craft at first (no transmitter packet has arrived, so nothing re-arbitrates the flight mode on the ground).
+#   1. `takeoff` switches the ground mode to POS_HOLD and requests the ARM; the ARM is refused ("ARM rejected: pairing in progress").
+#   2. StateManager::requestArmForTakeoff puts the previous mode (STABILIZE) back at once, before any transmitter packet exists.
+#   3. A transmitter then binds and its ARM press is accepted: the craft is armed in STABILIZE (manual throttle), so no automatic takeoff starts.
+# A mode left in POS_HOLD would have made that ARM start an auto-takeoff under the user's hand (detailed_design.md §3.1, API takeoff row).
+#
+# 最初は API だけが機体に話しかける（送信機の電文はまだ届いておらず、地上で飛行モードを調停し直すものはない）。
+#   1. `takeoff` は地上のモードを POS_HOLD に切り替えて ARM を要求する。ARM は拒否される（"ARM rejected: pairing in progress"）。
+#   2. StateManager::requestArmForTakeoff が、送信機の電文が届く前に、以前のモード（STABILIZE）へ直ちに戻す。
+#   3. その後に送信機が bind し、その ARM 押下が受理される: 機体は STABILIZE（手動スロットル）で ARM し、自動離陸は始まらない。
+# モードが POS_HOLD のまま残っていれば、この ARM は使う人の手の下で自動離陸を始める（detailed_design.md §3.1、API 離陸の行）。
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   6000 api        "command"                                          # A: t=6 s — enter SDK mode (calibration done, pairing still open)
+   +    api        "takeoff"                                          # B: ground mode -> POS_HOLD, ARM refused (pairing), mode restored
+   8000 rc         2048  2048   2048    2048  0     3000      50      # C: t=8 s — the transmitter binds (first packet), disarmed 3 s
+   +    rc         2048  2048   2048    2048  1     4000      50      # D: t=11 s — ARM press accepted in STABILIZE, idle throttle 4 s (to t=15)

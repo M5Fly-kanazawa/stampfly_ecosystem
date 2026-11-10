@@ -133,6 +133,11 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | `disarm_long_idle` | **38 分の無音 DISARM のあとも次の飛行が壊れない**（`--duration 2300000000`、仮想時間なので実時間は約 3 分）: RC リンクを DISARM のまま 38 分（> 35.8 分）無音にし、再開後に ALT_HOLD の自動離陸→ホバー（0.5 m）→DISARM 自動着陸。出力停止の監視器が「停止」に固着しない（ARM 不可・誤った `Comm lost → LANDING` が起きない）ことを守る。途絶したリンクを生存と読む危険側はホスト試験 `test_sensor_freshness`（36/40/60 分の観測の空き）が担う | vehicle |
 | `api_move_stop` | **`forward 150` の待機中の `stop`**: 開始 1.0 s 後に `stop` → 移動は `error interrupted by stop` で終わり、最大 0.14 m 進んだところで制動（main（2026-11-08 時点） は待機中の `stop` を読まず、1.48 m 全行程を進んでから止まる）。待機中に届いた `left 50` は `stop` が捨てる（`error cancelled by stop`、実行されない）。`--duration 26000000` | vehicle |
 | `api_wait_deferred` | **待機中に届いた `emergency`/`stop` 以外のコマンドは捨てず順序も変えない**: `takeoff` の待機中に `height?` と 二つ目の `takeoff` を注入 → FLYING の後にこの順で実行され、二つ目は `error not on ground`。main（2026-11-08 時点） と同じ結果。`--duration 20000000` | vehicle |
+| `api_invalid_numbers` | **有限でない・範囲外の数は誘導目標に届かない**: ホバー中に `forward nan`・`forward 1e39`・`go inf 0 0 50`・`rc nan 0 0 0`・`speed nan`・`cw 1e39`・`cw 9999999999`・`ccw 0`・`ccw 361`・`sysid roll chirp 25 600`・`sysid roll chirp nan 4`・`autotune roll nan` を送る → 全て `error out of range`（`rc` は応答なし）、機体は動かない（水平 0 m・高度の幅 0.004 m・ヨー 0）、続く `forward 50` は通常の移動になる。`--duration 32000000` | vehicle |
+| `api_sysid_emergency` | **`sysid` の待機中の `emergency`**: `sysid roll chirp 25 8` の励振の 1.5 s 後に `emergency` → モータが直ちに止まり、`sysid` は `error interrupted by emergency`、後回しの `height?` は取り消される。`--duration 22000000` | vehicle |
+| `api_move_flight_end` | **移動の待機中に飛行が終わる**: `forward 150` の待機中にパイロットの DISARM 押下（POS_HOLD の自動着陸）→ 待機は `error flight ended` で終わり、後回しの `takeoff`・`height?` は `error cancelled: flight ended` で捨てられ、再離陸しない。`--duration 40000000` | vehicle |
+| `api_emergency_without_command` | **`command` なしの `emergency`**: 送信機の ARM（ARMED_GROUND）の後、`land` は `error not in command mode`、`emergency` はモータを止める（`EMERGENCY STOP`）。`--duration 12000000` | vehicle |
+| `api_takeoff_refused_mode` | **ARM が拒否された API `takeoff` はモードを残さない**: `--unpaired` でペアリングが開いたままの機体に `takeoff` → POS_HOLD への切り替えと ARM の拒否の後、送信機の電文より前に STABILIZE へ戻る（"Mode re-leveled" なし）。後の送信機の ARM は受理され、自動離陸は始まらない。`--unpaired --duration 16000000` | vehicle |
 
 **P8 ロバスト再飛行（`crash_refly`）が炙り出した2つのファーム欠陥（修正済）:**
 1. **ESKF 姿勢の latch**: 墜落で姿勢推定が真値から大きく外れると accel-attitude χ² 判定（カイ二乗判定）が補正自体を棄却し続け自己復帰しない。設置時（IDLE_HELD→IDLE_GROUND、機体が level・静止と既知）に ESKF を Reset して姿勢を level へ再初期化することで解決。
@@ -150,7 +155,7 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | 接地の検出 | 柔らかい接地（3 G 未満）、不感帯、衝撃のカットを無効にした接地、低い高さで始まる LANDING | LANDING は床で終わり、空中では終わらない | `landing_dead_zone`、`landing_low_start`、`tof_silent_touchdown_detect`、`tof_silent_hover_timed`、ホスト試験 `land_*`（`test_main`） |
 | 高度の上限と LANDING の再上昇 | ALT_HOLD でスティックを上げ続ける、ホバー推力の見積もりが 28 % 高い LANDING、古い加速度積分のまま ALT_HOLD へ入る | 上限 1.2 m で止まる。LANDING の後に再上昇しない | `alt_ceiling_stick`・`alt_ceiling_stick_noise`、`landing_rise_est_high`、`ceiling_brake_stale_velocity`・`ceiling_brake_stale_velocity_alt` |
 | TAKEOFF 中の操作 | パイロットの DISARM、API `land`、通信途絶 | DISARM は即モータ停止。API `land` は後回しで、離陸が終わってから実行される（TAKEOFF では LANDING にならない）。通信途絶は LANDING | `takeoff_disarm_stops`、`api_land_in_takeoff`、`api_land_deferred_in_takeoff`、`commloss_takeoff` |
-| API の待機中の割り込み | `takeoff`・`land`・`forward` の待機中の `emergency`・`stop`・`land`・その他の行 | `emergency` と ARMED_GROUND の `land` は後回しの行を捨てる。手動モードの ARMED_GROUND の `land` は拒否 | `api_takeoff_emergency`、`api_land_emergency`、`api_land_stop`、`api_move_stop`、`api_wait_deferred`、`api_land_in_armed_ground`、`api_land_manual_armed_ground` |
+| API の待機中の割り込み | `takeoff`・`land`・`forward` の待機中の `emergency`・`stop`・`land`・その他の行 | `emergency` と ARMED_GROUND の `land` は後回しの行を捨てる。手動モードの ARMED_GROUND の `land` は拒否 | `api_takeoff_emergency`、`api_land_emergency`、`api_land_stop`、`api_move_stop`、`api_wait_deferred`、`api_land_in_armed_ground`、`api_land_manual_armed_ground`、`api_move_flight_end`、`api_sysid_emergency` |
 
 各シナリオの条件の書き下しは、上の「その他のシナリオ」の表と、各 `.scn` のヘッダにある。
 

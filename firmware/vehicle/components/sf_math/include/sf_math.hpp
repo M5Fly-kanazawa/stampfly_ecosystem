@@ -39,6 +39,28 @@ namespace math {
 constexpr float kGravity = 9.80665f;
 
 // =============================================================================
+// Angle constants and wrapping
+// 角度の定数と折り返し
+// =============================================================================
+
+/// Pi [rad] and one full turn 2*pi [rad] (single precision).
+/// 円周率 [rad] と 1 回転 2*pi [rad]（単精度）。
+constexpr float kPi    = 3.14159265358979f;
+constexpr float kTwoPi = 2.0f * kPi;
+
+/// Wrap an angle [rad] into [-pi, +pi]. Terminates for every finite input, however
+/// large (std::remainder takes the integer number of turns in one step; a subtraction
+/// loop would never end once the float spacing exceeds one turn). A non-finite input
+/// returns NaN, so the caller must check it first.
+/// 角度 [rad] を [-pi, +pi] へ折り返す。どんな大きな有限値でも有限回で終わる
+/// （std::remainder は回転数を一度に取り除く。引き算のループは、float の刻みが 1 回転を
+/// 超えると終わらない）。有限でない入力は NaN を返すので、呼び出し側が先に確認する。
+inline float wrapAngleRad(float angle_rad)
+{
+    return std::remainder(angle_rad, kTwoPi);
+}
+
+// =============================================================================
 // Vector3 — 3D vector
 // 3次元ベクトル
 // =============================================================================

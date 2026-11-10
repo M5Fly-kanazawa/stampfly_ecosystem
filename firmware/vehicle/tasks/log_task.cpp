@@ -157,6 +157,14 @@ void reportDroppedLines(uint32_t dropped)
 void drainSink(size_t max_bytes)
 {
     const std::lock_guard<std::mutex> one_drainer_at_a_time(s_drain_mutex);
+    // The console output function writes to the stdout of the task that calls it. A caller
+    // whose stdout was redirected (`reboot` typed on a TCP CLI session) must still send the
+    // pending lines to the console, so stdout points at the console while draining.
+    // コンソールの出力関数は、呼び出したタスクの stdout へ書く。stdout を差し替えている呼び出し側
+    // （TCP CLI セッションで打った `reboot`）でも、出力待ちの行はコンソールへ出す必要があるので、
+    // 取り出しの間だけ stdout をコンソールに向ける。
+    FILE* const callers_stdout = stdout;
+    stdout = s_default_stdout;
     char line[SinkRing::kMaxLineBytes + 1];
     size_t written_bytes = 0;
     while (max_bytes == 0 || written_bytes < max_bytes) {
@@ -164,12 +172,13 @@ void drainSink(size_t max_bytes)
         const size_t length = takePendingLine(line, &dropped);
         reportDroppedLines(dropped);
         if (length == 0) {
-            return;
+            break;
         }
         line[length] = '\0';
         writeToConsole("%s", line);
         written_bytes += length;
     }
+    stdout = callers_stdout;
 }
 
 /// Put the sink in place of the ESP_LOG output function (once, when LogTask starts). Lines

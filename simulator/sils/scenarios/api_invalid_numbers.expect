@@ -1,0 +1,29 @@
+# api_invalid_numbers.expect — refusals at the parsing boundary, no motion, the API stays alive
+# 解析の境界での拒否・機体は動かない・API は生きたまま
+exit 0
+log_contains any "cmd: forward nan"
+log_contains any "cmd: forward 1e39"
+log_contains any "cmd: go inf 0 0 50"
+log_contains any "cmd: rc nan 0 0 0"
+log_contains any "cmd: speed nan"
+log_contains any "cmd: cw 1e39"
+log_contains any "cmd: cw 9999999999"
+log_contains any "cmd: ccw 0"
+log_contains any "cmd: sysid roll chirp 25 600"
+log_contains any "cmd: sysid roll chirp nan 4"
+log_contains any "cmd: autotune roll nan"
+log_contains any "cmd: ccw 361"
+log_contains any "reply: error out of range"
+log_absent any "reply: error move timeout"
+log_absent any "reply: error rotate timeout"
+log_absent any "reply: error sysid timeout"
+log_absent any "Autotune"
+log_absent any "Sysid excitation start"
+# the API stays alive: the following move runs and ends with ok, then the landing is served
+order "cmd: ccw 361" "cmd: forward 50"
+order "cmd: forward 50" "cmd: land"
+log_contains any "reply: ok"
+# nothing moved the craft before the valid move (t=18 s): hover bounds
+metric horizontal_drift_max < 0.15 in 16.0 18.0
+metric alt_band < 0.15 in 16.0 18.0
+metric yaw_band < 0.1 in 16.0 18.0

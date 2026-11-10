@@ -1,0 +1,15 @@
+# api_sysid_emergency.expect — `emergency` interrupts the `sysid` wait
+# `emergency` が `sysid` の待機を打ち切る
+exit 0
+log_contains any "cmd: sysid roll chirp 25 8"
+log_contains any "Sysid excitation start"
+log_contains any "cmd: emergency (during a blocking command)"
+log_contains any "reply: error interrupted by emergency"
+log_absent any "reply: error sysid timeout"
+order "Sysid excitation start" "cmd: emergency"
+order "cmd: emergency" "reply: error interrupted by emergency"
+# the parked line is cancelled and never replayed
+log_contains any "deferred line cancelled: height?"
+log_absent any "cmd: height?"
+# the motors stop within a fraction of a second of the emergency (t=17.5 s), not at the end of the excitation wait (t=25 s)
+metric duty_max < 0.01 in 18.0 21.0

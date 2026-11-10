@@ -73,6 +73,8 @@
 #include "params.hpp"        // autotune applies gains live / 自動チューンのライブ適用
 #include "autotune.hpp"      // onboard fit + tune / オンボード同定＋設計
 #include "tello_state.hpp"   // UDP:8890 state-string builder / 状態文字列ビルダ
+#include "api_arguments.hpp" // range checks of the parsed numbers / 解析した数の範囲検査
+#include "sf_math.hpp"       // sf::math::wrapAngleRad, kPi
 
 static const char* TAG = "ApiTask";
 
@@ -122,8 +124,22 @@ constexpr float    kDefaultSpeed   = 0.3f;    // [m/s] guidance approach / 既�
 constexpr float    kReachRadiusM   = 0.15f;   // move "reached" tolerance / 到達判定半径
 constexpr float    kReachYawRad    = 0.17f;   // ~10 deg yaw tolerance / ヨー到達判定
 constexpr uint32_t kTakeoffTimeoutMs = 12000;
+constexpr uint32_t kRotateTimeoutMs  = 8000;     // `cw` / `ccw` wait / 回頭の待ち時間
 constexpr uint32_t kLandTimeoutMs    = 20000;
 constexpr uint32_t kLandConfirmMs    = 500;     // wait for a land from ARMED_GROUND to take effect / ARMED_GROUND からの着陸が効くのを待つ上限
+// Reply for a command whose number is not finite or outside its range.
+// 数が有限でない、または範囲外のコマンドへの応答。
+constexpr const char* kOutOfRangeReply = "error out of range";
+// Reply for a wait that ended because the flight ended (see waitUntil), and for the lines that were parked behind it.
+// 飛行が終わったために打ち切った待機（waitUntil 参照）と、その後ろに置かれていた行への応答。
+constexpr const char* kFlightEndedReply          = "error flight ended";
+constexpr const char* kFlightEndedCancelledReply = "error cancelled: flight ended";
+constexpr float    kDegreesToRadians = sf::math::kPi / 180.0f;
+constexpr float    kSpeedMinCmPerSec = 10.0f;    // Tello `speed` range [cm/s] / Tello `speed` の範囲
+constexpr float    kSpeedMaxCmPerSec = 100.0f;
+constexpr float    kGoSpeedMinMps    = 0.1f;     // `go` speed clamp [m/s] / `go` の速度クランプ
+constexpr float    kGoSpeedMaxMps    = 1.0f;
+constexpr uint32_t kSysidMarginMs    = 1000;     // wait after the excitation ends [ms] / 励振の終了後に待つ時間
 constexpr float    kBattEmptyV     = 3.3f;    // 0% / 100% mapping for battery?
 constexpr float    kBattFullV      = 4.2f;
 
@@ -194,12 +210,13 @@ int          g_deferred_tail = 0;   // read index  / 読出位置
 
 // What ended the last waitUntil early (None = it did not), read by waitFailureText().
 // 直近の waitUntil を途中で打ち切った原因（None = 打ち切られていない）。waitFailureText() が読む。
-enum class WaitInterrupt : uint8_t { None, Emergency, Stop, Land };
+enum class WaitInterrupt : uint8_t { None, Emergency, Stop, Land, FlightEnded };
 WaitInterrupt g_wait_interrupt = WaitInterrupt::None;
 
 // Forward declaration: defined after cmdStop (it needs cmdStop and cmdEmergency).
 // 前方宣言: cmdStop の後で定義（cmdStop と cmdEmergency を使うため）。
 bool servicePendingCommands();
+void cancelDeferredLines(const char* reason_text);   // defined after deferLine / deferLine の後で定義
 
 // =============================================================================
 // API session state / API セッション状態
@@ -361,22 +378,52 @@ void publishGuidance(float speed)
     sf::command_target.publish(t);
 }
 
+// True while the craft is still in the flight a move / rotate / flip / excitation belongs to
+// (FLYING, or FLIP inside a flip). Any other state means the flight has ended: a pilot's
+// DISARM or landing, a failsafe landing, an emergency.
+// 移動・回頭・flip・励振が属する飛行の中に機体がまだいる間 true（FLYING、または flip 中の
+// FLIP）。それ以外の状態は飛行が終わったことを意味する: パイロットの DISARM・着陸、
+// フェイルセーフの着陸、emergency。
+bool isFlightContinuing()
+{
+    const sf::FlightState state = currentState();
+    return state == sf::FlightState::FLYING || state == sf::FlightState::FLIP;
+}
+
+// End the wait in progress because the flight ended, and drop the lines parked behind it: they
+// were issued for that flight, and a parked `takeoff` would otherwise ARM the craft again.
+// 進行中の待機を、飛行が終わったために打ち切り、その後ろに置かれた行を捨てる: それらはその
+// 飛行のために出された行で、後回しの `takeoff` が残ると機体をまた ARM してしまう。
+void endWaitByFlightEnd()
+{
+    ESP_LOGW(TAG, "flight ended during a wait - parked lines cancelled");
+    g_wait_interrupt = WaitInterrupt::FlightEnded;
+    cancelDeferredLines(kFlightEndedCancelledReply);
+}
+
 // Wait until `pred` returns true, polling at kWaitPollMs. Returns false on timeout OR when
 // an `emergency` / `stop` (or a `land` in ARMED_GROUND) read during the wait ended it early (see g_wait_interrupt and
-// waitFailureText). The API task may block here — it owns no control-path deadline — but it
-// must stay reachable for the commands that cancel what it waits for.
+// waitFailureText). With `ends_with_flight` the wait also ends early, returning false, as soon as
+// the craft is no longer in flight (isFlightContinuing), so a move / rotate / flip / excitation
+// does not run to its timeout after the flight is over. The API task may block here — it owns no
+// control-path deadline — but it must stay reachable for the commands that cancel what it waits for.
 // pred が真になるまで kWaitPollMs 周期でポーリング。タイムアウト、または待機中に読んだ
 // `emergency` / `stop`（または ARMED_GROUND での `land`）で早期に打ち切られたとき false（g_wait_interrupt と waitFailureText
-// 参照）。本タスクは制御経路の締切を持たないためブロックしてよいが、待っている対象を
-// 取り消すコマンドには応答できる状態を保つ。
+// 参照）。`ends_with_flight` のときは、機体が飛行中でなくなった（isFlightContinuing）時点でも待機を打ち切って
+// false を返し、移動・回頭・flip・励振が飛行の終わった後でタイムアウトまで続かないようにする。
+// 本タスクは制御経路の締切を持たないためブロックしてよいが、待っている対象を取り消すコマンドには応答できる状態を保つ。
 template <typename Pred>
-bool waitUntil(uint32_t timeout_ms, Pred pred)
+bool waitUntil(uint32_t timeout_ms, Pred pred, bool ends_with_flight = false)
 {
     g_wait_interrupt = WaitInterrupt::None;
     const uint32_t start = static_cast<uint32_t>(esp_timer_get_time() / 1000);
     while (static_cast<uint32_t>(esp_timer_get_time() / 1000) - start < timeout_ms) {
         if (pred()) {
             return true;
+        }
+        if (ends_with_flight && !isFlightContinuing()) {
+            endWaitByFlightEnd();
+            return false;
         }
         if (servicePendingCommands()) {
             return false;   // emergency / stop took over / emergency か stop が引き取った
@@ -386,15 +433,16 @@ bool waitUntil(uint32_t timeout_ms, Pred pred)
     return false;
 }
 
-// Reply text for a waitUntil that returned false: the interrupting command (`emergency`, `stop` or `land`), else the
-// caller's timeout text.
-// false を返した waitUntil の応答文字列: 打ち切ったコマンド（`emergency`・`stop`・`land`）、なければ呼び出し側のタイムアウト文。
+// Reply text for a waitUntil that returned false: the interrupting command (`emergency`, `stop` or `land`), the end of the
+// flight, else the caller's timeout text.
+// false を返した waitUntil の応答文字列: 打ち切ったコマンド（`emergency`・`stop`・`land`）、飛行の終わり、なければ呼び出し側のタイムアウト文。
 const char* waitFailureText(const char* timeout_text)
 {
     switch (g_wait_interrupt) {
         case WaitInterrupt::Emergency: return "error interrupted by emergency";
         case WaitInterrupt::Stop:      return "error interrupted by stop";
         case WaitInterrupt::Land:      return "error cancelled by land";
+        case WaitInterrupt::FlightEnded: return kFlightEndedReply;
         default:                       return timeout_text;
     }
 }
@@ -599,7 +647,7 @@ bool waitTargetReached(uint32_t timeout_ms)
         const float de = e.position[1] - g_target_ned[1];
         const float dd = e.position[2] - g_target_ned[2];
         return sqrtf(dn * dn + de * de + dd * dd) < kReachRadiusM;
-    });
+    }, true);
 }
 
 // Relative move in the TELLO body frame (x fwd, y LEFT, z UP, cm), rotated into
@@ -612,9 +660,14 @@ void cmdMove(float fwd_cm, float left_cm, float up_cm, float speed_mps)
         reply("error not flying");
         return;
     }
+    // A non-finite number must never be composed into the target (inf * 0 = NaN); dist is
+    // checked too because squaring a huge finite number overflows to inf.
+    // 有限でない数を目標へ合成してはならない（inf * 0 = NaN）。巨大な有限値は 2 乗で inf に
+    // あふれるので、dist も検査する。
     float dist = sqrtf(fwd_cm * fwd_cm + left_cm * left_cm + up_cm * up_cm);
-    if (dist < kMoveMinCm) {
-        reply("error out of range");
+    if (!sf::api_arguments::allFinite({fwd_cm, left_cm, up_cm, speed_mps, dist}) ||
+        dist < kMoveMinCm) {
+        reply(kOutOfRangeReply);
         return;
     }
     // Tello accepts moves up to 500 cm; we clamp the ACTUAL travel to the indoor-safe
@@ -658,21 +711,17 @@ void cmdRotate(float delta_yaw_rad, float speed_unused)
         reply("error not flying");
         return;
     }
-    g_target_yaw += delta_yaw_rad;
-    while (g_target_yaw >  3.14159265f) g_target_yaw -= 6.2831853f;
-    while (g_target_yaw < -3.14159265f) g_target_yaw += 6.2831853f;
+    if (!sf::api_arguments::allFinite({delta_yaw_rad})) {
+        reply(kOutOfRangeReply);
+        return;
+    }
+    g_target_yaw = sf::math::wrapAngleRad(g_target_yaw + delta_yaw_rad);
     publishGuidance(g_default_speed);
 
-    const bool reached = waitUntil(8000, [] {
-        const sf::StateEstimate e = sf::estimate_state.latest();
-        const float w = e.attitude[0], x = e.attitude[1];
-        const float y = e.attitude[2], z = e.attitude[3];
-        float yaw = atan2f(2.0f * (w * z + x * y), 1.0f - 2.0f * (y * y + z * z));
-        float err = g_target_yaw - yaw;
-        while (err >  3.14159265f) err -= 6.2831853f;
-        while (err < -3.14159265f) err += 6.2831853f;
+    const bool reached = waitUntil(kRotateTimeoutMs, [] {
+        const float err = sf::math::wrapAngleRad(g_target_yaw - estimateYaw(sf::estimate_state.latest()));
         return fabsf(err) < kReachYawRad;
-    });
+    }, true);
     reply(reached ? "ok" : waitFailureText("error rotate timeout"));
 }
 
@@ -980,7 +1029,7 @@ bool flipPreflight(const char* direction_token, sf::FlipDirection& dir, sf::Flig
 // DISARM/emergency/IMPACT は FLYING でなく IDLE_GROUND へ落ちる。
 void waitFlipOutcome()
 {
-    if (!waitUntil(500, [] { return currentState() == sf::FlightState::FLIP; })) {
+    if (!waitUntil(500, [] { return currentState() == sf::FlightState::FLIP; }, true)) {
         reply(waitFailureText("error flip: rejected"));
         return;
     }
@@ -989,6 +1038,7 @@ void waitFlipOutcome()
         return;
     }
     if (currentState() != sf::FlightState::FLYING) {
+        cancelDeferredLines(kFlightEndedCancelledReply);   // the flight is over / 飛行は終わった
         reply("error flip: aborted disarmed");
         return;
     }
@@ -1295,7 +1345,7 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         // この点の結果（seq エッジ）を余裕付きで待つ。
         const bool got = waitUntil(
             static_cast<uint32_t>(dur * 1000.0f) + 1500,
-            [last_seq] { return sf::sysid_result.latest().seq != last_seq; });
+            [last_seq] { return sf::sysid_result.latest().seq != last_seq; }, true);
         if (!got || currentState() != sf::FlightState::FLYING) {
             reply("error autotune aborted (excitation failed or not flying)");
             return;
@@ -1557,33 +1607,230 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
 }
 
 // -----------------------------------------------------------------------------
-// processLine — parse + execute one command line (shared HW / SILS path).
-// processLine — 1 コマンド行の解析＋実行（実機 / SILS 共通経路）。
+// Commands with numbers. Every number parsed from a line is checked at this boundary
+// (sf::api_arguments) before a command uses it; a non-finite or out-of-range number is
+// answered kOutOfRangeReply (`rc`, fire-and-forget, is ignored silently).
+// 数を伴うコマンド。行から解析した数は、コマンドが使う前にこの境界で検査する
+// （sf::api_arguments）。有限でない数・範囲外の数には kOutOfRangeReply を返す
+// （撃ちっぱなしの `rc` は黙って無視する）。
 // -----------------------------------------------------------------------------
-void processLine(char* line)
+
+// `speed x` — set the session cruise speed for the verb moves (Tello: 10-100 cm/s, clamped).
+// `speed?` is a query and was already routed. Returns true when the line was a `speed` line.
+// `speed x` — verb 移動の巡航速度を設定（Tello: 10〜100 cm/s、範囲外はクランプ）。
+// `speed?` はクエリで先に振り分け済み。`speed` の行だったとき true。
+bool handleSpeedLine(const char* line)
 {
-    // Trim trailing whitespace/newlines / 末尾の空白・改行を除去
-    if (trimLine(line) == 0) return;
-    ESP_LOGI(TAG, "cmd: %s", line);
+    float speed_cm_per_sec = 0.0f;
+    if (std::sscanf(line, "speed %f", &speed_cm_per_sec) != 1) {
+        return false;
+    }
+    if (!sf::api_arguments::allFinite({speed_cm_per_sec})) {
+        reply(kOutOfRangeReply);
+        return true;
+    }
+    if (speed_cm_per_sec < kSpeedMinCmPerSec) speed_cm_per_sec = kSpeedMinCmPerSec;
+    if (speed_cm_per_sec > kSpeedMaxCmPerSec) speed_cm_per_sec = kSpeedMaxCmPerSec;
+    g_default_speed = speed_cm_per_sec * 0.01f;   // cm/s → m/s
+    reply("ok");
+    return true;
+}
 
-    if (std::strcmp(line, "command") == 0) {
-        g_sdk_mode = true;
-        reply("ok");
+// `rc a b c d` — continuous manual control (fire-and-forget). Parsed early since it arrives
+// at a high rate. Returns true when the line was an `rc` line.
+// `rc a b c d` — 連続マニュアル操作（撃ちっぱなし）。高レートで来るため先に解析。
+// `rc` の行だったとき true。
+bool handleRcLine(const char* line)
+{
+    float roll = 0, pitch = 0, throttle = 0, yaw = 0;
+    if (std::sscanf(line, "rc %f %f %f %f", &roll, &pitch, &throttle, &yaw) != 4) {
+        return false;
+    }
+    if (sf::api_arguments::allFinite({roll, pitch, throttle, yaw})) {
+        cmdRc(roll, pitch, throttle, yaw);
+    }
+    return true;
+}
+
+// `cw <deg>` / `ccw <deg>` — Tello: cw = clockwise (viewed from above) = +yaw in NED; the angle
+// is 1-360 degrees. Returns true when `verb` is a rotate verb.
+// `cw <deg>` / `ccw <deg>` — Tello: cw = 上から見て時計回り = NED では +yaw。角度は 1〜360 度。
+// `verb` が回頭の verb のとき true。
+bool handleRotateVerb(const char* verb, float angle_degrees)
+{
+    const bool clockwise = std::strcmp(verb, "cw") == 0;
+    if (!clockwise && std::strcmp(verb, "ccw") != 0) {
+        return false;
+    }
+    if (!sf::api_arguments::isRotateAngleInRange(angle_degrees)) {
+        reply(kOutOfRangeReply);
+        return true;
+    }
+    cmdRotate((clockwise ? angle_degrees : -angle_degrees) * kDegreesToRadians, 0);
+    return true;
+}
+
+// `up|down|left|right|forward|back <cm>` — one-axis move in the Tello body frame (x forward,
+// y LEFT, z UP). Returns true when `verb` is a move verb.
+// `up|down|left|right|forward|back <cm>` — Tello 機体座標（x前・y左・z上）の 1 軸移動。
+// `verb` が移動の verb のとき true。
+bool handleMoveVerb(const char* verb, float distance_cm)
+{
+    float forward_cm = 0, left_cm = 0, up_cm = 0;
+    if      (std::strcmp(verb, "up") == 0)      { up_cm      =  distance_cm; }
+    else if (std::strcmp(verb, "down") == 0)    { up_cm      = -distance_cm; }
+    else if (std::strcmp(verb, "left") == 0)    { left_cm    =  distance_cm; }
+    else if (std::strcmp(verb, "right") == 0)   { left_cm    = -distance_cm; }
+    else if (std::strcmp(verb, "forward") == 0) { forward_cm =  distance_cm; }
+    else if (std::strcmp(verb, "back") == 0)    { forward_cm = -distance_cm; }
+    else { return false; }
+    cmdMove(forward_cm, left_cm, up_cm, g_default_speed);
+    return true;
+}
+
+// `go x y z speed` — x forward, y left, z up [cm], speed [cm/s] (Tello frame); the speed is
+// clamped to 0.1-1.0 m/s.
+// `go x y z speed` — x前・y左・z上 [cm]、speed [cm/s]（Tello 座標）。速度は 0.1〜1.0 m/s にクランプ。
+void cmdGo(float forward_cm, float left_cm, float up_cm, float speed_cm_per_sec)
+{
+    if (!sf::api_arguments::allFinite({forward_cm, left_cm, up_cm, speed_cm_per_sec})) {
+        reply(kOutOfRangeReply);
         return;
     }
-    if (!g_sdk_mode) {
-        reply("error not in command mode");
+    float speed = speed_cm_per_sec * 0.01f;
+    if (speed < kGoSpeedMinMps) speed = kGoSpeedMinMps;
+    if (speed > kGoSpeedMaxMps) speed = kGoSpeedMaxMps;
+    cmdMove(forward_cm, left_cm, up_cm, speed);
+}
+
+// `sysid <roll|pitch|yaw> <doublet|chirp> <amp_dps> <dur_s>` — rate-loop identification
+// excitation while hovering (see SysidCommand). Waits for the duration so the calling script
+// brackets its log capture; the wait is abortable (`emergency`, `stop`, the end of the flight).
+// The amplitude and duration must be finite, positive and within what the controller takes
+// unchanged (sf::api_arguments), otherwise a mistyped number would hold ApiTask for minutes.
+// `sysid <軸> <doublet|chirp> <振幅 dps> <継続 s>` — ホバー中のレートループ同定励振
+// （SysidCommand 参照）。呼び出しスクリプトのログ取得区間と揃うよう継続時間だけ待つ。待機は
+// 打ち切れる（`emergency`・`stop`・飛行の終わり）。振幅と継続時間は有限・正で、制御器が変更せずに
+// 受け取る範囲内であること。さもないと打ち間違いの数が ApiTask を数分間止める。
+void cmdSysid(const char* axis_name, const char* waveform_name, float amplitude_dps, float duration_s)
+{
+    if (currentState() != sf::FlightState::FLYING) {
+        reply("error not flying");
+        return;
+    }
+    uint8_t axis;
+    if      (std::strcmp(axis_name, "roll") == 0)  axis = 0;
+    else if (std::strcmp(axis_name, "pitch") == 0) axis = 1;
+    else if (std::strcmp(axis_name, "yaw") == 0)   axis = 2;
+    else { reply("error bad axis"); return; }
+    uint8_t waveform;
+    if      (std::strcmp(waveform_name, "doublet") == 0) waveform = 0;
+    else if (std::strcmp(waveform_name, "chirp") == 0)   waveform = 1;
+    else { reply("error bad waveform"); return; }
+    if (!sf::api_arguments::isSysidRangeValid(amplitude_dps, duration_s)) {
+        reply(kOutOfRangeReply);
         return;
     }
 
-    // Emergency first — never behind any other gate.
-    // emergency は最優先 — 他の判定の後ろに置かない。
-    if (std::strcmp(line, "emergency") == 0) { cmdEmergency(); return; }
-    if (std::strcmp(line, "takeoff") == 0) { cmdTakeoff(); return; }
-    if (std::strcmp(line, "land") == 0)    { cmdLand();    return; }
-    if (std::strcmp(line, "stop") == 0)    { (void)cmdStop(); return; }
-    if (std::strchr(line, '?') != nullptr) { cmdQuery(line); return; }
+    sf::SysidCommand cmd{};
+    cmd.axis      = axis;
+    cmd.waveform  = waveform;
+    cmd.amplitude = amplitude_dps * kDegreesToRadians;   // dps → rad/s
+    cmd.duration  = duration_s;
+    cmd.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::sysid_command.publish(cmd);
 
+    const uint32_t wait_ms = static_cast<uint32_t>(duration_s * 1000.0f) + kSysidMarginMs;
+    const uint32_t start_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+    const bool finished = waitUntil(wait_ms + kWaitPollMs, [start_ms, wait_ms] {
+        return static_cast<uint32_t>(esp_timer_get_time() / 1000) - start_ms >= wait_ms;
+    }, true);
+    reply(finished ? "ok" : waitFailureText("error sysid timeout"));
+}
+
+// `autotune <roll|pitch|yaw> [wc_radps] [pm_deg]` — onboard autotune. Returns true when the
+// line was an `autotune` line.
+// `autotune <軸> [ωc] [PM]` — オンボード自動チューン。`autotune` の行だったとき true。
+bool handleAutotuneLine(const char* line)
+{
+    char axis_name[16] = {};
+    float crossover = 0, phase_margin_deg = 0;
+    if (std::strncmp(line, "autotune", 8) != 0 ||
+        std::sscanf(line, "autotune %15s %f %f", axis_name, &crossover, &phase_margin_deg) < 1) {
+        return false;
+    }
+    uint8_t axis;
+    if      (std::strcmp(axis_name, "roll") == 0)  axis = 0;
+    else if (std::strcmp(axis_name, "pitch") == 0) axis = 1;
+    else if (std::strcmp(axis_name, "yaw") == 0)   axis = 2;
+    else { reply("error bad axis"); return true; }
+    if (!sf::api_arguments::allFinite({crossover, phase_margin_deg})) {
+        reply(kOutOfRangeReply);
+        return true;
+    }
+    // Default wc: 25 rad/s for roll/pitch; 18 for yaw. Yaw's empirically low control
+    // authority + low-SNR identification make a conservative crossover the safe choice
+    // (NOT a reaction-zero limit — that was refuted). An explicit wc arg overrides.
+    // 既定 wc: roll/pitch=25、yaw=18（yaw は操縦権限が低く同定SNRも低いため保守的に。零点制限ではない）。
+    const float wc_def = (axis == 2) ? 18.0f : 25.0f;
+    const float wc = (crossover > 1.0f && crossover < 100.0f) ? crossover : wc_def;
+    const float pm = (phase_margin_deg > 20.0f && phase_margin_deg < 80.0f) ? phase_margin_deg : 60.0f;
+    cmdAutotune(axis, wc, pm);
+    return true;
+}
+
+// True for the verbs that take one number: the six moves and the two rotations. Only these get
+// the out-of-range reply; any other word stays an unknown command.
+// 数を 1 つ取る verb（移動 6 つと回頭 2 つ）なら true。範囲外の応答はこれらだけで、
+// それ以外の語は不明なコマンドのまま。
+bool isOneNumberVerb(const char* verb)
+{
+    static const char* const kVerbs[] = {"up", "down", "left", "right", "forward", "back", "cw", "ccw"};
+    for (const char* known : kVerbs) {
+        if (std::strcmp(verb, known) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Lines of the form `<verb> <numbers...>` other than `speed` / `rc`: moves, rotation, `go`,
+// `autotune`, `sysid`. Returns true when the line was one of them (answered or executed).
+// `<verb> <数...>` の形の行（`speed` / `rc` 以外）: 移動・回頭・`go`・`autotune`・`sysid`。
+// そのどれかだったとき true（応答または実行済み）。
+bool handleNumberedLine(const char* line)
+{
+    char verb[16] = {};
+    char waveform_name[16] = {};
+    float a = 0, b = 0, c = 0, d = 0;
+    if (std::sscanf(line, "sysid %15s %15s %f %f", verb, waveform_name, &a, &b) == 4) {
+        cmdSysid(verb, waveform_name, a, b);
+        return true;
+    }
+    if (handleAutotuneLine(line)) {
+        return true;
+    }
+    const int parsed = std::sscanf(line, "%15s %f %f %f %f", verb, &a, &b, &c, &d);
+    if (parsed == 2 && isOneNumberVerb(verb)) {
+        if (!sf::api_arguments::allFinite({a})) {
+            reply(kOutOfRangeReply);
+            return true;
+        }
+        return handleRotateVerb(verb, a) || handleMoveVerb(verb, a);
+    }
+    if (parsed == 5 && std::strcmp(verb, "go") == 0) {
+        cmdGo(a, b, c, d);
+        return true;
+    }
+    return false;
+}
+
+// Lines that are a fixed word and carry no number to check: the camera toggles, `flip`, the mission pads.
+// Returns true when the line was one of them (answered or executed).
+// 数の検査が要らない、決まった語の行: カメラの切り替え・`flip`・ミッションパッド。
+// そのどれかだったとき true（応答または実行済み）。
+bool handleFixedVerbLine(const char* line)
+{
     // Camera commands — StampFly has no camera, but reply "ok" so video-aware Tello
     // programs that merely toggle the stream (without reading frames) keep running.
     // The 11111 video port is never opened; get_frame_read() would just see nothing.
@@ -1591,7 +1838,7 @@ void processLine(char* line)
     // Tello プログラムが止まらないよう "ok" を返す。映像ポート 11111 は開かない。
     if (std::strcmp(line, "streamon") == 0 || std::strcmp(line, "streamoff") == 0) {
         reply("ok");
-        return;
+        return true;
     }
     // flip <l/r/f/b> — Tello-compatible single-axis 360-degree flip
     // (flip-maneuver-plan.md §4.4, decision reversed 2026-09-16 from the
@@ -1606,117 +1853,50 @@ void processLine(char* line)
         char dir_tok[8] = {};
         std::sscanf(line, "flip %7s", dir_tok);
         cmdFlip(dir_tok);
-        return;
+        return true;
     }
     // Mission pads — a Tello EDU/RoboMaster-TT-only feature we do not implement.
     // ミッションパッドは EDU/RoboMaster TT 専用機能で未対応。
     if (std::strcmp(line, "mon") == 0 || std::strcmp(line, "moff") == 0 ||
         std::strncmp(line, "mdirection", 10) == 0) {
         reply("error mission pads not supported");
-        return;
+        return true;
     }
+    return false;
+}
 
-    // speed x — set the session cruise speed for the verb moves (Tello: 10–100 cm/s).
-    // `speed?` is a query and was already routed above. / verb 移動の巡航速度を設定。
-    {
-        float sx = 0;
-        if (std::sscanf(line, "speed %f", &sx) == 1) {
-            if (sx < 10.0f)  sx = 10.0f;
-            if (sx > 100.0f) sx = 100.0f;
-            g_default_speed = sx * 0.01f;   // cm/s → m/s
-            reply("ok");
-            return;
-        }
-    }
+// -----------------------------------------------------------------------------
+// processLine — parse + execute one command line (shared HW / SILS path).
+// processLine — 1 コマンド行の解析＋実行（実機 / SILS 共通経路）。
+// -----------------------------------------------------------------------------
+void processLine(char* line)
+{
+    // Trim trailing whitespace/newlines / 末尾の空白・改行を除去
+    if (trimLine(line) == 0) return;
+    ESP_LOGI(TAG, "cmd: %s", line);
 
-    // rc a b c d — continuous manual control (fire-and-forget). Parse early since it
-    // arrives at a high rate. / 連続マニュアル操作（撃ちっぱなし）。高レートで来るため先に解析。
-    {
-        float ra = 0, rb = 0, rc_ = 0, rd = 0;
-        if (std::sscanf(line, "rc %f %f %f %f", &ra, &rb, &rc_, &rd) == 4) {
-            cmdRc(ra, rb, rc_, rd);
-            return;
-        }
-    }
-
-    // Moves: <verb> <cm> / 移動: <verb> <cm>
-    char verb[16] = {};
-    float a = 0, b = 0, c = 0, d = 0;
-    const int got = std::sscanf(line, "%15s %f %f %f %f", verb, &a, &b, &c, &d);
-    const float deg2rad = 0.017453293f;
-    if (got == 2) {
-        if (std::strcmp(verb, "up") == 0)      { cmdMove(0, 0,  a, g_default_speed); return; }
-        if (std::strcmp(verb, "down") == 0)    { cmdMove(0, 0, -a, g_default_speed); return; }
-        if (std::strcmp(verb, "left") == 0)    { cmdMove(0,  a, 0, g_default_speed); return; }
-        if (std::strcmp(verb, "right") == 0)   { cmdMove(0, -a, 0, g_default_speed); return; }
-        if (std::strcmp(verb, "forward") == 0) { cmdMove( a, 0, 0, g_default_speed); return; }
-        if (std::strcmp(verb, "back") == 0)    { cmdMove(-a, 0, 0, g_default_speed); return; }
-        // Tello: cw = clockwise (viewed from above) = +yaw in NED.
-        // Tello: cw = 上から見て時計回り = NED では +yaw。
-        if (std::strcmp(verb, "cw") == 0)      { cmdRotate( a * deg2rad, 0); return; }
-        if (std::strcmp(verb, "ccw") == 0)     { cmdRotate(-a * deg2rad, 0); return; }
-    }
-    // autotune <roll|pitch|yaw> [wc_radps] [pm_deg] — onboard autotune.
-    // autotune <軸> [ωc] [PM] — オンボード自動チューン。
-    if (std::sscanf(line, "autotune %15s %f %f", verb, &a, &b) >= 1 &&
-        std::strncmp(line, "autotune", 8) == 0) {
-        uint8_t axis;
-        if      (std::strcmp(verb, "roll") == 0)  axis = 0;
-        else if (std::strcmp(verb, "pitch") == 0) axis = 1;
-        else if (std::strcmp(verb, "yaw") == 0)   axis = 2;
-        else { reply("error bad axis"); return; }
-        // Default wc: 25 rad/s for roll/pitch; 18 for yaw. Yaw's empirically low control
-        // authority + low-SNR identification make a conservative crossover the safe choice
-        // (NOT a reaction-zero limit — that was refuted). An explicit wc arg overrides.
-        // 既定 wc: roll/pitch=25、yaw=18（yaw は操縦権限が低く同定SNRも低いため保守的に。零点制限ではない）。
-        const float wc_def = (axis == 2) ? 18.0f : 25.0f;
-        const float wc = (a > 1.0f && a < 100.0f) ? a : wc_def;
-        const float pm = (b > 20.0f && b < 80.0f) ? b : 60.0f;
-        cmdAutotune(axis, wc, pm);
-        return;
-    }
-
-    // sysid <roll|pitch|yaw> <doublet|chirp> <amp_dps> <dur_s> — rate-loop
-    // identification excitation while hovering (see SysidCommand). Blocks for
-    // the duration so the calling script naturally brackets its log capture.
-    // sysid … — ホバー中のレートループ同定励振（SysidCommand 参照）。継続時間
-    // ブロックするため、呼び出しスクリプトのログ取得区間と自然に揃う。
-    char wave[16] = {};
-    if (std::sscanf(line, "sysid %15s %15s %f %f", verb, wave, &a, &b) == 4) {
-        if (currentState() != sf::FlightState::FLYING) {
-            reply("error not flying");
-            return;
-        }
-        uint8_t axis;
-        if      (std::strcmp(verb, "roll") == 0)  axis = 0;
-        else if (std::strcmp(verb, "pitch") == 0) axis = 1;
-        else if (std::strcmp(verb, "yaw") == 0)   axis = 2;
-        else { reply("error bad axis"); return; }
-        uint8_t waveform;
-        if      (std::strcmp(wave, "doublet") == 0) waveform = 0;
-        else if (std::strcmp(wave, "chirp") == 0)   waveform = 1;
-        else { reply("error bad waveform"); return; }
-
-        sf::SysidCommand cmd{};
-        cmd.axis      = axis;
-        cmd.waveform  = waveform;
-        cmd.amplitude = a * 0.017453293f;   // dps → rad/s
-        cmd.duration  = b;
-        cmd.timestamp = static_cast<uint32_t>(esp_timer_get_time());
-        sf::sysid_command.publish(cmd);
-
-        const uint32_t wait_ms = static_cast<uint32_t>(b * 1000.0f) + 1000;
-        vTaskDelay(pdMS_TO_TICKS(wait_ms));
+    // Emergency first — never behind any other gate, the command-mode gate included.
+    // emergency は最優先 — コマンドモードの判定を含め、他の判定の後ろに置かない。
+    if (std::strcmp(line, "emergency") == 0) { cmdEmergency(); return; }
+    if (std::strcmp(line, "command") == 0) {
+        g_sdk_mode = true;
         reply("ok");
         return;
     }
+    if (!g_sdk_mode) {
+        reply("error not in command mode");
+        return;
+    }
 
-    if (got == 5 && std::strcmp(verb, "go") == 0) {
-        // go x y z speed — x fwd, y left, z up [cm], speed [cm/s] (Tello frame)
-        float speed = d * 0.01f;
-        if (speed < 0.1f) speed = 0.1f;
-        if (speed > 1.0f) speed = 1.0f;
-        cmdMove(a, b, c, speed);
+    if (std::strcmp(line, "takeoff") == 0) { cmdTakeoff(); return; }
+    if (std::strcmp(line, "land") == 0)    { cmdLand();    return; }
+    if (std::strcmp(line, "stop") == 0)    { (void)cmdStop(); return; }
+    if (std::strchr(line, '?') != nullptr) { cmdQuery(line); return; }
+
+    if (handleFixedVerbLine(line) || handleSpeedLine(line) || handleRcLine(line)) {
+        return;
+    }
+    if (handleNumberedLine(line)) {
         return;
     }
     reply("error unknown command");

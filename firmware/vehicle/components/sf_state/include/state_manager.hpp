@@ -123,6 +123,24 @@ public:
     /// @design requirements.md §9 — USB power: ARM prohibited         [OK]
     bool requestArm();
 
+    /// ARM for an API takeoff: switch to `takeoff_mode` (the auto-takeoff mode the API asks for),
+    /// then ARM from IDLE_GROUND. When the ARM is refused (pre-arm gates: tilt, battery, pairing,
+    /// calibration ...) the flight mode that was active before the call is put back, so a refused
+    /// takeoff leaves no trace: without an RC packet nothing re-arbitrates the mode on the ground,
+    /// and a later ARM (the on-board button) would otherwise start an automatic takeoff in the
+    /// mode the refused request left behind. In ARMED_GROUND no ARM is requested (the craft is
+    /// already armed) and the mode stays as switched.
+    /// API 離陸のための ARM: `takeoff_mode`（API が求める自動離陸のモード）へ切り替え、IDLE_GROUND から ARM
+    /// する。ARM が拒否されたとき（ARM 前判定: 傾き・電池・ペアリング・校正 …）は、呼び出し前の飛行モードに
+    /// 戻す。拒否された離陸が痕跡を残さないようにするため: RC の電文が無いと地上でモードを調停し直す
+    /// ものがなく、後の ARM（機体のボタン）が、拒否された要求の残したモードで自動離陸を始めてしまう。
+    /// ARMED_GROUND では ARM を要求せず（既に ARM 済み）、切り替えたモードのままにする。
+    ///
+    /// @return true if the craft is armed after the call
+    ///
+    /// @design detailed_design.md §3.1 — API takeoff: mode change + ARM  [OK]
+    bool requestArmForTakeoff(FlightMode takeoff_mode);
+
     /// Request DISARM. On the ground, in TAKEOFF (any mode) and in ACRO / STABILIZE it is an immediate motor cut (-> IDLE_GROUND). In ALT_HOLD / POS_HOLD while FLYING
     /// it starts an AUTO-LANDING (-> LANDING, gradual descent) instead of dropping the craft; touchdown then disarms. A DISARM pressed again while already LANDING
     /// is the emergency cut (see below). The ways into LANDING from TAKEOFF are the loss of the link, the ToF rules and notifyTakeoffEndedByLanding() (a takeoff that does not lift).

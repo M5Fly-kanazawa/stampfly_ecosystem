@@ -1,0 +1,17 @@
+# api_move_flight_end.expect — the flight ends during a move: the wait ends, the parked lines are dropped
+# 移動の最中に飛行が終わる: 待機は終わり、後回しの行は捨てられる
+exit 0
+log_contains any "cmd: forward 150"
+log_contains any "DISARM in POS_HOLD → auto-land (LANDING)"
+log_contains any "reply: error flight ended"
+log_absent any "reply: error move timeout"
+order "cmd: forward 150" "DISARM in POS_HOLD"
+order "DISARM in POS_HOLD" "reply: error flight ended"
+# the parked lines are cancelled, never replayed: no second takeoff
+log_contains any "deferred line cancelled: takeoff"
+log_contains any "deferred line cancelled: height?"
+log_contains any "reply: error cancelled: flight ended"
+log_absent any "cmd: height?"
+log_absent any "reply: error not on ground"
+# the craft lands and stays on the floor: no re-arm, no second climb after the landing
+metric alt_max < 0.05 in 28.0 32.0

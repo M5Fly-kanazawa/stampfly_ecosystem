@@ -257,6 +257,28 @@ bool StateManager::requestArm()
     return true;
 }
 
+/// @design detailed_design.md §3.1 — API takeoff: mode change + ARM        [OK]
+bool StateManager::requestArmForTakeoff(FlightMode takeoff_mode)
+{
+    const FlightMode previous_mode = mode_;
+    if (previous_mode != takeoff_mode) {
+        requestModeChange(takeoff_mode);
+    }
+    if (state_ != FlightState::IDLE_GROUND) {
+        return state_ == FlightState::ARMED_GROUND;
+    }
+    if (requestArm()) {
+        return true;
+    }
+    // Refused: put the mode back (it is a request that failed, not a mode the pilot chose).
+    // 拒否された: モードを戻す（パイロットが選んだモードではなく、失敗した要求のモード）。
+    if (mode_ != previous_mode) {
+        ESP_LOGI(TAG, "API takeoff refused: mode restored to %s", flightModeName(previous_mode));
+        requestModeChange(previous_mode);
+    }
+    return false;
+}
+
 /// @design requirements.md §2 — ARMED_GROUND→IDLE_GROUND (DISARM),       [OK]
 /// @design requirements.md §2 — FLYING→IDLE_GROUND (pilot DISARM)        [OK]
 bool StateManager::requestDisarm()
@@ -735,23 +757,24 @@ void StateManager::handleLowBatteryAlert(const SystemAlert& alert)
     // EMERGENCY (3.0V): the pack is about to sag below the cutoff — land
     // NOW. Same Landing-verb path as the comm-loss auto-land (the
     // onEnter(LANDING) callback engages the controller's descent).
-    // FLIP window exception (plan §3.5/§9 item 2, §4.3 FLIP row): unlike
-    // COMM_LOST (a level alert re-raised by the failsafe, so isAirborne
-    // including FLIP + a FLYING-only firing condition in update() is enough
-    // to defer it), the EMERGENCY battery alert is an EDGE — the failsafe's
-    // batt_emergency_ latch (failsafe.cpp) raises it only ONCE. Transitioning
-    // FLIP → LANDING directly here would also skip the FLIP → FLYING onExit
-    // (position/altitude re-capture). So we defer explicitly: set a pending
-    // flag instead of transitioning, and notifyFlipComplete() re-applies this
-    // same rule once back in FLYING.
+    // The EMERGENCY is a standing level: the failsafe raises it on entry into the region below
+    // the critical voltage and again about every 5 s while the voltage stays there
+    // (battery_alert_policy.hpp), so an alert consumed in a state that ignores it (on the ground,
+    // ARMED_GROUND) does not leave a later flight without it. Repeated alerts are harmless here:
+    // in LANDING and on the ground they only log, and the FLIP flag below is idempotent.
+    // FLIP window exception (plan §3.5/§9 item 2, §4.3 FLIP row): the next re-raise can be seconds
+    // away, and transitioning FLIP → LANDING directly here would also skip the FLIP → FLYING
+    // onExit (position/altitude re-capture). So we defer explicitly: set a pending flag instead of
+    // transitioning, and notifyFlipComplete() re-applies this same rule once back in FLYING.
     // WARNING（3.4V）: 通知のみ（ブザーは NotifyTask）。
     // EMERGENCY（3.0V）: パックがカットオフ割れ寸前 — 即着陸。通信断の
     // 自動着陸と同じ Landing verb 経路（onEnter(LANDING) コールバックが
     // 制御器の降下を発動する）。
-    // FLIP 窓の例外（plan §3.5/§9 項目2、§4.3 FLIP 行）: COMM_LOST（failsafe が
-    // 再発報するレベルアラートゆえ、FLIP を含む isAirborne ＋ update() の
-    // FLYING 限定の成立条件だけで保留できる）と異なり、EMERGENCY 電池アラートは
-    // エッジ（failsafe.cpp の batt_emergency_ ラッチが一度しか発報しない）。
+    // EMERGENCY は継続するレベル: failsafe は危険電圧より下の領域へ入ったときに発報し、電圧がそこに
+    // 留まる間は約 5 s ごとに再発報する（battery_alert_policy.hpp）。無視する状態（地上、
+    // ARMED_GROUND）で消費されたアラートが、後の飛行から失われることはない。繰り返し届いても
+    // 害はない: LANDING と地上ではログ出力だけで、下の FLIP の保留フラグは冪等。
+    // FLIP 窓の例外（plan §3.5/§9 項目2、§4.3 FLIP 行）: 次の再発報まで数秒かかりうるうえ、
     // ここで FLIP → LANDING に直接遷移すると FLIP → FLYING の onExit（位置/高度
     // 目標の取り直し）も飛ばす。よって明示的に保留する: 遷移せずフラグを
     // 立て、notifyFlipComplete() が FLYING 復帰後に同じ規則を再適用する。

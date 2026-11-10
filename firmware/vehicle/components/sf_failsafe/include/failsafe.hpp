@@ -26,6 +26,7 @@
 
 #include "flight_state.hpp"
 #include "sensor_freshness.hpp"
+#include "battery_alert_policy.hpp"
 #include <cstdint>
 
 namespace sf {
@@ -105,16 +106,10 @@ private:
     sf::SilenceWatch comm_watch_;     // Time since the last new setpoint / 最後の新 setpoint からの経過
     sf::SilenceWatch tof_watch_;      // Time since the downward ToF last produced a NEW sample / 下向き ToF の最後の新サンプルからの経過
     uint8_t tof_alert_cooldown_ = 0;  // updates until the next TOF_SILENT (re-)raise; 0 = raise now / 次の TOF_SILENT 発報までの更新回数（0=今発報）
-    // Separate warning/emergency battery latches: a shared latch meant that once
-    // the 3.4V warning fired, the 3.0V emergency could never escalate. Both clear
-    // on voltage recovery (with hysteresis) so a later sag re-raises.
-    // 電池の警告/危険ラッチを分離: 共有ラッチだと 3.4V 警告発報後に 3.0V 危険へ
-    // エスカレーションできなかった。電圧回復（ヒステリシス付き）で両方クリアし、
-    // 後の電圧低下で再発報できるようにする。
-    bool batt_warning_     = false;   // 3.4V warning latched / 低電圧警告ラッチ
-    bool batt_emergency_   = false;   // 3.0V emergency latched / 危険電圧ラッチ
+    // Battery WARNING / EMERGENCY timing (re-raised while the voltage stays low, see battery_alert_policy.hpp).
+    // 電池の WARNING / EMERGENCY のタイミング（電圧が低い間は再発報する。battery_alert_policy.hpp 参照）。
+    BatteryAlertPolicy battery_policy_;
     uint8_t comm_reraise_count_ = 0;  // re-raise divider while comm stays lost / 喪失継続中の再発報分周
-    uint8_t batt_reraise_count_ = 0;  // re-raise divider for the in-flight low-battery warble / 低電圧警告の再発報分周
 };
 
 /// IMU-rate anomaly detector: impact (high-G) and gyro-anomaly (tumble) checks,

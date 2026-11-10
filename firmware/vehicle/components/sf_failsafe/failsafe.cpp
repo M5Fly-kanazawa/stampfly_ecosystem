@@ -273,46 +273,21 @@ void Failsafe::checkBattery()
         return;
     }
 
-    // Recovery hysteresis: clear both latches only when the voltage rises clearly
-    // above the warning threshold, so load-transient sag does not chatter alerts.
-    // 回復ヒステリシス: 警告閾値を明確に上回ったときだけ両ラッチをクリアし、負荷過渡の
-    // 電圧降下でアラートがばたつかないようにする。
-    constexpr float kRecoveryHysteresisV = 0.1f;
-
-    if (power.voltage < config_.critical_battery_v) {
-        // Critical voltage — emergency. Independent latch: escalates even after the
-        // warning already fired (the old shared latch swallowed the escalation).
-        // 危険電圧 — 緊急。独立ラッチ: 警告発報済みでもエスカレーションする
-        // （旧共有ラッチはエスカレーションを破棄していた）。
-        if (!batt_emergency_) {
-            batt_emergency_ = true;
-            batt_warning_   = true;
+    // The decision (when to raise the WARNING and the EMERGENCY, the re-raise cadence, the
+    // spacing against a chattering voltage) is BatteryAlertPolicy's; this function publishes it.
+    // 判断（WARNING・EMERGENCY を出すタイミング、再発報の周期、ばたつく電圧に対する間隔）は
+    // BatteryAlertPolicy の役割で、この関数はその結果を発行する。
+    switch (battery_policy_.update(power.voltage, config_.low_battery_v, config_.critical_battery_v)) {
+        case BatteryAlertAction::Emergency:
             raiseAlert(AlertType::LOW_BATTERY, AlertSeverity::EMERGENCY);
             ESP_LOGE(TAG, "Critical battery: %.2fV", power.voltage);
-        }
-    } else if (power.voltage < config_.low_battery_v) {
-        // Low voltage — warning. RE-RAISE periodically while latched, mirroring the
-        // COMM_LOST divider above and the OLD firmware's PowerTask (which re-warbled
-        // lowBatteryWarning() every ~10 s in flight). vehicle funnels every tone
-        // through one notify_command consumer, so a SINGLE in-flight beep is missed
-        // over motor noise — the warble must REPEAT to be heard while armed.
-        // 低電圧 — 警告。ラッチ中は周期的に再発報する（上の COMM_LOST 分周・旧 PowerTask の
-        // 10秒ごと再生に倣う）。新ファームは全音を単一の notify_command 消費に集約するため、
-        // 飛行中の単発はモータ騒音で埋もれる — armed 中に聞こえるよう警告を反復する。
-        constexpr uint8_t kBattReraiseEveryNUpdates = 50;  // ~5 s at the 10 Hz failsafe rate
-        if (!batt_warning_) {
-            batt_warning_ = true;
+            break;
+        case BatteryAlertAction::Warning:
             raiseAlert(AlertType::LOW_BATTERY, AlertSeverity::WARNING);
-            batt_reraise_count_ = 0;
             ESP_LOGW(TAG, "Low battery: %.2fV", power.voltage);
-        } else if (++batt_reraise_count_ >= kBattReraiseEveryNUpdates) {
-            raiseAlert(AlertType::LOW_BATTERY, AlertSeverity::WARNING);
-            batt_reraise_count_ = 0;
-        }
-    } else if (power.voltage > config_.low_battery_v + kRecoveryHysteresisV) {
-        batt_warning_       = false;
-        batt_emergency_     = false;
-        batt_reraise_count_ = 0;
+            break;
+        case BatteryAlertAction::None:
+            break;
     }
 }
 

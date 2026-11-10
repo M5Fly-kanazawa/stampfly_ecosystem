@@ -1,0 +1,24 @@
+# api_sysid_emergency.scn — `emergency` is served while a `sysid` excitation is being waited for
+#                           `sysid` の励振を待っている間も `emergency` に応える
+#
+# `sysid roll chirp 25 8` waits for the 8 s excitation (plus 1 s). The wait is the abortable one every other command uses: an
+# `emergency` 1.5 s into the excitation cuts the motors at once, the `sysid` answers "error interrupted by emergency", and the line
+# parked behind it (`height?`) is cancelled, not replayed.
+#
+# `sysid roll chirp 25 8` は 8 s の励振（と 1 s）を待つ。待機は他のコマンドと同じ打ち切れるもの: 励振の 1.5 s 後の
+# `emergency` は直ちにモータを止め、`sysid` は "error interrupted by emergency" を返し、その後ろに置かれた行（`height?`）は
+# 再生されず取り消される。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_sysid_emergency.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> hover
+   +    rc         2048  2048   2048    2048  0     10000     50      # D: the takeoff finishes, hover (to t=16)
+   +    api        "sysid roll chirp 25 8"                            # E: t=16 s — an 8 s excitation, waited for
+   +    rc         2048  2048   2048    2048  0     500       50      # F: (to t=16.5)
+   +    api        "height?"                                          # G: parked during the wait
+   +    rc         2048  2048   2048    2048  0     1000      50      # H: the excitation runs (to t=17.5)
+   +    api        "emergency"                                        # I: t=17.5 s — must be served at once
+   +    rc         2048  2048   2048    2048  0     4000      50      # J: motors stay off (to t=21.5)

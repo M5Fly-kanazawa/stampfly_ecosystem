@@ -1,0 +1,27 @@
+# api_move_flight_end.scn — a move that waits ends when the flight ends, and the lines parked behind it are dropped
+#                           待機中の移動は飛行が終わると終わり、その後ろに置かれた行は捨てられる
+#
+# `forward 150` (0.3 m/s, about 5 s) waits for the craft to arrive; a `takeoff` and a `height?` that arrive meanwhile are parked.
+# The pilot's DISARM press (ALT_HOLD / POS_HOLD in flight = auto-landing) ends the flight 1 s into the move. The wait must end at once
+# ("error flight ended") instead of running to its timeout, and the parked lines must be cancelled ("error cancelled: flight ended"):
+# replayed, the parked `takeoff` would ARM the craft again right after the landing.
+#
+# `forward 150`（0.3 m/s、約 5 s）が機体の到達を待つ。その間に届いた `takeoff` と `height?` は後回しにされる。
+# 移動の 1 s 後のパイロットの DISARM 押下（飛行中の ALT_HOLD / POS_HOLD = 自動着陸）で飛行が終わる。待機はタイムアウトまで
+# 続かず直ちに終わり（"error flight ended"）、後回しの行は取り消される（"error cancelled: flight ended"）: 再生されると、
+# 後回しの `takeoff` が着陸の直後にまた ARM してしまう。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_move_flight_end.scn --target vehicle --duration 40000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> hover
+   +    rc         2048  2048   2048    2048  0     10000     50      # D: the takeoff finishes, hover (to t=16)
+   +    api        "forward 150"                                      # E: t=16 s — the move waits
+   +    rc         2048  2048   2048    2048  0     500       50      # F: (to t=16.5)
+   +    api        "takeoff"                                          # G: parked during the wait
+   +    api        "height?"                                          # H: parked during the wait
+   +    rc         2048  2048   2048    2048  0     500       50      # I: the move runs (to t=17)
+   +    rc         2048  2048   2048    2048  1     200       50      # J: t=17 s — the pilot's ARM/DISARM press: auto-landing
+   +    rc         2048  2048   2048    2048  0     15000     50      # K: landing and rest (to t=32.2)

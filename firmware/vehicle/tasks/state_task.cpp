@@ -894,13 +894,9 @@ void StateTask(void* pvParameters)
                 // 経路でトリガされる — 下の離陸シーケンスが ARMED_GROUND + mode>=ALT_HOLD が
                 // スプールドウェルを経た時点で notifyTakeoff() を出す。ここで直接 notifyTakeoff()
                 // を呼ばず統一することで、API と RC の離陸が1つのトリガ・1つのドウェルを共有する。
-                const auto want = static_cast<sf::FlightMode>(api_cmd.mode);
-                if (g_state_manager.getMode() != want) {
-                    g_state_manager.requestModeChange(want);
-                }
-                if (g_state_manager.getState() == sf::FlightState::IDLE_GROUND) {
-                    g_state_manager.requestArm();
-                }
+                // A refused ARM puts the previous mode back (requestArmForTakeoff).
+                // 拒否された ARM は以前のモードに戻す（requestArmForTakeoff）。
+                g_state_manager.requestArmForTakeoff(static_cast<sf::FlightMode>(api_cmd.mode));
                 break;
             }
             case sf::ApiCmd::Land:

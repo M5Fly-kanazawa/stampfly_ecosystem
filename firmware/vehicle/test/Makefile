@@ -15,6 +15,8 @@ CXXFLAGS = -std=c++17 -D_USE_MATH_DEFINES -Wall -Wextra -O2 \
     -I../components/sf_estimator/include \
     -I../components/sf_controller/include \
     -I../components/sf_state/include \
+    -I../components/sf_failsafe/include \
+    -I../components/sf_command/include \
     -I../components/sf_takeoff_landing/include \
     -I../components/sf_telemetry/include
 
@@ -108,6 +110,22 @@ TARGET_LOG_RING = test_log_ring
 SRCS_LOOP_TIMING = test_loop_timing.cpp
 TARGET_LOOP_TIMING = test_loop_timing
 
+# Low-battery alert timing (sf::BatteryAlertPolicy, battery_alert_policy.hpp): the EMERGENCY on entry into the
+# critical region, its re-raise cadence, re-entry after a recovery to the warning band, the bound on a chattering
+# voltage, the WARNING latch. Header-only logic — own binary, no extra sources.
+# 低電圧アラートのタイミング（sf::BatteryAlertPolicy、battery_alert_policy.hpp）: 危険領域への突入時の EMERGENCY・
+# 再発報の周期・警告帯へ回復した後の再突入・ばたつく電圧の頻度の上限・WARNING のラッチ。
+# ヘッダのみのロジック — 独自バイナリで追加ソース不要。
+SRCS_BATTERY_ALERT_POLICY = test_battery_alert_policy.cpp
+TARGET_BATTERY_ALERT_POLICY = test_battery_alert_policy
+
+# API argument checks (sf::api_arguments: finite numbers, `cw` / `ccw` range, `sysid` range) and the angle wrap
+# sf::math::wrapAngleRad that terminates for any finite input. Header-only logic — own binary, no extra sources.
+# API の引数検査（sf::api_arguments: 有限の数・`cw` / `ccw` の範囲・`sysid` の範囲）と、有限な入力ならどれでも
+# 終わる角度の折り返し sf::math::wrapAngleRad。ヘッダのみのロジック — 独自バイナリで追加ソース不要。
+SRCS_API_ARGUMENTS = test_api_arguments.cpp
+TARGET_API_ARGUMENTS = test_api_arguments
+
 # NOTE: test_state_manager is temporarily disabled. It compiled the firmware
 # state_manager/failsafe through the now-removed simulator/sils/compat shim and
 # sils_topics.cpp (deleted in the SILS clean-slate, 2026-05-31). It will be
@@ -118,7 +136,7 @@ TARGET_LOOP_TIMING = test_loop_timing
 
 .PHONY: all clean test
 
-all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING)
+all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
@@ -153,6 +171,12 @@ $(TARGET_LOG_RING): $(SRCS_LOG_RING)
 $(TARGET_LOOP_TIMING): $(SRCS_LOOP_TIMING)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+$(TARGET_BATTERY_ALERT_POLICY): $(SRCS_BATTERY_ALERT_POLICY)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
+$(TARGET_API_ARGUMENTS): $(SRCS_API_ARGUMENTS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
 test: all
 	./$(TARGET)
 	./$(TARGET_ESKF_FLIP)
@@ -165,6 +189,8 @@ test: all
 	./$(TARGET_TAKEOFF_POLICY)
 	./$(TARGET_LOG_RING)
 	./$(TARGET_LOOP_TIMING)
+	./$(TARGET_BATTERY_ALERT_POLICY)
+	./$(TARGET_API_ARGUMENTS)
 
 clean:
-	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) test_state_manager
+	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) test_state_manager

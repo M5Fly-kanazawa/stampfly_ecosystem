@@ -1,0 +1,39 @@
+# api_invalid_numbers.scn — numbers that are not finite or out of range never reach the guidance target
+#                           有限でない数・範囲外の数は誘導目標に届かない
+#
+# While the craft hovers (API takeoff), lines whose numbers are NaN, +-inf (`1e39` overflows a float), out of the Tello range or
+# far too long are sent. Each must be answered "error out of range" at once (`rc`, fire-and-forget, is ignored without a reply),
+# the craft must not move, and the API must stay alive: a following `forward 50` is a normal move. `cw 9999999999` is the case
+# where subtracting 2*pi from a float whose spacing is larger than that never ends, and `sysid roll chirp 25 600` is a 10-minute wait
+# in which `emergency` could not be served.
+#
+# 機体がホバー（API 離陸）している間に、NaN・+-inf（`1e39` は float ではあふれる）・Tello の範囲外・長すぎる数を含む行を送る。
+# どれにも直ちに "error out of range" を返し（撃ちっぱなしの `rc` は応答なしで無視）、機体は動かず、API は生きたままで
+# いなければならない: 続く `forward 50` は普通の移動になる。`cw 9999999999` は、刻みが 2*pi より大きい float から 2*pi を引き続けても
+# 終わらない場合で、`sysid roll chirp 25 600` は 10 分間 `emergency` に応えられなくなる待機になる場合。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_invalid_numbers.scn --target vehicle --duration 32000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> hover
+   +    rc         2048  2048   2048    2048  0     10000     50      # D: the takeoff finishes, hover (to t=16)
+   +    api        "forward nan"                                      # E: t=16 s — each line below is refused at once
+   +    api        "forward 1e39"
+   +    api        "go inf 0 0 50"
+   +    api        "rc nan 0 0 0"
+   +    api        "speed nan"
+   +    api        "cw 1e39"
+   +    api        "cw 9999999999"
+   +    api        "ccw 0"
+   +    rc         2048  2048   2048    2048  0     1000      50      # F: the craft holds (to t=17)
+   +    api        "sysid roll chirp 25 600"                          # G: t=17 s
+   +    api        "sysid roll chirp nan 4"
+   +    api        "autotune roll nan"
+   +    api        "ccw 361"
+   +    rc         2048  2048   2048    2048  0     1000      50      # H: the craft holds (to t=18)
+   +    api        "forward 50"                                       # I: t=18 s — the API is alive: a normal move
+   +    rc         2048  2048   2048    2048  0     7000      50      # J: the move finishes, hover (to t=25)
+   +    api        "land"                                             # K: land
+   +    rc         2048  2048   2048    2048  0     6000      50      # L: touchdown (to t=31)
