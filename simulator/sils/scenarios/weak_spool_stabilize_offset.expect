@@ -1,5 +1,5 @@
-# weak_spool_stabilize_offset.expect — STABILIZE, a TAKEOFF the floor holds becomes FLYING on the floor, with the warning and no forced landing (8th pass, D2)
-# 床が支える TAKEOFF は床の上で FLYING になる。警告は出るが強制着陸はしない（8 回目、D2）
+# weak_spool_stabilize_offset.expect — STABILIZE, a TAKEOFF the floor holds becomes FLYING on the floor, with the warning and no forced landing
+# 床が支える TAKEOFF は床の上で FLYING になる。警告は出るが強制着陸はしない
 #
 # Variant of weak_spool_stabilize with an accelerometer offset: the same expectations.
 # weak_spool_stabilize に加速度計のオフセットを足した変種: 期待値は同じ。

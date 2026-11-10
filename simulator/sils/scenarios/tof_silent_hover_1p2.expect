@@ -23,15 +23,13 @@ order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silen
 # 終わる。2026-11-09 より前は 1.23 m）。出力停止の後は上昇しない（alt_max 1.10 m）。
 metric alt_mean > 1.0 in 19.6 20.5
 metric alt_max < 1.25 in 20.6 22.6
-# Touchdown speed from 1.1 m: measured 0.43 m/s (truth; 0.49 m/s from 1.15 m before 2026-11-09; the open-loop ramp of
-# the first fix: 1.30 m/s, 1.9 s). The closed-loop landing with a working ToF touches down at 0.3 m/s; the
+# Touchdown speed from 1.1 m: measured 0.43 m/s (truth). The closed-loop landing with a working ToF touches down at 0.3 m/s; the
 # target of the velocity loop is 0.4 m/s (sf::limits::kBlindDescentRateMps). Bound 0.6 m/s.
-# 1.1 m からの接地速度: 実測 0.43 m/s（真値。2026-11-09 より前は 1.15 m から 0.49 m/s。最初の修正の開ループのランプ: 1.30 m/s、
-# 1.9 s）。ToF が生きている閉ループの着陸は 0.3 m/s。速度ループの目標は 0.4 m/s
+# 1.1 m からの接地速度: 実測 0.43 m/s（真値）。ToF が動作している閉ループの着陸は 0.3 m/s。速度ループの目標は 0.4 m/s
 # （sf::limits::kBlindDescentRateMps）。上限 0.6 m/s。
-# 2026-11-09 (5th review): bound 0.6 -> 1.05 m/s (measured 0.43 -> 0.84 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
+# 2026-11-09: bound 0.6 -> 1.05 m/s (measured 0.43 -> 0.84 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
 # (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g) instead of by the PI.
-# 2026-11-09（5 回目の見直し）: 上限 0.6 → 1.05 m/s（実測 0.43 → 0.84 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
+# 2026-11-09: 上限 0.6 → 1.05 m/s（実測 0.43 → 0.84 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
 # 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
 metric descent_speed_max < 1.05 in 20.5 25.1
 # On the floor and stopped after the blind descent (truth 0.021 m resting).

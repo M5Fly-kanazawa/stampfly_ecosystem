@@ -1,0 +1,20 @@
+# api_land_manual_armed_ground.scn — `land` in ARMED_GROUND of a MANUAL mode (STABILIZE) is refused: the craft is not known to be on the floor
+#                                    手動モード（STABILIZE）の ARMED_GROUND での `land` は拒否される: 機体が床の上とは限らない
+#
+# In an altitude mode (ALT_HOLD / POS_HOLD) the spool of ARMED_GROUND is followed by an auto-takeoff and a `land` there is the immediate DISARM (api_land_in_armed_ground). In a manual mode (ACRO / STABILIZE) the pilot holds the
+# throttle, and the craft can lift off from ARMED_GROUND (a throttle of 0.499 is enough), so the craft is not known to be on the floor: the `land` is refused as it was before ("error not flying"), the craft stays armed.
+# Spec under test (detailed_design.md §3.1, ARMED_GROUND -> IDLE_GROUND row; StateManager::notifyLandingRequest, ApiTask::cmdLand).
+#
+# 高度モード（ALT_HOLD / POS_HOLD）の ARMED_GROUND はスプールの後に自動離陸が続き、そこでの `land` は即時 DISARM（api_land_in_armed_ground）。手動モード（ACRO / STABILIZE）ではスロットルをパイロットが握り、
+# ARMED_GROUND からでも浮ける（スロットル 0.499 で足りる）ので、機体は床の上とは限らない: `land` は従来どおり拒否され（"error not flying"）、機体は ARM のまま。
+# 検証する仕様（detailed_design.md §3.1 の ARMED_GROUND → IDLE_GROUND の行。StateManager::notifyLandingRequest、ApiTask::cmdLand）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_land_manual_armed_ground.scn --target vehicle --duration 14000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    tof_deadzone 0
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    rc         2048  2048   2048    2048  1     1000      50      # C: ARM by the switch in STABILIZE (the default mode): ARMED_GROUND, throttle at the bottom (to t=7)
+   +    api        "land"                                             # D: t=7 s — land in the ARMED_GROUND of a manual mode
+   +    rc         2048  2048   2048    2048  1     2000      50      # E: still armed (to t=9)

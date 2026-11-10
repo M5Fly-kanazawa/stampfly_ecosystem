@@ -1,7 +1,7 @@
 # tof_silent_flip_end.scn — the ToF goes silent DURING a flip: the response is applied the moment the flip ends
 #                           宙返りの「最中」に ToF が出力停止: 宙返りが終わった瞬間に応答を適用する
 #
-# 2nd independent review, D6. The TOF_SILENT alerts raised while the state is FLIP are ignored (the maneuver is not
+# The TOF_SILENT alerts raised while the state is FLIP are ignored (the maneuver is not
 # interrupted), and the failsafe re-raises the alert only about once a second, so after FLIP -> FLYING the craft
 # flew on in POS_HOLD on the estimate for up to ~1 s. Spec under test: StateManager::notifyFlipComplete() looks at
 # the standing level at once and lands from FLYING / POS_HOLD in the same step (log "ToF silence episode during the
@@ -9,7 +9,7 @@
 # silence. The flip itself is not interrupted (flip_pitch_deg about -350 deg).
 # Requires the flip enabled: --param flip.enable=1.
 #
-# 2 回目の独立レビューの D6。状態が FLIP の間に発報された TOF_SILENT アラートは無視され（マニューバは中断しない）、
+# 状態が FLIP の間に発報された TOF_SILENT アラートは無視され（マニューバは中断しない）、
 # Failsafe はアラートを約 1 秒に 1 回しか再発報しないので、FLIP -> FLYING の後、機体は推定だけで POS_HOLD のまま
 # 最大約 1 s 飛んだ。検証する仕様: StateManager::notifyFlipComplete() が継続状態（レベル）をその場で見て、同じ段で
 # FLYING / POS_HOLD から着陸させる（ログ "ToF silence episode during the maneuver: decided now that FLIP is

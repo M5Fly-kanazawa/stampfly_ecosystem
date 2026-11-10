@@ -4,7 +4,7 @@
 # A manual flight (STABILIZE: the throttle stick is the thrust, no altitude loop) that goes on for 20 s with the downward ToF silent (warning only,
 # `NO forced landing, fly on`), then the command link is lost: after the comm-loss hover grace the craft lands. The velocity of the descent is an
 # accelerometer integral that was last reset when the ToF stopped, 24 s earlier: it is far beyond kVerticalVelocityTrustS (2 s), so the PI of the
-# descent must NOT be used from the first cycle (the previous build started its loop on an estimate drifted by tens of seconds) and the thrust
+# descent must NOT be used from the first cycle and the thrust
 # is the constant ceiling kNoTofThrustCapRatio x the support thrust (calibrated over the 20 s of near-hover samples). Spec under test:
 #  1. FLYING (STABILIZE) goes on after the silence (warning only), no LANDING until the comm-loss.
 #  2. The comm-loss landing starts the descent without a ToF with a CALIBRATED support thrust and the velocity estimate NOT trusted (`trusted -`).
@@ -15,9 +15,9 @@
 # 手動飛行（STABILIZE: スロットルスティックが推力で、高度ループなし）を、下向き ToF が出力停止したまま 20 s 続け（警告のみ、
 # `NO forced landing, fly on`）、その後に通信が途絶する: 通信断のホバーの猶予の後、機体は着陸する。降下の速度は加速度の積分で、
 # 最後のリセットは 24 s 前の ToF 停止時なので、kVerticalVelocityTrustS（2 s）をはるかに超える: 降下の PI は最初の周期から使っては
-# ならず（前のビルドは数十秒ドリフトした推定の上で速度ループを始めた）、推力は kNoTofThrustCapRatio × 支持推力（20 s のホバー近傍の
+# ならず、推力は kNoTofThrustCapRatio × 支持推力（20 s のホバー近傍の
 # サンプルで較正済み）の一定の上限になる。検証する仕様:
-#  1. 沈黙の後も FLYING（STABILIZE）が続く（警告のみ）。通信断まで LANDING にならない。
+#  1. 出力停止の後も FLYING（STABILIZE）が続く（警告のみ）。通信断まで LANDING にならない。
 #  2. 通信断の着陸は、「較正済み」の支持推力で、速度推定を「信用しない」（`trusted -`）まま ToF なしの降下を始める。
 #  3. LANDING が始まった後、機体は再上昇せず、着地し、接地の 3 G の衝撃は非常の DISARM でなく LANDING を終わらせる。
 # スロットルの列は開ループ（STABILIZE に高度ループは無い）: ノイズ n0 の SILS で、機体が 25 s の間 0.6〜0.75 m に留まるように手で調整した

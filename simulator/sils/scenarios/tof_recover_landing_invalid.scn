@@ -1,7 +1,7 @@
 # tof_recover_landing_invalid.scn — samples come back DURING the blind landing, but all of them are invalid
 #                                   ToF なしの着陸の「最中」にサンプルが戻るが、全部が無効
 #
-# 4th review, C5. The ToF stops while hovering at 0.5 m (14.0 s) -> LANDING by silence, blind descent. 0.3 s into that
+# The ToF stops while hovering at 0.5 m (14.0 s) -> LANDING by silence, blind descent. 0.3 s into that
 # LANDING (the craft is still ~0.4 m up) the sensor's output returns, but every sample is INVALID (`tof_invalid`: a
 # floor material it cannot range). The tracker used to count an invalid sample as AGREEMENT whenever the craft was not
 # flying (LANDING included), so after ~1 s the estimator was declared "re-acquired" with nothing but invalid samples,
@@ -11,7 +11,7 @@
 #     invalid samples while flying") and the episode lasts until the craft is down.
 #  2. The blind landing goes on to the touchdown (IDLE_GROUND) at a bounded speed; it is not given up in the air.
 #
-# 4 回目の見直しの C5。0.5 m のホバー中（14.0 s）に ToF が停止 → 出力停止による LANDING、ToF なしの降下。その
+# 0.5 m のホバー中（14.0 s）に ToF が停止 → 出力停止による LANDING、ToF なしの降下。その
 # LANDING の 0.3 s 後（機体はまだ約 0.4 m 上）にセンサの出力が戻るが、全サンプルが「無効」（`tof_invalid`:
 # 測距できない床材）。追跡器は、機体が飛行中でなければ（LANDING を含む）無効サンプルを「一致」と数えていたので、
 # 約 1 s 後に無効サンプルだけで推定器が「取り込み直し済み」と宣言され、出力停止のエピソードが終わり、

@@ -293,7 +293,7 @@ public:
     /// 一時停止する。宙返りの終わり（holdAttitudeCorrection(false)）と ToF 出力停止の終わり
     /// （IEstimator::reacquireAltitude）が共有する「唯一の」仕組み。
     ///
-    /// @design detailed_design.md §3.1 注 12 — ToF re-acquisition after a silence [OK]
+    /// @design detailed_design.md §3 注12 — ToF re-acquisition after a silence [OK]
     void reacquireVertical();
 
 private:

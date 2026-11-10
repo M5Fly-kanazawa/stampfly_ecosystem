@@ -26,19 +26,17 @@ metric alt_max < 0.60 in 13.0 14.6
 # closed-loop landing touches down at 0.3 m/s. Bound 0.6 m/s.
 # ToF なしの降下の接地速度（真値、実測 0.49 m/s。開ループのランプでは 0.69 m/s）。閉ループの着陸は 0.3 m/s。
 # 上限 0.6 m/s。
-# 2026-11-09 (5th review): bound 0.6 -> 0.8 m/s (measured 0.43 -> 0.60 m/s; the 0.6 m/s bound would pass by 2 mm). The thrust of the descent without a ToF is now at most 0.95 x the support thrust,
+# 2026-11-09: bound 0.6 -> 0.8 m/s (measured 0.43 -> 0.60 m/s; the 0.6 m/s bound would pass by 2 mm). The thrust of the descent without a ToF is now at most 0.95 x the support thrust,
 # so once the velocity target is reached the descent speed is set by that ceiling (0.05 g) instead of by the PI.
-# 2026-11-09（5 回目の見直し）: 上限 0.6 → 0.8 m/s（実測 0.43 → 0.60 m/s。0.6 m/s のままでは 2 mm の差で通るだけ）。ToF なしの降下の推力は高々 支持推力の 0.95 倍になり、
+# 2026-11-09: 上限 0.6 → 0.8 m/s（実測 0.43 → 0.60 m/s。0.6 m/s のままでは 2 mm の差で通るだけ）。ToF なしの降下の推力は高々 支持推力の 0.95 倍になり、
 # 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
 metric descent_speed_max < 0.8 in 14.0 18.0
 # On the floor after the blind descent (resting truth 0.021 m).
 # ToF なしの降下の後は床の上（真値 0.021 m で静止）。
 metric alt_max < 0.05 in 17.0 21.0
 # The second takeoff (ToF still invalid) is cut 0.15 s after the estimated rise reaches 5 cm: the craft rises 0.20 m
-# (0.39 m before 2026-11-09 with the 0.5 s persistence, which would reach 0.99-1.24 m with noise n2; the first fix, counting
-# from the TAKEOFF entry, 0.16 m, but it cut a slow takeoff short), it does not climb away (the 2026-11 accident climbed to
+# (with the 0.5 s persistence of FLYING it would be 0.39 m, and 0.99-1.24 m with noise n2), it does not climb away (the 2026-11 accident climbed to
 # the ceiling). Bound 0.30 m.
-# 2 回目の離陸（ToF は無効のまま）は、上昇量の推定が 5 cm に達してから 0.15 s で打ち切られる: 機体は 0.20 m 上がる
-# （継続 0.5 s だと 0.39 m で、ノイズ n2 では 0.99〜1.24 m に達する。TAKEOFF 突入から数えた最初の修正は 0.16 m だが、
-# 離陸の遅い機体を打ち切った）。上昇し続けない（2026-11 の事故は天井まで上昇した）。上限 0.30 m。
+# 二つ目の離陸（ToF は無効のまま）は、上昇量の推定が 5 cm に達してから 0.15 s で打ち切られる: 機体は 0.20 m 上がる
+# （FLYING と同じ継続 0.5 s だと 0.39 m で、ノイズ n2 では 0.99〜1.24 m に達する）。上昇し続けない（2026-11 の事故は天井まで上昇した）。上限 0.30 m。
 metric alt_max < 0.30 in 21.0 28.0

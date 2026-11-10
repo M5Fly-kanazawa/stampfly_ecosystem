@@ -1,0 +1,24 @@
+# api_land_tof_never_valid.expect — `land` during the TAKEOFF with a ToF that never read a valid height: parked, the ToF rule ends the takeoff by a LANDING, the descent without a ToF, the motors run until the floor
+# 一度も有効な高さを読んでいない ToF での TAKEOFF 中の `land`: 後回し、ToF の規則が離陸を LANDING で終わらせ、ToF なしの降下で、モータは床まで回る
+#
+exit 0
+log_contains any "cmd: takeoff"
+log_contains any "Downward ToF unusable"
+log_contains any "Transition: TAKEOFF → LANDING"
+log_contains any "Blind landing: ToF silent"
+log_contains any "reply: error takeoff aborted"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+# The `land` is parked, not run at once: no LANDING from the request, no cut in the air.
+# `land` は即実行でなく後回し: 要求による LANDING は無く、空中での停止も無い。
+log_absent any "cmd: land (during a blocking command"
+log_absent any "Landing requested"
+log_absent any "Transition: TAKEOFF → FLYING"
+order "Transition: TAKEOFF → LANDING" "Blind landing: ToF silent"
+order "Blind landing: ToF silent" "Transition: LANDING → IDLE_GROUND"
+# Speed at the floor (truth, altitude below 3 cm): 0.90 m/s measured (the same craft without the `land` line gives the same).
+# 床での速度（真値、高さ 3 cm 未満）: 実測 0.90 m/s（`land` の行が無い同じ機体でも同じ）。
+metric descent_speed_max < 1.5 in 6.5 16.0
+# On the floor with the motors stopped at the end.
+# 最後は床の上でモータは止まっている。
+metric alt_max < 0.05 in 12.0 16.0
+metric duty_max < 0.01 in 12.0 16.0

@@ -30,8 +30,8 @@
 # Run: sf sils scenario simulator/sils/scenarios/tof_silent_est_high.scn --target vehicle --duration 28000000
 #
 #  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
-   0    param      hover.thrust.learn 0                                                # P1: stop the hover-thrust learning, so the wrong estimate stays wrong
-   +    param      hover.thrust_corr 1.12                                              # P2: estimate 1.12 x mg = 0.406 N against the true hover 0.34 N (+19 %; the loop settles on 0.34)
+   0    param      hover.thrust.learn 0                                                # stop the hover-thrust learning, so the wrong estimate stays wrong
+   +    param      hover.thrust_corr 1.12                                              # estimate 1.12 x mg = 0.406 N against the true hover 0.34 N (+19 %; the loop settles on 0.34)
    +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
    +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
    +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (7.5 s)

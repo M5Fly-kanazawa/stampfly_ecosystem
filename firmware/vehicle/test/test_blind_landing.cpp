@@ -29,6 +29,7 @@
  *  5. Support thrust (SupportThrustFilter): the window opens when the craft leaves the floor, near-hover samples only,
  *     accelerometer offset error, bounds, the lowered estimate and the early estimate without a window.
  *  6. Upward specific force from the attitude and the body reading.
+ *  7. The pure pieces of the closed-loop landing (ToF alive): the base thrust bound and the rise brake.
  * Own TEST/ASSERT framework and main(), same pattern as test_tof_silence.cpp.
  *
  * ESP-IDF・FreeRTOS 不要（ヘッダのみのロジック）:
@@ -45,6 +46,7 @@
  *  5. 支持推力（SupportThrustFilter）: 機体が床を離れたときに窓が開くこと、ホバー近傍のサンプルだけ、加速度計のオフセット
  *     誤差、制限、窓が無いときの低くした見積もりと早い推定。
  *  6. 姿勢と機体座標の測定値から上向きの加速度計の測定値。
+ *  7. 閉ループ着陸（ToF 生存）の純関数: 基準推力の上限、上昇ブレーキ。
  * test_tof_silence.cpp と同じ自前の TEST/ASSERT フレームワークと main()。
  *
  * @design detailed_design.md §3.1 — ToF silent: blind descent by vertical-velocity loop [OK]
@@ -374,7 +376,7 @@ TEST(estimator_value_is_limited)
     sf::VerticalVelocityEstimator e;
     e.reset();
     veRun(e, 0.5f, kG, true, false, 0.0f);
-    veRun(e, 20.0f, kG + 50.0f, false, false, 0.0f);   // a runaway reading / 暴走した読み
+    veRun(e, 20.0f, kG + 50.0f, false, false, 0.0f);   // a runaway reading / 異常に大きい読み
     ASSERT_NEAR(e.velocityUp(), lim::kVerticalVelocityLimitMps, 1e-4f);
 }
 
@@ -678,7 +680,7 @@ TEST(detector_a_bounce_restarts_the_stillness)
     d.init(sf::BlindTouchdownConfig{});
     tdImpact(d);
     tdRun(d, lim::kBlindTouchdownStillS + 0.3f - 0.1f, kG, 0.4f, 0.0f);
-    tdRun(d, 0.2f, 0.3f * kG, 0.4f, 0.8f);             // the craft bounces up: moving and accelerating / 跳ね上がる
+    tdRun(d, 0.2f, 0.3f * kG, 0.4f, 0.8f);             // the craft bounces up: moving and accelerating / 急に上がる
     ASSERT_TRUE(!d.touchdown());
     ASSERT_TRUE(d.stillSeconds() == 0.0f);
     tdRun(d, lim::kBlindTouchdownStillS + 0.4f, kG, 0.4f, 0.0f);
@@ -844,7 +846,7 @@ TEST(means_of_thrust_and_reading_advance_only_in_the_same_cycles)
     // 40 cycles (0.1 s) of an unusable reading (free fall / an estimator without specific force) with a very different
     // thrust change neither mean nor the averaged time. The quotient therefore stays the one of the usable cycles.
     // 平均の推力と平均の読みは、読みが使える周期だけ、両方ともか両方とも無しで更新する: 読みが使えない 40 周期（0.1 s。
-    // 自由落下、または比力を出さない推定器）は、推力がまったく違っても、どちらの平均も平均した時間も変えない。
+    // 自由落下、または加速度計の測定値を出さない推定器）は、推力がまったく違っても、どちらの平均も平均した時間も変えない。
     // よって商は、使える周期のものであり続ける。
     sf::SupportThrustFilter f;
     f.reset();
@@ -904,9 +906,9 @@ TEST(support_without_a_window_is_the_lowered_estimate)
     sf::SupportThrustFilter none;
     none.reset();
     ASSERT_NEAR(sf::blindLandingStartThrust(none, hover_estimate), cap, 1e-6f);
-    // Left the floor, hover window still short: the early estimate is used AS IT IS, the lowered estimate does not cut it (6th pass: the cut made
+    // Left the floor, hover window still short: the early estimate is used AS IT IS, the lowered estimate does not cut it (the cut made
     // the ceiling 0.63-0.71 x the thrust that holds the craft in the real logs). It is bounded above by the same sanity bound as the calibrated value.
-    // 床を離れたがホバーの窓がまだ短い: 早い推定を「そのまま」使い、低くした見積もりでは切らない（6 回目: 切ると、実機ログで上限が機体を支える
+    // 床を離れたがホバーの窓がまだ短い: 早い推定を「そのまま」使い、低くした見積もりでは切らない（切ると、実機ログで上限が機体を支える
     // 推力の 0.63〜0.71 倍になった）。上は較正した値と同じ、異常値に備えた上限で抑える。
     sf::SupportThrustFilter young;
     young.reset();
@@ -958,14 +960,16 @@ TEST(a_thrust_ceiling_from_the_lowered_estimate_cannot_climb_unless_the_estimate
     ASSERT_TRUE(sf::blindThrustCeiling(sf::blindLandingStartThrust(none, high)) > kStart);
 }
 
-TEST(an_early_estimate_gives_a_ceiling_between_85_percent_and_the_weight)
+TEST(an_early_estimate_gives_a_ceiling_between_84_percent_and_the_weight)
 {
+    // The lower bound is 0.84 x the weight: the target was lowered from 0.85 as a decision, to make the re-take-off from the floor zero (kSupportClimbDerate 0.91, flight_limits.hpp).
+    // 下限は重さの 0.84 倍: 目標は、床からの再離陸を 0 にするための判断として 0.85 から下げた（kSupportClimbDerate 0.91、flight_limits.hpp）。
     // Before the calibration, the ceiling is 0.95 x kSupportClimbDerate x (the quotient thrust x g / reading). A climb whose delivered
-    // thrust is linear in the command (the real logs: quotient 0.98-1.03 x the weight) gives at least 0.85 x the weight; a climb whose delivered
+    // thrust is linear in the command (the real logs: quotient 0.98-1.03 x the weight) gives at least 0.84 x the weight; a climb whose delivered
     // thrust is concave (SILS: the reading only 1.1 g for 1.2 x the thrust, quotient 1.09 x the weight) stays below the weight. The hover estimate
     // (here 45 % too high) does not matter: the lowered estimate no longer cuts the early estimate.
     // 較正の前の上限は 0.95 × kSupportClimbDerate × （商 = 推力 × g ÷ 読み）。出る推力が指令に比例する上昇（実機ログ: 商は重さの 0.98〜1.03 倍）では
-    // 重さの 0.85 倍以上になり、出る推力が上に凸の上昇（SILS: 推力 1.2 倍で読みは 1.1 g だけ、商は重さの 1.09 倍）でも重さを下回る。
+    // 重さの 0.84 倍以上になり、出る推力が上に凸の上昇（SILS: 推力 1.2 倍で読みは 1.1 g だけ、商は重さの 1.09 倍）でも重さを下回る。
     // ホバー推力の見積もり（ここでは 45 % 高い）は関係しない: 低くした見積もりはもう早い推定を切らない。
     const float high_estimate = 1.45f * kStart;
     for (float quotient : {0.98f, 1.0f, 1.03f}) {
@@ -974,13 +978,13 @@ TEST(an_early_estimate_gives_a_ceiling_between_85_percent_and_the_weight)
         sfRun(linear, 0.4f, 1.2f * kStart * quotient, 1.2f * kG, 0.3f);   // reading 1.2 g for a thrust 1.2 x quotient x weight / 推力が重さの 1.2 × 商 倍のとき読みは 1.2 g
         ASSERT_TRUE(linear.leftFloor() && !linear.calibrated());
         const float ceiling = sf::blindThrustCeiling(sf::blindLandingStartThrust(linear, high_estimate));
-        ASSERT_TRUE(ceiling >= 0.85f * kStart && ceiling < kStart);
+        ASSERT_TRUE(ceiling >= 0.84f * kStart && ceiling < kStart);
     }
     sf::SupportThrustFilter concave;
     concave.reset();
     sfRun(concave, 0.4f, 1.2f * kStart, 1.1f * kG, 0.3f);
     const float concave_ceiling = sf::blindThrustCeiling(sf::blindLandingStartThrust(concave, high_estimate));
-    ASSERT_TRUE(concave_ceiling >= 0.85f * kStart && concave_ceiling < kStart);
+    ASSERT_TRUE(concave_ceiling >= 0.84f * kStart && concave_ceiling < kStart);
 }
 
 TEST(reading_limit_is_below_free_fall_and_hover)
@@ -1019,6 +1023,80 @@ TEST(upward_specific_force_inverted_and_zero)
     const float level[4] = {1.0f, 0.0f, 0.0f, 0.0f};
     const float zero[3] = {0.0f, 0.0f, 0.0f};
     ASSERT_TRUE(sf::upwardSpecificForce(level, zero) == 0.0f);     // an estimator without specific_force / 非対応の推定器
+}
+
+// ----------------------------------------------------------------------------
+// 7. Closed-loop landing (ToF alive): base thrust bound, rise brake
+//    閉ループ着陸（ToF 生存）: 基準推力の上限、上昇ブレーキ
+// ----------------------------------------------------------------------------
+
+TEST(landing_base_thrust_is_the_estimate_up_to_1_08_times_the_support_reference)
+{
+    // The bound is 1.08 x the support reference (kLandingBaseOverSupportMax); an estimate below it is not touched. The values are written out, not recomputed.
+    // 上限は支持推力の基準の 1.08 倍（kLandingBaseOverSupportMax）で、それ以下の見積もりには触れない。値は書き下したもので、同じ式の再計算ではない。
+    ASSERT_NEAR(lim::kLandingBaseOverSupportMax, 1.08f, 1e-6f);
+    ASSERT_NEAR(sf::landingBaseThrust(0.34f, 0.34f), 0.34f, 1e-6f);     // estimate = support: untouched / 見積もり = 支持推力: そのまま
+    ASSERT_NEAR(sf::landingBaseThrust(0.36f, 0.34f), 0.36f, 1e-6f);     // +5.9 %: inside the margin (bound 0.3672) / 余裕の内側（上限 0.3672）
+    ASSERT_NEAR(sf::landingBaseThrust(0.40f, 0.34f), 0.3672f, 1e-5f);   // +17.6 %: cut to 1.08 x 0.34 / 1.08 × 0.34 まで切る
+    ASSERT_NEAR(sf::landingBaseThrust(0.50f, 0.30f), 0.324f, 1e-5f);    // a far too high estimate against the lowered support reference / 低くした支持推力の基準に対して、はるかに高い見積もり
+    ASSERT_NEAR(sf::landingBaseThrust(0.30f, 0.34f), 0.30f, 1e-6f);     // an estimate below the support reference is not raised / 支持推力の基準より低い見積もりは上げない
+}
+
+TEST(rise_brake_passes_the_thrust_unless_the_craft_rises_and_falls_linearly_to_half)
+{
+    ASSERT_NEAR(lim::kLandingRiseBrakeFrac, 0.5f, 1e-6f);
+    ASSERT_NEAR(lim::kLandingRiseBrakeRampMps, 0.2f, 1e-6f);
+    const float support = 0.30f;
+    // Climb rate <= 0: any thrust passes (a descent, a hover, the ground where the vertical state is pinned at 0).
+    // 上昇率 0 以下: どの推力も通す（降下、ホバー、鉛直状態が 0 に固定された地上）。
+    for (float climb : {0.0f, -0.001f, -0.5f}) {
+        ASSERT_NEAR(sf::brakeRiseThrust(0.40f, climb, support), 0.40f, 1e-6f);
+    }
+    // Rising: the limit is (1 - 0.5 x climb / 0.2) x support, down to 0.5 x support from 0.2 m/s on (written out per cell).
+    // 上昇中: 上限は (1 − 0.5 × 上昇率 / 0.2) × 支持推力で、0.2 m/s 以上では 0.5 × 支持推力（セルごとに書き下す）。
+    ASSERT_NEAR(sf::brakeRiseThrust(0.40f, 0.02f, support), 0.285f, 1e-5f);   // fraction 0.95 / 割合 0.95
+    ASSERT_NEAR(sf::brakeRiseThrust(0.40f, 0.10f, support), 0.225f, 1e-5f);   // fraction 0.75 / 割合 0.75
+    ASSERT_NEAR(sf::brakeRiseThrust(0.40f, 0.20f, support), 0.150f, 1e-5f);   // fraction 0.5, the end of the ramp / 割合 0.5、ランプの終わり
+    ASSERT_NEAR(sf::brakeRiseThrust(0.40f, 0.60f, support), 0.150f, 1e-5f);   // and it stays there / それより上でも変わらない
+    // A thrust already below the limit is not raised: a hover-like thrust at a tiny climb rate (noise around 0) is only cut by the gentle start of the ramp.
+    // 上限より低い推力は上げない: ごく小さい上昇率（0 の周りの雑音）の、ホバー並みの推力は、ランプの緩い立ち上がりでしか切られない。
+    ASSERT_NEAR(sf::brakeRiseThrust(0.20f, 0.10f, support), 0.20f, 1e-6f);
+    ASSERT_NEAR(sf::brakeRiseThrust(0.29f, 0.002f, support), 0.29f, 1e-6f);   // limit 0.2985 / 上限 0.2985
+    ASSERT_NEAR(sf::brakeRiseThrust(0.40f, 0.002f, support), 0.2985f, 1e-5f);
+}
+
+TEST(rise_brake_is_continuous_in_the_climb_rate_and_never_raises_the_thrust)
+{
+    // For a thrust equal to the support reference (the limit is 1 x it at a climb rate of 0) there is no jump across the climb rate: the output changes by at most 0.5 x support x step / ramp per step,
+    // and never rises with the climb rate. (A thrust ABOVE the support reference passes at a climb rate <= 0 by design, so it steps down to the limit when the craft starts to rise.)
+    // 支持推力の基準に等しい推力（上昇率 0 で上限が 1 倍）では、上昇率をまたいで段差が無い: 出力の 1 歩での変化は高々 0.5 × 支持推力 × 歩幅 / ランプで、上昇率とともに増えない。
+    // （支持推力の基準「より高い」推力は、上昇率 0 以下では設計どおり通るので、機体が上がり始めると上限まで下がる。）
+    const float support = 0.30f;
+    float last = sf::brakeRiseThrust(support, 0.0f, support);
+    ASSERT_NEAR(last, support, 1e-6f);
+    for (int i = 1; i <= 100; ++i) {
+        const float climb = 0.005f * static_cast<float>(i);
+        const float out = sf::brakeRiseThrust(support, climb, support);
+        ASSERT_TRUE(out <= support + 1e-6f);
+        ASSERT_TRUE(last - out <= 0.5f * support * 0.005f / 0.2f + 1e-5f);   // at most 0.00375 N per 5 mm/s / 5 mm/s あたり高々 0.00375 N
+        ASSERT_TRUE(out <= last + 1e-6f);                                       // never rises with the climb rate / 上昇率とともに増えない
+        last = out;
+    }
+    ASSERT_NEAR(last, 0.5f * support, 1e-5f);
+}
+
+TEST(ramped_limit_is_one_at_the_start_falls_linearly_and_stays_at_the_end_fraction)
+{
+    // The shared shape of the ceiling brake, the rise brake and the settle ceiling: fraction 1 at progress 0, linear to end_fraction at ramp_width, constant above.
+    // 天井ブレーキ・上昇ブレーキ・着地アシストの上限が共有する形: 進み 0 で割合 1、ramp_width で直線的に end_fraction まで下がり、それより上では一定。
+    ASSERT_NEAR(sf::rampedLimit(0.0f, 0.2f, 0.5f, 0.30f), 0.30f, 1e-6f);
+    ASSERT_NEAR(sf::rampedLimit(0.1f, 0.2f, 0.5f, 0.30f), 0.225f, 1e-6f);   // fraction 0.75 / 割合 0.75
+    ASSERT_NEAR(sf::rampedLimit(0.2f, 0.2f, 0.5f, 0.30f), 0.150f, 1e-6f);   // fraction 0.5, the end of the ramp / 割合 0.5、ランプの終わり
+    ASSERT_NEAR(sf::rampedLimit(5.0f, 0.2f, 0.5f, 0.30f), 0.150f, 1e-6f);   // and it stays there / それより上でも変わらない
+    // The two brakes use it with their own constants: the ceiling brake falls from 1 to kAltitudeCeilingBrakeFrac over kAltitudeCeilingBrakeRampM of predicted excess.
+    // 2 つのブレーキはそれぞれの定数で使う: 天井ブレーキは止まる高さの予測の超過 kAltitudeCeilingBrakeRampM で 1 から kAltitudeCeilingBrakeFrac まで下がる。
+    ASSERT_NEAR(sf::rampedLimit(lim::kAltitudeCeilingBrakeRampM, lim::kAltitudeCeilingBrakeRampM, lim::kAltitudeCeilingBrakeFrac, 0.30f),
+                lim::kAltitudeCeilingBrakeFrac * 0.30f, 1e-6f);
 }
 
 int main()
@@ -1067,10 +1145,14 @@ int main()
     run_support_is_bounded_against_a_bad_reading();
     run_support_without_a_window_is_the_lowered_estimate();
     run_a_thrust_ceiling_from_the_lowered_estimate_cannot_climb_unless_the_estimate_is_40_percent_high();
-    run_an_early_estimate_gives_a_ceiling_between_85_percent_and_the_weight();
+    run_an_early_estimate_gives_a_ceiling_between_84_percent_and_the_weight();
     run_reading_limit_is_below_free_fall_and_hover();
     run_upward_specific_force_level_and_tilted();
     run_upward_specific_force_inverted_and_zero();
+    run_landing_base_thrust_is_the_estimate_up_to_1_08_times_the_support_reference();
+    run_rise_brake_passes_the_thrust_unless_the_craft_rises_and_falls_linearly_to_half();
+    run_rise_brake_is_continuous_in_the_climb_rate_and_never_raises_the_thrust();
+    run_ramped_limit_is_one_at_the_start_falls_linearly_and_stays_at_the_end_fraction();
 
     printf("\n=== Results: %d run, %d passed, %d failed ===\n",
            tests_run, tests_passed, tests_failed);

@@ -38,7 +38,7 @@
  *      once the reading falls back below the release level the velocity is set to ZERO (a zero-velocity update).
  *      Without it the integral of the impact (clipped by the accelerometer range, noisy) leaves an error of
  *      +0.2 m/s on the ground (SILS noise n2: 22 of 80 runs) which keeps the touchdown detector from seeing "not moving".
- * Why not copy the ESKF velocity (the first design: reset to it every cycle): right after the
+ * Why not copy the ESKF velocity (reset to it every cycle): right after the
  * ground-to-air handoff the ESKF velocity is wrong for ~1 s (SILS: 0.56 m/s while the craft climbs at
  * 1.27 m/s), and its hover noise is +-0.1-0.2 m/s; the observer keeps the accelerometer's fast part.
  * The error of rule 3 is (offset error) x (time since the last reset): 0.1 m/s^2 for 3 s is 0.3 m/s.
@@ -177,7 +177,7 @@ public:
     /// whole accelerometer offset error (SILS scenario ceiling_brake_stale_velocity: offset -0.4 m/s^2, 3.7 m/s after 15 s on a craft that was not climbing), and rule 2
     /// would wait kVerticalVelocityHandoffSettleS before it follows the ESKF; for that time every reader of the integral (the ceiling brake, the
     /// blind descent) would see a stale value. The integral error restarts at zero. The rise is not touched.
-    /// ESKF が飛行中の ToF 出力停止のエピソードの後で ToF サンプルを再び取り込んだとき（推定器は高度を取り込み直し、鉛直状態は自由で、上昇率を知っている）、
+    /// ESKF が飛行中の ToF 出力停止のエピソードの後で ToF サンプルを再び取り込んだとき（推定器は高度を取り込み直し、鉛直状態は自由で、上昇率を持っている）、
     /// 速度を ESKF の値へ一度に合わせる。長いエピソードの積分は加速度オフセットの誤差を丸ごと持つ（SILS のシナリオ ceiling_brake_stale_velocity: オフセット −0.4 m/s^2、
     /// 上昇していない機体で 15 s 後に 3.7 m/s）。規則 2 は ESKF に従うまで kVerticalVelocityHandoffSettleS 待つので、その間、積分を読む側
     /// （天井ブレーキ、ToF なしの降下）は古い値を見る。積分の誤差は 0 から数え直す。上昇量には触れない。
@@ -215,7 +215,7 @@ public:
     /// 機体が地上に最後に静止してからの上昇量の推定 [m]: 速度の積分（静止中は 0 なので離陸から始まる）。
     /// ToF 健全性トラッカーが「機体は床を離れた」と「まだセンサの不感帯にいる」を区別するのと、支持推力の窓を開くのに使う。加速度計の
     /// 積分なので、オフセット誤差で床の上でもずれる: どちらの使い手も、誤っても害の無い向きにだけ使う（健全性トラッカーは無効サンプルを「早く」
-    /// 数え、窓は「早く」開き、支持推力は「低く」しか出ない）。安全判断の門には使わない。
+    /// 数え、窓は「早く」開き、支持推力は「低く」しか出ない）。安全判断の判定条件には使わない。
     float riseM() const { return rise_m_; }
     /// Time the value has been an integral since its last reset (rule 1 at rest, or rule 2 following the ESKF) [s]. The
     /// error of the integral grows with it (offset error x time), so the PI of the descent without a ToF trusts the

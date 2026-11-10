@@ -263,10 +263,10 @@ static void applyMagBootPolicy(const sf::MagData& mag)
     g_estimator->setMagReference(ned);
 }
 
-/// Refresh the ToF-silence inputs of this IMU cycle: the guarded failsafe_status (D5: a stale
+/// Refresh the ToF-silence inputs of this IMU cycle: the guarded failsafe_status (a stale
 /// status reads as silent) and the clock of the ToF health tracker. EVERY cycle, in every flight
 /// state (SilenceWatch needs continuous observation).
-/// この IMU 周期の ToF 出力停止の入力を更新する: ガード済みの failsafe_status（D5: 古い状態は
+/// この IMU 周期の ToF 出力停止の入力を更新する: ガード済みの failsafe_status（古い状態は
 /// 出力停止と読む）と、ToF 健全性トラッカーの時計。飛行状態に関わらず「毎周期」
 /// （SilenceWatch は連続観測が要る）。
 static void refreshToFSilenceInputs(uint32_t now_us)
@@ -280,8 +280,8 @@ static void refreshToFSilenceInputs(uint32_t now_us)
 /// (no new sample, only invalid samples while flying, or the estimator has not re-acquired the ToF
 /// yet; failsafe_status.tof_silent) the raw flag proves nothing. A flag frozen "on the ground" kept
 /// the estimator pinning position/velocity to zero while the craft climbed (2026-11 accident), and
-/// after the samples returned the raw flag was trusted again before the estimator agreed with them
-/// (2nd review D1). During the episode: armed -> NOT on the ground; disarmed -> on the ground
+/// after the samples returned the raw flag was trusted again before the estimator agreed with them.
+/// During the episode: armed -> NOT on the ground; disarmed -> on the ground
 /// (motors off). The episode ends only when the estimator has re-acquired the ToF. Ground-contact
 /// consumers (vertical handoff / hold, tilt monitor, the published airborne flag) must call this
 /// instead of g_takeoff_landing.isOnGround().
@@ -289,7 +289,7 @@ static void refreshToFSilenceInputs(uint32_t now_us)
 /// （新サンプル無し、飛行中に無効サンプルだけ、または推定器がまだ ToF を取り込み直していない。
 /// failsafe_status.tof_silent）の間、生のフラグは何も保証しない。「接地」のまま固定されると、機体が
 /// 上昇しても推定器が位置・速度を 0 に固定し続けた（2026-11 の事故）。サンプルが戻った後も、推定器が
-/// それと一致する前に生のフラグが再び信用された（2 回目のレビューの D1）。エピソード中は、ARM 中なら
+/// それと一致する前に生のフラグが再び信用された。エピソード中は、ARM 中なら
 /// 「接地していない」、DISARM 中なら「接地している」（モータ停止）。エピソードは推定器が ToF を
 /// 取り込み直したときだけ終わる。接地フラグを使う側（鉛直ハンドオフ・ホールド、傾きモニタ、発行する
 /// airborne フラグ）は g_takeoff_landing.isOnGround() でなくこれを呼ぶこと。
@@ -323,10 +323,10 @@ static void feedBlindTouchdown(const sf::ImuData& imu)
 
 /// The ToF-silence episode starts while ARMED: flip the raw ground-contact flag to "airborne"
 /// (once, on the rising edge). From then on it returns to "ground" only through the existing
-/// air->ground debounce (valid ground readings), never by a missing or invalid sample (D1).
+/// air->ground debounce (valid ground readings), never by a missing or invalid sample.
 /// ARM 中に ToF 出力停止のエピソードが始まったら、生の接地フラグを「空中」に倒す（立ち上がりの
 /// エッジで 1 回）。以後「接地」へ戻るのは既存の空中→接地デバウンス（有効な地上読み）だけで、
-/// 欠測や無効サンプルでは戻らない（D1）。
+/// 欠測や無効サンプルでは戻らない。
 static void markGroundContactUnknownOnSilence(bool armed)
 {
     static bool was_silent = false;
@@ -356,19 +356,14 @@ static sf::ToFFlightPhase toFFlightPhase(sf::FlightState state)
     }
 }
 
-/// Time since the TAKEOFF state was entered [us] (0 outside TAKEOFF). The entry is noticed at the
-/// next ToF sample (up to ~33 ms late: the elapsed time errs short, i.e. the counting starts later).
-/// TAKEOFF に入ってからの時間 [us]（TAKEOFF の外では 0）。入ったことは次の ToF サンプルで気付く（最大
-/// 約 33 ms 遅れ: 経過時間は短めに出る = 数え始めが遅くなる側）。
-static uint32_t takeoffElapsedUs(sf::FlightState state, uint32_t now_us)
+/// Time since the TAKEOFF state was entered [us] (0 outside TAKEOFF), from the ONE clock of "time in this state": SystemMode.state_since_us, stamped by StateManager when it enters the
+/// state (StateTask reads the same stamp for the auto-takeoff abort).
+/// TAKEOFF に入ってからの時間 [us]（TAKEOFF の外では 0）。「この状態にいる時間」の唯一の時計 SystemMode.state_since_us から求める（StateManager が状態に入るときに刻む。StateTask も自動離陸の中止で同じ
+/// 時刻印を読む）。
+static uint32_t takeoffElapsedUs(const sf::SystemMode& mode, uint32_t now_us)
 {
-    static sf::FlightState previous = sf::FlightState::INIT;
-    static uint32_t entered_us = 0;
-    if (state == sf::FlightState::TAKEOFF && previous != sf::FlightState::TAKEOFF) {
-        entered_us = now_us;
-    }
-    previous = state;
-    return (state == sf::FlightState::TAKEOFF) ? static_cast<uint32_t>(now_us - entered_us) : 0u;
+    const bool in_takeoff = (static_cast<sf::FlightState>(mode.state) == sf::FlightState::TAKEOFF);
+    return in_takeoff ? static_cast<uint32_t>(now_us - mode.state_since_us) : 0u;   // unsigned difference: correct across a wrap / 符号なしの差: 巻き戻りをまたいでも正しい
 }
 
 /// Tell the health tracker what the estimator did with this ToF sample, and in which flight phase
@@ -380,12 +375,13 @@ static uint32_t takeoffElapsedUs(sf::FlightState state, uint32_t now_us)
 /// 不感帯にいる、など。tof_health_tracker.hpp）。上昇量は制御器の加速度積分。
 static void feedToFHealth(const sf::TofData& tof)
 {
-    const sf::FlightState state = static_cast<sf::FlightState>(sf::system_mode.latest().state);
+    const sf::SystemMode mode = sf::system_mode.latest();
+    const sf::FlightState state = static_cast<sf::FlightState>(mode.state);
 
     // An estimator that does not use the ToF (eskf.use_tof = false: the barometer anchors the
     // altitude) has nothing to re-acquire: the ToF being alive is all that can be asked of it.
     // ToF を使わない推定器（eskf.use_tof = false: 気圧計が高度を錨付けする）には取り込み直すものが
-    // 無い: ToF が生きていることだけを求められる。
+    // 無い: ToF が動作していることだけを求められる。
     const sf::ToFObservation observed = g_estimator->lastToFObservation();
     sf::ToFSampleFacts facts;
     facts.now_us             = static_cast<uint32_t>(esp_timer_get_time());
@@ -395,7 +391,7 @@ static void feedToFHealth(const sf::TofData& tof)
     facts.distance_m         = tof.distance;
     facts.phase              = toFFlightPhase(state);
     facts.rise_m             = sf::controller_status.latest().vertical_rise_m;
-    facts.takeoff_elapsed_us = takeoffElapsedUs(state, facts.now_us);
+    facts.takeoff_elapsed_us = takeoffElapsedUs(mode, facts.now_us);
     g_tof_health.onSample(tof.timestamp, facts);
     if (facts.phase == sf::ToFFlightPhase::Takeoff) {   // the positive floor evidence is a TAKEOFF fact / 床の積極的な証拠は TAKEOFF の事実
         g_takeoff_floor_watch.onSample(facts.now_us, !g_failsafe.tof_silent, tof.valid, tof.distance);
@@ -413,6 +409,8 @@ static void publishToFHealth()
     health.invalid_stuck     = g_tof_health.invalidStuck();
     health.timestamp         = static_cast<uint32_t>(esp_timer_get_time());
     health.floor_stays       = g_takeoff_floor_watch.stays(health.timestamp, !g_failsafe.tof_silent);
+    health.floor_seen        = g_takeoff_floor_watch.seen();   // the latch; released by the craft leaving the floor (TakeoffFloorWatch) / ラッチ。機体が床を離れると解ける（TakeoffFloorWatch）
+    health.floor_leaving     = g_takeoff_floor_watch.leaving() && !g_failsafe.tof_silent;   // the craft is lifting off the floor now (a run above the band) / 機体は今、床を離れつつある（帯より上の区間）
     sf::tof_health.publish(health);
 }
 
@@ -524,6 +522,10 @@ static bool consumeMagAndBaroSamples(sf::SensorSnapshot& snap)
     return snap_dirty;
 }
 
+/// SystemMode.state_since_us that processAsyncSensors() read in this cycle: the state the landing verdict of the cycle belongs to (published as SystemStatus.verdict_state_since_us).
+/// この周期に processAsyncSensors() が読んだ SystemMode.state_since_us: その周期の着陸判定が属する状態（SystemStatus.verdict_state_since_us として発行）。
+static uint32_t g_verdict_state_since_us = 0;
+
 /// Process async sensor observations from queues
 /// キューからの非同期センサ観測を処理する
 static void processAsyncSensors()
@@ -550,7 +552,9 @@ static void processAsyncSensors()
     static sf::SensorSnapshot snap{};
     bool snap_dirty = false;
 
+    g_verdict_state_since_us = mode.state_since_us;   // the state this cycle's landing verdict belongs to (SystemStatus.verdict_state_since_us) / この周期の着陸判定が属する状態（SystemStatus.verdict_state_since_us）
     markGroundContactUnknownOnSilence(armed);
+    g_takeoff_landing.noteLandingDescent(in_landing_descent);   // LANDING begins: judge the touchdown afresh, before any sample / LANDING が始まる: 接地の判定を、どのサンプルより前に新たに行う
     snap_dirty = consumeToFSamples(armed, in_landing_descent, snap) || snap_dirty;
 
     snap_dirty = consumeFrontToFSamples(snap) || snap_dirty;
@@ -679,6 +683,7 @@ static void publishSystemStatus(uint32_t now_us)
                         ? g_takeoff_landing.isBlindTouchdown()
                         : g_takeoff_landing.isLandingDetected();
     st.timestamp  = now_us;
+    st.verdict_state_since_us = g_verdict_state_since_us;   // StateTask counts `landing` only for the state it was judged in / StateTask は `landing` を、それが判定された状態でだけ数える
     sf::system_status.publish(st);
 }
 

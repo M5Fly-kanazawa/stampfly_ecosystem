@@ -2,15 +2,15 @@
 #              長い ToF 出力停止のエピソードの直後に ALT_HOLD へ入る: 天井ブレーキは古い加速度積分の速度を信用してはならない
 #
 # STABILIZE flight with the ToF silent for 8 s with the offset, then the ToF returns and ALT_HOLD is switched on at about 16 s.
-# An accelerometer offset of 0.4 m/s^2 (injected after the rest-learning) makes the integral of the episode 3.5 m/s on a craft that is not climbing. The 6th-pass
+# An accelerometer offset of 0.4 m/s^2 (injected after the rest-learning) makes the integral of the episode 3.5 m/s on a craft that is not climbing. The earlier
 # ceiling brake took max(ESKF, integral) as the climb rate, thought the craft would stop far above the ceiling and cut the thrust to half the weight: the craft fell
-# to the floor (1.7 m/s at 16.8 s). Spec under test (detailed_design.md §3.1, 7th pass C1): (a) the integral is used by the brake only in the auto-takeoff climb and while the ESKF
+# to the floor (1.7 m/s at 16.8 s). Spec under test (detailed_design.md §3.1): (a) the integral is used by the brake only in the auto-takeoff climb and while the ESKF
 # vertical state is not trusted; (b) while the ESKF is trusted its own climb rate decides; (c) when the ESKF takes the ToF again the integral is set to the ESKF velocity.
 #
 # STABILIZE の飛行で ToF が 8 s 出力停止（オフセット付き）、その後 ToF が戻り、約 16 s に ALT_HOLD を入れる。
-# 加速度計のオフセット 0.4 m/s^2（静止での学習の後に注入）が、上昇していない機体で、エピソードの積分を 3.5 m/s にする。6 回目の天井ブレーキは
-# max(ESKF, 積分) を上昇率とし、天井のはるか上で止まると考えて推力を重さの半分に落とし、機体は床へ落ちた（1.7 m/s at 16.8 s）。検証する仕様（detailed_design.md §3.1、
-# 7 回目の C1）: (a) ブレーキが積分を使うのは自動離陸の上昇と、ESKF の鉛直状態を信用できない間だけ。(b) ESKF を信用できる間は ESKF 自身の上昇率で決める。
+# 加速度計のオフセット 0.4 m/s^2（静止での学習の後に注入）が、上昇していない機体で、エピソードの積分を 3.5 m/s にする。以前の天井ブレーキは
+# max(ESKF, 積分) を上昇率とし、天井のはるか上で止まると考えて推力を重さの半分に落とし、機体は床へ落ちた（1.7 m/s at 16.8 s）。検証する仕様（detailed_design.md §3.1）:
+# (a) ブレーキが積分を使うのは自動離陸の上昇と、ESKF の鉛直状態を信用できない間だけ。(b) ESKF を信用できる間は ESKF 自身の上昇率で決める。
 # (c) ESKF が ToF を取り込み直したとき、積分を ESKF の速度に合わせる。
 #
 # Run: sf sils scenario simulator/sils/scenarios/ceiling_brake_stale_velocity.scn --target vehicle --duration 36000000

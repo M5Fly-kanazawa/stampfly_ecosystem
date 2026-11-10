@@ -1,0 +1,28 @@
+# api_land_in_armed_ground.expect — `land` in ARMED_GROUND: immediate DISARM, `land` answers ok, the waiting `takeoff` answers "error cancelled by land", the motors never run
+# ARMED_GROUND の `land`: 即時 DISARM、`land` は ok、待っている `takeoff` は "error cancelled by land"、モータは回らない
+#
+exit 0
+log_contains any "cmd: takeoff"
+log_contains any "cmd: land (during a blocking command, ARMED_GROUND)"
+log_contains any "Landing requested on the floor (ARMED_GROUND) -> DISARM"
+log_contains any "reply: error cancelled by land"
+log_contains any "Transition: ARMED_GROUND → IDLE_GROUND"
+order "cmd: land (during a blocking command, ARMED_GROUND)" "reply: error cancelled by land"
+order "cmd: land (during a blocking command, ARMED_GROUND)" "Transition: ARMED_GROUND → IDLE_GROUND"
+# The parked lines are cancelled (not replayed): no second ARM, no `height?` answer.
+# 後回しの行は取り消される（再生されない）: 2 度目の ARM も `height?` の応答も無い。
+log_contains any "deferred line cancelled: takeoff"
+log_contains any "deferred line cancelled: height?"
+log_absent any "cmd: height?"
+log_absent any "reply: error not on ground"
+# Never airborne, no takeoff, no landing, no timeout or "not flying" reply.
+# 空中に出ない。離陸も着陸も無く、タイムアウトや "not flying" の応答も無い。
+log_absent any "Transition: ARMED_GROUND → TAKEOFF"
+log_absent any "Transition: TAKEOFF → LANDING"
+log_absent any "reply: error takeoff timeout"
+log_absent any "reply: error not flying"
+log_absent any "reply: error land timeout"
+# The craft stays on the floor with the motors stopped.
+# 機体は床の上でモータは止まったまま。
+metric alt_max < 0.05 in 6.0 10.0
+metric duty_max < 0.01 in 6.5 10.0

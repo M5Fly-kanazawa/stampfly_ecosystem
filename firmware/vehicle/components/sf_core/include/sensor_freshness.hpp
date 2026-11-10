@@ -110,8 +110,8 @@ public:
     /// Cross-task / clock jitter tolerated as "just now" [us] (1 s). A stamp this far ahead of
     /// now, or an observation clock this far behind the previous one, is jitter; anything
     /// further is the 2^31 us ambiguity of a long gap and reads as silent.
-    /// 「たった今」として許容するタスク間・時計のふらつき [us]（1 s）。now よりこれだけ先の
-    /// 時刻印、前回の観測よりこれだけ戻った観測時刻はふらつき。それ以上は長い空きによる
+    /// 「たった今」として許容するタスク間・時計の揺れ [us]（1 s）。now よりこれだけ先の
+    /// 時刻印、前回の観測よりこれだけ戻った観測時刻は揺れ。それ以上は長い空きによる
     /// 2^31 us の曖昧さで、停止と読む。
     static constexpr int32_t kClockSkewToleranceUs = 1000000;
 
@@ -134,7 +134,7 @@ public:
         last_timestamp_us_ = timestamp_us;
         // Never move the reference backwards within the jitter tolerance, so a jittery clock
         // cannot count time twice. A larger backward step is a long gap: re-base on it.
-        // 基準時刻はふらつき許容の範囲では後戻りさせない。ふらつく時計で同じ時間を二重に数えない
+        // 基準時刻は揺れの許容の範囲では後戻りさせない。揺れる時計で同じ時間を二重に数えない
         // ため。それより大きく戻って見えるのは長い空きなので、そこへ基準を取り直す。
         if (!observed_ || since_last_observe_us > 0 || since_last_observe_us < -kClockSkewToleranceUs) {
             last_now_us_ = now_us;
@@ -172,7 +172,7 @@ private:
 
     // Silent time of a NEW sample: its signed age, 0 within the jitter tolerance ahead of now,
     // saturated when the stamp looks further ahead (an age of 35.8 min or more wrapped negative).
-    // 新サンプルの停止時間: 符号付きの経過。now よりふらつき許容以内の先なら 0、それより先に
+    // 新サンプルの停止時間: 符号付きの経過。now より揺れの許容以内の先なら 0、それより先に
     // 見える（35.8 分以上の経過が負に巻き戻った）なら飽和。
     static constexpr uint32_t ageOfNewSampleUs(uint32_t now_us, uint32_t timestamp_us)
     {
@@ -186,7 +186,7 @@ private:
     // Silent time when the stamp did NOT change: add the time since the previous observation.
     // Zero or within-tolerance backward time adds 0; a larger backward step is a gap of 35.8 min
     // or more -> saturate.
-    // 時刻印が変化しなかったときの停止時間: 前回の観測からの時間を足す。0 またはふらつき許容内の
+    // 時刻印が変化しなかったときの停止時間: 前回の観測からの時間を足す。0 または揺れの許容内の
     // 後戻りは 0 を足し、それより大きな後戻りは 35.8 分以上の空きなので飽和。
     static constexpr uint32_t silentAfterGapUs(uint32_t silent_for_us, int32_t since_last_observe_us)
     {

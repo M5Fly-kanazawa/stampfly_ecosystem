@@ -151,6 +151,24 @@ void TakeoffLandingMgr::evaluateToF(const TofData& tof)
 }
 
 // -----------------------------------------------------------------------------
+// noteLandingDescent — judge the landing afresh when the LANDING begins
+// noteLandingDescent — LANDING が始まったら、着陸の判定を新たに行う
+//
+// @design detailed_design.md §3 注7 — a landing verdict of before the LANDING is no evidence of a touchdown in it [OK]
+// @design architecture.md INV-3 — detection here (ImuTask feeds it every cycle), the decision stays in StateTask [OK]
+// -----------------------------------------------------------------------------
+void TakeoffLandingMgr::noteLandingDescent(bool in_landing_descent)
+{
+    if (in_landing_descent && !was_landing_descent_) {
+        landing_detected_ = false;   // the verdict of before the LANDING is no evidence of a touchdown in it / LANDING の前の判定は、その中の接地の証拠ではない
+        landing_start_ms_ = 0;
+        stall_start_ms_   = 0;
+        dead_zone_armed_  = false;   // so is the dead-zone evidence of before it / 前から残った不感帯の証拠も同じ
+    }
+    was_landing_descent_ = in_landing_descent;
+}
+
+// -----------------------------------------------------------------------------
 // detectLanding — low altitude + low velocity sustained → landing event
 // 着陸検出 — 低高度＋低速度の持続 → 着陸イベント
 // -----------------------------------------------------------------------------

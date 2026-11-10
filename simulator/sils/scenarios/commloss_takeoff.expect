@@ -1,5 +1,5 @@
-# commloss_takeoff.expect — a link lost during a TAKEOFF that does not complete lands the craft after the hover grace (8th pass, D3)
-# 完了しない TAKEOFF の間にリンクが途絶えると、ホバーの猶予の後に着陸する（8 回目、D3）
+# commloss_takeoff.expect — a link lost during a TAKEOFF that does not complete lands the craft after the hover grace
+# 完了しない TAKEOFF の間にリンクが途絶えると、ホバーの猶予の後に着陸する
 #
 exit 0
 log_contains any "Transition: ARMED_GROUND → TAKEOFF"

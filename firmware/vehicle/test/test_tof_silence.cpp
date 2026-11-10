@@ -155,10 +155,10 @@ TEST(stream_that_stops_is_silent_after_threshold)
 
 TEST(tof_silent_for_more_than_36_minutes_stays_silent)
 {
-    // R1: Failsafe observes the ToF stamp at 10 Hz. After the last sample the
+    // Failsafe observes the ToF stamp at 10 Hz. After the last sample the
     // watch must say "silent" from 0.3 s on and never go back to "alive" — not at 35.8 min
     // (signed 32-bit difference turns negative) and not at the 71.6 min uint32 wrap.
-    // R1: Failsafe は ToF の時刻印を 10 Hz で観測する。最後のサンプルの後、0.3 s
+    // Failsafe は ToF の時刻印を 10 Hz で観測する。最後のサンプルの後、0.3 s
     // 以降は「停止」で、35.8 分（符号付き 32bit 差が負になる）でも 71.6 分の uint32 巻き戻りでも
     // 「動作」に戻らないこと。
     const uint32_t last_sample_us = 3000000000u;
@@ -272,7 +272,7 @@ TEST(landing_after_a_long_live_tof_gets_the_minimum_silent_time_before_the_motor
 {
     // A LANDING with a live ToF that lasted longer than the limit, and then the ToF dies: the limit alone would cut the motors at once, in the air.
     // The time limit needs BOTH the LANDING time and the continuous silent time.
-    // ToF が生きたまま上限より長く続いた LANDING の後に ToF が死ぬ: 上限だけなら、空中で即座にモータを切る。時間切れには
+    // ToF が動作したまま上限より長く続いた LANDING の後に ToF が停止する: 上限だけなら、空中で即座にモータを切る。時間切れには
     // LANDING の時間と連続した出力停止の時間の「両方」が要る。
     for (FlightMode mode : kAllModes) {
         ASSERT_TRUE(act(FlightState::LANDING, mode, true, kBlindUs + 5000000u, 0u) == ToFSilenceAction::None);
@@ -322,7 +322,7 @@ TEST(landing_time_is_counted_from_the_entry_into_landing_and_not_extended_by_a_r
 {
     // The clock runs from the entry into LANDING whether the ToF is silent or alive, and restarts only after LANDING ended:
     // a ToF that returns for a while and stops again (silent -> alive -> silent) does not extend the time limit.
-    // 時計は LANDING に入った時点から、ToF が出力停止でも生きていても進み、LANDING が終わった後でだけ数え直す: ToF が
+    // 時計は LANDING に入った時点から、ToF が出力停止でも動作していても進み、LANDING が終わった後でだけ数え直す: ToF が
     // しばらく戻ってまた止まっても（出力停止 → 生存 → 出力停止）、時間切れは延びない。
     sf::LandingClock clock;
     uint32_t now = 1000000u;
@@ -361,14 +361,14 @@ TEST(landing_time_is_counted_from_the_entry_into_landing_and_not_extended_by_a_r
 TEST(landing_clock_counts_the_continuous_silence_of_this_landing)
 {
     // A live ToF for 12 s in LANDING, then the ToF dies: the silent time starts at the silence (not at the entry) and restarts if the ToF returns and stops again.
-    // LANDING で 12 s ToF が生きていて、その後に ToF が死ぬ: 出力停止の時間は出力停止から（入った時点からでなく）数え、ToF が戻ってまた止まれば数え直す。
+    // LANDING で 12 s ToF が動作していて、その後に ToF が停止する: 出力停止の時間は出力停止から（入った時点からでなく）数え、ToF が戻ってまた止まれば数え直す。
     sf::LandingClock clock;
     uint32_t now = 5000000u;
     clock.update(true, false, now);
     now += 12000000u;
     clock.update(true, false, now);
     ASSERT_TRUE(clock.elapsedUs() == 12000000u && clock.silentElapsedUs() == 0u);
-    clock.update(true, true, now);                     // the ToF dies / ToF が死ぬ
+    clock.update(true, true, now);                     // the ToF dies / ToF が停止する
     ASSERT_TRUE(clock.silentElapsedUs() == 0u);
     now += 2000000u;
     clock.update(true, true, now);
@@ -379,7 +379,7 @@ TEST(landing_clock_counts_the_continuous_silence_of_this_landing)
     clock.update(true, false, now);                    // the ToF returns: the silent time is cleared / ToF が戻る: 出力停止の時間はクリア
     ASSERT_TRUE(clock.silentElapsedUs() == 0u);
     now += 500000u;
-    clock.update(true, true, now);                     // and dies again: restarts / また死ぬ: 数え直す
+    clock.update(true, true, now);                     // and dies again: restarts / また停止する: 数え直す
     now += kMinSilentUs;
     clock.update(true, true, now);
     ASSERT_TRUE(clock.silentElapsedUs() == kMinSilentUs);

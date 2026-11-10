@@ -20,7 +20,7 @@
 # 落ち着いたら宙返りを開始する、(2) 最終的に拒否されたら（どの理由でも、待ち時間切れでも）
 # エラー音を鳴らす。本シナリオは、短いスティック下げのパルスの終わりに機体がまだ「降下」中の 1.1 m
 # （|vz| が 0.2 m/s を大きく超える → NotSteady）でボタンを押し、既定の待ち時間 1 s（flip.button_wait_ms）の
-# 中で、宙返りが 1 回だけ走る（"Flip button: waiting ..." → "Flip requested"）ことを確認する。
+# 中で、宙返りが 1 回だけ実行される（"Flip button: waiting ..." → "Flip requested"）ことを確認する。
 # 2026-11-09: 助走の終わりだった上昇（1.2 m 以上へのスロットルパルス）は無くなった: 高度上限（1.2 m）が
 # ALT_HOLD のスティック上昇も縛り、上限へ向けて上昇を絞る（速さ = 0.45 1/s × 距離）ので、1.0 m 以上で上昇が
 # 速い（0.2 m/s 超）ことはない（宙返りは flip.min_height_m = 1.0 m が要る）。降下は上限に縛られないので、
@@ -38,8 +38,8 @@
    +    rc   2048  2048   2048    2048  0     1500      50        1                        # B: ALT switch ON while DISARMED (t=4-5.5)
    +    rc   2048  2048   2048    2048  1     1000      50        1                        # C: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=5.5-6.5)
    +    rc   2048  2048   2048    2048  1     4300      50        1                        # D: neutral -> climb to 0.5 m target, settle (t=6.5-10.8). 2026-10-31 R_out plant: 5000->4300 ms (shifted into E, timeline unchanged) / 5000->4300 ms（E へ振替、時刻は不変）
-   +    rc   4095  2048   2048    2048  1     5000      50        1                        # E1: stick UP -> climbs, tapered toward the 1.2 m ceiling (t=10.8-15.8; ~1.15 m)
-   +    rc   0     2048   2048    2048  1     600       50        1                        # E2: stick DOWN pulse -> descending at the press (t=15.8-16.4)
+   +    rc   4095  2048   2048    2048  1     5000      50        1                        # stick UP -> climbs, tapered toward the 1.2 m ceiling (t=10.8-15.8; ~1.15 m)
+   +    rc   0     2048   2048    2048  1     600       50        1                        # stick DOWN pulse -> descending at the press (t=15.8-16.4)
    +    rc   2048  2048   2048    2048  1     200       50        1     0    0    1        # F: FLIP pressed while descending: |vz| > 0.2 -> latched (t=16.4-16.6)
    +    rc   2048  2048   2048    2048  1     5000      50        1                        # G: neutral — the descent settles, the latched flip starts, maneuver (t=16.6-21.6)
    +    rc   2048  2048   2048    2048  0     200       50                                 # H: release ARM button (t=21.6-21.8)

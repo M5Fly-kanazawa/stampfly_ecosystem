@@ -1,13 +1,13 @@
 # tof_invalid_stabilize.scn — only INVALID ToF samples during a MANUAL STABILIZE flight: warning only, NO forced landing
 #                             手動 STABILIZE 飛行中に「無効」な ToF サンプルだけが続く: 警告のみ・強制着陸しない
 #
-# 2nd independent review, D4 for the manual modes (the twin of tof_silent_stabilize.scn with `tof_invalid` instead of
+# The manual-mode version (the twin of tof_silent_stabilize.scn with `tof_invalid` instead of
 # `tof_silent`). Spec under test: after 0.5 s of only invalid samples while flying (judged ~8.1 s) the state machine
 # only WARNS (log "NO forced landing, fly on"; the LED / tone are driven from the same level) and the pilot keeps
 # the vertical axis (the craft stays around 0.5 m until the pilot lowers the throttle); the POS_HOLD switch at 8.5 s is
 # REFUSED in flight and its edge CONSUMED (the switch is back OFF at 9.5 s, nothing follows by itself).
 #
-# 2 回目の独立レビューの D4 の手動モード版（tof_silent_stabilize.scn の `tof_silent` を `tof_invalid` にした兄弟）。
+# 手動モード版（tof_silent_stabilize.scn の `tof_silent` を `tof_invalid` にした兄弟）。
 # 検証する仕様: 飛行中に 0.5 s の間無効サンプルだけが続いた後（約 8.1 s に判定）、状態機械は警告だけを出し（ログ
 # "NO forced landing, fly on"。LED・音は同じレベルから駆動）、パイロットは鉛直軸を握ったまま（スロットルを下げる
 # まで機体は約 0.5 m に留まる）。8.5 s の POS_HOLD スイッチは飛行中に拒否されエッジは消費される（9.5 s にスイッチは

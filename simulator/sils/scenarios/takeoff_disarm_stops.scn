@@ -1,0 +1,32 @@
+# takeoff_disarm_stops.scn — the pilot's DISARM during the TAKEOFF of an altitude mode is an immediate motor cut, not a land request
+#                            高度モードの TAKEOFF 中のパイロットの DISARM は、着陸要求でなく即時のモータ停止
+#
+# ALT_HOLD auto-takeoff, weak motors (health 0.85: the craft cannot lift, see weak_spool_alt_floor), the ToF reads the floor VALIDLY (`tof_deadzone 0`). The TAKEOFF begins at about
+# 5.8 s and would be aborted by the system at about 10.8 s (kAutoTakeoffNoLiftAbortUs). The pilot presses the ARM button again (it toggles) at about 8.6 s, inside the TAKEOFF. Spec under test
+# (detailed_design.md §3.1, TAKEOFF -> IDLE_GROUND row for the pilot; StateManager::requestDisarm):
+#  1. In TAKEOFF a DISARM stops the motors at once, in every mode (only in FLYING does the DISARM of ALT_HOLD / POS_HOLD start the auto-landing). Started from the floor, a LANDING would be limited by a
+#     thrust that is not known to be below the weight of a craft that has not lifted (the ESKF is still pinned to the ground): in SILS such a craft floated up to 0.355 m, and a LANDING ended at 0.07-0.16 m with the motors stopped in the air (20 of 336 DISARM timings and estimates).
+#  2. The system's own abort of the takeoff (5 s) does not run: the DISARM comes first.
+#
+# ALT_HOLD の自動離陸、弱いモータ（健全度 0.85: 機体は浮けない。weak_spool_alt_floor 参照）、ToF は床を「有効に」読む（`tof_deadzone 0`）。TAKEOFF は約 5.8 s に始まり、システム自身の
+# 中止（kAutoTakeoffNoLiftAbortUs）なら約 10.8 s。パイロットが TAKEOFF の中の約 8.6 s に ARM ボタンをもう一度押す（トグル）。検証する仕様（detailed_design.md §3.1 の TAKEOFF → IDLE_GROUND の
+# パイロットの行。StateManager::requestDisarm）:
+#  1. TAKEOFF 中の DISARM は、どのモードでも、すぐモータを止める（ALT_HOLD / POS_HOLD の DISARM が自動着陸を始めるのは FLYING の間だけ）。床の上から始めた LANDING は、まだ浮いていない機体の重さ未満と
+#     分かっていない推力で制限される（ESKF がまだ地上に固定されている）: SILS では、そうした機体が 0.355 m まで浮き上がり、LANDING が 0.07〜0.16 m で終わって空中でモータが止まった（DISARM の時刻と見積もりの 336 通りのうち 20 通り）。
+#  2. システム自身の離陸の中止（5 s）は働かない: DISARM のほうが先。
+#
+# Run: sf sils scenario simulator/sils/scenarios/takeoff_disarm_stops.scn --target vehicle --duration 16000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    tof_deadzone 0
+   0    fault 0 0.85
+   0    fault 1 0.85
+   0    fault 2 0.85
+   0    fault 3 0.85
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (5.5 s) — spool, then the auto-takeoff climb (TAKEOFF at about 5.8 s)
+   +    rc         2048  2048   2048    2048  1     1800      50        1              # D: stick centre — the thrust rises but the craft does not lift (to 8.3 s)
+   +    rc         2048  2048   2048    2048  0     300       50        1              # E: release the ARM button (the ARM button is a toggle: the release does nothing)
+   +    rc         2048  2048   2048    2048  1     300       50        1              # F: press it again inside the TAKEOFF (8.6 s) — the DISARM stops the motors
+   +    rc         2048  2048   2048    2048  0     7100      50        1              # G: release — the craft stays on the floor, motors stopped (to 16.0 s)

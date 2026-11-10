@@ -114,7 +114,7 @@ void Failsafe::update()
 // aliases back to a small age and clears it. sf::SilenceWatch takes the age of a new setpoint
 // signed and saturates the silent time, so neither happens (sensor_freshness.hpp). Its time is
 // the time since the last NEW setpoint (stamp changed), not the stamp itself.
-// setpoint の時刻印は comm.cpp（別タスク）が書く uint32 マイクロ秒（71.6 分で巻き戻る）。素朴な
+// setpoint の時刻印は comm.cpp（別タスク）が書く uint32 マイクロ秒（71.6 分で巻き戻る）。単純な
 // (now - stamp) は 2 通りに誤る: こちらの now より数 us 「新しい」時刻印は ~4.29e9 に桁あふれ
 // して COMM_LOST を誤発報し、35.8 分・71.6 分を超える本物の途絶は小さな経過に戻って解除して
 // しまう。sf::SilenceWatch は新しい setpoint の経過を符号付きで取り、停止時間を飽和させるので、
@@ -228,7 +228,7 @@ void Failsafe::checkTofSilence()
 
     // What the estimator side knows (ImuTask, tof_health): invalid samples only while flying, and
     // whether the estimator has re-acquired the ToF. The episode lasts until it has.
-    // 推定器側が知っていること（ImuTask、tof_health）: 飛行中に無効サンプルだけが続くか、推定器が ToF を
+    // 推定器側が持っていること（ImuTask、tof_health）: 飛行中に無効サンプルだけが続くか、推定器が ToF を
     // 取り込み直したか。エピソードは取り込み直すまで続く。
     const ToFHealth health = tof_health.latest();
     const ToFSilenceReason reason =

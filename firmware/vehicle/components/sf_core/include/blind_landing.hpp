@@ -108,7 +108,7 @@ inline bool upwardSpecificForceValid(float upward_specific_force)
  * real hovers show a 2 s mean within +-1 % of the long mean (0.3 s: +-5 %, 1 s: +-2.5 %).
  * 機体が床を離れるまでは何も平均しない（床が重さの一部を支え、推力が上がっても読みは約 g）。離れたとは、健全な ToF が空中と
  * 言っている、静止からの上昇量の推定が kSupportLeaveRiseM に達する、または読みの g に対するろ波した超過が kSupportLeaveExcessMps2 に達すること。この判定は窓を「開く」
- * だけで、安全判断の門ではない（「床を離れたか」を誰もここに問わない）: 窓が早く開きすぎれば床の上のサンプル（読みは g、推力は小さい）を平均して、支持推力が「低く」出て、
+ * だけで、安全判断の判定条件ではない（「床を離れたか」を誰もここに問わない）: 窓が早く開きすぎれば床の上のサンプル（読みは g、推力は小さい）を平均して、支持推力が「低く」出て、
  * ToF なしの降下の推力の上限もそれに従って下がる（安全側）。遅すぎれば低くした hover 推力の見積もりが効き続ける（これも安全側）。その後は、
  * ろ波した読みが g の ±kSupportHoverBandFrac × g 以内のサンプルだけを平均に入れる: そこでは推力は重さに等しく、商はホバー
  * 推力になり、推力と指令の非線形性（SILS: +0.2 g の上昇では商が 12 % 高い）は影響しない。平均は、そのようなサンプルの最初の
@@ -268,6 +268,67 @@ inline float blindLandingStartThrust(const SupportThrustFilter& filter, float ho
 inline float blindThrustCeiling(float support_thrust, float cap_ratio = limits::kNoTofThrustCapRatio)
 {
     return cap_ratio * support_thrust;
+}
+
+/**
+ * @brief Base thrust of the closed-loop landing (ToF alive): the hover-thrust estimate, bounded by the support reference
+ *        閉ループ着陸（ToF 生存）の基準推力: ホバー推力の見積もり。支持推力の基準で上を抑える
+ *
+ * min(hover_thrust, kLandingBaseOverSupportMax x support_reference). The bound holds before the calibration too (the support reference is then the
+ * early estimate, or the lowered hover estimate): an estimate that is too high must not start the descent above the weight.
+ * min(ホバー推力の見積もり, kLandingBaseOverSupportMax × 支持推力の基準)。上限は較正の前にも効く（そのとき支持推力の基準は早い推定、
+ * または低くしたホバー推力の見積もり）: 高すぎる見積もりが、重さを超える推力から降下を始めてはならない。
+ * @param hover_thrust      The hover-thrust estimate [N]                                  ホバー推力の見積もり [N]
+ * @param support_reference The support reference [N] (blindLandingStartThrust)            支持推力の基準 [N]（blindLandingStartThrust）
+ */
+inline float landingBaseThrust(float hover_thrust, float support_reference)
+{
+    const float bound = limits::kLandingBaseOverSupportMax * support_reference;
+    return (hover_thrust < bound) ? hover_thrust : bound;
+}
+
+/**
+ * @brief A limit that falls linearly with the progress of a ramp: the fraction of a reference that a brake allows
+ *        ランプの進みとともに直線的に下がる上限: ブレーキが許す、基準に対する割合
+ *
+ * limit = (1 - (1 - end_fraction) x min(progress / ramp_width, 1)) x reference. The fraction is 1 at a progress of 0, falls LINEARLY to end_fraction at ramp_width, and stays
+ * there above it. The one shape of the altitude ceiling's brake (progress: predicted excess of the stop height), the rise brake of the landing (progress: climb rate) and the near-ground
+ * settle ceiling (progress: time): a noise around the start of the ramp then changes the limit continuously, it does not switch it on and off.
+ * 上限 = (1 - (1 - end_fraction) × min(進み / ramp_width, 1)) × 基準。割合は進み 0 で 1、ramp_width で直線的に end_fraction まで下がり、それより上では一定。
+ * 高度上限のブレーキ（進み: 止まる高さの予測の超過）、着陸の上昇ブレーキ（進み: 上昇率）、近地面の着地アシストの上限（進み: 時間）が共有する 1 つの形:
+ * ランプの始まりの周りの雑音でも、上限は連続に変わり、入り切りしない。
+ * @param progress     Progress of the ramp, 0 or more (same unit as ramp_width)   ランプの進み（0 以上。ramp_width と同じ単位）
+ * @param ramp_width   Width of the ramp, above 0 (same unit as progress)          ランプの幅（0 より大きい。進みと同じ単位）
+ * @param end_fraction Fraction at the end of the ramp                              ランプの終わりの割合
+ * @param reference    The thrust the fraction applies to [N]                       割合を掛ける推力 [N]
+ */
+inline float rampedLimit(float progress, float ramp_width, float end_fraction, float reference)
+{
+    const float ramp     = fminf(progress / ramp_width, 1.0f);   // 0 at the start, 1 from the ramp end / 始まりで 0、ランプの終わりから 1
+    const float fraction = 1.0f - (1.0f - end_fraction) * ramp;
+    return fraction * reference;
+}
+
+/**
+ * @brief Rise brake of the closed-loop landing: while the craft rises, the thrust is at most a falling fraction of the support reference
+ *        閉ループ着陸の上昇ブレーキ: 機体が上昇している間、推力を支持推力の基準の（下がる）割合以下にする
+ *
+ * climb_rate <= 0: the thrust passes unchanged. Above 0 the fraction is 1 at a climb rate of 0 and falls LINEARLY to kLandingRiseBrakeFrac at
+ * kLandingRiseBrakeRampMps (and stays there above it); the thrust is cut to that fraction x support_reference when it is higher. The ramp keeps
+ * a noise around a climb rate of 0 from switching the brake on and off.
+ * 上昇率が 0 以下: 推力はそのまま通す。0 を超えると、割合は上昇率 0 で 1、kLandingRiseBrakeRampMps で直線的に kLandingRiseBrakeFrac まで下がり（それより上では一定）、
+ * 推力がそれ × support_reference より高ければそこまで切る。ランプは、上昇率 0 の周りの雑音でブレーキが入り切りするのを避ける。
+ * @param thrust            Thrust before the brake [N]                          ブレーキ前の推力 [N]
+ * @param climb_rate        Climb rate, up positive [m/s] (the ESKF's)           上昇率（上が正）[m/s]（ESKF の値）
+ * @param support_reference The support reference [N] (blindLandingStartThrust)  支持推力の基準 [N]（blindLandingStartThrust）
+ */
+inline float brakeRiseThrust(float thrust, float climb_rate, float support_reference)
+{
+    if (climb_rate <= 0.0f) {
+        return thrust;
+    }
+    const float limit = rampedLimit(climb_rate, limits::kLandingRiseBrakeRampMps, limits::kLandingRiseBrakeFrac, support_reference);
+    return (thrust > limit) ? limit : thrust;
 }
 
 /**

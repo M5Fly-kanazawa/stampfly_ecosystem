@@ -56,6 +56,7 @@ static constexpr uint32_t kCommLossHoverUs = 3000u * 1000u;   // 3 s / 3秒
 void StateManager::init()
 {
     state_ = FlightState::INIT;
+    state_since_us_ = static_cast<uint32_t>(esp_timer_get_time());
     mode_ = FlightMode::STABILIZE;
     pairing_state_ = PairingState::NotPaired;
     exit_callback_count_ = 0;
@@ -292,6 +293,8 @@ bool StateManager::requestDisarm()
     // 検出）。LANDING 中の再 DISARM は下の即カットに落ちる（state_ != FLYING）— 2回押しが中断/緊急。
     // FLIP も同様に下へ落ちる（state_ == FLIP であり FLYING でない）: マニューバ中の
     // DISARM は ACRO/STABILIZE と同じ即カット — plan §4.3 FLIP 行。
+    // TAKEOFF is not in this list: the DISARM there is the immediate cut below (a landing started on the floor can float the craft up; detailed_design.md §3 note 5).
+    // TAKEOFF は対象外: そこでの DISARM は下の即時カット（床から始めた着陸は機体を浮かせうる。detailed_design.md §3 注5）。
     if (state_ == FlightState::FLYING && mode_ >= FlightMode::ALT_HOLD) {
         ESP_LOGI(TAG, "DISARM in %s → auto-land (LANDING)", flightModeName(mode_));
         transition(FlightState::LANDING);
@@ -338,12 +341,37 @@ void StateManager::notifyTakeoffComplete()
     transition(FlightState::FLYING);
 }
 
+/// @design detailed_design.md §3.1 — FLYING -> LANDING (land request) / ARMED_GROUND -> IDLE_GROUND (land request) rows  [OK]
 void StateManager::notifyLandingRequest()
 {
+    // ARMED_GROUND in an altitude mode (ALT_HOLD / POS_HOLD): the motors have only begun to spool on the floor and the auto-takeoff has not started, so the immediate cut is the safe answer (a landing from
+    // the floor has nothing to land from). In a manual mode (ACRO / STABILIZE) the pilot holds the throttle and the craft can lift off from ARMED_GROUND (a throttle of 0.499 is enough), so it is not known to be on
+    // the floor: the request is refused, as it was before.
+    // 高度モード（ALT_HOLD / POS_HOLD）の ARMED_GROUND: モータは床の上でスプールを始めただけで、自動離陸も始まっていないので、即時のモータ停止が安全（床の上には、そこから降りる高さが無い）。
+    // 手動モード（ACRO / STABILIZE）ではスロットルをパイロットが握り、ARMED_GROUND からでも浮ける（スロットル 0.499 で足りる）ので、床の上とは限らない: 要求は従来どおり拒否する。
+    if (state_ == FlightState::ARMED_GROUND) {
+        if (!flightModeNeedsAltitude(mode_)) {
+            return;
+        }
+        ESP_LOGI(TAG, "Landing requested on the floor (ARMED_GROUND) -> DISARM");
+        requestDisarm();
+        return;
+    }
+    // TAKEOFF is not accepted: a landing started on the floor can float the craft up (detailed_design.md §3 note 5). The API `land` that arrives in TAKEOFF is held by ApiTask until the TAKEOFF has been left (parked during a `takeoff` wait, waited for by cmdLand outside one).
+    // TAKEOFF は受け付けない: 床から始めた着陸は機体を浮かせうる（detailed_design.md §3 注5）。TAKEOFF に届いた API の `land` は、TAKEOFF を抜けるまで ApiTask が保留する（`takeoff` の待機中なら後回しの行、待機の外なら cmdLand が待つ）。
     if (state_ != FlightState::FLYING) {
         return;
     }
     ESP_LOGI(TAG, "Landing requested");
+    transition(FlightState::LANDING);
+}
+
+void StateManager::notifyTakeoffEndedByLanding()
+{
+    if (state_ != FlightState::TAKEOFF) {
+        return;
+    }
+    ESP_LOGI(TAG, "Takeoff ended by a landing (the floor evidence is latched and not released)");
     transition(FlightState::LANDING);
 }
 
@@ -820,7 +848,7 @@ bool StateManager::isToFSilent() const
 {
     // The verdict is Failsafe's: a silence EPISODE (no new sample for kTofSilenceUs / only invalid
     // samples while flying / the estimator has not re-acquired the ToF yet), published every
-    // 100 ms. It is read through this task's FailsafeStatusGuard (D5): a status that nobody
+    // 100 ms. It is read through this task's FailsafeStatusGuard: a status that nobody
     // refreshes reads as silent, so a stalled Failsafe can never leave the last "not silent" in
     // force; before the first Failsafe publish it reads silent too (the safe side). Read FRESH at
     // every call, not cached per update(): an alert handled earlier in the same StateTask cycle must
@@ -828,7 +856,7 @@ bool StateManager::isToFSilent() const
     // tof_silent_armed_ground). The guard's watch is observed on every call (same task, same clock).
     // 判定は Failsafe のもの: ToF 出力停止の「エピソード」（kTofSilenceUs の間新サンプル無し／飛行中に
     // 無効サンプルだけ／推定器がまだ ToF を取り込み直していない）を 100 ms ごとに発行する。このタスクの
-    // FailsafeStatusGuard を通して読む（D5）: 誰も更新しない状態は出力停止と読むので、Failsafe が停滞
+    // FailsafeStatusGuard を通して読む: 誰も更新しない状態は出力停止と読むので、Failsafe が停滞
     // しても最後の「出力停止でない」が効き続けることはない。Failsafe の最初の発行の前も出力停止と読む
     // （安全側）。update() ごとのキャッシュでなく、呼ぶたびに「最新」を読む: 同じ StateTask 周期の中で
     // 先に処理したアラートは、それを発報したレベルを見なければならず、さもないと 1 回限りの応答が
@@ -898,7 +926,7 @@ void StateManager::handleBlindLandingTimeout(uint32_t now_us)
 
     // LANDING clock: counted from the moment the state ENTERED LANDING, whether the ToF is alive or silent, and
     // cleared only when LANDING ends. A ToF that returns and stops again therefore does not extend it.
-    // LANDING の時計: 状態が LANDING に「入った」時刻から、ToF が生きていても出力停止でも数え、LANDING が終わる
+    // LANDING の時計: 状態が LANDING に「入った」時刻から、ToF が動作していても出力停止でも数え、LANDING が終わる
     // ときだけクリアする。ToF が戻ってまた止まっても延びない。
     landing_clock_.update(state_ == FlightState::LANDING, silent, now_us);
     const uint32_t blind_elapsed_us = landing_clock_.elapsedUs();
@@ -1085,6 +1113,7 @@ void StateManager::resetModeOnGround()
 void StateManager::enterState(FlightState old_state, FlightState new_state)
 {
     state_ = new_state;
+    state_since_us_ = static_cast<uint32_t>(esp_timer_get_time());   // the one clock of "time in this state" (SystemMode.state_since_us) / 「この状態にいる時間」の唯一の時計
     if (new_state == FlightState::LANDING) {
         last_landing_end_ = LandingEnd::None;   // the next landing's end is not known yet / 次の着陸の終わり方はまだ分からない
     }
@@ -1164,6 +1193,7 @@ void StateManager::publishMode()
     mode_msg.arm_block = static_cast<uint8_t>(arm_block_);
     mode_msg.mode_block = static_cast<uint8_t>(mode_block_);
     mode_msg.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    mode_msg.state_since_us = state_since_us_;
 
     system_mode.publish(mode_msg);
 }

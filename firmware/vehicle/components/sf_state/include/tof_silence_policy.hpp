@@ -208,7 +208,7 @@ inline constexpr ToFSilenceAction decideToFSilenceAction(FlightState state, Flig
 /// (kBlindLandingTimeoutUs). It restarts only when LANDING has ended, so a ToF that returns and stops again does not extend it.
 /// It also counts the time the ToF has been continuously silent in this LANDING (the descent without a ToF): the minimum time that a
 /// ToF that dies after a long LANDING gets before the motors are cut (kBlindLandingMinSilentUs).
-/// 状態が LANDING に「入った」時刻からの経過時間（下向き ToF が生きていても出力停止でも）: 着陸の時間切れ
+/// 状態が LANDING に「入った」時刻からの経過時間（下向き ToF が動作していても出力停止でも）: 着陸の時間切れ
 /// （kBlindLandingTimeoutUs）の時計。LANDING が終わったときだけ数え直すので、ToF が戻ってまた止まっても延びない。
 /// この LANDING の中で ToF が連続して出力停止している時間（ToF なしの降下）も数える: 長い LANDING の後に ToF が止まったときに、
 /// モータを切る前に与える最低時間（kBlindLandingMinSilentUs）。
@@ -236,7 +236,7 @@ public:
         silent_elapsed_us_ = silent_running_ ? (now_us - silent_since_us_) : 0u;
     }
     uint32_t elapsedUs() const { return elapsed_us_; }   ///< Time in LANDING [us], 0 when not landing / LANDING の経過 [us]。着陸中でなければ 0
-    uint32_t silentElapsedUs() const { return silent_elapsed_us_; }   ///< Continuous silence in this LANDING [us], 0 when the ToF is alive / この LANDING での連続した出力停止 [us]。ToF が生きていれば 0
+    uint32_t silentElapsedUs() const { return silent_elapsed_us_; }   ///< Continuous silence in this LANDING [us], 0 when the ToF is alive / この LANDING での連続した出力停止 [us]。ToF が動作していれば 0
 
 private:
     bool     running_    = false;

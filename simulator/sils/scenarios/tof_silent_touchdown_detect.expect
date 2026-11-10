@@ -22,9 +22,9 @@ order "Touchdown detected (impact, then still" "Transition: LANDING → IDLE_GRO
 order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silent"
 # Touchdown speed (truth): measured 0.48 m/s (target 0.4 m/s). Bound 0.6 m/s.
 # 接地速度（真値）: measured 0.48 m/s（目標 0.4 m/s）。上限 0.6 m/s。
-# 2026-11-09 (5th review): bound 0.6 -> 0.8 m/s (measured 0.43 -> 0.60 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
+# 2026-11-09: bound 0.6 -> 0.8 m/s (measured 0.43 -> 0.60 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
 # (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g) instead of by the PI.
-# 2026-11-09（5 回目の見直し）: 上限 0.6 → 0.8 m/s（実測 0.43 → 0.60 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
+# 2026-11-09: 上限 0.6 → 0.8 m/s（実測 0.43 → 0.60 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
 # 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
 metric descent_speed_max < 0.8 in 14.0 18.0
 # Landed and stays on the floor: the touchdown was real, not declared in the air (truth 0.021 m resting).

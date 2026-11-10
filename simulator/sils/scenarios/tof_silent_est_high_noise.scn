@@ -4,7 +4,7 @@
 # tof_silent_est_high.scn with the sensor-noise model n2 (`--noise n2`; the plant's true hover thrust is 0.30 N there, so the estimate 0.406 N is
 # 1.35 x the truth). The auto-takeoff reaches 1.5 m/s at the ToF handoff and the altitude loop's thrust bottoms at 0.89 x the weight,
 # so the craft went on to 1.68 m (the ceiling is 1.2 m, the ToF's range 1.6 m: the ToF then became invalid and LANDING started in the air). The altitude
-# ceiling is now effective (2026-11-09, 5th review): above kAltitudeCeilingM + kAltitudeCeilingMarginM (1.35 m) no climb command is
+# ceiling is now effective (2026-11-09): above kAltitudeCeilingM + kAltitudeCeilingMarginM (1.35 m) no climb command is
 # allowed and, while the craft is still rising, the thrust is at most 0.5 x the estimate. Spec under test:
 #  1. The truth peak stays below 1.55 m over the whole run (before: 1.69 m; with the noise off the same scenario stays at 1.2 m).
 #  2. The craft comes down to the floor by the descent without a ToF (silence at 15.6 s) and the motors stop only there; no time-limit end, no emergency DISARM.
@@ -13,7 +13,7 @@
 # tof_silent_est_high.scn をセンサノイズモデル n2（`--noise n2`。そこではプラントの真のホバー推力は 0.30 N で、見積もり 0.406 N は
 # 真値の 1.35 倍）で行う。自動離陸は ToF の引き継ぎで 1.5 m/s に達し、高度ループの推力は重さの 0.89 倍で底を打つので、機体は
 # 1.68 m まで行った（天井は 1.2 m、ToF の有効距離 1.6 m: ToF が無効になり、空中で LANDING が始まった）。高度の天井は今は実効的
-# （2026-11-09 の 5 回目の見直し）: kAltitudeCeilingM + kAltitudeCeilingMarginM（1.35 m）を超えたら上昇の指令を一切許さず、
+# （2026-11-09）: kAltitudeCeilingM + kAltitudeCeilingMarginM（1.35 m）を超えたら上昇の指令を一切許さず、
 # まだ上昇中の間は推力を見積もりの 0.5 倍以下にする。検証する仕様:
 #  1. 真値の最高は走行全体で 1.55 m 未満（以前: 1.69 m。ノイズなしの同じシナリオは 1.2 m）。
 #  2. 機体は ToF なしの降下（15.6 s の出力停止）で床まで降り、モータは床の上でだけ止まる。時間切れ・非常の DISARM では終わらない。
@@ -22,8 +22,8 @@
 # Run: sf sils scenario simulator/sils/scenarios/tof_silent_est_high_noise.scn --target vehicle --duration 28000000 --noise n2
 #
 #  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
-   0    param      hover.thrust.learn 0                                                # P1: stop the hover-thrust learning, so the wrong estimate stays wrong
-   +    param      hover.thrust_corr 1.12                                              # P2: estimate 1.12 x mg = 0.406 N against the true hover 0.34 N (+19 %; the loop settles on 0.34)
+   0    param      hover.thrust.learn 0                                                # stop the hover-thrust learning, so the wrong estimate stays wrong
+   +    param      hover.thrust_corr 1.12                                              # estimate 1.12 x mg = 0.406 N against the true hover 0.34 N (+19 %; the loop settles on 0.34)
    +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
    +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
    +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (7.5 s)

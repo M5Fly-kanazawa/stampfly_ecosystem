@@ -1,0 +1,25 @@
+# api_land_deferred_in_takeoff.expect — `land` during the TAKEOFF climb: parked, the takeoff completes ("ok" at FLYING), then the `land` runs and ends at the touchdown
+# TAKEOFF の上昇中の `land`: 後回し、離陸が完了し（FLYING で "ok"）、その後に `land` が実行されて接地で終わる
+#
+exit 0
+log_contains any "cmd: takeoff"
+log_contains any "Auto-takeoff engaged"
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "Landing requested"
+log_contains any "Transition: FLYING → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_absent any "Transition: TAKEOFF → LANDING"
+log_absent any "reply: error"
+log_absent any "cmd: land (during a blocking command"
+order "Auto-takeoff engaged" "Transition: TAKEOFF → FLYING"
+order "Transition: TAKEOFF → FLYING" "cmd: land"
+order "cmd: land" "Transition: FLYING → LANDING"
+order "Transition: FLYING → LANDING" "Transition: LANDING → IDLE_GROUND"
+# The takeoff is not cut short: the craft reaches the takeoff height (0.5 m, measured peak 0.54 m) and does not overshoot it.
+# 離陸は打ち切られない: 機体は離陸の高さ（0.5 m、実測の最高 0.54 m）に達し、行き過ぎない。
+metric alt_max > 0.45 in 6.0 8.0
+metric alt_max < 0.70 in 6.0 22.0
+# On the floor with the motors stopped at the end.
+# 最後は床の上でモータは止まっている。
+metric alt_max < 0.05 in 12.0 22.0
+metric duty_max < 0.01 in 12.0 22.0

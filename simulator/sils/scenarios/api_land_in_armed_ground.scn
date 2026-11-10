@@ -1,0 +1,25 @@
+# api_land_in_armed_ground.scn — `land` while the motors have only begun to turn on the floor (ARMED_GROUND): the immediate DISARM, the waiting `takeoff` is cancelled
+#                                モータが床の上で回り始めたところ（ARMED_GROUND）での `land`: 即時 DISARM、待っている `takeoff` は取り消される
+#
+# The API `takeoff` ARMs the craft in POS_HOLD; the auto-takeoff starts only after the spool of ARMED_GROUND (0.3 s). A `land` that arrives 50 ms after the `takeoff` finds the craft in
+# ARMED_GROUND with the `takeoff` still waiting. There is no height to land from, so the request is the immediate DISARM (StateManager::notifyLandingRequest; detailed_design.md §3 note 13): the motors
+# never reach TAKEOFF, `land` answers ok, the waiting `takeoff` answers "error cancelled by land". The lines parked while the first `takeoff` waited (a second `takeoff` and a `height?`) are dropped too, each answered
+# "error cancelled by land", as an `emergency` drops them: a parked `takeoff` would ARM the craft again right after the DISARM.
+#
+# API の `takeoff` は POS_HOLD で ARM し、自動離陸は ARMED_GROUND のスプール（0.3 s）の後に始まる。`takeoff` の 50 ms 後に届いた `land` は、機体が ARMED_GROUND で、`takeoff` がまだ待っているところに当たる。
+# 降りる高さが無いので、要求は即時 DISARM（StateManager::notifyLandingRequest。detailed_design.md §3 注13）: モータは TAKEOFF に入らず、`land` は ok、待っていた `takeoff` は "error cancelled by land" を返す。
+# 最初の `takeoff` が待っている間に後回しにされた行（2 つ目の `takeoff` と `height?`）も、`emergency` と同じく捨てられ、それぞれ "error cancelled by land" を返す: 後回しの `takeoff` が残ると、DISARM の直後にまた ARM する。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_land_in_armed_ground.scn --target vehicle --duration 12000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    tof_deadzone 0
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> ARM -> ARMED_GROUND (t=6)
+   +    rc         2048  2048   2048    2048  0     30        50      # D: 30 ms: still in the spool of ARMED_GROUND
+   +    api        "takeoff"                                          # second takeoff, parked during the wait
+   +    api        "height?"                                          # parked during the wait
+   +    rc         2048  2048   2048    2048  0     20        50      # D2: 20 ms more (t=6.05 s)
+   +    api        "land"                                             # E: t=6.05 s — land while takeoff waits
+   +    rc         2048  2048   2048    2048  0     4000      50      # F: nothing else happens (to t=10)

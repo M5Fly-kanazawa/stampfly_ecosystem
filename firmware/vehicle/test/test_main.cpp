@@ -1003,7 +1003,7 @@ TEST(wire_unified_worst_case_fits)
     // The same worst case built through the real builder: every addEntry() must be accepted and the
     // datagram must stay within the cap (an entry that does not fit is DROPPED, silently on the wire).
     // 同じ最悪ケースを実際のビルダで組む: 全 addEntry() が受理され、データグラムが上限内に収まること
-    // （収まらないエントリは回線上では黙って落ちる）。
+    // （収まらないエントリは回線上では通知されずに捨てられる）。
     sf::LogStreamSample samples[kSamplesPerPacket] = {};
     UnifiedPacketBuilder builder;
     builder.begin(0, samples);
@@ -1406,11 +1406,11 @@ TEST(land_blind_touchdown_floor_holds_the_craft_up_without_an_impact)
     ASSERT_TRUE(mgr.isBlindTouchdown());
 }
 
-// D1 (2nd independent review): a ToF-silence episode while ARMED must not leave the raw ground flag
+// A ToF-silence episode while ARMED must not leave the raw ground flag
 // frozen at "ground". markAirborne() flips it to the safe side, and it returns to "ground" ONLY
 // through the existing air->ground debounce (consecutive VALID ground readings): neither an invalid
 // first sample after the silence nor a few valid ones fewer than the debounce count may restore it.
-// D1（2 回目の独立レビュー）: ARM 中の ToF 出力停止のエピソードで、生の接地フラグを「接地」のまま
+// ARM 中の ToF 出力停止のエピソードで、生の接地フラグを「接地」のまま
 // 固定されたままにしてはならない。markAirborne() は安全側へ倒し、「接地」へ戻るのは既存の空中→接地デバウンス
 // （有効な地上読みの連続）だけ: 出力停止後の最初の無効サンプルでも、デバウンス回数に満たない有効
 // サンプルでも戻ってはならない。
@@ -1427,6 +1427,85 @@ TEST(land_mark_airborne_returns_to_ground_only_by_the_debounce)
     ASSERT_TRUE(!mgr.isOnGround());
     feed(mgr, 0.03f, true, true, 0.0f, false, 1, 30);         // flip_confirm_samples (2) reached / 2 個で成立
     ASSERT_TRUE(mgr.isOnGround());
+}
+
+// The landing verdict is judged AFRESH when the LANDING begins (noteLandingDescent(), called every control cycle by ImuTask before the samples of the cycle).
+// A verdict left over from before (the hysteresis band between kTakeoffGroundBandM and kTakeoffAirborneBandM keeps the ground flag at 0.05-0.15 m) is no evidence of a touchdown in the LANDING.
+// 着陸の判定は LANDING が始まるとき「新たに」行う（noteLandingDescent()。ImuTask が、その周期のサンプルより前に、制御周期ごとに呼ぶ）。以前から残った判定
+// （kTakeoffGroundBandM と kTakeoffAirborneBandM の間のヒステリシス帯では、接地フラグが 0.05〜0.15 m で保たれる）は、LANDING の中の接地の証拠ではない。
+// Feed like ImuTask does: the notice first, then the ToF sample (every cycle, not only on a sample).
+// ImuTask と同じ順で与える: 先に通知、次に ToF サンプル（サンプルのときだけでなく毎周期）。
+static void feedWithNotice(sf::TakeoffLandingMgr& mgr, float tof_m, bool in_landing_descent, int n)
+{
+    for (int i = 0; i < n; ++i) {
+        mgr.noteLandingDescent(in_landing_descent);
+        feed(mgr, tof_m, true, true, 0.02f, in_landing_descent, 1, 33);
+    }
+}
+
+// A craft that rested on the floor (ground flag set, verdict true), then holds 0.10 m at rest in FLYING: the verdict is still true there (the hysteresis band).
+// 床に置かれていた機体（接地フラグが立ち、判定が true）が、FLYING で 0.10 m に静止して保つ: 判定は（ヒステリシス帯なので）まだ true。
+static void restedThenLowHover(sf::TakeoffLandingMgr& mgr)
+{
+    mgr.init();
+    feedWithNotice(mgr, 0.03f, false, 40);
+    feedWithNotice(mgr, 0.10f, false, 40);
+    ASSERT_TRUE(mgr.isOnGround() && mgr.isLandingDetected());   // the stale verdict that the LANDING must not inherit / LANDING が引き継いではならない、古い判定
+}
+
+TEST(land_notice_clears_the_verdict_of_before_at_the_rising_edge_of_the_landing)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLowHover(mgr);
+    mgr.noteLandingDescent(true);                                // the first cycle of the LANDING, before any sample / LANDING の最初の周期、サンプルの前
+    ASSERT_TRUE(!mgr.isLandingDetected());                       // gone at once, so StateTask cannot read it / すぐ消える（StateTask が読めない）
+}
+
+TEST(land_after_the_notice_only_a_new_sample_ends_the_landing)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLowHover(mgr);
+    feedWithNotice(mgr, 0.10f, true, 10);                        // 330 ms of new samples < stall_hold_ms (400 ms) / 330 ms < 400 ms
+    ASSERT_TRUE(!mgr.isLandingDetected());                       // the verdict of before did not come back / 以前の判定は戻らない
+    feedWithNotice(mgr, 0.10f, true, 4);                         // 14 samples = 462 ms of a craft at rest at 0.10 m in the LANDING: touchdown / LANDING の中で 0.10 m に静止して 14 サンプル = 462 ms: 接地
+    ASSERT_TRUE(mgr.isLandingDetected());
+    mgr.noteLandingDescent(true);                                // the notice every cycle is NOT an edge: it must not clear a verdict made in the LANDING / 毎周期の通知は立ち上がりではない: LANDING の中の判定を消してはならない
+    ASSERT_TRUE(mgr.isLandingDetected());
+}
+
+TEST(land_notice_judges_afresh_again_at_every_new_landing)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLowHover(mgr);
+    feedWithNotice(mgr, 0.10f, true, 14);
+    ASSERT_TRUE(mgr.isLandingDetected());
+    feedWithNotice(mgr, 0.10f, false, 40);                       // the LANDING ended (a take-off from it): the flag follows the level / LANDING が終わる: フラグは水準に従う
+    ASSERT_TRUE(mgr.isLandingDetected());                        // ground flag still set in the band, at rest / 帯の中、静止で接地フラグが残る
+    mgr.noteLandingDescent(true);                                // the next LANDING: afresh again / 次の LANDING: また新たに
+    ASSERT_TRUE(!mgr.isLandingDetected());
+}
+
+TEST(land_notice_without_a_landing_descent_changes_nothing)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLowHover(mgr);
+    mgr.noteLandingDescent(false);
+    ASSERT_TRUE(mgr.isLandingDetected());                        // the verdict follows the level outside a LANDING / LANDING の外では判定は水準に従う
+}
+
+// The dead-zone evidence (a valid reading near the floor, then only invalid samples) is a ToF fact of before the LANDING too: the notice clears it with the verdict, so a LANDING that begins with
+// invalid samples after a low hover is not ended by the evidence of the hover.
+// 不感帯の証拠（床の近くの有効な読みの後に無効サンプルだけ）も、LANDING の前の ToF の事実: 通知は判定と一緒にこれを消すので、低いホバーの後に無効サンプルで始まる LANDING は、
+// ホバーの間の証拠では終わらない。
+TEST(land_notice_clears_the_dead_zone_evidence_of_before_the_landing)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    feedWithNotice(mgr, 0.08f, true, 3);                         // a valid reading inside the band: the dead-zone evidence is armed (a descent is commanded) / 帯の中の有効な読み: 不感帯の証拠が立つ（降下が指令されている）
+    mgr.noteLandingDescent(false);
+    mgr.noteLandingDescent(true);                                // the notice at the rising edge clears the evidence / 立ち上がりの通知が証拠を消す
+    feed(mgr, 0.0f, false, true, 0.28f, true, 30, 33);           // 0.99 s of invalid samples, the craft still descending / 無効サンプルが 0.99 s、機体はまだ降下中
+    ASSERT_TRUE(!mgr.isLandingDetected());
 }
 
 /// The [TakeoffLanding] group (ground contact, stalled descent, blind touchdown, markAirborne).
@@ -1447,6 +1526,11 @@ static void runTakeoffLandingTests()
     run_land_reload_config_reaches_the_detector_and_keeps_the_latch();
     run_land_blind_touchdown_floor_holds_the_craft_up_without_an_impact();
     run_land_mark_airborne_returns_to_ground_only_by_the_debounce();
+    run_land_notice_clears_the_verdict_of_before_at_the_rising_edge_of_the_landing();
+    run_land_after_the_notice_only_a_new_sample_ends_the_landing();
+    run_land_notice_judges_afresh_again_at_every_new_landing();
+    run_land_notice_without_a_landing_descent_changes_nothing();
+    run_land_notice_clears_the_dead_zone_evidence_of_before_the_landing();
 }
 
 int main()

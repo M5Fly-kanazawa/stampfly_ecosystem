@@ -1,0 +1,28 @@
+# api_land_tof_never_valid.scn — `land` during the TAKEOFF of a craft whose downward ToF has never read a valid height: the `land` is parked, the ToF rule ends the takeoff by a LANDING without a ToF
+#                                下向き ToF が一度も有効な高さを読んでいない機体の TAKEOFF 中の `land`: `land` は後回しになり、ToF の規則が離陸を終わらせ、ToF なしの着陸に入る
+#
+# The ToF returns only invalid samples from the start (`tof_invalid 1`, as a sensor that cannot range the floor), the hover-thrust estimate is 20 % high (`hover.thrust_corr 1.2`), the accelerometer has an offset and the sensor
+# noise is on (n2). The API `takeoff` ARMs and starts the auto-takeoff; 0.7 s later a `land` arrives while the craft is still climbing. The `land` is parked (StateManager::notifyLandingRequest does not accept TAKEOFF,
+# detailed_design.md §3 note 13); the takeoff ends by the ToF rule instead: a craft that has risen kTofInvalidTakeoffRiseM with only invalid samples is climbing blind (tof_health_tracker.hpp), so Failsafe declares the
+# ToF silent and StateManager ends the TAKEOFF by a LANDING (detailed_design.md §3 note 12). The descent is the one without a ToF (a thrust that cannot climb) and ends at the touchdown of the descent without a ToF.
+# Spec under test: a `land` in TAKEOFF does not start a LANDING; the way into the LANDING is the ToF rule, and the craft is not stopped in the air.
+#
+# ToF は最初から無効サンプルだけを返し（`tof_invalid 1`。床を測れないセンサ）、ホバー推力の見積もりが 20 % 高く（`hover.thrust_corr 1.2`）、加速度計にオフセットがあり、センサノイズが有効（n2）。API の `takeoff` が ARM して
+# 自動離陸を始め、0.7 s 後、機体がまだ上昇している間に `land` が届く。`land` は後回しになる（StateManager::notifyLandingRequest は TAKEOFF を受け付けない。detailed_design.md §3 注13）。離陸を終わらせるのは ToF の規則:
+# 有効なサンプルが無いまま kTofInvalidTakeoffRiseM 上昇した機体は ToF なしで上昇している（tof_health_tracker.hpp）ので、Failsafe が ToF の出力停止を宣言し、StateManager が TAKEOFF を LANDING で終わらせる
+# （detailed_design.md §3 注12）。降下は ToF なしの降下（上昇できない推力）で、ToF なしの降下の接地で終わる。
+# 検証する仕様: TAKEOFF 中の `land` は LANDING を始めない。LANDING に入る道は ToF の規則で、機体は空中で止められない。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_land_tof_never_valid.scn --target vehicle --duration 16000000 --noise n2
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    param      hover.thrust_corr 1.2                                  # P: hover-thrust estimate 20 % high
+   0    rc         2048  2048   2048    2048  0     5500      50         # A: boot at rest — calibration completes
+   +    bias       0 0 0.3 0 0 0                                         # B: accelerometer offset +0.3 m/s^2 on z
+   +    rc         2048  2048   2048    2048  0     500       50         # C: settle with the offset
+   +    tof_invalid 1                                                    # D: the ToF returns invalid samples only, from now on
+   +    api        "command"                                             # E: enter SDK mode (t=6)
+   +    api        "takeoff"                                             # F: takeoff -> ARM -> auto-takeoff climb (t=6)
+   +    rc         2048  2048   2048    2048  0     700       50         # G: the climb runs for 0.7 s
+   +    api        "land"                                                # H: t=6.7 s — land while takeoff waits
+   +    rc         2048  2048   2048    2048  0     9300      50         # I: the descent and the touchdown (to t=16)

@@ -8,16 +8,16 @@
 
 /**
  * @file test_tof_health.cpp
- * @brief Host tests for the ToF re-acquisition judgement (2nd independent review, D1-D6)
- *        ToF 取り込み直しの判定のホスト試験（2 回目の独立レビュー、D1〜D6）
+ * @brief Host tests for the ToF re-acquisition judgement (the silence episode, the stale status, the mode refusal)
+ *        ToF 取り込み直しの判定のホスト試験（出力停止のエピソード、古い状態、モード拒否）
  *
  * Pure pieces, no ESP-IDF / FreeRTOS:
  *  1. sf::ToFHealthTracker — "the estimator has re-acquired the ToF" (N adopted samples with a small
- *     innovation AND the ToF alive for kTofAliveMinUs), the stuck-invalid verdict while flying (D4),
- *     the one-shot re-acquisition request (D2), losses incl. silences beyond 36 / 72 minutes.
+ *     innovation AND the ToF alive for kTofAliveMinUs), the stuck-invalid verdict while flying,
+ *     the one-shot re-acquisition request, losses incl. silences beyond 36 / 72 minutes.
  *  2. sf::judgeToFSilenceReason — every cell of the verdict Failsafe publishes.
- *  3. sf::FailsafeStatusGuard — a failsafe_status nobody refreshes reads as silent (D5).
- *  4. sf::decideToFModeRefusal / sf::toFSilenceRefusesArm — the D3 "consume the edge in flight" rule
+ *  3. sf::FailsafeStatusGuard — a failsafe_status nobody refreshes reads as silent.
+ *  4. sf::decideToFModeRefusal / sf::toFSilenceRefusesArm — the "consume the edge in flight" rule
  *     and the ARM refusal in every mode.
  * Own TEST/ASSERT framework and main(), same pattern as test_tof_silence.cpp.
  *
@@ -285,7 +285,7 @@ TEST(stuck_on_the_ground_is_not_started_and_a_started_one_survives_the_landing)
 }
 
 // ----------------------------------------------------------------------------
-// 1b. What an invalid sample means by phase (C2 / C5) / 無効サンプルの意味（フェーズ別）
+// 1b. What an invalid sample means by phase / 無効サンプルの意味（フェーズ別）
 // ----------------------------------------------------------------------------
 
 TEST(classify_invalid_sample_covers_every_phase)
@@ -360,9 +360,9 @@ TEST(takeoff_counts_after_the_rise_and_at_the_latest_after_the_time_limit)
 
 TEST(a_loss_then_invalid_only_samples_in_landing_is_stuck_not_reliable)
 {
-    // The C5 case: a silence while flying, then LANDING with samples back but ALL invalid. They must
+    // The case: a silence while flying, then LANDING with samples back but ALL invalid. They must
     // not count as agreement (the estimator would be declared reliable after ~1 s).
-    // C5 の場合: 飛行中の出力停止の後、サンプルは戻ったが LANDING で「全部」無効。一致と数えてはならない
+    // この場合: 飛行中の出力停止の後、サンプルは戻ったが LANDING で「全部」無効。一致と数えてはならない
     // （約 1 s で推定器が信頼できると宣言されてしまう）。
     Rig rig;
     Scene flying = sceneOf(ToFFlightPhase::Flying);
@@ -513,7 +513,7 @@ TEST(the_display_staleness_test_needs_no_observation_and_catches_the_edges)
 }
 
 // ----------------------------------------------------------------------------
-// 4. D3 mode refusal and ARM refusal / D3 のモード拒否と ARM 拒否
+// 4. Mode refusal and ARM refusal / モード拒否と ARM 拒否
 // ----------------------------------------------------------------------------
 
 TEST(altitude_mode_requests_are_consumed_in_flight_and_kept_on_the_ground)

@@ -652,15 +652,19 @@ static void arbitrateFlightMode(sf::FlightMode want)
 
 /// Execute the TAKEOFF decision of takeoff_policy.hpp (decideTakeoff()): the judgement is the pure function's, StateTask only collects the facts and acts (INV-3).
 /// takeoff_policy.hpp の TAKEOFF の判断（decideTakeoff()）を実行する: 判断は純関数のもので、StateTask は事実を集めて実行するだけ（INV-3）。
-/// @design detailed_design.md §3 — TAKEOFF -> FLYING (manual: ToF airborne / auto: captured) / TAKEOFF -> IDLE_GROUND (auto: ToF shows the floor for 5 s) [OK]
-static void updateTakeoff(uint32_t takeoff_since_us, uint32_t now_us)
+/// @design detailed_design.md §3.1 — TAKEOFF -> FLYING (manual: ToF airborne / auto: captured, no floor evidence, none latched; the latch is released by the craft leaving the floor) [OK]
+/// @design detailed_design.md §3.1 — TAKEOFF -> IDLE_GROUND (auto: the healthy ToF shows the craft on the floor for 5 s) [OK]
+/// @design detailed_design.md §3.1 — TAKEOFF -> LANDING (auto: the floor evidence is latched, not there now, after 5 s) [OK]
+static void updateTakeoff(uint32_t now_us)
 {
     sf::TakeoffFacts facts;
     facts.auto_takeoff       = sf::flightModeNeedsAltitude(g_state_manager.getMode());
     facts.airborne           = sf::system_status.latest().airborne;
     facts.controller_reached = sf::controller_status.latest().takeoff_reached;
     facts.floor_stays        = sf::tof_health.latest().floor_stays && !g_state_manager.isToFSilent();   // detected by ImuTask (INV-3), only a healthy ToF counts / ImuTask が検出（INV-3）。健全な ToF だけが数える
-    facts.elapsed_us         = static_cast<uint32_t>(now_us - takeoff_since_us);   // unsigned difference: correct across a wrap / 符号なしの差: 巻き戻りをまたいでも正しい
+    facts.floor_seen         = sf::tof_health.latest().floor_seen;   // the latch of the evidence (ImuTask); not gated by the silence judgement, see ToFHealth / 証拠のラッチ（ImuTask）。出力停止の判定の条件にはしない（ToFHealth 参照）
+    facts.floor_leaving      = sf::tof_health.latest().floor_leaving && !g_state_manager.isToFSilent();   // the craft is lifting off the floor now; only a healthy ToF counts / 機体は今、床を離れつつある。健全な ToF だけが数える
+    facts.elapsed_us         = static_cast<uint32_t>(now_us - sf::system_mode.latest().state_since_us);   // the one clock of "time in this state" (StateManager::enterState); unsigned difference: correct across a wrap / 「この状態にいる時間」の唯一の時計。符号なしの差: 巻き戻りをまたいでも正しい
     switch (sf::decideTakeoff(facts)) {
     case sf::TakeoffAction::Complete:
         g_state_manager.notifyTakeoffComplete();   // → FLYING
@@ -668,7 +672,12 @@ static void updateTakeoff(uint32_t takeoff_since_us, uint32_t now_us)
     case sf::TakeoffAction::AbortDisarm:
         ESP_LOGW(TAG, "Auto-takeoff aborted: the healthy ToF has shown the craft on the floor for %u ms → DISARM",
                  static_cast<unsigned>(sf::limits::kAutoTakeoffNoLiftAbortUs / 1000u));
-        g_state_manager.requestDisarm();
+        g_state_manager.requestDisarm();   // in TAKEOFF a DISARM is the motor cut / TAKEOFF での DISARM はモータ停止
+        break;
+    case sf::TakeoffAction::Land:
+        ESP_LOGW(TAG, "Auto-takeoff ended by a landing: the floor evidence is latched and not released after %u ms",
+                 static_cast<unsigned>(sf::limits::kAutoTakeoffNoLiftAbortUs / 1000u));
+        g_state_manager.notifyTakeoffEndedByLanding();   // → LANDING (a craft that the takeoff thrust did not lift is not lifted by the landing thrust) / LANDING（離陸の推力で浮かなかった機体は、着陸の推力でも浮かない）
         break;
     case sf::TakeoffAction::Continue:
         break;
@@ -715,7 +724,6 @@ void StateTask(void* pvParameters)
     // config::ARMED_GROUND_SPOOL_US）。prev_fs で突入エッジを検出する。
     uint32_t armed_ground_since_us = 0;
     sf::FlightState prev_fs = sf::FlightState::INIT;
-    uint32_t takeoff_since_us = 0;   // TAKEOFF entry time [us], for the auto-takeoff abort / TAKEOFF 突入時刻 [us]（自動離陸の中止用）
 
     // Bench motor test bookkeeping: a test has run and its re-level is still owed,
     // and the last time motor_test was seen active (start of the quiet window).
@@ -988,9 +996,6 @@ void StateTask(void* pvParameters)
         if (fs == sf::FlightState::ARMED_GROUND && prev_fs != sf::FlightState::ARMED_GROUND) {
             armed_ground_since_us = now_us;
         }
-        if (fs == sf::FlightState::TAKEOFF && prev_fs != sf::FlightState::TAKEOFF) {
-            takeoff_since_us = now_us;   // TAKEOFF entry edge, for the abort / 中止のための TAKEOFF 突入エッジ
-        }
         prev_fs = fs;
 
         if (fs == sf::FlightState::ARMED_GROUND) {
@@ -1008,7 +1013,7 @@ void StateTask(void* pvParameters)
                 g_state_manager.notifyTakeoff();          // → TAKEOFF (manual)
             }
         } else if (fs == sf::FlightState::TAKEOFF) {
-            updateTakeoff(takeoff_since_us, now_us);   // manual: ToF airborne; auto: 0.5 m captured, or the floor shown for 5 s / 手動: ToF が空中、自動: 0.5 m 捕捉、または床が 5 s 示された
+            updateTakeoff(now_us);   // manual: ToF airborne; auto: 0.5 m captured, or the floor shown for 5 s / 手動: ToF が空中、自動: 0.5 m 捕捉、または床が 5 s 示された
         } else if (fs == sf::FlightState::FLIP) {
             // Flip sequencer reports completion OR abort-then-recovery the same way
             // (controller_status.flip_done), same shape as takeoff_reached above —
@@ -1038,7 +1043,9 @@ void StateTask(void* pvParameters)
         const sf::SystemStatus status = sf::system_status.latest();
         if (fs == sf::FlightState::IDLE_GROUND || fs == sf::FlightState::IDLE_HELD) {
             g_state_manager.notifyIdleGroundHeld(status.held);
-        } else if (fs == sf::FlightState::LANDING && status.landing) {
+        } else if (fs == sf::FlightState::LANDING &&
+                   sf::landingVerdictCounts(status.landing, status.verdict_state_since_us, sf::system_mode.latest().state_since_us)) {
+            // Only a verdict judged in this very LANDING counts / この LANDING の中で判定されたものだけを数える（landingVerdictCounts()、takeoff_policy.hpp）
             g_state_manager.notifyLandingComplete();
         }
 

@@ -1,13 +1,13 @@
 # tof_recover_prearm.scn — ARM is refused until the estimator has re-acquired the ToF, not just until samples arrive
 #                          ARM は、サンプルが届くだけでなく、推定器が ToF を取り込み直すまで拒否される
 #
-# 2nd independent review: the ARM / altitude-mode permission was "a fresh sample arrived". Spec under test: the ToF
+# Before the change the ARM / altitude-mode permission was "a fresh sample arrived". Spec under test: the ToF
 # stops at 3.0 s and resumes at 9.0 s; an ARM press 0.3 s after the return (9.3 s) is REFUSED with the reason
 # "estimator has not re-acquired the ToF yet" (the ToF must be alive for 1 s AND 10 samples must be adopted with a
 # small innovation); a press at 11.2 s is ACCEPTED. (tof_silent_prearm.scn covers the plain silence; this one the
 # recovery.) The motors never spin.
 #
-# 2 回目の独立レビュー: ARM・高度モードの許可条件が「新しいサンプルが届いた」だった。検証する仕様: ToF が 3.0 s に
+# main（2026-11-08 時点）は ARM・高度モードの許可条件が「新しいサンプルが届いた」だった。検証する仕様: ToF が 3.0 s に
 # 停止し 9.0 s に復帰する。復帰の 0.3 s 後（9.3 s）の ARM 操作は「推定器がまだ ToF を取り込み直していない」理由で
 # 拒否される（ToF が 1 s 生存し、かつ小さなイノベーションで 10 サンプルが採用されること）。11.2 s の操作は受理される。
 # （tof_silent_prearm.scn は単純な出力停止、こちらは復帰。）モータは回らない。

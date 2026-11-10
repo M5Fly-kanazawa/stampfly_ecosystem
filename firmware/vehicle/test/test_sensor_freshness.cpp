@@ -130,10 +130,10 @@ TEST(uint32_wraparound_boundary_values)
 
 TEST(long_silence_stays_silent_past_signed_limit)
 {
-    // R1: the sensor stops at t0. Observed every second, it must be silent from 0.5 s on
+    // The sensor stops at t0. Observed every second, it must be silent from 0.5 s on
     // and STAY silent through 36 min (a signed 32-bit difference would turn negative at
     // 35.8 min and call it "newer than now" = healthy) and through the 71.6 min uint32 wrap.
-    // R1: センサが t0 で止まる。1 秒ごとに観測し、0.5 s 以降は停止、かつ 36 分（符号付き 32bit
+    // センサが t0 で止まる。1 秒ごとに観測し、0.5 s 以降は停止、かつ 36 分（符号付き 32bit
     // 差は 35.8 分で負になり「now より新しい」＝健全と誤る）も 71.6 分の uint32 巻き戻りも
     // またいで停止のままであること。
     const uint32_t last_sample_us = 4000000000u;          // near the uint32 limit / 上限の近く
@@ -259,7 +259,7 @@ static bool silent_after_gap(uint32_t gap_minutes, uint32_t stamp_age_at_last_us
 {
     // A live source observed at t0, then NOT observed for gap_minutes, then observed again
     // with the SAME stamp (the source died right after the last observation).
-    // 生きていた発行元を t0 で観測し、gap_minutes 分観測せず、同じ時刻印で再観測する
+    // 動作していた発行元を t0 で観測し、gap_minutes 分観測せず、同じ時刻印で再観測する
     // （最後の観測の直後に発行元が止まった）。
     sf::SilenceWatch watch;
     const uint32_t t0 = 3000000000u;
@@ -394,7 +394,7 @@ TEST(observing_through_disarm_keeps_a_dead_link_silent)
     // and then the vehicle is armed: the link must read dead the whole way, not revive when a
     // single 40 min difference would have wrapped. Contrast: the same stamp observed only at
     // t0 and at ARM (the pre-fix behaviour) is caught by the gap rule above.
-    // 制御タスクの場面: setpoint の時刻印が t0 で止まる（DISARM 中にリンクが死ぬ）。監視器を
+    // 制御タスクの場面: setpoint の時刻印が t0 で止まる（DISARM 中にリンクが途絶える）。監視器を
     // 毎周期観測（ここでは速度のため 1 s 刻み）して 40 分たち、ARM する: リンクは終始「途絶」で、
     // 40 分の差が巻き戻って復活してはならない。
     sf::SilenceWatch watch;

@@ -7,7 +7,7 @@ log_absent any "reply: error land timeout"
 order "Autonomous landing engaged" "cmd: emergency"
 order "cmd: emergency" "reply: error interrupted by emergency"
 metric duty_max < 0.01 in 17.1 20.6
-# R2: the parked lines are cancelled, never replayed (no second takeoff / move)
+# the parked lines are cancelled, never replayed (no second takeoff / move)
 log_contains any "deferred line cancelled: takeoff"
 log_contains any "deferred line cancelled: left 100"
 log_contains any "reply: error cancelled by emergency"

@@ -1,0 +1,14 @@
+# takeoff_disarm_stops.expect — a pilot DISARM in the TAKEOFF of ALT_HOLD stops the motors at once; no LANDING, no abort of the system
+# ALT_HOLD の TAKEOFF でのパイロットの DISARM はすぐモータを止める。LANDING にも、システムの中止にもならない
+#
+exit 0
+log_contains any "Auto-takeoff engaged"
+log_contains any "DISARM accepted (TAKEOFF → IDLE_GROUND)"
+log_contains any "Transition: TAKEOFF → IDLE_GROUND"
+log_absent any "auto-land (LANDING)"
+log_absent any "Transition: TAKEOFF → LANDING"
+log_absent any "Auto-takeoff aborted"
+log_absent any "Transition: TAKEOFF → FLYING"
+order "Auto-takeoff engaged" "DISARM accepted (TAKEOFF → IDLE_GROUND)"
+metric alt_max < 0.05 in 5.0 16.0
+metric duty_max < 0.01 in 9.0 16.0

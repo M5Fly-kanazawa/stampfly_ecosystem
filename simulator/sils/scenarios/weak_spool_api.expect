@@ -1,5 +1,5 @@
-# weak_spool_api.expect — the API takeoff of a craft that cannot lift ends by a ToF-silent LANDING, replies an error, and the motors stop (8th pass, D1)
-# 浮けない機体の API takeoff は ToF なしの LANDING で終わり、error を返し、モータは止まる（8 回目、D1）
+# weak_spool_api.expect — the API takeoff of a craft that cannot lift ends by a ToF-silent LANDING, replies an error, and the motors stop
+# 浮けない機体の API takeoff は ToF なしの LANDING で終わり、error を返し、モータは止まる
 #
 exit 0
 log_contains any "cmd: takeoff"

@@ -38,7 +38,7 @@ namespace sf {
 /// 離着陸設定
 struct TakeoffLandingConfig {
     float ground_tof_m       = limits::kTakeoffGroundBandM;   // Ground threshold [m]    / 地上閾値
-    float airborne_tof_m     = 0.15f;   // Airborne threshold [m]  / 空中閾値
+    float airborne_tof_m     = limits::kTakeoffAirborneBandM;   // Airborne threshold [m]  / 空中閾値
     float landing_vel_mps    = 0.05f;   // Landing velocity [m/s]  / 着陸速度
     uint32_t landing_hold_ms = 700;     // Firm-ground confirm [ms] (was 1000: faster disarm once settled) / 接地確認時間
     // Stalled-descent touchdown ("ground-effect float"). During a commanded landing
@@ -148,6 +148,16 @@ public:
     /// ToF なし降下の接地検出器（衝撃・床の閾値）と 3 つの着陸経路は、次のサンプルから新しい値を使う。
     void reloadConfig(const TakeoffLandingConfig& config);
 
+    /// Tell the manager, EVERY control cycle, whether the autonomous landing descent is commanded (FlightState::LANDING). On the rising edge the landing verdict is judged AFRESH: the level flag
+    /// and the hold timers of the paths (1) and (2) are cleared, so only samples that arrive after LANDING began can end it. Without this a verdict left over from before (the hysteresis band between
+    /// kTakeoffGroundBandM and kTakeoffAirborneBandM keeps the ground flag true at 0.05-0.15 m: a weak craft that rested there, or a hover held low) ended the LANDING in the cycle it began, and the motors
+    /// stopped about 0.1 m above the floor (SILS, a low hover or a weak craft at 0.05-0.15 m, then a lost link). It is called every cycle rather than only from update() (a ToF sample every ~33 ms) so that the stale flag is gone before StateTask can read it.
+    /// 自動着陸の降下が指令されているか（FlightState::LANDING）を、「毎制御周期」教える。立ち上がりで着陸の判定を「新たに」行う: 経路 (1) (2) のレベルフラグと保持タイマーを消し、
+    /// LANDING が始まった後に届いたサンプルだけがそれを終わらせられる。これが無いと、以前から残った判定（kTakeoffGroundBandM と kTakeoffAirborneBandM の間のヒステリシス帯では接地フラグが
+    /// 0.05〜0.15 m で true のまま: そこに居た弱い機体、低く保ったホバー）が、LANDING が始まった周期にそれを終わらせ、モータが床の約 0.1 m 上で止まった（SILS の、低いホバーや 0.05〜0.15 m にいる弱い機体の後のリンク途絶）。update()（約 33 ms ごとの
+    /// ToF サンプル）からだけでなく毎周期呼ぶのは、古いフラグが StateTask に読まれる前に消えているようにするため。
+    void noteLandingDescent(bool in_landing_descent);
+
     /// Check if vehicle is on the ground
     /// 機体が地上にあるか確認する
     bool isOnGround() const { return on_ground_; }
@@ -168,14 +178,14 @@ public:
     /// Force the RAW ground-contact flag to "airborne". Called by ImuTask when a ToF-silence
     /// episode starts while ARMED: the flag is released by ToF samples only, so it froze at its
     /// last value, and a flag frozen "on the ground" kept the estimator pinning position/velocity
-    /// to zero while the craft climbed (2026-11 accident, 2nd review D1). Nothing proves ground
+    /// to zero while the craft climbed (2026-11 accident). Nothing proves ground
     /// contact during the episode, so the flag is flipped to the safe side; it returns to "ground"
     /// only by the existing air->ground debounce (flip_confirm_samples consecutive VALID ground
     /// readings), never by an invalid or missing sample.
     /// 生の接地フラグを強制的に「空中」にする。ARM 中に ToF 出力停止のエピソードが始まったとき
     /// ImuTask が呼ぶ。フラグは ToF サンプルだけで解除されるため最後の値のまま固定され、「接地」のまま
-    /// 固定されると機体が上昇しても推定器が位置・速度を 0 に固定し続けた（2026-11 の事故、2 回目の
-    /// レビューの D1）。エピソード中は接地を示す証拠が無いので、フラグを安全側に倒す。「接地」へ
+    /// 固定されると機体が上昇しても推定器が位置・速度を 0 に固定し続けた（2026-11 の事故）。
+    /// エピソード中は接地を示す証拠が無いので、フラグを安全側に倒す。「接地」へ
     /// 戻るのは既存の空中→接地デバウンス（有効な地上読み flip_confirm_samples 回連続）だけで、
     /// 無効なサンプルや欠測では戻らない。
     void markAirborne();
@@ -239,6 +249,7 @@ private:
     bool     near_ground_      = false;  // ToF within near_ground_tof_m  / 接地近傍フラグ
     bool     held_             = false;  // Held-in-hand flag    / 手持ちフラグ
     bool     landing_detected_ = false;  // Landing detected flag (level) / 着陸検出フラグ
+    bool     was_landing_descent_ = false;   // The landing descent was commanded in the previous cycle (edge detector of noteLandingDescent) / 前の周期で着陸降下が指令されていた（noteLandingDescent のエッジ検出）
     uint32_t landing_start_ms_ = 0;      // Firm-ground landing timer start / 接地着陸タイマー開始
     uint32_t stall_start_ms_   = 0;      // Stalled-descent timer start  / 降下停滞タイマー開始
     bool     dead_zone_armed_  = false;  // A valid reading inside the band was seen and only invalid samples followed / 帯の中の有効な読みがあり、以後は無効サンプルだけ

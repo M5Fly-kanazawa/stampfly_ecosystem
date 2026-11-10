@@ -1,0 +1,20 @@
+# landing_rise_est_high.expect — LANDING before the support-thrust calibration, hover estimate 28 % too high (noise n2): no rise, gentle touchdown
+# サポート推力の較正の前の LANDING、ホバー推力の見積もりが 28 % 高い（ノイズ n2）: 上昇なし、穏やかな接地
+#
+# Measured (in brackets: without the base bound before the calibration and the rise brake): altitude after the LANDING began 1.19 m at most (1.98 m), descent speed at most 0.38 m/s (2.20 m/s), no descent without a ToF.
+# 実測（括弧内は、較正前の基準の上限も上昇ブレーキも無いとき）: LANDING が始まった後の高度は最大 1.19 m（1.98 m）、降下速度は最大 0.38 m/s（2.20 m/s）、ToF なしの降下にならない。
+exit 0
+log_contains any "Transition: FLYING → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_absent any "Blind landing: ToF silent"
+log_absent any "touchdown by time"
+order "Transition: FLYING → LANDING" "Transition: LANDING → IDLE_GROUND"
+# Never above the take-off overshoot after the LANDING began (before: 1.98 m, the ToF range).
+# LANDING が始まった後は、離陸の行き過ぎより上に行かない（以前: 1.98 m、ToF の範囲）。
+metric alt_max < 1.35 in 12.0 28.0
+# Descent speed (truth, includes the touchdown): measured 0.38 m/s (before: 2.20 m/s).
+# 降下速度（真値。接地を含む）: 実測 0.38 m/s（以前: 2.20 m/s）。
+metric descent_speed_max < 1.0 in 12.0 28.0
+# On the floor at the end.
+# 最後は床の上。
+metric alt_max < 0.05 in 22.0 28.0

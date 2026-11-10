@@ -207,7 +207,7 @@ public:
     /// 実装は 1 つ（並列に作らない）。喪失後の最初の有効な ToF サンプルの前に ImuTask が呼ぶ。
     /// イノベーション判定を持たない推定器では既定で何もしない。
     ///
-    /// @design detailed_design.md §3.1 注 12 — ToF re-acquisition after a silence [OK]
+    /// @design detailed_design.md §3 注12 — ToF re-acquisition after a silence [OK]
     virtual void reacquireAltitude() {}
 
     /// What happened to the last ToF sample passed to updateTof(): adopted or not, and how far the
@@ -215,7 +215,7 @@ public:
     /// estimator without an innovation gate trusts the ToF as it comes).
     /// 直近に updateTof() へ渡した ToF サンプルがどうなったか: 採用されたか、推定がどれだけ離れて
     /// いたか。既定: 有効なサンプルは全て、イノベーション 0 で採用（イノベーション判定を持たない
-    /// 推定器は ToF をそのまま信じる）。
+    /// 推定器は ToF をそのまま信用する）。
     virtual ToFObservation lastToFObservation() const { return ToFObservation{true, 0.0f}; }
 
     // =========================================================================

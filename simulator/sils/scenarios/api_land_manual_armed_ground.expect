@@ -1,0 +1,11 @@
+# api_land_manual_armed_ground.expect — `land` in ARMED_GROUND of a manual mode: refused ("error not flying"), no DISARM
+# 手動モードの ARMED_GROUND での `land`: 拒否（"error not flying"）、DISARM しない
+#
+exit 0
+log_contains any "Transition: IDLE_GROUND → ARMED_GROUND"
+log_contains any "cmd: land"
+log_contains any "reply: error not flying"
+log_absent any "Landing requested on the floor"
+log_absent any "Transition: ARMED_GROUND → IDLE_GROUND"
+log_absent any "Transition: ARMED_GROUND → TAKEOFF"
+order "Transition: IDLE_GROUND → ARMED_GROUND" "reply: error not flying"

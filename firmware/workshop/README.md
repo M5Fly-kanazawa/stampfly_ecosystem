@@ -194,7 +194,7 @@ Workshop は vehicle の `StateTask`・`ImuTask`・`Failsafe`（ToF の出力が
 
 ### 確かめ方
 
-SILS（模擬飛行）で、ToF の出力停止を注入して挙動を再現できる。vehicle 用のシナリオを Workshop の機体モデルで走らせる: `sf sils scenario simulator/sils/scenarios/tof_silent_prearm.scn --target workshop --duration 12000000`（ARM の拒否）と、同じ形で `tof_silent_armed_ground.scn`（ARM 中・地上で ToF が止まると DISARM）。どちらも 2026-11-09 に PASS を確認した。飛行中の挙動（上の表の下 2 行）と、離陸中の無効の判定が 2 s 遅れる点は、SILS のシナリオでは未確認。
+SILS（模擬飛行）で、ToF の出力停止を注入して挙動を再現できる。vehicle 用のシナリオを Workshop の機体モデルで実行する: `sf sils scenario simulator/sils/scenarios/tof_silent_prearm.scn --target workshop --duration 12000000`（ARM の拒否）と、同じ形で `tof_silent_armed_ground.scn`（ARM 中・地上で ToF が止まると DISARM）。どちらも 2026-11-09 に PASS を確認した。飛行中の挙動（上の表の下 2 行）と、離陸中の無効の判定が 2 s 遅れる点は、SILS のシナリオでは未確認。
 
 ---
 

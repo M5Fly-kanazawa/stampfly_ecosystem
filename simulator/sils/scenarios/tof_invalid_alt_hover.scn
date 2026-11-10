@@ -1,7 +1,7 @@
 # tof_invalid_alt_hover.scn — the downward ToF delivers only INVALID samples while hovering (ALT_HOLD): treated as a silence
 #                             ホバー中（ALT_HOLD）に下向き ToF が「無効」サンプルだけを出し続ける: 出力停止と同じ扱い
 #
-# 2nd independent review, D4. The ToF keeps delivering samples on time, so the stamp watch cannot see a problem, but
+# The ToF keeps delivering samples on time, so the stamp watch cannot see a problem, but
 # every sample is invalid (SILS fault injection `tof_invalid`; in practice a floor material the sensor cannot range).
 # The ground-contact flag and the altitude estimate then rest on nothing. Spec under test (detailed_design.md §3.1,
 # note 12):
@@ -16,7 +16,7 @@
 #     it does not climb away (the 2026-11 ceiling collision). With the 0.5 s of FLYING it would reach 0.39 m (noise off)
 #     and 0.99-1.24 m with n2 (flight_limits.hpp has the sweep).
 #
-# 2 回目の独立レビューの D4。ToF はサンプルを時間どおり届け続けるので時刻印の監視には問題が見えないが、全サンプルが
+# ToF はサンプルを時間どおり届け続けるので時刻印の監視には問題が見えないが、全サンプルが
 # 無効（SILS の故障注入 `tof_invalid`。実際にはセンサが測れない床材）。接地フラグと高度推定は何にも支えられない。
 # 検証する仕様（detailed_design.md §3.1、注 12）: (1) 自動離陸の後、機体は 0.5 m でホバーし、サンプルが無効に
 # なって 0.5 s 後（14.0 s）に Failsafe が「飛行中に無効サンプルだけ」の理由で出力停止のエピソードと判定し、状態機械は

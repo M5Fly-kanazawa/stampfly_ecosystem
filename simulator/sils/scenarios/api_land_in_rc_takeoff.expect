@@ -1,0 +1,24 @@
+# api_land_in_rc_takeoff.expect — `land` in the TAKEOFF of an RC-started auto-takeoff: held until FLYING, then LANDING, touchdown, answered ok (no land timeout)
+# RC が始めた自動離陸の TAKEOFF 中の `land`: FLYING まで保留、その後 LANDING、接地、ok を返す（land のタイムアウトは無い）
+#
+exit 0
+log_contains any "Auto-takeoff engaged"
+log_contains any "cmd: land"
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "Landing requested"
+log_contains any "Transition: FLYING → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+order "cmd: land" "Transition: TAKEOFF → FLYING"
+order "Transition: TAKEOFF → FLYING" "Landing requested"
+order "Landing requested" "Transition: LANDING → IDLE_GROUND"
+# The request is held, not published into TAKEOFF and not answered with a timeout or a refusal.
+# 要求は保留され、TAKEOFF では発行されず、タイムアウトも拒否も返らない。
+log_absent any "reply: error land timeout"
+log_absent any "reply: error not flying"
+log_absent any "Transition: TAKEOFF → LANDING"
+# The takeoff is not cut short (it reaches the takeoff height, 0.5 m) and the craft ends on the floor with the motors stopped.
+# 離陸は打ち切られず（離陸の高さ 0.5 m に達する）、最後は床の上でモータは止まっている。
+metric alt_max > 0.45 in 5.5 8.0
+metric alt_max < 0.70 in 5.5 20.0
+metric alt_max < 0.05 in 22.0 34.0
+metric duty_max < 0.01 in 22.0 34.0

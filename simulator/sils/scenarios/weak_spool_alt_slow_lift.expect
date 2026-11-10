@@ -1,5 +1,5 @@
-# weak_spool_alt_slow_lift.expect — a craft that lifts slowly is not aborted (8th pass, D4)
-# ゆっくり浮く機体は中止されない（8 回目、D4）
+# weak_spool_alt_slow_lift.expect — a craft that lifts slowly is not aborted
+# ゆっくり浮く機体は中止されない
 #
 exit 0
 log_contains any "Auto-takeoff engaged"

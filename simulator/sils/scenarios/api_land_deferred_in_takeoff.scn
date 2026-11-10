@@ -1,0 +1,23 @@
+# api_land_deferred_in_takeoff.scn — `land` while `takeoff` is still climbing: it is parked, the takeoff completes, then the `land` runs as an ordinary `land`
+#                                    `takeoff` がまだ上昇している最中の `land`: 後回しになり、離陸が完了し、その後に普通の `land` として実行される
+#
+# The API task blocks inside `takeoff` (waitUntil) until the auto-takeoff reaches FLYING. A `land` that arrives meanwhile is parked like every other line (dispatchDuringWait); the takeoff is NOT cut short.
+# StateManager::notifyLandingRequest does not accept TAKEOFF (a LANDING that begins on the floor can float the craft up, detailed_design.md §3 note 5). The craft therefore climbs to the takeoff height
+# as if no `land` had been sent, `takeoff` answers "ok" at FLYING, and the parked `land` then runs: FLYING -> LANDING -> IDLE_GROUND, answered "ok" at the touchdown.
+# The peak height of the takeoff is the one of a takeoff without the `land` (the same scenario without the `land` line gives the same peak: api_flight-like takeoff). Spec under test (detailed_design.md §3 note 13).
+#
+# `takeoff` が FLYING を待っている間、API タスクは `takeoff` の中（waitUntil）でブロックする。その間に届いた `land` は他の行と同じく後回しになり（dispatchDuringWait）、離陸は途中で打ち切られない。
+# StateManager::notifyLandingRequest は TAKEOFF を受け付けない（床の上で始めた LANDING は機体を浮かせうる。detailed_design.md §3 注5）。したがって機体は、`land` が無かったときと同じく離陸の高さまで上昇し、
+# `takeoff` は FLYING で "ok" を返し、その後に後回しの `land` が実行される: FLYING → LANDING → IDLE_GROUND、接地で "ok"。
+# 離陸の最高高度は、`land` が無い離陸と同じ。検証する仕様（detailed_design.md §3 注13）。
+#
+# Timeline: takeoff at 6.0 s (ARM, spool, the TAKEOFF begins at about 6.3 s), land at 6.9 s (the climb is under way).
+# Run: sf sils scenario simulator/sils/scenarios/api_land_deferred_in_takeoff.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> ARM -> auto-takeoff (t=6)
+   +    rc         2048  2048   2048    2048  0     900       50      # D: the climb runs (to t=6.9)
+   +    api        "land"                                             # E: t=6.9 s — land while takeoff waits (parked)
+   +    rc         2048  2048   2048    2048  0     15100     50      # F: the takeoff completes, then the parked land runs (to t=22)

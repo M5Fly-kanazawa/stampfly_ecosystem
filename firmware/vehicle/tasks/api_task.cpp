@@ -69,6 +69,7 @@
 #include "config.hpp"
 #include "flight_limits.hpp"   // sf::limits::kAltitudeCeilingM (shared altitude ceiling)
 #include "flight_state.hpp"
+#include "tof_silence_policy.hpp"   // sf::flightModeNeedsAltitude (ALT_HOLD / POS_HOLD)
 #include "params.hpp"        // autotune applies gains live / 自動チューンのライブ適用
 #include "autotune.hpp"      // onboard fit + tune / オンボード同定＋設計
 #include "tello_state.hpp"   // UDP:8890 state-string builder / 状態文字列ビルダ
@@ -94,7 +95,7 @@ constexpr int      kPollMs         = 20;      // main loop poll / 主ループ�
 // `emergency` / `stop` の待ち時間は最大でこれ＋処理時間。従来の述語周期 50 ms を維持:
 // 待機していないときの遅れ（kPollMs = 20 ms）の 2.5 倍、離陸タイムアウト 12 s の 1/240。
 // （SILS のみ: ソケットシムは recvfrom ごとに 1 tick 譲るので周期は 51 ms に見える。49 ms なら
-// 既存 51 シナリオが修正前と完全一致、50 ms だと API 系 11 本が 1 回あたり 1 ms ずれる。全て PASS。）
+// 既存 51 シナリオが変更前と完全一致、50 ms だと API 系 11 本が 1 回あたり 1 ms ずれる。全て PASS。）
 constexpr int      kWaitPollMs     = 50;
 // Capacity of the deferred-command queue: commands that arrive while another command is
 // blocking, other than `emergency` / `stop`, wait here and run in arrival order afterwards.
@@ -122,6 +123,7 @@ constexpr float    kReachRadiusM   = 0.15f;   // move "reached" tolerance / 到�
 constexpr float    kReachYawRad    = 0.17f;   // ~10 deg yaw tolerance / ヨー到達判定
 constexpr uint32_t kTakeoffTimeoutMs = 12000;
 constexpr uint32_t kLandTimeoutMs    = 20000;
+constexpr uint32_t kLandConfirmMs    = 500;     // wait for a land from ARMED_GROUND to take effect / ARMED_GROUND からの着陸が効くのを待つ上限
 constexpr float    kBattEmptyV     = 3.3f;    // 0% / 100% mapping for battery?
 constexpr float    kBattFullV      = 4.2f;
 
@@ -192,7 +194,7 @@ int          g_deferred_tail = 0;   // read index  / 読出位置
 
 // What ended the last waitUntil early (None = it did not), read by waitFailureText().
 // 直近の waitUntil を途中で打ち切った原因（None = 打ち切られていない）。waitFailureText() が読む。
-enum class WaitInterrupt : uint8_t { None, Emergency, Stop };
+enum class WaitInterrupt : uint8_t { None, Emergency, Stop, Land };
 WaitInterrupt g_wait_interrupt = WaitInterrupt::None;
 
 // Forward declaration: defined after cmdStop (it needs cmdStop and cmdEmergency).
@@ -360,11 +362,11 @@ void publishGuidance(float speed)
 }
 
 // Wait until `pred` returns true, polling at kWaitPollMs. Returns false on timeout OR when
-// an `emergency` / `stop` read during the wait ended it early (see g_wait_interrupt and
+// an `emergency` / `stop` (or a `land` in ARMED_GROUND) read during the wait ended it early (see g_wait_interrupt and
 // waitFailureText). The API task may block here — it owns no control-path deadline — but it
 // must stay reachable for the commands that cancel what it waits for.
 // pred が真になるまで kWaitPollMs 周期でポーリング。タイムアウト、または待機中に読んだ
-// `emergency` / `stop` で早期に打ち切られたとき false（g_wait_interrupt と waitFailureText
+// `emergency` / `stop`（または ARMED_GROUND での `land`）で早期に打ち切られたとき false（g_wait_interrupt と waitFailureText
 // 参照）。本タスクは制御経路の締切を持たないためブロックしてよいが、待っている対象を
 // 取り消すコマンドには応答できる状態を保つ。
 template <typename Pred>
@@ -384,14 +386,15 @@ bool waitUntil(uint32_t timeout_ms, Pred pred)
     return false;
 }
 
-// Reply text for a waitUntil that returned false: the interrupting command, else the
+// Reply text for a waitUntil that returned false: the interrupting command (`emergency`, `stop` or `land`), else the
 // caller's timeout text.
-// false を返した waitUntil の応答文字列: 打ち切ったコマンド、なければ呼び出し側のタイムアウト文。
+// false を返した waitUntil の応答文字列: 打ち切ったコマンド（`emergency`・`stop`・`land`）、なければ呼び出し側のタイムアウト文。
 const char* waitFailureText(const char* timeout_text)
 {
     switch (g_wait_interrupt) {
         case WaitInterrupt::Emergency: return "error interrupted by emergency";
         case WaitInterrupt::Stop:      return "error interrupted by stop";
+        case WaitInterrupt::Land:      return "error cancelled by land";
         default:                       return timeout_text;
     }
 }
@@ -502,19 +505,69 @@ void cmdTakeoff()
     reply("ok");
 }
 
+// True when `mode` (one reading of system_mode) says the craft is in ARMED_GROUND in an altitude mode (ALT_HOLD / POS_HOLD): the motors have begun to spool on the floor and StateManager answers a land request with an immediate DISARM
+// (detailed_design.md §3 note 13). In a manual mode it does not: the craft may already be lifting off (the request is refused, as before). Takes ONE reading, so the state and the mode come from the same instant.
+// `mode`（system_mode の 1 回の読み）が、ARMED_GROUND にいて高度モード（ALT_HOLD / POS_HOLD）であることを示すとき true: モータは床の上でスプールを始めており、StateManager は着陸要求に即時 DISARM で応える
+// （detailed_design.md §3 注13）。手動モードでは違う: 機体はもう浮き始めているかもしれない（要求は従来どおり拒否する）。状態とモードが同じ瞬間のものになるよう、読みは 1 回だけ受け取る。
+bool isSpoolingInAltitudeMode(const sf::SystemMode& mode)
+{
+    return static_cast<sf::FlightState>(mode.state) == sf::FlightState::ARMED_GROUND &&
+           sf::flightModeNeedsAltitude(static_cast<sf::FlightMode>(mode.sub_mode));
+}
+
+// The same test on a fresh reading of system_mode.
+// system_mode を新たに 1 回読んで同じ判定をする。
+bool isSpoolingInAltitudeMode()
+{
+    return isSpoolingInAltitudeMode(sf::system_mode.latest());
+}
+
+// True once the craft has left TAKEOFF (for waitUntil).
+// 機体が TAKEOFF を抜けたら true（waitUntil 用）。
+bool hasLeftTakeoff()
+{
+    return currentState() != sf::FlightState::TAKEOFF;
+}
+
+// True when a `land` has finished: the craft is on the ground, or it entered TAKEOFF (a `land` issued from ARMED_GROUND lost the race against the auto-takeoff: StateManager ignores a land request in TAKEOFF and the `land` must be issued again after the takeoff).
+// `land` が済んだら true: 機体が地上にいる、または TAKEOFF に入った（ARMED_GROUND から出した `land` が自動離陸との競合に負けた: StateManager は TAKEOFF での着陸要求を無視するので、離陸の後でもう一度出す必要がある）。
+bool hasLandedOrTookOff()
+{
+    const sf::FlightState state = currentState();
+    return state == sf::FlightState::IDLE_GROUND || state == sf::FlightState::TAKEOFF;
+}
+
+// `land`. A request that arrives while the craft is in TAKEOFF (e.g. the auto-takeoff an RC ARM started: no blocking command is waiting for it) is held until the takeoff has ended, as the one parked during a `takeoff` wait is
+// (detailed_design.md §3 note 13); how the takeoff ended decides the answer: FLYING -> the landing is issued; LANDING -> that landing is waited for; on the ground -> "error not flying". A land issued from ARMED_GROUND is answered "ok" only once the
+// craft is on the ground; if the craft entered TAKEOFF in between, StateManager has ignored it, and it is issued again after the takeoff.
+// `land`。機体が TAKEOFF にいる間に届いた要求（例: RC の ARM が始めた自動離陸。待機中のコマンドは無い）は、`takeoff` の待機中に後回しにした行と同じく、離陸が終わるまで保留する（detailed_design.md §3 注13）。
+// 離陸の終わり方が応答を決める: FLYING -> 着陸を発行する、LANDING -> その着陸を待つ、地上 -> "error not flying"。ARMED_GROUND から出した `land` は、機体が地上に降りてから "ok" を返す。
+// その間に TAKEOFF へ移っていたら StateManager が無視しているので、離陸の後でもう一度出す。
+// @design detailed_design.md §3.1 — FLYING -> LANDING / ARMED_GROUND -> IDLE_GROUND (land request) [OK]
 void cmdLand()
 {
-    if (!sf::isAirborne(currentState())) {
-        reply("error not flying");
-        return;
-    }
-    g_target_valid = false;   // guidance ends with the flight / 誘導は飛行と共に終了
-    publishApiVerb(sf::ApiCmd::Land);
-    if (waitUntil(kLandTimeoutMs,
-                  [] { return currentState() == sf::FlightState::IDLE_GROUND; })) {
-        reply("ok");
-    } else {
-        reply(waitFailureText("error land timeout"));
+    while (true) {
+        if (!hasLeftTakeoff() && !waitUntil(kTakeoffTimeoutMs, hasLeftTakeoff)) {
+            reply(waitFailureText("error land timeout"));
+            return;
+        }
+        // The spool of an altitude mode counts: StateManager answers the land request with an immediate DISARM.
+        // 高度モードのスプール中も受け付ける: StateManager は着陸要求に即時 DISARM で応える。
+        const sf::SystemMode mode = sf::system_mode.latest();
+        if (!sf::isAirborne(static_cast<sf::FlightState>(mode.state)) && !isSpoolingInAltitudeMode(mode)) {
+            reply("error not flying");
+            return;
+        }
+        g_target_valid = false;   // guidance ends with the flight / 誘導は飛行と共に終了
+        publishApiVerb(sf::ApiCmd::Land);
+        if (!waitUntil(kLandTimeoutMs, hasLandedOrTookOff)) {
+            reply(waitFailureText("error land timeout"));
+            return;
+        }
+        if (currentState() == sf::FlightState::IDLE_GROUND) {
+            reply("ok");
+            return;
+        }
     }
 }
 
@@ -716,19 +769,60 @@ bool isRcLine(const char* line)
     return std::strncmp(line, "rc ", 3) == 0;
 }
 
+// Wait (at most kLandConfirmMs) until the craft is no longer in ARMED_GROUND, after a land request was published there. Returns true when it is on the ground (IDLE_GROUND: StateManager cut the motors); false when it entered TAKEOFF
+// (StateManager ignores a land request in TAKEOFF: the request lost the race against the auto-takeoff) or when nothing changed in time. A plain poll, not waitUntil: the caller is already inside a wait.
+// ARMED_GROUND で着陸要求を出した後、機体が ARMED_GROUND を抜けるまで（最長 kLandConfirmMs）待つ。地上（IDLE_GROUND: StateManager がモータを止めた）なら true。TAKEOFF に入った（StateManager は TAKEOFF での着陸要求を無視する:
+// 要求が自動離陸との競合に負けた）か、時間内に変わらなかったなら false。waitUntil ではなく素のポーリング: 呼び出し側が既に待機の中にいるため。
+bool waitLandOnFloorConfirmed()
+{
+    const uint32_t start = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+    while (currentState() == sf::FlightState::ARMED_GROUND &&
+           static_cast<uint32_t>(esp_timer_get_time() / 1000) - start < kLandConfirmMs) {
+        vTaskDelay(pdMS_TO_TICKS(kWaitPollMs));
+    }
+    return currentState() == sf::FlightState::IDLE_GROUND;
+}
+
+// A `land` that arrives while the craft is still in ARMED_GROUND (the motors have begun to turn on the floor, the spool of the auto-takeoff; the wait is the `takeoff` chain): there is no height to land from, so the request is the immediate
+// DISARM (StateManager::notifyLandingRequest). Once the craft is confirmed on the ground (waitLandOnFloorConfirmed) the line is answered here, "ok" as `emergency` is (the motors have stopped), and the wait ends (the waiting `takeoff`
+// replies "error cancelled by land"). The lines parked before it are dropped, as `emergency` drops them (each answered "error cancelled by land"): they were issued before the `land` and a parked `takeoff` would otherwise ARM the craft again right after
+// the DISARM. If the craft entered TAKEOFF in between (or did not change in time), the request was not carried out: the line is parked like a `land` read in TAKEOFF, the wait goes on, and the `land` runs after the takeoff has ended (the waiting
+// `takeoff` replies as the takeoff ended; cmdLand answers the parked `land`). Returns true when the line ended the wait.
+// 機体がまだ ARMED_GROUND の間に届いた `land`（モータは床の上で回り始めたところ、自動離陸のスプール中。待機は `takeoff` の鎖）: 降りる高さが無いので、要求は即時 DISARM（StateManager::notifyLandingRequest）。
+// 機体が地上にいると確かめてから（waitLandOnFloorConfirmed）、行はここで応答する: `emergency` と同じ "ok"（モータは止まった）。待機を終える（待っていた `takeoff` は "error cancelled by land" を返す）。
+// それより前に後回しにした行は `emergency` と同じく捨てる（それぞれに "error cancelled by land" を返す）: `land` より前に出された行で、後回しの `takeoff` が残ると、DISARM の直後にまた ARM する。
+// その間に TAKEOFF へ移っていた（または時間内に変わらなかった）なら要求は実行されていない: TAKEOFF で読んだ `land` と同じく行を後回しにして待機を続け、`land` は離陸が終わってから実行する
+// （待っていた `takeoff` は離陸の終わり方どおりに応答し、後回しの `land` には cmdLand が応える）。待機を終えたとき true。
+// @design detailed_design.md §3.1 — ARMED_GROUND -> IDLE_GROUND (land request) [OK]
+bool landOnFloorDuringWait(const sockaddr_in* from)
+{
+    g_target_valid = false;   // guidance ends with the flight / 誘導は飛行と共に終了
+    publishApiVerb(sf::ApiCmd::Land);
+    ESP_LOGI(TAG, "cmd: land (during a blocking command, ARMED_GROUND)");   // after the publish, not between the read of the state and the publish / 発行の後。状態を読んでから発行するまでの間には置かない
+    if (!waitLandOnFloorConfirmed()) {
+        ESP_LOGI(TAG, "land not carried out on the floor (the craft entered TAKEOFF) -> parked");
+        deferLine("land", from);
+        return false;
+    }
+    cancelDeferredLines("error cancelled by land");   // a parked `takeoff` must not ARM the craft again after the DISARM / 後回しの `takeoff` が、DISARM の後にまた ARM してはならない
+    reply("ok");
+    g_wait_interrupt = WaitInterrupt::Land;
+    return true;
+}
+
 // Handle one line read during a wait. `emergency` and `stop` run at once through the same
 // functions processLine uses, each answered at its own sender, and drop the parked lines
 // (cancelDeferredLines). An `rc` line is DROPPED, not parked: it is a stale operator input
 // the moment the wait ends, and replaying it would steer the craft with old sticks. Anything
-// else is deferred. Returns true when the line ended the wait (an emergency, or an accepted
-// stop). A rejected stop (not flying: it is takeoff / land / flip that is waiting) only gets
+// else is deferred, including a `land` read while the craft is in TAKEOFF (it runs after the takeoff has ended), except a `land` read while the craft is in ARMED_GROUND in an altitude mode
+// (landOnFloorDuringWait: the immediate DISARM, answered at once once the craft is on the ground, and the wait ends; if the craft entered TAKEOFF meanwhile it is parked like the others). Returns true when the line ended the wait (an emergency, an accepted stop, or that `land`). A rejected stop (not flying: it is takeoff / land / flip that is waiting) only gets
 // its error reply, the parked lines stay and the wait goes on.
 // 待機中に読んだ 1 行を処理する。`emergency` と `stop` は processLine と同じ関数で即実行し
 // （返信は各自の送信元へ）、後回しの行を捨てる（cancelDeferredLines）。`rc` の行は後回しにせず
 // 「捨てる」: 待機が終わった時点で古い操作入力であり、再生すると古いスティックで機体を操縦して
 // しまう。それ以外は後回し。その行が待機を終わらせたとき（emergency、または受理された stop）true。
 // 拒否された stop（飛行中でない: takeoff / land / flip の待機中）は拒否の応答だけ返し、後回しの行は
-// 残して待機を続ける。
+// 残して待機を続ける。機体が TAKEOFF にいる間に読んだ `land` も後回しにして（離陸が終わってから実行する）、高度モードの ARMED_GROUND にいる間に読んだ `land` だけは、即時 DISARM をその場で、機体が地上に降りてから応答して待機を終える（landOnFloorDuringWait。その間に TAKEOFF へ移っていたら他と同じく後回しにする）。
 bool dispatchDuringWait(char* line, const sockaddr_in* from)
 {
     if (trimLine(line) == 0) {
@@ -753,6 +847,9 @@ bool dispatchDuringWait(char* line, const sockaddr_in* from)
             return true;
         }
         return false;
+    }
+    if (std::strcmp(line, "land") == 0 && isSpoolingInAltitudeMode()) {
+        return landOnFloorDuringWait(from);
     }
     deferLine(line, from);
     return false;

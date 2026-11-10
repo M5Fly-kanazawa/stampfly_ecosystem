@@ -1,13 +1,13 @@
 # weak_spool_api.scn — API `takeoff` of a craft that cannot lift (motor health 0.85): the ToF-invalid rule ends the takeoff by a LANDING, the command replies an error
 #                      浮けない機体（モータの健全度 0.85）の API `takeoff`: ToF 無効の規則が離陸を LANDING で終わらせ、コマンドは error を返す
 #
-# Before the 7th pass the auto-takeoff of such a craft went on at hover thrust + the correction limit for ever (the `takeoff` command replied `error takeoff timeout` after 12 s, the
+# Before the ToF-invalid rule the auto-takeoff of such a craft went on at hover thrust + the correction limit for ever (the `takeoff` command replied `error takeoff timeout` after 12 s, the
 # motors kept spinning on the floor). With the ToF reading invalid on the floor (the SILS dead zone), the 2 s + 0.15 s time limit of the invalid-sample count makes a ToF-silence
-# episode and TAKEOFF -> LANDING (8th pass, D1: accepted on the floor, the descent thrust cannot lift the craft); the waiting `takeoff` sees the climb aborted and replies
+# episode and TAKEOFF -> LANDING (accepted on the floor, the descent thrust cannot lift the craft); the waiting `takeoff` sees the climb aborted and replies
 # "error takeoff aborted"; the floor holds the craft ("Touchdown detected") and the motors stop. Spec under test (detailed_design.md §3, operation_manual.md "takeoff that does not lift").
 #
-# 7 回目より前は、そのような機体の自動離陸は hover 推力 + 補正の上限のまま続いた（`takeoff` コマンドは 12 s 後に `error takeoff timeout` を返したが、モータは床の上で回り続けた）。
-# ToF が床の上で無効を返す（SILS の不感帯）ので、無効サンプルを数える 2 s + 0.15 s の時間の上限が ToF 出力停止のエピソードと TAKEOFF → LANDING を作る（8 回目、D1: 床の上で
+# ToF 無効の規則の前は、そのような機体の自動離陸は hover 推力 + 補正の上限のまま続いた（`takeoff` コマンドは 12 s 後に `error takeoff timeout` を返したが、モータは床の上で回り続けた）。
+# ToF が床の上で無効を返す（SILS の不感帯）ので、無効サンプルを数える 2 s + 0.15 s の時間の上限が ToF 出力停止のエピソードと TAKEOFF → LANDING を作る（床の上で
 # 許容する。降下の推力は機体を持ち上げられない）。待機中の `takeoff` は上昇の中止を見て "error takeoff aborted" を返し、床が機体を支え（"Touchdown detected"）、モータは止まる。
 # 検証する仕様（detailed_design.md §3、operation_manual.md の「浮かない takeoff」）。
 #

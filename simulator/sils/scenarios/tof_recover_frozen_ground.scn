@@ -1,7 +1,7 @@
 # tof_recover_frozen_ground.scn — ToF goes silent BEFORE takeoff and returns while the craft is far above its range
 #                                 離陸の「前」に ToF が出力停止し、機体がレンジのはるか上にいる間に復帰する
 #
-# 2nd independent review, D1 + D2 (reproduced there as recover_frozen2). STABILIZE, ARM at 4.0 s, the ToF stops at
+# STABILIZE, ARM at 4.0 s, the ToF stops at
 # 5.0 s (on the ground: the ground-contact flag freezes at "ground"), the pilot climbs blind to ~1.8 m (above the
 # ~1.6 m range), the ToF resumes at 8.6 s but its first samples are out of range (invalid). Before the fix the
 # frozen "ground" flag was trusted again, the estimator pinned position/velocity to 0 while the craft climbed to
@@ -14,14 +14,14 @@
 #  4. The pilot's later crash (throttle stick to the bottom in STABILIZE, 10.3 s) is the pilot's, and the next
 #     flight (ARM in ALT_HOLD at 17 s) is normal: auto-takeoff to 0.8 m, estimate within 0.1 m of the truth.
 #
-# 2 回目の独立レビューの D1 + D2（そこでは recover_frozen2 として再現）。STABILIZE、4.0 s に ARM、5.0 s に ToF が
+# STABILIZE、4.0 s に ARM、5.0 s に ToF が
 # 出力停止（地上で。接地フラグは「接地」のまま固定）、パイロットがレンジ（約 1.6 m）を超える約 1.8 m まで ToF
-# なしで上昇、8.6 s に ToF が復帰するが最初のサンプルは範囲外（無効）。修正前は固定されたままの「接地」フラグが再び信用され、
+# なしで上昇、8.6 s に ToF が復帰するが最初のサンプルは範囲外（無効）。main（2026-11-08 時点）は固定されたままの「接地」フラグが再び信用され、
 # 推定器は機体が上昇する間ずっと位置・速度を 0 に固定し、ALT_HOLD で 10 m まで上昇して、自動着陸が高所で完了した
 # （10 m でモータ停止）。検証する仕様: (1) 出力停止が生の接地フラグを「空中」に倒し、エピソードはサンプルが届いた
 # ときでなく推定器が ToF を取り込み直すまで続く、(2) 推定器が ToF を取り込み直す（鉛直共分散を広げ、1 サンプルだけ
 # イノベーション判定を外す。宙返りの終わりと同じ仕組み。イノベーション 1.5 m）、(3) 機体は上昇し続けず（真値の
-# alt_max 2.5 m、修正前は 10.9 m）、高所で着陸は宣言されない、(4) その後のパイロットの墜落（STABILIZE でスロットルを
+# alt_max 2.5 m）、高所で着陸は宣言されない、(4) その後のパイロットの墜落（STABILIZE でスロットルを
 # 最下端、10.3 s）はパイロットのもので、次の飛行（17 s に ALT_HOLD で ARM）は正常: 0.8 m への自動離陸、推定は真値の
 # 0.1 m 以内。
 #

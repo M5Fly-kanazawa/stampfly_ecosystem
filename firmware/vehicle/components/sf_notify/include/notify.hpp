@@ -210,7 +210,7 @@ private:
     // This task's guard on failsafe_status and the guarded value of the current update() (a status
     // nobody refreshes reads as "ToF silent": the LED must not stay quiet because Failsafe died).
     // failsafe_status に対するこのタスクのガードと、現在の update() のガード済みの値（誰も更新しない
-    // 状態は「ToF 出力停止」と読む: Failsafe が止まったせいで LED が黙ったままになってはならない）。
+    // 状態は「ToF 出力停止」と読む: Failsafe が止まったせいで LED の表示が変わらないままになってはならない）。
     FailsafeStatusGuard tof_guard_;
     FailsafeStatus      tof_status_ = {};
 

@@ -3,13 +3,13 @@
 #
 # Motor health 0.85: the craft cannot lift (see weak_spool_alt). Here the ToF dead zone is OFF (`tof_deadzone 0`): the sensor reads the true 21 mm above the floor as a VALID sample, as
 # a real sensor does over a floor it can range from below 5 cm (a mat, a tilt). The healthy ToF POSITIVELY shows the craft on the floor, and its reading does not rise. Spec under test
-# (8th pass, decision D4; detailed_design.md §3, TAKEOFF -> IDLE_GROUND row; takeoff_policy.hpp):
+# (detailed_design.md §3, TAKEOFF -> IDLE_GROUND row; takeoff_policy.hpp):
 #  1. The controller's backstop (3 s) reports the takeoff complete, but StateTask holds the TAKEOFF while the floor evidence has held for 1 s (decideTakeoff()): no FLYING on the floor.
 #  2. kAutoTakeoffNoLiftAbortUs (5 s) after the TAKEOFF began, the craft is DISARMED (the motors stop), not left spinning at the correction limit, and not sent to a LANDING (the ToF is healthy).
 # An accelerometer cannot give this evidence: the abort never depends on it (weak_spool_alt_slow_lift: a craft that lifts slowly is not aborted).
 #
 # モータの健全度 0.85: 機体は浮けない（weak_spool_alt 参照）。ここでは ToF の不感帯を切る（`tof_deadzone 0`）: センサは床の上 21 mm の真の距離を「有効」なサンプルとして読む。
-# 実センサが、5 cm 未満でも測れる床（マット、傾き）で読むのと同じ。健全な ToF が、機体は床の上にいて読みは増えないと「積極的に」示す。検証する仕様（8 回目、判断 D4。
+# 実センサが、5 cm 未満でも測れる床（マット、傾き）で読むのと同じ。健全な ToF が、機体は床の上にいて読みは増えないと「積極的に」示す。検証する仕様（
 # detailed_design.md §3 の TAKEOFF → IDLE_GROUND の行。takeoff_policy.hpp）:
 #  1. 制御器の備え（3 s）は離陸完了を報告するが、床の証拠が 1 s 続いている間は StateTask が TAKEOFF を保つ（decideTakeoff()）: 床の上で FLYING にならない。
 #  2. TAKEOFF の開始から kAutoTakeoffNoLiftAbortUs（5 s）後に DISARM する（モータ停止）。補正の上限のまま回し続けず、LANDING にもしない（ToF は健全）。

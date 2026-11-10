@@ -1,5 +1,5 @@
-# weak_spool_alt_offset.expect — a craft that cannot lift ends the auto-takeoff by a ToF-silent LANDING on the floor, and the motors stop (8th pass, D1)
-# 浮けない機体の自動離陸は、床の上での ToF なしの LANDING で終わり、モータは止まる（8 回目、D1）
+# weak_spool_alt_offset.expect — a craft that cannot lift ends the auto-takeoff by a ToF-silent LANDING on the floor, and the motors stop
+# 浮けない機体の自動離陸は、床の上での ToF なしの LANDING で終わり、モータは止まる
 # Variant of weak_spool_alt with an accelerometer offset: the same expectations.
 # weak_spool_alt に加速度計のオフセットを足した変種: 期待値は同じ。
 #

@@ -1,7 +1,7 @@
 # tof_recover_edge_consumed.scn — a mode switch refused in flight during a ToF silence must NOT apply itself at recovery
 #                                 ToF 出力停止中に飛行中に拒否したモード切替が、復帰の瞬間に勝手に適用されてはならない
 #
-# 2nd independent review, D3 (reproduced there as rv_stab_pending_pos). STABILIZE flight, the ToF stops at 7.5 s, the
+# STABILIZE flight, the ToF stops at 7.5 s, the
 # pilot flips the POS_HOLD switch at 9.0 s (refused: no usable altitude), the ToF resumes at 11.0 s. Before the fix the
 # refused switch EDGE persisted and was retried every cycle, so the instant the ToF came back the craft entered
 # POS_HOLD by itself while flying ("Mode change: STABILIZE -> POS_HOLD" before anything else), with the pilot's
@@ -12,8 +12,8 @@
 #     persists and the mode follows the switch once the episode has ended (the safest time to change mode).
 # The crash is the pilot's (throttle stick to the bottom in STABILIZE); it is not part of the verdict.
 #
-# 2 回目の独立レビューの D3（そこでは rv_stab_pending_pos として再現）。STABILIZE 飛行、7.5 s に ToF が出力停止、
-# 9.0 s にパイロットが POS_HOLD スイッチを入れる（拒否: 使える高度が無い）、11.0 s に ToF が復帰。修正前は拒否した
+# STABILIZE 飛行、7.5 s に ToF が出力停止、
+# 9.0 s にパイロットが POS_HOLD スイッチを入れる（拒否: 使える高度が無い）、11.0 s に ToF が復帰。main（2026-11-08 時点）は拒否した
 # スイッチの「エッジ」が持続して毎周期再試行され、ToF が戻った瞬間に、2 s 前にスイッチを入れたきりの機体が勝手に
 # POS_HOLD に入った。検証する仕様: (1) 飛行中の拒否はエッジを「消費」し、そう記録する（ログ "IN FLIGHT the switch
 # request is CONSUMED"、CLI `status` は modeblock TofSwitchConsumed）。モードは勝手に切り替わらず、パイロットが

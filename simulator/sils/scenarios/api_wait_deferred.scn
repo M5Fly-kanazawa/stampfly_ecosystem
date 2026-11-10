@@ -6,10 +6,10 @@
 # Here a `height?` and a second `takeoff` arrive while the first `takeoff` waits: `height?` must
 # be answered after FLYING, and the second `takeoff` must then be refused ("not on ground"),
 # i.e. it must not start a second takeoff chain in the middle of the first.
-# 待機中に動くのは `emergency` と `stop` だけ。他は修正前と全く同じ振る舞い — 待機中のコマンドが
-# 応答した後に、到着順で実行される。ここでは 1 回目の `takeoff` の待機中に `height?` と 2 回目の
-# `takeoff` が届く: `height?` は FLYING の後に応答し、2 回目の `takeoff` は "not on ground" で
-# 拒否される（1 回目の途中で 2 回目の離陸の鎖を始めない）。
+# 待機中に動くのは `emergency` と `stop` だけ。他はmain（2026-11-08 時点）と全く同じ振る舞い — 待機中のコマンドが
+# 応答した後に、到着順で実行される。ここでは最初の `takeoff` の待機中に `height?` と二つ目の
+# `takeoff` が届く: `height?` は FLYING の後に応答し、二つ目の `takeoff` は "not on ground" で
+# 拒否される（最初の離陸の途中で 二つ目の離陸の鎖を始めない）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/api_wait_deferred.scn --target vehicle --duration 20000000
 #

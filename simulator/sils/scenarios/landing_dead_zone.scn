@@ -20,24 +20,24 @@
 # height of 0.038 m), so `on_ground_` (two valid readings below 5 cm) is never set, the estimator is not pinned to the
 # ground, the stalled-descent test (`|vz| < 0.05 m/s`) never holds, and the 3 G impact cut does not fire either (this
 # contact is below 3 G). Before the fix LANDING never ended (backlog #23, KNOWN-FAIL). Fixed by the dead-zone touchdown
-# (TakeoffLandingMgr::deadZoneTouchdown(), detailed_design.md §3.1 note 7): during the LANDING descent, a valid reading at or
+# (TakeoffLandingMgr::deadZoneTouchdown(), detailed_design.md §3 note 7): during the LANDING descent, a valid reading at or
 # below 0.10 m followed by ONLY invalid samples for 0.2 s means the craft is on the floor. Here the last valid reading is
 # 0.085 m and "Landing detected (ToF dead zone ...)" comes 0.2 s after it, with the craft at rest on the floor (truth
 # height 0.021 m, vertical speed 0.001 m/s); LANDING -> IDLE_GROUND follows at once. The real log (front_tof_poshold_yaw360,
 # 0.28 m/s) went invalid for good after valid readings of 0.039 and 0.031 m; replaying it, the rule does not fire during the
-# descent and fires 0.23 s after the last valid reading (detailed_design.md §3.1 note 7).
+# descent and fires 0.23 s after the last valid reading (detailed_design.md §3 note 7).
 #
 # alt_disarm_land.scn に ToF の近距離の不感帯を加えたもの（2026-11-09 から走行の既定。実機のセンサは約 3 cm より近いと
 # 「目標なし」を返すので、床の上では無効）。降下は 0.26 m/s で床に着き、機体がまだ動いている間にセンサが無効になる
 # （読みは真値に遅れる: 真の高さ 0.038 m で 0.085 m と報告）。そのため `on_ground_`（5 cm 未満の有効な読み 2 回）は立たず、
 # 推定器は地面に固定されず、降下停滞の判定（`|vz| < 0.05 m/s`）は成り立たず、3 G の衝撃カットも働かない（この接触は
-# 3 G 未満）。修正前は LANDING が終わらなかった（バックログ #23、KNOWN-FAIL）。不感帯での接地（
-# TakeoffLandingMgr::deadZoneTouchdown()、detailed_design.md §3.1 注7）で修正: LANDING の降下中に、0.10 m 以下の有効な
+# 3 G 未満）。この経路が無いと LANDING が終わらなかった（バックログ #23、KNOWN-FAIL だった）。不感帯での接地（
+# TakeoffLandingMgr::deadZoneTouchdown()、detailed_design.md §3 注7）で修正: LANDING の降下中に、0.10 m 以下の有効な
 # 読みの後、無効サンプルだけが 0.2 s 続いたら、機体は床の上にある。ここでは最後の有効な読みが 0.085 m で、その 0.2 s 後に
 # 「Landing detected (ToF dead zone ...)」が出る。機体は床の上で静止（真の高さ 0.021 m、鉛直速度 0.001 m/s）。続けて
 # LANDING → IDLE_GROUND。実機ログ（front_tof_poshold_yaw360、0.28 m/s）は 0.039 m と 0.031 m の有効な読みの後、ずっと
 # 無効になった。それを再生すると、この規則は降下中には作動せず、最後の有効な読みの 0.23 s 後に作動する
-# （detailed_design.md §3.1 注7）。
+# （detailed_design.md §3 注7）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/landing_dead_zone.scn --target vehicle
 #

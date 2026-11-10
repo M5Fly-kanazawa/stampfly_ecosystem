@@ -266,7 +266,7 @@ TEST(b07_takeoff_complete_from_armed) {
 TEST(b08_landing_request_from_armed) {
     topics_init();
     StateManager sm; sm.init(); sm.forceIdle(); sm.requestArm();
-    sm.notifyLandingRequest();  // guard: FLYING only
+    sm.notifyLandingRequest();  // manual mode (STABILIZE, the default): refused, the craft may lift off from ARMED_GROUND (an altitude mode answers with DISARM) / 手動モード（STABILIZE、既定）: 拒否（ARMED_GROUND からでも浮ける。高度モードは DISARM で応える）
     ASSERT_TRUE(sm.getState() == FlightState::ARMED_GROUND);
 }
 

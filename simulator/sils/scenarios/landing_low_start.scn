@@ -1,0 +1,31 @@
+# landing_low_start.scn — a LANDING that begins low (0.117 m, from TAKEOFF, by a comm loss) ends by a verdict made in that LANDING
+#                         低い高さ（0.117 m、TAKEOFF から、通信途絶で）で始まる LANDING は、その LANDING の中で出た判定で終わる
+#
+# A weak craft (motor health 0.8725) cannot climb: it hovers low in TAKEOFF, then the link is lost for 12 s and the LANDING begins at 0.117 m, inside the hysteresis band of the ground flag
+# (set below 0.05 m, released above 0.15 m). Spec under test: the touchdown of a LANDING is judged from the samples that arrive after the LANDING began (TakeoffLandingMgr::noteLandingDescent(),
+# SystemStatus.verdict_state_since_us, takeoff_policy.hpp landingVerdictCounts(); detailed_design.md §3 注7), so the motors keep running after it began and stop on the floor with the
+# verdict "stalled descent / ground effect" made in the LANDING, not an emergency cut.
+# This scenario confirms the behaviour of a LANDING that begins low; it does NOT check the afresh judgement itself: no SILS input was found that makes a verdict left over from before
+# (ground flag set, craft at rest, FLYING or TAKEOFF at 0.05-0.15 m) (weak craft 0.80-0.90: it either never lifts and the TAKEOFF is aborted, or it climbs). The afresh judgement
+# and the stamp are checked on the host: test_main.cpp (land_notice_*) and test_takeoff_policy.cpp (a_touchdown_verdict_counts_only_with_the_stamp_of_the_present_landing).
+#
+# 弱い機体（モータの健全度 0.8725）は上昇できず TAKEOFF で低くホバーする。そこでリンクが 12 s 途絶え、LANDING が 0.117 m で始まる。0.117 m は接地フラグのヒステリシス帯の中（0.05 m 未満で立ち、
+# 0.15 m 超で解ける）。検証する仕様: LANDING の接地は、LANDING が始まった後に届いたサンプルから判定される（TakeoffLandingMgr::noteLandingDescent()、SystemStatus.verdict_state_since_us、
+# takeoff_policy.hpp の landingVerdictCounts()。detailed_design.md §3 注7）ので、モータは始まった後も回り続け、床の上で、LANDING の中で出た「降下停滞・地面効果」の判定で止まる（緊急カットではない）。
+# このシナリオは、低い高さで始まる LANDING の動作の確認であり、判定のやり直しそのものは「検査しない」: 以前から残った判定（接地フラグが立ち、機体が静止し、0.05〜0.15 m の
+# FLYING または TAKEOFF）を作る入力は、SILS では見つからなかった（弱い機体 0.80〜0.90: 浮かずに TAKEOFF が中止されるか、上昇する）。やり直しと刻印の確認はホストで検査する:
+# test_main.cpp（land_notice_*）と test_takeoff_policy.cpp（a_touchdown_verdict_counts_only_with_the_stamp_of_the_present_landing）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/landing_low_start.scn --target vehicle --duration 26000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    tof_deadzone 0
+   0    fault 0 0.8725
+   0    fault 1 0.8725
+   0    fault 2 0.8725
+   0    fault 3 0.8725
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     2000      50        1              # C: ARM in ALT_HOLD (5.5 s) — auto-takeoff, the weak craft hovers low in TAKEOFF
+   +12000 rc      2048  2048   2048    2048  1     300       50        1              # D: the link is silent for 12 s (from about 9 s): comm loss, LANDING at about 11 s
+   +    rc         2048  2048   2048    2048  0     6000      50        1              # E: the link returns, ARM released

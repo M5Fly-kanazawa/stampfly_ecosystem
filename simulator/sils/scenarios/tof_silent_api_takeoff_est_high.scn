@@ -2,18 +2,18 @@
 #                                       API 離陸の上昇中に ToF が出力停止、ホバー推力の見積もりが 28 % 高い
 #
 # Same chain as tof_silent_api_takeoff.scn (the 2026-11 accident through the Tello-style API) with
-# `hover.thrust_corr 1.2` set at t = 0: the review's second failing case (truth peak 4.9 m with 3 seeds of
-# noise n2; 11 m for hover.thrust_corr 1.2 in the old build). Spec under test:
+# `hover.thrust_corr 1.2` set at t = 0: the second failing case (main as of 2026-11-08: the craft keeps
+# climbing, truth peak 120 m). Spec under test:
 #  1. The climb is aborted and the blind descent is the velocity loop: truth peak below 1.0 m, touchdown
 #     speed below 0.6 m/s, the motors stop on the floor.
 #  2. The API answers "error takeoff aborted" and a second `takeoff` is refused up front.
 #
 # tof_silent_api_takeoff.scn（Tello 風 API を通した 2026-11 の事故）と同じ連鎖で、t = 0 に
-# `hover.thrust_corr 1.2` を設定: レビューの 2 つ目の失敗例（ノイズ n2 の 3 seed で真値の最高 4.9 m。旧ビルドで
-# hover.thrust_corr 1.2 なら 11 m）。検証する仕様:
+# `hover.thrust_corr 1.2` を設定: 2 つ目の失敗例（main（2026-11-08 時点）では
+# 上昇し続け、真値の最高 120 m）。検証する仕様:
 #  1. 上昇は中止され、ToF なしの降下は速度ループ: 真値の最高は 1.0 m 未満、接地速度は 0.6 m/s 未満、モータは
 #     床の上で止まる。
-#  2. API は "error takeoff aborted" を返し、2 回目の `takeoff` は最初に拒否される。
+#  2. API は "error takeoff aborted" を返し、二つ目の `takeoff` は最初に拒否される。
 #
 # Run: sf sils scenario simulator/sils/scenarios/tof_silent_api_takeoff_est_high.scn --target vehicle --duration 16000000
 #

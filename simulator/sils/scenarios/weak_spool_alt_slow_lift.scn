@@ -1,13 +1,13 @@
 # weak_spool_alt_slow_lift.scn — ALT_HOLD auto-takeoff, motors that lift SLOWLY (health 0.88), the ToF reads valid: NOT aborted, the craft lifts and flies
 #                                ALT_HOLD の自動離陸、「ゆっくり」浮くモータ（健全度 0.88）、ToF は有効: 中止しない。機体は浮いて飛ぶ
 #
-# The case that the 7th-pass rule (abort when the accelerometer shows no evidence of leaving the floor 5 s after TAKEOFF) got wrong: a craft that lifts slowly shows no upward
-# acceleration, so it was DISARMED at 0.11-0.17 m and fell at 1.2-1.6 m/s. Spec under test (8th pass, decision D4): the abort needs the POSITIVE evidence of the healthy ToF (a valid reading
+# The case that an earlier rule (abort when the accelerometer shows no evidence of leaving the floor 5 s after TAKEOFF) got wrong: a craft that lifts slowly shows no upward
+# acceleration, so it was DISARMED at 0.11-0.17 m and fell at 1.2-1.6 m/s. Spec under test: the abort needs the POSITIVE evidence of the healthy ToF (a valid reading
 # at or below 5 cm that does not rise); this craft's reading rises (0.02 -> 0.17 m), so there is no abort. The takeoff completes (the controller's backstop, once the evidence is gone)
 # and the craft flies; the landing at the end is gentle.
 #
-# 7 回目の規則（TAKEOFF の 5 s 後に加速度計が床を離れた証拠を示さなければ中止）が誤った場面: ゆっくり浮く機体は上向きの加速を示さないので、0.11〜0.17 m で DISARM され、
-# 1.2〜1.6 m/s で落下した。検証する仕様（8 回目、判断 D4）: 中止には健全な ToF の「積極的な」証拠（5 cm 以下の有効な読みで、増えない）が要る。この機体の読みは増える
+# 以前の規則（TAKEOFF の 5 s 後に加速度計が床を離れた証拠を示さなければ中止）が誤った場面: ゆっくり浮く機体は上向きの加速を示さないので、0.11〜0.17 m で DISARM され、
+# 1.2〜1.6 m/s で落下した。検証する仕様: 中止には健全な ToF の「積極的な」証拠（5 cm 以下の有効な読みで、増えない）が要る。この機体の読みは増える
 # （0.02 → 0.17 m）ので、中止しない。離陸は完了し（証拠が消えた後の制御器の備え）、機体は飛ぶ。最後の着陸は穏やか。
 #
 # Run: sf sils scenario simulator/sils/scenarios/weak_spool_alt_slow_lift.scn --target vehicle --duration 25000000

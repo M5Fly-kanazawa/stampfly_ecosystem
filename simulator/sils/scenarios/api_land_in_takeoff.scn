@@ -1,0 +1,30 @@
+# api_land_in_takeoff.scn — `land` while `takeoff` is still waiting for FLYING, on a craft that cannot lift: the `land` is parked, the abort stops the motors on the floor, there is no LANDING
+#                           `takeoff` が FLYING を待っている最中の `land`（浮けない機体）: `land` は後回しになり、中止で床の上でモータが止まり、LANDING は無い
+#
+# The API task blocks inside `takeoff` (waitUntil) until the auto-takeoff reaches FLYING. A craft whose motors are too weak to lift (health 0.85) and whose ToF reads the floor validly
+# (`tof_deadzone 0`) stays in TAKEOFF until the system's own abort (5 s after the TAKEOFF began: DISARM, the motors stop). A `land` that arrives meanwhile is parked like every other line (dispatchDuringWait):
+# StateManager::notifyLandingRequest does not accept TAKEOFF, because a LANDING that begins on the floor can float the craft up (detailed_design.md §3 note 5), so the `land` waits until the takeoff has ended.
+# The abort ends the wait ("error takeoff aborted"), the parked `land` then runs on the craft that is no longer flying and answers "error not flying". The craft never leaves the floor and the motors are stopped.
+# Spec under test (detailed_design.md §3.1, TAKEOFF -> IDLE_GROUND row; §3 note 13).
+#
+# `takeoff` が FLYING を待っている間、API タスクは `takeoff` の中（waitUntil）でブロックする。モータが弱すぎて浮けない機体（健全度 0.85）で、ToF が床を有効に読む（`tof_deadzone 0`）と、
+# 機体は、システム自身の中止（TAKEOFF の開始から 5 s 後。DISARM でモータ停止）まで TAKEOFF に留まる。その間に届いた `land` は、他の行と同じく後回しになる（dispatchDuringWait）:
+# StateManager::notifyLandingRequest は TAKEOFF を受け付けない。床の上で始めた LANDING は機体を浮かせうるため（detailed_design.md §3 注5）。`land` は離陸が終わるまで待つ。
+# 中止が待機を終え（"error takeoff aborted"）、後回しの `land` は、もう飛んでいない機体に対して実行され "error not flying" を返す。機体は床を離れず、モータは止まる。
+# 検証する仕様（detailed_design.md §3.1 の TAKEOFF → IDLE_GROUND の行、§3 注13）。
+#
+# Timeline: takeoff at 6.0 s (ARM, spool, the TAKEOFF begins at about 6.3 s), land at 8.0 s, the abort at about 11.3 s.
+# Run: sf sils scenario simulator/sils/scenarios/api_land_in_takeoff.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    tof_deadzone 0
+   0    fault 0 0.85
+   0    fault 1 0.85
+   0    fault 2 0.85
+   0    fault 3 0.85
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> ARM -> auto-takeoff; the craft cannot lift (t=6)
+   +    rc         2048  2048   2048    2048  0     2000      50      # D: the TAKEOFF runs, the craft stays on the floor (to t=8)
+   +    api        "land"                                             # E: t=8.0 s — land while takeoff waits (parked)
+   +    rc         2048  2048   2048    2048  0     14000     50      # F: the abort at about 11.3 s, the parked land is answered, the motors stay off (to t=22)

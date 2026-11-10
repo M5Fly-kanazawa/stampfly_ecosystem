@@ -102,7 +102,7 @@ private:
     float stickClimbRate(float throttle_axis) const;                      // climb rate the throttle stick commands / スロットルスティックが指令する上昇率
     float altitudeHoldClimbRate(float throttle_axis, float altitude);   // stick / rc-guidance climb rate, limited at the altitude ceiling / スティック・rc 誘導の上昇率（高度上限で制限）
     float limitClimbAboveCeiling(float velocity_setpoint, float altitude);   // no climb command above the ceiling + margin; the target returns to the ceiling / 上限 + 余裕を超えたら上昇の指令を出さず、目標を上限へ戻す
-    float ceilingBrakeClimbRate(const StateEstimate& state, float eskf_climb_rate) const;   // climb rate the ceiling brake judges (integral only where the ESKF cannot be believed) / 天井ブレーキが判定する上昇率（ESKF を信じられない場面だけ積分）
+    float ceilingBrakeClimbRate(const StateEstimate& state, float eskf_climb_rate) const;   // climb rate the ceiling brake judges (integral only where the ESKF cannot be believed) / 天井ブレーキが判定する上昇率（ESKF を信用できない場面だけ積分）
     float brakeAboveCeiling(float thrust, float altitude, float climb_rate) const;   // thrust at most kAltitudeCeilingBrakeFrac x support while the craft would stop above the ceiling + margin / 上限 + 余裕より上で止まる見込みなら推力を支持推力の kAltitudeCeilingBrakeFrac 倍以下に
     float takeoffClimbRate(float eskf_climb_rate) const;   // climb rate of the auto-takeoff velocity loop: the ESKF's plus the excess climb that only the accelerometer integral shows / 自動離陸の速度ループの上昇率: ESKF の値に、加速度積分だけが示す超過分の上昇を足したもの
     bool  restingOnGround(float thrust) const;   // Grounded phase and a thrust below kVerticalVelocityRestThrustFrac x hover / Grounded フェーズかつ推力が hover の kVerticalVelocityRestThrustFrac 倍未満
@@ -700,7 +700,9 @@ private:
     // 床が機体を支えている）か時間切れ（StateManager）。数値はすべて sf::limits（1 か所）にあり、気圧計の
     // 段階で同じ推定器へ速度を融合できる。
     float blindLandingThrust(float dt);
-    float landingBaseThrust() const;   // base of the closed-loop landing: the hover estimate, bounded by the calibrated support thrust / 閉ループ着陸の基準: ホバー推力の見積もり（較正した支持推力で上を抑える）
+    float landingBaseThrust() const;   // base of the closed-loop landing: the hover estimate, bounded by the support reference (calibrated, early estimate or lowered hover estimate) / 閉ループ着陸の基準: ホバー推力の見積もり（支持推力の基準 = 較正値、早い推定、低くしたホバー推力の見積もりで上を抑える）
+    float brakeRiseInLanding(float thrust, float climb_rate) const;   // while the craft rises in the LANDING, thrust at most a falling fraction of the support reference / LANDING 中に機体が上昇しているあいだ、推力を支持推力の基準の（下がる）割合以下に
+    float landingSettleCeiling(float altitude, float dt);   // near-ground settle assist: the falling thrust ceiling / 近地面の着地アシスト: 下がる推力の上限
     float closedLoopLandingThrust(const StateEstimate& state, float dt);   // the ToF-alive descent / ToF 生存中の降下
     float last_thrust_            = 0.0f;    // [-] thrust commanded last cycle (all phases) / 前周期の指令推力（全フェーズ）
     SupportThrustFilter support_filter_;     // means of the commanded thrust and of the upward specific force over the window that opens when the craft

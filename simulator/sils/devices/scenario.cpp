@@ -283,7 +283,7 @@ int parseParamChannel(const std::string& ch, std::istringstream& iss, Event& e, 
         // inject an ERROR into a value the firmware relies on without changing the flight before
         // it (e.g. hover.thrust_corr: the hover-thrust estimate is wrong from here on).
         // param <name> <value> — 走行のこの時点でファームのパラメータを 1 つ、型に正しいセッタで
-        // 設定する（範囲検証あり。変更コールバックが走るので、制御器のパラメータはコンソールの
+        // 設定する（範囲検証あり。変更コールバックが呼ばれるので、制御器のパラメータはコンソールの
         // `param set` と同じく再読込される）。ファームが頼る値に「誤差」を、それ以前の飛行を
         // 変えずに注入するのに使う（例: hover.thrust_corr: 以後ホバー推力の見積もりが違う）。
         e.ch = Channel::Param;

@@ -326,12 +326,12 @@ TEST(resume_tof_suspension_times_out)
     ASSERT_NEAR(-eskf.getPosition().z, 1.0f, 0.05f);   // still 1.0m — the 2.0m sample was rejected
 }
 
-// ToF-silence re-acquisition (detailed_design.md §3.1 注 12): the estimator's altitude is 1.2 m off
+// ToF-silence re-acquisition (detailed_design.md §3 注12): the estimator's altitude is 1.2 m off
 // after a blind period (here: pinned at 1.0 m while the true height is 2.2 m). Without
 // reacquireVertical() the 0.5 m innovation gate rejects every sample forever; with it the very same
 // mechanism as the end of a flip lifts the gate for the next sample and the estimate converges.
-// lastToFObservation() reports the rejected samples as not adopted (D2 of the 2nd review).
-// ToF 出力停止の取り込み直し（detailed_design.md §3.1 注 12）: ToF なしの期間の後、推定器の高度が
+// lastToFObservation() reports the rejected samples as not adopted.
+// ToF 出力停止の取り込み直し（detailed_design.md §3 注12）: ToF なしの期間の後、推定器の高度が
 // 1.2 m ずれている（ここでは 1.0 m に固定されたまま、真の高さは 2.2 m）。reacquireVertical() が無いと
 // 0.5 m のイノベーション判定がサンプルを永久に棄却する。有れば、宙返りの終わりと「同じ」仕組みが次の
 // サンプルの判定を外し、推定が収束する。lastToFObservation() は棄却されたサンプルを「未採用」と報告する。

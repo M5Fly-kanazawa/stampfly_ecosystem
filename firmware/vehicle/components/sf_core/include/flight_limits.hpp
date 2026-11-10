@@ -58,16 +58,16 @@ inline constexpr float kAltitudeCeilingM = 1.2f;
 /// few cm (innovation gate 0.5 m, ToF noise 0.02 m), so 0.15 m is the same as the ground/air threshold of the
 /// takeoff/landing manager: beyond it the altitude is not a measurement error but a real overshoot.
 /// kAltitudeCeilingM を超える余裕 [m]。これを超えたら制御器は上昇の指令を一切禁止し、目標を上限へ戻す（自動離陸・
-/// ALT_HOLD・POS_HOLD）。候補値。根拠: ToF が生きているときの ESKF の高度誤差は数 cm（イノベーション判定 0.5 m、
+/// ALT_HOLD・POS_HOLD）。候補値。根拠: ToF が動作しているときの ESKF の高度誤差は数 cm（イノベーション判定 0.5 m、
 /// ToF ノイズ 0.02 m）なので、離着陸マネージャの接地/空中のしきい値と同じ 0.15 m を超えたら、測定誤差でなく本当の行き過ぎ。
 inline constexpr float kAltitudeCeilingMarginM = 0.15f;
 /// Auto-takeoff velocity loop (PidController::takeoffClimbRate): the part of the climb that the accelerometer integral shows and the ESKF does not, beyond this [m/s],
 /// is added to the ESKF climb rate. CANDIDATE. Basis: SILS, an ordinary takeoff (corr 1.12, noise off): the integral exceeds the pinned / lagging ESKF by up to 0.5 m/s in the
 /// first second, so 0.6 keeps it on the ESKF signal (alt_recenter_gate and landing_dead_zone, whose margins are small, are unchanged), while the failing takeoff
-/// (`hover.thrust_corr` 1.2, 1.2-1.8 m/s) is seen (TEST_MATRIX.md, 6th round).
+/// (`hover.thrust_corr` 1.2, 1.2-1.8 m/s) is seen.
 /// 自動離陸の速度ループ（PidController::takeoffClimbRate）: 加速度積分が示し ESKF が示さない上昇のうち、この値 [m/s] を超えた分を ESKF の上昇率に足す。候補値。
 /// 根拠: SILS の普通の離陸（corr 1.12、ノイズなし）では、固定された・遅れた ESKF を積分が最初の 1 s に最大 0.5 m/s 超えるので、0.6 なら ESKF の信号のまま
-/// （余裕の小さい alt_recenter_gate と landing_dead_zone は変わらない）。失敗する離陸（`hover.thrust_corr` 1.2、1.2〜1.8 m/s）は見える（TEST_MATRIX.md の 6 回目）。
+/// （余裕の小さい alt_recenter_gate と landing_dead_zone は変わらない）。失敗する離陸（`hover.thrust_corr` 1.2、1.2〜1.8 m/s）は見える。
 inline constexpr float kTakeoffVelocityDisagreeMps = 0.6f;   // [m/s]
 /// The full brake: while the craft is still rising and would stop more than kAltitudeCeilingBrakeRampM above kAltitudeCeilingM + kAltitudeCeilingBrakeStartM even if it
 /// braked now, the thrust is at most this fraction of the SUPPORT thrust [-] (the thrust that holds the craft: blind_landing.hpp; a brake that does not wait for the velocity
@@ -91,33 +91,48 @@ inline constexpr float kAltitudeCeilingBrakeFrac = 0.5f;
 inline constexpr float kAltitudeCeilingBrakeStartM = 0.05f;
 /// Derating of the deceleration that the brake is assumed to give when the stop height is predicted [-]. CANDIDATE. Basis: the thrust follows the command
 /// with a delay of about 80 ms (kSupportThrustLagS) and the attitude loop takes a part of the thrust; 0.7 x 4.9 = 3.4 m/s^2. Final build, SILS (the auto-takeoff and the API takeoff, `hover.thrust_corr` 0.9 / 1.0 / 1.2 x noise n0 / n2 x 3 seeds,
-/// 36 runs per value): the true peak height is 1.279 m at 0.5, 1.282 m at 0.7 and 1.291 m at 0.9 (the hard limit is the ceiling + margin, 1.35 m): the result hardly depends on it, so the physical estimate is kept (TEST_MATRIX.md, 7th round).
+/// 36 runs per value): the true peak height is 1.279 m at 0.5, 1.282 m at 0.7 and 1.291 m at 0.9 (the hard limit is the ceiling + margin, 1.35 m): the result hardly depends on it, so the physical estimate is kept.
 /// 止まる高さを予測するときに、ブレーキが出すと仮定する減速度に掛ける余裕 [-]。候補値。根拠: 推力は指令に約 80 ms 遅れ（kSupportThrustLagS）、
-/// 姿勢ループが推力の一部を使う。0.7 × 4.9 = 3.4 m/s^2。最終ビルドの SILS（自動離陸と API の離陸、`hover.thrust_corr` 0.9 / 1.0 / 1.2 × ノイズ n0 / n2 × 3 seed、
-/// 1 値あたり 36 本）: 真値のピークの高さは 0.5 で 1.279 m、0.7 で 1.282 m、0.9 で 1.291 m（硬い側の限界は上限 + 余裕の 1.35 m）。結果はほとんどこれに依らないので、物理的な見積もりのまま（TEST_MATRIX.md の 7 回目）。
+/// 姿勢ループが推力の一部を使う。0.7 × 4.9 = 3.4 m/s^2。SILS（自動離陸と API の離陸、`hover.thrust_corr` 0.9 / 1.0 / 1.2 × ノイズ n0 / n2 × 3 seed、
+/// 1 値あたり 36 本）: 真値のピークの高さは 0.5 で 1.279 m、0.7 で 1.282 m、0.9 で 1.291 m（硬い側の限界は上限 + 余裕の 1.35 m）。結果はほとんどこれに依らないので、物理的な見積もりのまま。
 inline constexpr float kAltitudeCeilingBrakeDecelDerate = 0.7f;
 /// Predicted excess of the stop height [m] over which the brake limit falls from 1 x the support thrust to kAltitudeCeilingBrakeFrac x it (linear). CANDIDATE. Basis: SILS, the 1.2 m
-/// hover after an API takeoff and `up 200` (`hover.thrust_corr` 0.9 / 1.0 / 1.2 x noise n0 / n2 x 2 seeds, 12 runs per value, TEST_MATRIX.md, 8th round): the number of times
+/// hover after an API takeoff and `up 200` (`hover.thrust_corr` 0.9 / 1.0 / 1.2 x noise n0 / n2 x 2 seeds, 12 runs per value): the number of times
 /// the brake went to more than half of its depth per run, with the hard brake (ramp 0): 136 / 134 (0.9, n0), 18 / 18 (1.0, n0), 9 / 12 (0.9, n2), 38 / 38 (1.2, n2: the takeoff overshoot); ramp 0.03 m: 0 / 0, 0 / 0, 0 / 0, 9 / 9; ramp 0.06 m: 0 / 0,
 /// 0 / 0, 0 / 0, 3 / 10; ramp 0.1 m (chosen): 0 / 0, 0 / 0, 0 / 0, 3 / 3. The worst true peak of the same 12 runs: 1.288 / 1.279 / 1.290 / 1.296 m (the hard limit is the ceiling + margin, 1.35 m), so
 /// the ramp costs at most 0.01 m of overshoot.
 /// 止まる高さの予測の超過 [m] のうち、ブレーキの上限が 支持推力の 1 倍から kAltitudeCeilingBrakeFrac 倍まで（直線的に）下がる幅。候補値。根拠: SILS の、API 離陸と `up 200` の後の
-/// 1.2 m のホバー（`hover.thrust_corr` 0.9 / 1.0 / 1.2 × ノイズ n0 / n2 × 2 seed、1 値あたり 12 本。TEST_MATRIX.md の 8 回目）で、ブレーキが深さの半分より深くなった回数（1 回の実行あたり）:
+/// 1.2 m のホバー（`hover.thrust_corr` 0.9 / 1.0 / 1.2 × ノイズ n0 / n2 × 2 seed、1 値あたり 12 本）で、ブレーキが深さの半分より深くなった回数（1 回の実行あたり）:
 /// 硬いブレーキ（幅 0）: 136 / 134（0.9、n0）、18 / 18（1.0、n0）、9 / 12（0.9、n2）、38 / 38（1.2、n2: 離陸の行き過ぎ）。幅 0.03 m: 0 / 0、0 / 0、0 / 0、9 / 9。幅 0.06 m: 0 / 0、0 / 0、0 / 0、
 /// 3 / 10。幅 0.1 m（採用）: 0 / 0、0 / 0、0 / 0、3 / 3。同じ 12 本の真値のピークの最悪: 1.288 / 1.279 / 1.290 / 1.296 m（硬い側の限界は上限 + 余裕の 1.35 m）。つまり幅の代償は行き過ぎ最大 0.01 m。
 inline constexpr float kAltitudeCeilingBrakeRampM = 0.1f;   // [m]
 
 /// Upper bound of the base thrust of the closed-loop landing (ToF alive), as a multiple of the calibrated support thrust [-] (PidController::landingBaseThrust). CANDIDATE. Basis: SILS, the 1.2 m
-/// hover and the API `land` (`hover.thrust_corr` 1.1 / 1.2 x noise n2 x 3 seeds, TEST_MATRIX.md, 8th round): the craft climbed after the LANDING began by 0.17-0.24 / 0.47-0.57 m with no bound
+/// hover and the API `land` (`hover.thrust_corr` 1.1 / 1.2 x noise n2 x 3 seeds): the craft climbed after the LANDING began by 0.17-0.24 / 0.47-0.57 m with no bound
 /// (the estimate is 1.17 / 1.24 x the support thrust); with the bound 1.05 (= 1 / kNoTofThrustCapRatio) 0-0.03 / 0.00-0.01 m, with 1.08 (chosen) 0.03-0.09 / 0.00-0.04 m, with 1.10 0.08-0.11 / 0.05-0.11 m,
 /// with 1.15 0.17-0.26 / 0.17-0.29 m. An ordinary landing must not change: in landing_dead_zone the estimate is 1.057 x the support thrust, and a bound of 1.05 (0.4 % less thrust) turned its soft contact
 /// (the dead-zone path, under 3 G) into a 3.2 G impact (contact at 0.27 m/s instead of about 0.2 m/s), so 1.08 is the smallest value among those tried that leaves it untouched.
 /// ToF 生存中の閉ループ着陸の基準推力の上限（較正した支持推力の倍数 [-]。PidController::landingBaseThrust）。候補値。根拠: SILS の、1.2 m のホバーと API の `land`
-/// （`hover.thrust_corr` 1.1 / 1.2 × ノイズ n2 × 3 seed。TEST_MATRIX.md の 8 回目）で、上限なしでは LANDING が始まった後に機体が 0.17〜0.24 / 0.47〜0.57 m 上昇した（見積もりは支持推力の 1.17 / 1.24 倍）。
+/// （`hover.thrust_corr` 1.1 / 1.2 × ノイズ n2 × 3 seed）で、上限なしでは LANDING が始まった後に機体が 0.17〜0.24 / 0.47〜0.57 m 上昇した（見積もりは支持推力の 1.17 / 1.24 倍）。
 /// 上限 1.05（= 1 / kNoTofThrustCapRatio）なら 0〜0.03 / 0.00〜0.01 m、1.08（採用）なら 0.03〜0.09 / 0.00〜0.04 m、1.10 なら 0.08〜0.11 / 0.05〜0.11 m、1.15 なら 0.17〜0.26 / 0.17〜0.29 m。
 /// 普通の着陸は変わってはならない: landing_dead_zone の見積もりは支持推力の 1.057 倍で、上限 1.05（推力 0.4 % 減）にすると、その柔らかい接触（不感帯の経路、3 G 未満）が 3.2 G の衝撃
 /// （接触が約 0.2 m/s でなく 0.27 m/s）に変わったので、1.08 は試した値のうちそれに触れない最小の値。
 inline constexpr float kLandingBaseOverSupportMax = 1.08f;   // [-]
+/// Rise brake of the closed-loop landing (PidController::brakeRiseInLanding): at a climb rate of 0 or less the thrust passes unchanged; while the craft rises in the LANDING (climb rate above 0), the thrust is limited to a fraction of
+/// the support reference that is 1 just above a climb rate of 0 and falls linearly to kLandingRiseBrakeFrac over kLandingRiseBrakeRampMps. So the limit steps in at a climb rate of 0 for a thrust above the support reference
+/// (it is cut to 1 x the support reference), and is continuous above 0. CANDIDATES, one value each measured. Basis: the fraction at the end of the ramp is the one of the altitude ceiling's full brake (kAltitudeCeilingBrakeFrac),
+/// whose ramp form removed the on-off switching of a hard brake without it (20-136 switches per run); the ramp width 0.2 m/s is a first guess that was not tied to a measurement of the climb-rate noise (a hover or a slow
+/// descent sees a limit of 0.9-1.0 x the support reference for a climb rate of up to 0.04 m/s). SILS (a `land` 6 s after an API takeoff, `hover.thrust_corr` 0.9 / 1.0 / 1.2, accelerometer offset -0.6..+0.6 m/s^2,
+/// noise off / n2, 120 runs): re-rise above 0.10 m in 22 runs without the brake and without the bound of landingBaseThrust() before the calibration, 0 runs with them; worst descent speed 2.75 -> 0.63 m/s; the
+/// ordinary landing (`landing_dead_zone`) is unchanged. Other values of the ramp and of the fraction were NOT swept.
+/// 閉ループ着陸の上昇ブレーキ（PidController::brakeRiseInLanding）: 上昇率 0 以下では推力をそのまま通し、LANDING 中に機体が上昇している間（上昇率が 0 より大きい）は、推力を支持推力の基準の割合以下に制限する。
+/// 割合は上昇率 0 の直上で 1、kLandingRiseBrakeRampMps で直線的に kLandingRiseBrakeFrac まで下がる。したがって、支持推力の基準より高い推力は、上昇率 0 で段差を持って
+/// 上限（支持推力の基準の 1 倍）まで切られ、0 より上では連続。候補値で、それぞれ 1 値だけ測った。根拠: ランプの終わりの割合は高度上限の全ブレーキ（kAltitudeCeilingBrakeFrac）と同じで、そのランプの形は、ランプの無い硬いブレーキ
+/// （1 回の実行で 20〜136 回の入り切り）の切り替えをなくした。ランプの幅 0.2 m/s は、上昇率の雑音の測定には結び付けていない最初の見当（上昇率 0.04 m/s までなら、ホバーや遅い降下が受ける制限は支持推力の基準の 0.9〜1.0 倍）。
+/// SILS（API 離陸の 6 s 後の `land`、`hover.thrust_corr` 0.9 / 1.0 / 1.2、加速度計のオフセット −0.6〜+0.6 m/s^2、ノイズなし / n2、120 本）: 再上昇 0.10 m 超は、このブレーキも較正前の
+/// landingBaseThrust() の上限も無いと 22 本、有ると 0 本。最大の降下速度は 2.75 → 0.63 m/s。普通の着陸（`landing_dead_zone`）は変化なし。ランプと割合の他の値は未測定。
+inline constexpr float kLandingRiseBrakeFrac     = kAltitudeCeilingBrakeFrac;   // [-]
+inline constexpr float kLandingRiseBrakeRampMps  = 0.2f;                        // [m/s]
 
 /// Downward-ToF silence threshold [us]: no NEW sample for this long = sensor stopped.
 /// CANDIDATE. Basis: the ToF runs at ~30 Hz and the largest interval between samples
@@ -213,31 +228,49 @@ inline constexpr uint32_t kTofInvalidPersistUs = 500000;   // 0.5 s
 /// 0.25〜0.38 / 0.38〜0.41 m: 閾値が低いと上昇を最大 0.13 m 早く止められるが、0.05 m（持ち主の例示）は加速度積分の
 /// 誤差 1 cm に対する余裕を保つ。
 inline constexpr float    kTofInvalidTakeoffRiseM  = 0.05f;      // [m]
-/// Ground threshold of the takeoff/landing manager [m]: a valid ToF reading at or below it means on the ground (TakeoffLandingConfig::ground_tof_m takes its default from here).
+/// Ground threshold of the takeoff/landing manager [m] (TakeoffLandingConfig::ground_tof_m takes its default from here). The two users differ at the boundary: the manager's ground flag
+/// needs a valid reading STRICTLY BELOW it (takeoff_landing.cpp, "distance < ground_tof_m"), while TakeoffFloorWatch counts a reading AT OR BELOW it as in the band ("distance > band" ends the
+/// run). A reading of exactly 0.05 m (never seen: the ToF resolves 1 mm and the noise is 0.5 cm) is therefore floor evidence for the watch but not "on the ground" for the manager.
 /// CANDIDATE. Basis: the real sensor's first valid distance is 0.031 m and the craft's own height on the floor is a few cm, so 5 cm is 1.6 times the dead zone.
-/// 離着陸マネージャの地上の閾値 [m]: この値以下の有効な ToF の読みは接地を意味する（TakeoffLandingConfig::ground_tof_m の既定値はここから取る）。
+/// 離着陸マネージャの地上の閾値 [m]（TakeoffLandingConfig::ground_tof_m の既定値はここから取る）。境界での扱いは 2 つの使い手で違う: マネージャの接地フラグは、これ「未満」の
+/// 有効な読みを要し（takeoff_landing.cpp の「distance < ground_tof_m」）、TakeoffFloorWatch は、これ「以下」の読みを帯の中として数える（「distance > band」で区間が終わる）。
+/// ちょうど 0.05 m の読み（現れない: ToF の分解能は 1 mm、雑音は 0.5 cm）は、監視器には床の証拠だが、マネージャには「接地」でない。
 /// 候補値。根拠: 実機のセンサが有効になる距離は 0.031 m で、機体が床の上にいるときの高さは数 cm なので、5 cm は不感帯の 1.6 倍。
 inline constexpr float    kTakeoffGroundBandM       = 0.05f;     // [m]
+/// Airborne threshold of the takeoff/landing manager [m]: a valid ToF reading above it means off the ground (TakeoffLandingConfig::airborne_tof_m takes its default from here). Between
+/// kTakeoffGroundBandM and this the manager's ground flag holds its last value (hysteresis). TakeoffFloorWatch uses it to release the floor evidence it has latched at once (a valid reading above it proves the craft left the floor; readings above kTakeoffGroundBandM release it after kAutoTakeoffFloorHoldUs).
+/// 離着陸マネージャの空中の閾値 [m]: これを超える有効な ToF の読みは離陸を意味する（TakeoffLandingConfig::airborne_tof_m の既定値はここから取る）。kTakeoffGroundBandM とこの値の間では、
+/// マネージャの接地フラグは直前の値を保つ（ヒステリシス）。TakeoffFloorWatch は、ラッチした床の証拠をこれですぐ解く（これを超える有効な読みは、機体が床を離れた証拠。kTakeoffGroundBandM を超える読みが kAutoTakeoffFloorHoldUs 続いても解く）。
+inline constexpr float    kTakeoffAirborneBandM     = 0.15f;     // [m]
 
 /// Auto-takeoff (ALT_HOLD / POS_HOLD / API takeoff) that CANNOT lift is aborted (DISARM, the motors stop), but only on POSITIVE evidence that the craft is
 /// still on the floor, never because evidence of flight is missing: the healthy downward ToF (not silent) reads a valid height of at most
 /// kTakeoffGroundBandM, and that reading has not risen by more than kAutoTakeoffFloorRiseM for kAutoTakeoffFloorHoldUs (TakeoffFloorWatch,
 /// takeoff_policy.hpp), kAutoTakeoffNoLiftAbortUs after TAKEOFF began. An invalid sample, a silent ToF, or a reading above the band is NOT that evidence
-/// (an accelerometer cannot tell a craft that lifts slowly from one that the floor holds: the 7th-pass rule built on it aborted slow takeoffs in the air and ran
+/// (an accelerometer cannot tell a craft that lifts slowly from one that the floor holds: the rule built on it aborted slow takeoffs in the air and ran
 /// away on takeoffs without a ToF). CANDIDATES. Basis (SILS, motor health 0.85-1.0 at `hover.thrust_corr` 1.0, noise n0 / n2): a craft that cannot lift
 /// (health 0.85) reads the SILS floor at 21 mm, below the 31 mm dead zone, so its samples are INVALID and the ToF-invalid rule (kTofInvalidTakeoffMaxUs, above) ends its takeoff by a
 /// LANDING instead; this abort is for a craft that rests on a floor the ToF reads validly (the real sensor above 31 mm: a mat, a tilt) and keeps full correction on it for ever. 5 s is more
 /// than five times the time an ordinary takeoff needs to leave the band (0.4-0.9 s) and longer than the 3 s of the controller's own backstop, which therefore only
 /// declares the takeoff complete when the evidence is absent (takeoff_policy.hpp). The band is the ground threshold of the takeoff/landing manager (kTakeoffGroundBandM). The rise margin
-/// 0.02 m is four times the ToF noise (0.5 cm), and the hold 1 s is thirty ToF samples.
+/// 0.02 m is four times the ToF noise (0.5 cm), and the hold 1 s is thirty ToF samples. On the REAL sensor the rise margin never fires inside the band: the lowest valid reading is 0.031 m, so
+/// the readings of the band span 0.031-0.050 = 0.019 m, less than 0.02 m; what ends a run there is leaving the band (a reading above kTakeoffGroundBandM), and the margin matters only for a
+/// sensor that reads closer than 0.031 m (the SILS floor without the dead zone reads 0.021 m). And the real floor reads INVALID (status 254, the first 0.19-0.34 s of the TAKEOFF in the three real logs), so on a real
+/// floor this evidence is seldom there at all (it needs a floor the ToF reads validly: a mat, a tilt). Once the evidence has held, it is latched: a single stray reading above the band cannot let the takeoff complete on the floor. The latch is released by the craft leaving the floor, with the weight of evidence the abort has: valid
+/// readings above kTakeoffGroundBandM for kAutoTakeoffFloorHoldUs, or one valid reading above kTakeoffAirborneBandM (a craft that hangs in the 5-15 cm ground effect is not held for ever).
 /// 浮けない自動離陸（ALT_HOLD / POS_HOLD / API の takeoff）は中止して DISARM（モータ停止）する。ただし、機体がまだ床の上にいるという「積極的な」証拠があるときだけで、飛んでいる証拠が
 /// 「無い」ことでは中止しない: 健全な（出力停止でない）下向き ToF が kTakeoffGroundBandM 以下の有効な高さを読み、その読みが kAutoTakeoffFloorHoldUs の間、
 /// kAutoTakeoffFloorRiseM を超えて増えておらず（TakeoffFloorWatch、takeoff_policy.hpp）、かつ離陸の開始から kAutoTakeoffNoLiftAbortUs 経ったとき。無効サンプル、
-/// 出力停止の ToF、帯より上の読みは、その証拠ではない（加速度計は、ゆっくり浮く機体と床が支えている機体を区別できない: それに基づいた 7 回目の規則は、空中で遅い離陸を
+/// 出力停止の ToF、帯より上の読みは、その証拠ではない（加速度計は、ゆっくり浮く機体と床が支えている機体を区別できない: それに基づいた以前の規則は、空中で遅い離陸を
 /// 打ち切り、ToF なしの離陸では止まらなかった）。候補値。根拠（SILS、`hover.thrust_corr` 1.0、モータの健全度 0.85〜1.0、ノイズ n0 / n2）: 浮けない機体（健全度 0.85）は SILS の床を 21 mm と読み、
 /// 不感帯 31 mm より下なので、サンプルは「無効」で、離陸は上の ToF 無効の規則（kTofInvalidTakeoffMaxUs）が LANDING で終わらせる。この中止の対象は、ToF が有効に読める床（実センサの 31 mm 超: マット、傾き）に
 /// 載ったまま最大の補正を出し続ける機体。5 s は、普通の離陸が帯を出る時間（0.4〜0.9 s）の 5 倍以上で、制御器自身の時間切れの備え（3 s）より長い。そのため制御器の備えは、
 /// 証拠が無いときだけ離陸完了を宣言する（takeoff_policy.hpp）。帯は離着陸マネージャの地上の閾値（kTakeoffGroundBandM）。上昇の余裕 0.02 m は ToF ノイズ（0.5 cm）の 4 倍、保持 1 s は ToF の 30 サンプル。
+/// 「実センサ」では、上昇の余裕は帯の中では働かない: 有効な最小の読みは 0.031 m なので、帯の読みの幅は 0.031〜0.050 = 0.019 m で 0.02 m に届かない。そこで区間を終わらせるのは帯を出ること
+/// （kTakeoffGroundBandM より上の読み）で、余裕が効くのは 0.031 m より近くを読むセンサだけ（不感帯の無い SILS の床は 0.021 m）。そして実機の床は「無効」を返す（status 254。実機ログ 3 本の TAKEOFF の最初の
+/// 0.19〜0.34 s）ので、実機の床ではこの証拠そのものがほとんど立たない（ToF が有効に読める床: マット、傾き、が要る）。証拠が一度立ったらラッチする:
+/// 帯の外へ 1 つ外れた読みで、床の上で離陸が完了することはない。ラッチは、機体が床を離れたことで解ける（中止と同じ重さの証拠: kTakeoffGroundBandM を超える有効な読みが kAutoTakeoffFloorHoldUs 続く、
+/// または kTakeoffAirborneBandM を超える有効な読みが 1 つ。5〜15 cm の地面効果に留まる機体は、永久には保持されない）。
 inline constexpr uint32_t kAutoTakeoffNoLiftAbortUs = 5000000;   // 5 s
 inline constexpr float    kAutoTakeoffFloorRiseM    = 0.02f;     // [m]
 inline constexpr uint32_t kAutoTakeoffFloorHoldUs   = 1000000;   // 1 s
@@ -261,7 +294,7 @@ inline constexpr float    kTofInvalidLandingMinHeightM = 0.10f;  // [m]
 /// (66 ms between two valid readings), so 0.2 s (6 samples at 33 Hz) is about 3 times the longest gap; at 0.28 m/s the craft
 /// would sink 0.06 m in that time, more than it has left (it starts at 0.03-0.04 m). The band equals
 /// kTofInvalidLandingMinHeightM: below it an invalid sample is normal (tof_health_tracker.hpp), above it is a fault.
-/// ToF の「不感帯」での接地（下向き ToF は生きているが、約 0.031 m より近いと「目標なし」を返すので、着陸の最後の数 cm
+/// ToF の「不感帯」での接地（下向き ToF は動作しているが、約 0.031 m より近いと「目標なし」を返すので、着陸の最後の数 cm
 /// は無効サンプルになる）: LANDING の降下中に、kLandingDeadZoneBandM 以下の有効な読みの後、無効サンプルだけが
 /// kLandingDeadZoneHoldMs 続いたら、機体は床の上にあるとする。候補値。根拠: 実機の唯一の着陸（
 /// front_tof_poshold_yaw360、0.28 m/s）は 0.039 m まで有効、さらに 0.031 m が 1 回有効で、以後ずっと無効。最後の有効な
@@ -277,7 +310,7 @@ inline constexpr uint32_t kLandingDeadZoneHoldMs = 200;                         
 /// CANDIDATE. Basis: 10 publish periods (a few missed ticks are jitter), and short enough that a stalled Failsafe is noticed before a blind climb gets far.
 /// failsafe_status は Failsafe が 100 ms ごとに発行する。これより古いと読んだ側は ToF を出力停止と
 /// 扱う: 誰も更新しない状態（Failsafe の停止・PowerTask の停滞）で最後の「出力停止でない」が効き続けて
-/// はならない（ToF の保護は全部このフラグを読む）。候補値。根拠: 発行周期の 10 倍（数回の取りこぼしはふらつき）で、Failsafe が停滞しても、ToF なしの上昇が進む前に気付ける短さ。
+/// はならない（ToF の保護は全部このフラグを読む）。候補値。根拠: 発行周期の 10 倍（数回の取りこぼしは揺れ）で、Failsafe が停滞しても、ToF なしの上昇が進む前に気付ける短さ。
 inline constexpr uint32_t kFailsafeStatusStaleUs = 1000000;   // 1 s
 
 /// Descent without the downward ToF (the autonomous landing while the ToF is silent): a thrust that CANNOT climb.
@@ -348,11 +381,11 @@ inline constexpr float kNoTofThrustCapRatio   = 0.95f;   // [-]   thrust ceiling
 /// Support thrust before ANY airborne sample exists (the craft has not left the floor, or fewer than kSupportClimbMinS of airborne samples), as a
 /// fraction of the hover-thrust ESTIMATE: that [-]. CANDIDATE. Basis: the ceiling is then 0.95 x 0.75 = 0.71 x the estimate, below the weight while the
 /// estimate is below 1 / 0.71 = 1.40 x the true hover thrust (SILS with `hover.thrust_corr` 1.2: the estimate is 1.29 x the true one; the first choice 0.9
-/// climbed 2.6-6 m there). Since the 6th pass this is only the start value: once kSupportClimbMinS of airborne samples exist, the early estimate (below)
+/// climbed 2.6-6 m there). This is only the start value: once kSupportClimbMinS of airborne samples exist, the early estimate (below)
 /// replaces it WITHOUT being cut by it (the cut made the ceiling 0.63-0.71 x the thrust that holds the craft in the two front_tof logs, a fall at 0.29-0.37 g).
 /// 空中のサンプルが「まだ 1 つも無い」とき（機体が床を離れていない、または空中のサンプルが kSupportClimbMinS 未満）の支持推力。hover 推力の
 /// 「見積もり」に対する割合 [-]。候補値。根拠: 上限は 0.95 × 0.75 = 見積もりの 0.71 倍で、見積もりが真のホバー推力の 1 / 0.71 = 1.40 倍未満の間は
-/// 重さを下回る（SILS の `hover.thrust_corr` 1.2 では見積もりが真値の 1.29 倍。最初に選んだ 0.9 ではそこで 2.6〜6 m 上昇した）。6 回目の見直しから、
+/// 重さを下回る（SILS の `hover.thrust_corr` 1.2 では見積もりが真値の 1.29 倍。最初に選んだ 0.9 ではそこで 2.6〜6 m 上昇した）。いまは、
 /// これは開始値にすぎない: 空中のサンプルが kSupportClimbMinS 分たまったら、下の早い推定が、これで切られずに置き換える（切ると、上限は実機ログ
 /// front_tof の 2 本で機体を支える推力の 0.63〜0.71 倍になり、0.29〜0.37 g で落ちた）。
 inline constexpr float kBlindUncalibratedFrac = 0.75f;
@@ -397,24 +430,39 @@ inline constexpr float kSupportBandSettleS     = 0.25f;  // [s]
 inline constexpr float kSupportWindowS         = 2.0f;
 /// Early estimate of the support thrust before a hover has been flown (the silence comes in the take-off climb): the quotient thrust x g /
 /// reading over ALL the airborne samples, x kSupportClimbDerate, once kSupportClimbMinS of them are there. It is used as it is (bounded only by
-/// kBlindCalibratedMaxFrac x the hover estimate): the lowered estimate (kBlindUncalibratedFrac) no longer cuts it. CANDIDATE. Basis (6th pass):
-/// the quotient is the weight times 0.98-1.03 in the real hovers and climbs (front_tof_poshold_yaw360 / yaw4x90) and 0.97-1.12 in flip_test2 (the thrust
-/// falls while the average is taken), 1.11-1.12 in a SILS climb of +0.2 g (the delivered thrust is concave in the command). The ceiling (0.95 x support) over
-/// the thrust that held the craft, on the replay of the 3 real logs before the calibration: derate 0.85: 0.79-0.91; 0.90: 0.83-0.96; 0.92: 0.85-0.98 (target:
-/// 0.85 or more, never the weight); 0.94: 0.87-1.00 (flip_test2 reaches the weight). SILS matrix (silence 0.9-4.5 s after the ARM, `hover.thrust_corr` 0.9 / 1.0 /
-/// 1.2, noise n0 / n2 x 3 seeds, accelerometer offset -0.2 / 0 / +0.2 m/s^2 at the silence): the ceiling is 0.85-0.97 x the weight with 0.92 (0.87-0.97 with 0.94),
-/// never above it; no re-rise in any run; the touchdown speed from the early climb falls from 1.66 m/s (0.85) to 1.28 m/s (0.92). The first choice, 0.85 and the
-/// cut by the lowered estimate, made the real ceiling 0.63-0.71 x the thrust that holds the craft in the two front_tof logs (0.79-0.91 in flip_test2).
+/// kBlindCalibratedMaxFrac x the hover estimate): the lowered estimate (kBlindUncalibratedFrac) no longer cuts it. CANDIDATE. Basis:
+///  - Real logs: the quotient is the weight times 0.98-1.03 in the real hovers and climbs (front_tof_poshold_yaw360 / yaw4x90) and 0.97-1.12 in flip_test2 (the thrust
+///    falls while the average is taken), 1.11-1.12 in a SILS climb of +0.2 g (the delivered thrust is concave in the command). The ceiling (0.95 x support) over the thrust that
+///    held the craft, on the replay of the 3 real logs before the calibration: derate 0.85: 0.79-0.91; 0.90: 0.83-0.96; 0.92: 0.85-0.98; 0.91: 0.84-0.98; 0.94: 0.87-1.00 (flip_test2 reaches the weight).
+///    Target: 0.84 or more, never the weight. The target was LOWERED from 0.85 to 0.84 as a decision, to make the re-take-off from the floor zero: 0.91 is the smallest value with no worse cell, and the lowest ratio
+///    of the real logs at 0.91 is 0.842. The first choice, 0.85 and the cut by the lowered estimate, made the real ceiling 0.63-0.71 x the thrust that holds the craft in
+///    the two front_tof logs (0.79-0.91 in flip_test2).
+///  - SILS early-climb matrices (the silence 0.8-3.0 s after the take-off began; accelerometer offset -0.4..+0.6 m/s^2 injected at the ARM or at the silence; `hover.thrust_corr`
+///    1.0-1.3; noise off / n2; 340 runs per value): with 0.92 four cells are WORSE than the descent from the lowered estimate (kBlindUncalibratedFrac) by more than 0.1 m/s of touchdown speed
+///    (up to 1.1 m/s) or 0.05 m of rise: offset +0.6 m/s^2 (outside the 0.49 m/s^2 margin of kNoTofThrustCapRatio), `hover.thrust_corr` 1.2-1.3 and no noise, where the quotient reads 1.14 x the
+///    weight (the concave thrust and the offset add), so the ceiling is 0.996 x the weight and the craft HOVERS at 0.6-0.7 m until the late fall begins at 5 s and then falls (2.02 m/s). A craft whose ceiling
+///    is within 1.5 % of its weight hovers instead of descending, so a tiny change of the value swaps which cells are worse. Over the same 340 runs: derate 0.915: 2 such cells; 0.91 / 0.905 / 0.90: none.
+///    0.91 is the smallest value with no worse cell (the invariant "a landing that has begun never lifts the craft from the floor again" needs none), and it is adopted.
+///  - Price of the lower value: more strong touchdowns (above 1.5 m/s). Early-climb matrix (200 runs; the lowered estimate: 111): 18 (0.92), 21 (0.915), 33 (0.91), 42 (0.905), 49 (0.90), 84 (0.88). ToF-silent
+///    matrix (6 scenes x 9 offsets x 3 `hover.thrust_corr` x n0 / n2 x 3 seeds, 870 valid runs): 38 (0.92) -> 67 (0.91), the largest increase 0.5 m/s. The real-log ceiling over the thrust that held the craft
+///    scales with the value: its lowest (yaw4x90) is 0.851 / 0.842 / 0.837 at 0.92 / 0.91 / 0.905. The count of strong touchdowns is to be lowered by the barometer (a planned step), not by a value here.
 /// ホバーを飛ぶ前（出力停止が離陸の上昇中に来る）の支持推力の早い推定: 空中の「全」サンプルでの商（推力 × g ÷ 読み）× kSupportClimbDerate を、
 /// それが kSupportClimbMinS 分たまったら使う。そのまま使う（上限は hover 推力の見積もりの kBlindCalibratedMaxFrac 倍だけ）: 低くした見積もり
-/// （kBlindUncalibratedFrac）はもう切らない。候補値。根拠（6 回目）: 商は重さの、実機のホバーと上昇（front_tof_poshold_yaw360 / yaw4x90）で 0.98〜1.03 倍、
-/// flip_test2（平均を取る間に推力が下がる）で 0.97〜1.12 倍、SILS の +0.2 g の上昇で 1.11〜1.12 倍（出る推力が指令に対し上に凸）。実機ログ 3 本の再生で、
-/// 較正前の「上限 ÷ 機体を支えた推力」は、補正 0.85: 0.79〜0.91、0.90: 0.83〜0.96、0.92: 0.85〜0.98（目標: 0.85 以上で、重さは超えない）、0.94: 0.87〜1.00
-/// （flip_test2 で重さに届く）。SILS の表（ARM の 0.9〜4.5 s 後に出力停止、`hover.thrust_corr` 0.9 / 1.0 / 1.2、ノイズ n0 / n2 × 3 seed、出力停止時の加速度計の
-/// オフセット −0.2 / 0 / +0.2 m/s^2）: 上限は 0.92 で重さの 0.85〜0.97 倍（0.94 で 0.87〜0.97 倍）、重さを超えず、再上昇はどの実行でも無い。
-/// 上昇初期からの接地速度は 1.66 m/s（0.85）から 1.28 m/s（0.92）に下がる。最初の選択（0.85 と低くした見積もりでの切り捨て）は、front_tof の 2 本のログで上限を機体を支える推力の
-/// 0.63〜0.71 倍にしていた（flip_test2 は 0.79〜0.91 倍）。
-inline constexpr float kSupportClimbDerate     = 0.92f;  // [-]
+/// （kBlindUncalibratedFrac）はもう切らない。候補値。根拠:
+///  - 実機ログ: 商は重さの、実機のホバーと上昇（front_tof_poshold_yaw360 / yaw4x90）で 0.98〜1.03 倍、flip_test2（平均を取る間に推力が下がる）で 0.97〜1.12 倍、
+///    SILS の +0.2 g の上昇で 1.11〜1.12 倍（出る推力が指令に対し上に凸）。実機ログ 3 本の再生で、較正前の「上限 ÷ 機体を支えた推力」は、補正 0.85: 0.79〜0.91、
+///    0.90: 0.83〜0.96、0.92: 0.85〜0.98、0.91: 0.84〜0.98、0.94: 0.87〜1.00（flip_test2 で重さに届く）。目標: 0.84 以上で、重さは超えない。目標は 0.85 から 0.84 へ、床からの再離陸を 0 にするための判断として「下げた」: 0.91 は悪い組が無い最小の値で、0.91 での実機ログの最低の比は 0.842。
+///    最初の選択（0.85 と低くした見積もりでの切り捨て）は、
+///    front_tof の 2 本のログで上限を機体を支える推力の 0.63〜0.71 倍にしていた（flip_test2 は 0.79〜0.91 倍）。
+///  - SILS の上昇初期の評価表（離陸の開始の 0.8〜3.0 s 後に出力停止。加速度計のオフセット −0.4〜+0.6 m/s^2 を ARM または出力停止で注入、`hover.thrust_corr` 1.0〜1.3、ノイズなし / n2、
+///    1 値あたり 340 本）: 0.92 では、低くした見積もり（kBlindUncalibratedFrac）からの降下より接地速度が 0.1 m/s 超（最大 1.1 m/s）または上昇が 0.05 m 超「悪い」組が 4 つある: オフセット +0.6 m/s^2
+///    （kNoTofThrustCapRatio の余裕 0.49 m/s^2 の外）、`hover.thrust_corr` 1.2〜1.3、ノイズなしで、商が重さの 1.14 倍を読み（上に凸な推力とオフセットが足し合わさる）、上限は重さの 0.996 倍になって、
+///    機体は 5 s に後半の低下が始まるまで 0.6〜0.7 m に「ホバー」し、その後に落ちる（2.02 m/s）。上限が重さの 1.5 % 以内の機体は降りずにホバーするので、値のわずかな差で、悪い組の顔ぶれが入れ替わる。
+///    同じ 340 本で、補正 0.915 では 2 組、0.91・0.905・0.90 では 0 組。0.91 は悪い組が無い最小の値（「始まった着陸が、機体を床からまた持ち上げない」という不変条件はそれを要する）で、これを採る。
+///  - 値を下げる代償: 強い接地（1.5 m/s 超）が増える。上昇初期の評価表（200 本。低くした見積もりは 111 本）で 18（0.92）、21（0.915）、33（0.91）、42（0.905）、49（0.90）、84（0.88）。ToF なしの評価表
+///    （6 場面 × オフセット 9 通り × `hover.thrust_corr` 3 通り × n0 / n2 × 3 seed）の成立した 870 本で 38（0.92）→ 67（0.91）、増え幅の最大は 0.5 m/s。実機ログの「上限 ÷ 機体を支えた推力」は補正に比例する:
+///    最低（yaw4x90）は 0.92 / 0.91 / 0.905 で 0.851 / 0.842 / 0.837。強い接地の件数は、ここの値でなく気圧計（予定の段階）で下げる。
+inline constexpr float kSupportClimbDerate     = 0.91f;  // [-]
 inline constexpr float kSupportClimbMinS       = 0.15f;  // [s]
 inline constexpr float kBlindCalibratedMinFrac = 0.5f;   // [-]   accelerometer-calibrated support thrust is bounded below by frac * hover thrust estimate / 加速度計で較正した支持推力の下限（hover 推力の見積もりに対する割合）
 inline constexpr float kBlindCalibratedMaxFrac = 1.5f;   // [-]   ... and above by frac * hover thrust estimate (a bad reading cannot start the descent at an absurd thrust) / 同じく上限（誤った読みで降下が異常な推力から始まらない）
@@ -508,7 +556,7 @@ inline constexpr float kVerticalVelocityContactReleaseFrac = 0.75f;   // [-]
 /// 0.1〜0.4 m/s^2、sensor_noise.hpp 参照）。
 inline constexpr float kVerticalVelocityOffsetLimit = 1.0f;   // [m/s^2]
 /// Magnitude limit of the vertical velocity estimate [m/s] (a runaway guard; far above any real value).
-/// 鉛直速度推定の大きさの制限 [m/s]（暴走防止。実際の値よりずっと大きい）。
+/// 鉛直速度推定の大きさの制限 [m/s]（発散防止。実際の値よりずっと大きい）。
 inline constexpr float kVerticalVelocityLimitMps = 20.0f;
 
 /// Touchdown while the ToF is silent: an IMPACT followed by STILLNESS. The impact alone is not
@@ -572,7 +620,7 @@ inline constexpr float    kBlindTouchdownVelocityMps = 0.15f;  // [m/s]  |vertic
 /// `hover.thrust_corr` 1.2: 1.29-1.45). CANDIDATE.
 /// 「床が機体を支えている」ことによる接地（衝撃のあとの静止との OR の、2 つ目の経路。衝撃は要らない）: 指令推力が支持推力の
 /// kBlindFloorThrustFrac 未満、かつ ろ波した |加速度| が 1 g の ±kBlindFloorToleranceG 以内、が kBlindFloorS 続くこと。物理: 加速度計は
-/// 「推力 ÷ 質量」（比力）を読む。空中で推力が重さの 0.7 倍未満なら、読みは 0.7 g 未満（抗力で多少ずれる）で、その推力で 1 g を読むのは、
+/// 「推力 ÷ 質量」を読む。空中で推力が重さの 0.7 倍未満なら、読みは 0.7 g 未満（抗力で多少ずれる）で、その推力で 1 g を読むのは、
 /// 残りの重さを床が支えているときだけ。誤ラッチには、支持推力が重さを 0.9 g ÷ 0.7 g − 1 = 29 % 超えて高いことが要る。較正した
 /// 支持推力は重さの約 2 % 以内（kNoTofThrustCapRatio）、較正なしは見積もりの 0.75 倍以下なので、見積もりが真のホバーの 1.7 倍
 /// 要る（SILS の `hover.thrust_corr` 1.2 では 1.29〜1.45 倍）。候補値。
@@ -598,15 +646,15 @@ inline constexpr uint32_t kBlindLandingTimeoutUs = 10000000;   // 10 s
 /// Minimum time of the descent without a ToF before the time limit may cut the motors [us]: the landing is completed by time only when the state has
 /// been LANDING for kBlindLandingTimeoutUs AND the ToF has been continuously silent in it for this long. CANDIDATE. Basis: a LANDING with a live
 /// ToF can last longer than kBlindLandingTimeoutUs (a slow descent, ground effect); if the ToF then dies, the limit alone would stop the motors in the air at once.
-/// 5.5 s: the longest descent without a ToF measured, from the silence to the first contact, is 4.7 s (the 7th final build, SILS, the 972-run matrix of TEST_MATRIX.md, 7th round; 4.0 s in the 8th final build, 8th round: 0.5 m hover 1.0-2.6 s,
+/// 5.5 s: the longest descent without a ToF measured, from the silence to the first contact, is 4.7 s (SILS, the 972-run ToF-silent matrix, the descent as it was before the support-thrust ceiling was limited; 4.0 s with the descent as it is: 0.5 m hover 1.0-2.6 s,
 /// 1.2 m hover 1.4-2.8 s, API takeoff 0.5-2.4 s, auto-takeoff 0.5-3.6 s, ALT_HOLD stick climb 1.2-4.7 s, the longest with noise n0 and an accelerometer offset), so 5.5 s covers every one of them with 0.8 s
-/// to spare (1.5 s in the 8th final build), and it is short of the 8.33 s at which the late fall brings the thrust to zero: the thrust has been falling for only 0.5 s (to 85 %) when the limit is reached, kBlindLandingLateStartS = 5 s
+/// to spare (1.5 s with the descent as it is), and it is short of the 8.33 s at which the late fall brings the thrust to zero: the thrust has been falling for only 0.5 s (to 85 %) when the limit is reached, kBlindLandingLateStartS = 5 s
 /// being the start of that fall. The first value, 4 s, would have cut the motors up to 0.7 s before the contact of the longest descents.
 /// 時間切れがモータを切ってよくなるまでの、ToF なしの降下の最低時間 [us]: 状態が kBlindLandingTimeoutUs の間 LANDING であり、「かつ」その中で ToF が
-/// この時間連続して出力停止しているときだけ、時間で着陸完了とする。候補値。根拠: ToF が生きている LANDING は kBlindLandingTimeoutUs より長く続くことが
-/// ある（ゆっくりした降下、地面効果）。その後に ToF が死ぬと、上限だけでは空中で即座にモータを止めてしまう。
-/// 5.5 s: ToF なしの降下を、出力停止から最初の接触まで測った最長は 4.7 s（7 回目の最終ビルドの SILS、TEST_MATRIX.md の 7 回目の 972 本の評価表。8 回目の最終ビルドでは 4.0 s: 0.5 m ホバー 1.0〜2.6 s、1.2 m ホバー 1.4〜2.8 s、
-/// API 離陸 0.5〜2.4 s、自動離陸 0.5〜3.6 s、ALT_HOLD のスティック上昇 1.2〜4.7 s。最長はノイズ n0 で加速度計のオフセットがある場合）なので、5.5 s は全てを 0.8 s の余裕（8 回目の最終ビルドでは 1.5 s）で覆い、後半の低下が推力を
+/// この時間連続して出力停止しているときだけ、時間で着陸完了とする。候補値。根拠: ToF が動作している LANDING は kBlindLandingTimeoutUs より長く続くことが
+/// ある（ゆっくりした降下、地面効果）。その後に ToF が停止すると、上限だけでは空中で即座にモータを止めてしまう。
+/// 5.5 s: ToF なしの降下を、出力停止から最初の接触まで測った最長は 4.7 s（SILS の 972 本の ToF なしの評価表、推力の上限を支持推力で抑える前の降下。いまの降下では 4.0 s: 0.5 m ホバー 1.0〜2.6 s、1.2 m ホバー 1.4〜2.8 s、
+/// API 離陸 0.5〜2.4 s、自動離陸 0.5〜3.6 s、ALT_HOLD のスティック上昇 1.2〜4.7 s。最長はノイズ n0 で加速度計のオフセットがある場合）なので、5.5 s は全てを 0.8 s の余裕（いまの降下では 1.5 s）で覆い、後半の低下が推力を
 /// ゼロにする 8.33 s より手前: 上限に達した時点で推力が下がり始めて 0.5 s（85 %まで）しか経っていない（後半の低下の開始は kBlindLandingLateStartS = 5 s）。最初の値 4 s では、最長の降下で
 /// 接触の最大 0.7 s 前にモータを切るところだった。
 inline constexpr uint32_t kBlindLandingMinSilentUs = 5500000;   // 5.5 s

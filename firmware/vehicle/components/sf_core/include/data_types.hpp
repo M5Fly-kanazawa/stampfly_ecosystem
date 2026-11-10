@@ -425,6 +425,10 @@ struct SystemMode {
                           // refused (None = no refused request pending)
                           // ModeBlock — 直近のモード変更要求が拒否された理由（None=拒否中の要求なし）
     uint32_t timestamp;   // [us]
+    uint32_t state_since_us;  // [us] when `state` was entered (StateManager::enterState): the ONE clock of "time in this state" (TAKEOFF elapsed time: ImuTask's ToF-invalid rule and StateTask's abort).
+                          // Read the elapsed time as an unsigned difference now - state_since_us (correct across a wrap).
+                          // `state` に入った時刻（StateManager::enterState）: 「この状態にいる時間」の唯一の時計（TAKEOFF の経過時間: ImuTask の ToF 無効の規則と StateTask の中止）。
+                          // 経過時間は符号なしの差 now - state_since_us で読む（巻き戻りをまたいでも正しい）。
 };
 
 /// System alert from failsafe
@@ -443,8 +447,8 @@ enum class ToFSilenceReason : uint8_t {
     InvalidStuck = 2,   // flying, only invalid samples for kTofInvalidPersistUs / 飛行中に無効サンプルだけが続く
     Reacquiring  = 3,   // samples are back, the estimator has not re-acquired the ToF yet
                         // サンプルは戻ったが、推定器がまだ ToF を取り込み直していない
-    StatusStale  = 4,   // failsafe_status itself is not refreshed (set by the READER, D5)
-                        // failsafe_status 自体が更新されない（読む側が設定する。D5）
+    StatusStale  = 4,   // failsafe_status itself is not refreshed (set by the READER)
+                        // failsafe_status 自体が更新されない（読む側が設定する）
 };
 
 /// Human-readable ToF-silence reason / ToF 出力停止の理由の名前
@@ -493,7 +497,7 @@ struct ToFObservation {
 /// What ImuTask knows about the downward ToF and the estimator's use of it — published by ImuTask
 /// (the only consumer of the ToF samples) at every ToF sample; Failsafe turns it into the verdict
 /// on failsafe_status. A fact, not a decision.
-/// 下向き ToF と、推定器による ToF の使われ方について ImuTask が知っていること — ToF サンプルの
+/// 下向き ToF と、推定器による ToF の使われ方について ImuTask が持っていること — ToF サンプルの
 /// 唯一の消費者である ImuTask がサンプルごとに発行する。Failsafe がこれを failsafe_status の判定に
 /// 変える。事実であって判断ではない。
 struct ToFHealth {
@@ -507,6 +511,18 @@ struct ToFHealth {
                                  // the craft is still on the floor. False otherwise, in particular when the ToF is silent or reads invalid.
                                  // TAKEOFF 中: 健全な ToF が kTakeoffGroundBandM 以下の有効な高さを読み、その読みが kAutoTakeoffFloorHoldUs の間 kAutoTakeoffFloorRiseM を
                                  // 超えて増えていない（TakeoffFloorWatch、takeoff_policy.hpp）: 機体がまだ床の上にいるという「積極的な」証拠。それ以外は false（特に ToF が出力停止・無効のとき）
+                                 // The value has no age of its own: it is recomputed with every ToF sample (about 30 Hz, publishToFHealth before the snapshot), and the reader (StateTask) counts it only while Failsafe's
+                                 // silence judgement (R16, SilenceWatch on the sample stamps and on the status itself) says the ToF is healthy, so a stale true cannot outlive the samples that made it.
+                                 // この値自身は経過を持たない: ToF サンプルごと（約 30 Hz、スナップショットの前に publishToFHealth）に計算し直す。読む側（StateTask）は、Failsafe の
+                                 // 出力停止の判定（R16。サンプルの時刻印と status 自体への SilenceWatch）が ToF を健全とする間だけ数えるので、古い true が、それを作ったサンプルより長く残らない。
+    bool     floor_seen;         // TAKEOFF: the LATCH of floor_stays: the evidence has held in this TAKEOFF and the craft has not been shown to leave the floor since (TakeoffFloorWatch::seen(): released by valid readings above kTakeoffGroundBandM for kAutoTakeoffFloorHoldUs, or one above kTakeoffAirborneBandM).
+                                 // It blocks the completion of the auto-takeoff (one stray reading outside the band must not let it complete on the floor); it is not gated by the silence judgement
+                                 // (a silent ToF proves neither the floor nor the lift-off; the ToF rules end such a takeoff). TAKEOFF 中: floor_stays のラッチ: 証拠がこの TAKEOFF で一度立ち、以後
+                                 // 機体が床を離れた証拠が来ていない（kTakeoffGroundBandM を超える有効な読みが kAutoTakeoffFloorHoldUs 続く、または kTakeoffAirborneBandM を超える有効な読みが 1 つで解ける）。自動離陸の完了を止める（帯の外へ外れた 1 つの読みで、床の上で完了してはならない）。出力停止の判定の条件にはしない（出力停止の ToF は床も離陸も証明しない。その離陸は ToF の規則が終わらせる）。
+    bool     floor_leaving;      // TAKEOFF: the healthy ToF reads valid heights above kTakeoffGroundBandM NOW and that run continues (TakeoffFloorWatch::leaving()): the craft is lifting off the floor, and the latch (floor_seen) will be released after
+                                 // kAutoTakeoffFloorHoldUs of it. While it is true a latched TAKEOFF is not ended by a LANDING (a slow lift must not be landed in the middle of leaving). False when the ToF is silent or the reading is back in the band.
+                                 // TAKEOFF 中: 健全な ToF が kTakeoffGroundBandM を超える有効な高さを「今」読み、その区間が続いている（TakeoffFloorWatch::leaving()）: 機体は床を離れつつあり、ラッチ（floor_seen）は
+                                 // その状態が kAutoTakeoffFloorHoldUs 続くと解ける。真の間は、ラッチ中の TAKEOFF を LANDING で終わらせない（ゆっくり浮く機体を、離れつつある途中で着陸させない）。ToF が出力停止、または読みが帯の中へ戻ったら偽。
     uint32_t timestamp;          // [us]
 };
 
@@ -544,6 +560,12 @@ struct SystemStatus {
                           // 肯定の判定: 地上で、モニタが判定済みかつ推定が重力と一致。未判定
                           // （起動/推定器リセット後の約 lpf_s）や不一致の間は false。ARM に必須。
     uint32_t timestamp;   // [us]
+    uint32_t verdict_state_since_us;  // [us] SystemMode.state_since_us of the state that ImuTask had read when it judged `landing` (the state the verdict belongs to).
+                          // StateTask counts `landing` only when this equals the CURRENT SystemMode.state_since_us: a verdict that was made while the previous state was still
+                          // in force (a flag left over from before the LANDING began) never matches, whatever the order of the timestamps. Compare for equality, not for "newer".
+                          // ImuTask が `landing` を判定したときに読んでいた状態の SystemMode.state_since_us（判定が属する状態）。StateTask は、これが「現在の」
+                          // SystemMode.state_since_us と等しいときだけ `landing` を数える: 前の状態が有効だった間に出た判定（LANDING が始まる前から残ったフラグ）は、
+                          // 時刻印の大小に関わらず一致しない。「新しいか」でなく、等しいかで比べる。
 };
 
 /// Controller state fact for the API/guidance source (ControlTask → ApiTask).

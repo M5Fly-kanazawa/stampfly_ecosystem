@@ -123,13 +123,12 @@ public:
     /// @design requirements.md §9 — USB power: ARM prohibited         [OK]
     bool requestArm();
 
-    /// Request DISARM. On the ground / in ACRO·STABILIZE it is an immediate motor cut
-    /// (→ IDLE_GROUND). In ALT_HOLD/POS_HOLD while FLYING it starts an AUTO-LANDING
-    /// (→ LANDING, gradual descent) instead of dropping the craft; touchdown then disarms.
-    /// A DISARM pressed again while already LANDING is the emergency cut (see below).
-    /// DISARM リクエスト。地上 / ACRO・STABILIZE では即モータ停止（→IDLE_GROUND）。
-    /// ALT_HOLD/POS_HOLD の FLYING 中は機体を落とさず自動着陸を開始（→LANDING, 緩降下）し、
-    /// 接地で DISARM する。LANDING 中の再 DISARM は緊急カット（下記）。
+    /// Request DISARM. On the ground, in TAKEOFF (any mode) and in ACRO / STABILIZE it is an immediate motor cut (-> IDLE_GROUND). In ALT_HOLD / POS_HOLD while FLYING
+    /// it starts an AUTO-LANDING (-> LANDING, gradual descent) instead of dropping the craft; touchdown then disarms. A DISARM pressed again while already LANDING
+    /// is the emergency cut (see below). The ways into LANDING from TAKEOFF are the loss of the link, the ToF rules and notifyTakeoffEndedByLanding() (a takeoff that does not lift).
+    /// DISARM リクエスト。地上・TAKEOFF（どのモードでも）・ACRO / STABILIZE では即モータ停止（→IDLE_GROUND）。ALT_HOLD / POS_HOLD の FLYING 中は機体を落とさず
+    /// 自動着陸を開始（→LANDING, 緩降下）し、接地で DISARM する。LANDING 中の再 DISARM は緊急カット（下記）。TAKEOFF から LANDING に入るのは
+    /// 通信の途絶・ToF の規則・notifyTakeoffEndedByLanding()（浮けない離陸）。
     ///
     /// @return true if transition succeeded
     bool requestDisarm();
@@ -161,9 +160,17 @@ public:
     /// 離陸完了通知（TAKEOFF → FLYING）
     void notifyTakeoffComplete();
 
-    /// Notify landing requested (FLYING → LANDING)
-    /// 着陸リクエスト通知（FLYING → LANDING）
+    /// Notify landing requested (FLYING → LANDING; ARMED_GROUND in an altitude mode → immediate DISARM, the motors have only begun to turn on the floor). Ignored in every other state, TAKEOFF included
+    /// (the API `land` that arrives in TAKEOFF is held by ApiTask until the TAKEOFF has been left: a parked line during a `takeoff` wait, waited for by cmdLand outside one). From the API `land`.
+    /// 着陸リクエスト通知（FLYING → LANDING。高度モードの ARMED_GROUND → 即時 DISARM: モータは床の上で回り始めただけ）。TAKEOFF を含むそれ以外の状態では無視する
+    /// （TAKEOFF に届いた API の `land` は、TAKEOFF を抜けるまで ApiTask が保留する: `takeoff` の待機中なら後回しの行、待機の外なら cmdLand が待つ）。API の `land` から。
     void notifyLandingRequest();
+
+    /// Notify that the TAKEOFF ends by a LANDING because it cannot lift (TakeoffAction::Land: the floor evidence is latched, not there now, and the abort time has passed). TAKEOFF → LANDING; ignored in every other state.
+    /// TAKEOFF を、浮けないので LANDING で終えると通知する（TakeoffAction::Land: 床の証拠がラッチされ、今は無く、中止の時刻を過ぎた）。TAKEOFF → LANDING。それ以外の状態では無視する。
+    ///
+    /// @design detailed_design.md §3.1 — TAKEOFF -> LANDING (latch, no evidence now, 5 s) [OK]
+    void notifyTakeoffEndedByLanding();
 
     /// Notify landing complete (LANDING → IDLE_GROUND)
     /// 着陸完了通知（LANDING → IDLE_GROUND）
@@ -357,12 +364,12 @@ public:
     /// sf::limits::kTofSilenceUs (or never one), only invalid samples while flying, or the estimator
     /// has not re-acquired the ToF yet. The judgement is Failsafe's (R16); this reads the published
     /// level (failsafe_status.tof_silent) through this task's FailsafeStatusGuard, FRESH at every
-    /// call, so a status nobody refreshes reads as silent (D5).
+    /// call, so a status nobody refreshes reads as silent.
     /// 下向き ToF の出力停止の「エピソード」が進行中なら true: sf::limits::kTofSilenceUs の間新サンプル
     /// 無し（または一度も無い）、飛行中に無効サンプルだけ、または推定器がまだ ToF を取り込み直して
     /// いない。判定は Failsafe のもの（R16）で、ここでは発行済みのレベル（failsafe_status.tof_silent）を
     /// このタスクの FailsafeStatusGuard を通して、呼ぶたびに「最新」を読む。誰も更新しない状態は
-    /// 出力停止と読む（D5）。
+    /// 出力停止と読む。
     bool isToFSilent() const;
 
 private:
@@ -450,6 +457,7 @@ private:
     // Current state
     // 現在の状態
     FlightState state_ = FlightState::INIT;
+    uint32_t state_since_us_ = 0;   // [us] when state_ was entered (published as SystemMode.state_since_us) / state_ に入った時刻（SystemMode.state_since_us として発行）
     FlightMode mode_ = FlightMode::STABILIZE;
 
     // Pairing state (parallel to FlightState). Owned here; comm reflects it.
@@ -512,7 +520,7 @@ private:
     // sf::limits::kBlindLandingTimeoutUs). Runs while LANDING, whether the ToF is alive or silent.
     // LANDING のタイマ: 状態が LANDING に入った時刻からの経過時間（ToF が無いと高さで接地を検出できないため、
     // 出力停止した ToF に出会った着陸は時間で終える。sf::limits::kBlindLandingTimeoutUs 参照）。
-    // ToF が生きていても出力停止でも、LANDING の間は計時する。
+    // ToF が動作していても出力停止でも、LANDING の間は計時する。
     LandingClock landing_clock_;   // time since the state entered LANDING (tof_silence_policy.hpp) / 状態が LANDING に入ってからの時間
     LandingEnd last_landing_end_     = LandingEnd::None;
 

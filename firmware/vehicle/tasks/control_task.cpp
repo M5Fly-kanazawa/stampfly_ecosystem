@@ -194,15 +194,12 @@ static void processControllerCommands(sf::IController& controller)
 /// 誘導、自動離陸の捕捉、フリップの判定と結果、ImuTask が読むToF なし降下の事実。
 static sf::ControllerStatus publishControllerStatus(sf::IController& controller)
 {
-    // Publish the controller's guidance-engaged fact so the API source can
-    // release its target when the controller self-cancels guidance (pilot
-    // stick movement / mode change) — "the pilot always wins" stays
-    // observable to ApiTask (M-3). The controller is a core component with
-    // no topic access, so the task layer carries the fact to the topic.
-    // 制御器の誘導係合の事実を発行し、制御器がスティック動作/モード変更で誘導を
-    // 自発解除したとき API ソースが目標を解放できるようにする —「パイロット優先」を
-    // ApiTask から観測可能にする (M-3)。制御器はトピック禁制のコア部品ゆえ、タスク層
-    // が事実をトピックへ運ぶ。
+    // Publish the controller's guidance-engaged fact so the API source can release its target when the controller
+    // self-cancels guidance (pilot stick movement / mode change) — "the pilot always wins" stays observable to ApiTask
+    // (M-3). The controller is a core component with no topic access, so the task layer carries the fact to the topic.
+    // 制御器の誘導係合の事実を発行し、制御器がスティック動作/モード変更で誘導を自発解除したとき API ソースが目標を
+    // 解放できるようにする —「パイロット優先」を ApiTask から観測可能にする (M-3)。制御器はトピック禁制のコア部品
+    // ゆえ、タスク層が事実をトピックへ運ぶ。
     // takeoff_reached carries the auto-takeoff capture event to StateTask, which
     // uses it to drive TAKEOFF→FLYING for ALT/POS (decoupled from the ToF 0.15m
     // airborne edge). Same task-layer carries-the-fact pattern as guidance_active.
@@ -252,11 +249,11 @@ static void injectToFFacts(sf::StateEstimate& state, sf::FailsafeStatusGuard& fa
     // The downward-ToF silence LEVEL (Failsafe's judgement, 10 Hz): the autonomous landing
     // descends blind (velocity loop on an accelerometer-based estimate) while it is set. A silent ToF is also never a
     // "usable observation": the snapshot keeps the LAST sample's validity, which would let the
-    // FLIP gate (C6) trust an altitude nobody can see.
+    // FLIP gate trust an altitude nobody can see.
     // 下向き ToF の出力停止「レベル」（Failsafe の判定、10 Hz）: これが立っている間、自動着陸は
     // ToF なしで降りる（加速度計に基づく速度推定の速度ループ）。出力停止中の ToF は「使用可能な観測」でもない:
-    // スナップショットは「最後のサンプル」の有効性を保持するので、そのままだと FLIP の判定（C6）が
-    // 誰も見られない高度を信用してしまう。
+    // スナップショットは「最後のサンプル」の有効性を保持するので、そのままだと FLIP の判定が
+    // 誰も見られない高度を信用する。
     const sf::FailsafeStatus tof_silence = failsafe_guard.guard(
         static_cast<uint32_t>(esp_timer_get_time()), sf::failsafe_status.latest());
     state.tof_silent      = tof_silence.tof_silent;

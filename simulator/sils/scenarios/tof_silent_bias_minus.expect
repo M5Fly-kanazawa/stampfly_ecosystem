@@ -2,7 +2,7 @@
 # 約 1.1 m でホバー中に、加速度計のオフセット誤差 −0.2 m/s^2 のまま ToF が出力停止
 #
 # The craft must not rise again after the silence, and the 3 G impact of the touchdown ends LANDING without an emergency DISARM.
-# 沈黙の後に機体は再上昇してはならず、接地の 3 G の衝撃は非常の DISARM でなく LANDING を終わらせる。
+# 出力停止の後に機体は再上昇してはならず、接地の 3 G の衝撃は非常の DISARM でなく LANDING を終わらせる。
 exit 0
 log_contains any "Downward ToF silent (>= 300 ms without a sample) in FLYING/ALT_HOLD → LANDING"
 log_contains any "Blind landing: ToF silent, velocity loop"
@@ -13,8 +13,8 @@ log_absent any "emergency DISARM"
 log_absent any "touchdown by time"
 order "in FLYING/ALT_HOLD → LANDING" "Blind landing: ToF silent"
 order "Blind landing: ToF silent" "Touchdown while the ToF is silent (impact)"
-# No rise after the silence: the hover is ~1.11 m (alt_mean) and the maximum after it stays within 5 cm (a re-rise of the previous build: 2.7 m).
-# 沈黙の後に上昇しない: ホバーは約 1.11 m（alt_mean）で、その後の最高は 5 cm 以内（前のビルドの再上昇: 2.7 m）。
+# No rise after the silence: the hover is ~1.11 m (alt_mean) and the maximum after it stays within 5 cm (main as of 2026-11-08 rose to 2.9 m with -0.2).
+# 出力停止の後に上昇しない: ホバーは約 1.11 m（alt_mean）で、その後の最高は 5 cm 以内（main（2026-11-08 時点）は −0.2 で 2.9 m まで上昇した）。
 metric alt_mean > 1.0 in 19.6 20.5
 metric alt_max < 1.17 in 20.6 25.0
 metric descent_speed_max < 1.15 in 20.5 25.1

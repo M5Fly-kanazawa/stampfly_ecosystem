@@ -9,17 +9,17 @@
 #
 # API タスクは `takeoff` の中（waitUntil）で、自動離陸が FLYING に達するまで待機する。その間に
 # 届いた `emergency` はそれを待ってはならない: 待機はコマンド源を読み続け、即座にモータを止め、
-# 打ち切られた `takeoff` は "error interrupted by emergency" を返す。修正前は `emergency` が
+# 打ち切られた `takeoff` は "error interrupted by emergency" を返す。main（2026-11-08 時点）は `emergency` が
 # 離陸の完了後にやっと読まれ、待機の残り時間のあいだモータが回り続けた。
 #
-# R2 (emergency must not be followed by a re-takeoff): while the takeoff waits, three more lines
+# An emergency must not be followed by a re-takeoff: while the takeoff waits, three more lines
 # arrive — a second `takeoff`, `height?` and an `rc`. The `emergency` must DISCARD the parked
 # lines and answer each "error cancelled by emergency" (the `rc` is dropped at once: a stale
 # stick input is never replayed). Before the fix the parked `takeoff` ran right after the
 # emergency and the craft took off again.
-# R2（emergency の後に再離陸しない）: takeoff の待機中に、2 回目の `takeoff`・`height?`・`rc` の
+# emergency の後に再離陸しない: takeoff の待機中に、二つ目の `takeoff`・`height?`・`rc` の
 # 3 行が届く。`emergency` は後回しの行を「捨て」、それぞれに "error cancelled by emergency" を
-# 返す（`rc` はその場で捨てる: 古いスティック入力を再生しない）。修正前は後回しの `takeoff` が
+# 返す（`rc` はその場で捨てる: 古いスティック入力を再生しない）。main（2026-11-08 時点）は後回しの `takeoff` が
 # emergency の直後に実行され、機体が再び離陸した。
 #
 # Timeline: takeoff at 6.0 s, the extra lines at 6.5 s, emergency at 7.0 s (the climb is under way).
@@ -30,9 +30,9 @@
    +    api        "command"                                          # B: enter SDK mode (t=6)
    +    api        "takeoff"                                          # C: takeoff -> ARM -> auto-takeoff climb (t=6)
    +    rc         2048  2048   2048    2048  0     500       50      # D: the climb runs (to t=6.5)
-   +    api        "takeoff"                                          # D2: second takeoff, parked during the wait
-   +    api        "height?"                                          # D3: parked during the wait
-   +    api        "rc 0 0 50 0"                                      # D4: dropped at once (never replayed)
-   +    rc         2048  2048   2048    2048  0     500       50      # D5: the climb runs on (to t=7)
+   +    api        "takeoff"                                          # second takeoff, parked during the wait
+   +    api        "height?"                                          # parked during the wait
+   +    api        "rc 0 0 50 0"                                      # dropped at once (never replayed)
+   +    rc         2048  2048   2048    2048  0     500       50      # the climb runs on (to t=7)
    +    api        "emergency"                                        # E: t=7.0 s — emergency while takeoff waits
    +    rc         2048  2048   2048    2048  0     6000      50      # F: motors must be stopped (to t=13)
