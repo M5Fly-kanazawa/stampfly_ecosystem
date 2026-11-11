@@ -54,6 +54,7 @@
 #pragma once
 
 #include "data_types.hpp"
+#include "nonfinite_guard.hpp"
 
 namespace sf {
 
@@ -74,9 +75,14 @@ public:
     /// update() は実際にはモーターを回さない。
     void arm();
 
-    /// Run mixer: read ControlOutput, compute motor duties, publish & apply
-    /// ミキサー実行: ControlOutput読み取り、モーターduty計算、発行＆適用
-    void update();
+    /// Run mixer: read ControlOutput, compute motor duties, publish & apply. The mixer output and the
+    /// final motor command are checked for NaN / infinity and recorded in `monitor` (the caller owns it,
+    /// see nonfinite_guard.hpp); a motor whose value is not finite is driven with duty 0, finite duties
+    /// are not changed.
+    /// ミキサー実行: ControlOutput読み取り、モーターduty計算、発行＆適用。ミキサーの出力と最終のモーター指令は
+    /// NaN・無限大を検査して `monitor`（呼び出し側が持つ。nonfinite_guard.hpp 参照）に記録する。値が有限でない
+    /// モーターは duty 0 で駆動し、有限な duty は変えない。
+    void update(NonFiniteMonitor& monitor);
 
     /// Stop all motors immediately (safety hook for DISARM transitions).
     /// Idempotent: zeroes the LEDC outputs and clears the HAL arm gate on the
@@ -86,7 +92,7 @@ public:
     void disarm();
 
     /// BENCH MOTOR TEST: drive the 4 motors to the given raw duties [0,1], bypassing the
-    /// mixer. Arms the HAL and publishes actuator_motor for telemetry/SILS. The CALLER
+    /// mixer (a value that is not finite is driven as duty 0). Arms the HAL and publishes actuator_motor for telemetry/SILS. The CALLER
     /// (ControlTask) must gate this to the DISARMED state only — it exists for the
     /// wiring/direction check (development_roadmap Phase 2). Not used in flight.
     /// ベンチ用モータテスト: ミキサーを介さず 4 モータを生 duty [0,1] で駆動。HAL を arm し

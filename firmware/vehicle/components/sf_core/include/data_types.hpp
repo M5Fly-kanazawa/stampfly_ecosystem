@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace sf {
@@ -593,6 +594,44 @@ struct LoopTiming {
     uint32_t armed_late_count;
     uint32_t armed_busy_max_us;         // [us]
     uint32_t armed_over_budget_count;
+};
+
+/// The boundaries of the control path at which ControlTask checks that numbers are finite, from the input
+/// to the motor. The values are the indices of NonFiniteStatus::stage_count.
+/// 制御経路のうち、ControlTask が数の有限性を検査する境界（入力からモータの順）。値は
+/// NonFiniteStatus::stage_count の添字。
+enum class NonFiniteStage : uint8_t {
+    EstimateInput    = 0,   // estimate_state: attitude, position, velocity, angular rate (13 values) / 推定値の入力（姿勢・位置・速度・角速度の 13 個）
+    SetpointInput    = 1,   // command_setpoint: throttle, throttle axis, roll, pitch, yaw (5 values) / 目標値の入力（スロットル・スロットル軸・ロール・ピッチ・ヨーの 5 個）
+    ControlReference = 2,   // controller outer-loop output: rate_ref[3], angle_ref[2] (5 values) / 制御器の外側ループの出力（rate_ref・angle_ref の 5 個）
+    ControlOutput    = 3,   // controller output (the rate PID output): thrust and torque[3] (4 values) / 制御器の出力（レート PID の出力）: 推力とトルク 3 軸の 4 個
+    MixerOutput      = 4,   // mixer output before the limits: 4 motor duties / 上下限の前のミキサの出力: 4 モータの duty
+    MotorCommand     = 5,   // the duties about to go to the motors; a motor found non-finite here gets 0 / モータへ渡す直前の duty。ここで有限でないと分かったモータは 0 にする
+};
+
+/// Number of NonFiniteStage values. / NonFiniteStage の個数。
+static constexpr size_t kNonFiniteStageCount = 6;
+
+/// NonFiniteStatus::first_stage while nothing has been detected. / 何も検出していない間の NonFiniteStatus::first_stage。
+static constexpr uint8_t kNonFiniteNoStage = 0xFF;
+
+/// Non-finite numbers (NaN, +/-infinity) seen on the control path — published by ControlTask
+/// (nonfinite_status) once a second and at every cycle that detects one, read by the CLI `status`. A
+/// fact, not a decision: detection never stops the flight. Only ARMED control cycles are checked, and the
+/// counts are since boot. stage_count[stage] is the number of cycles in which that boundary held a value
+/// that was not finite (indexed by NonFiniteStage), so a NaN that travels down the path shows up in every
+/// boundary after the first one.
+/// 制御経路で見つかった有限でない数（NaN・±無限大）— ControlTask が毎秒と、検出した周期ごとに発行
+/// （nonfinite_status）し、CLI の `status` が読む。事実であって判断ではない: 検出は飛行を止めない。検査するのは
+/// ARM 中の制御周期だけで、数え方は起動以降の累計。stage_count[境界] はその境界に有限でない値があった周期の数
+/// （NonFiniteStage で引く）なので、経路を流れ下る NaN は最初の境界より下流のすべての境界に現れる。
+struct NonFiniteStatus {
+    uint32_t timestamp;                         // [us] when published / 発行時刻
+    uint32_t checked_cycles;                    // ARMED control cycles checked / 検査した ARM 中の制御周期の数
+    uint32_t detected_cycles;                   // cycles in which any boundary held a non-finite value / どれかの境界に有限でない値があった周期の数
+    uint32_t stage_count[kNonFiniteStageCount]; // per boundary, see above / 境界ごとの周期数（上記）
+    uint32_t first_us;                          // [us] esp_timer time of the first detection / 最初の検出の esp_timer 時刻
+    uint8_t  first_stage;                       // NonFiniteStage of the first detection (the most upstream boundary of that cycle), kNonFiniteNoStage = none yet / 最初の検出の境界（その周期で最も上流）。kNonFiniteNoStage = まだ無い
 };
 
 /// Controller state fact for the API/guidance source (ControlTask → ApiTask).

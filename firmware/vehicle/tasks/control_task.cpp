@@ -20,7 +20,7 @@
  * 制御出力を計算し、モーターdutyを発行する。
  *
  * @subscriber estimate_state, command_setpoint, controller_command, system_mode
- * @publisher control_output, controller_status, actuator_motor, log_stream
+ * @publisher control_output, controller_status, actuator_motor, log_stream, nonfinite_status
  * @design architecture.md §5 — Main pipeline: Control + Actuation     [OK]
  * @design architecture.md §6 — ControlTask: Control + Actuation       [OK]
  * @design detailed_design.md §8 — ControlTask: 400Hz IMU-sync, pri 23 [OK]
@@ -42,6 +42,7 @@
 #include "failsafe_status_guard.hpp"   // a stale failsafe_status reads as ToF silent
 #include "config.hpp"
 #include "loop_timing_scope.hpp"      // period / busy-time monitor of this 400Hz loop
+#include "nonfinite_scope.hpp"        // NaN / infinity check of the control path boundaries
 
 static const char* TAG = "ControlTask";
 
@@ -113,6 +114,44 @@ static void publishLogStream(const sf::ControlOutput& control, uint8_t state,
 /// duty を actuator_motor に発行する。実ミキサーは sf_actuator にあり、control_task は
 /// 配線するだけ（下の Step 4 参照）。
 static sf::Actuator actuator;
+
+/// Check the inputs of the controller for NaN / infinity: the estimate (attitude, position, velocity,
+/// angular rate) and the pilot setpoint. Only counts into the scope's monitor; no value is changed.
+/// 制御器への入力の NaN・無限大を検査する: 推定値（姿勢・位置・速度・角速度）とパイロットの目標値。
+/// 監視器へ数えるだけで、値は変えない。
+///
+/// @design detailed_design.md §8 — Non-finite number monitor (nonfinite_status)  [OK]
+static void checkControllerInputs(sf::NonFiniteMonitor& monitor, const sf::StateEstimate& state,
+                                  const sf::CommandSetpoint& setpoint)
+{
+    const uint32_t estimate_bad = sf::countNonFinite(state.attitude, 4)
+                                + sf::countNonFinite(state.position, 3)
+                                + sf::countNonFinite(state.velocity, 3)
+                                + sf::countNonFinite(state.angular_rate, 3);
+    monitor.record(sf::NonFiniteStage::EstimateInput, estimate_bad);
+
+    const float setpoint_values[] = {setpoint.throttle, setpoint.throttle_axis, setpoint.roll,
+                                     setpoint.pitch, setpoint.yaw};
+    monitor.record(sf::NonFiniteStage::SetpointInput,
+                   sf::countNonFinite(setpoint_values, sizeof(setpoint_values) / sizeof(float)));
+}
+
+/// Check the outputs of the controller for NaN / infinity: the cascade references (outer-loop output)
+/// and the thrust / torque (the rate PID output). Only counts; no value is changed.
+/// 制御器の出力の NaN・無限大を検査する: カスケードの目標（外側ループの出力）と推力・トルク（レート PID の
+/// 出力）。数えるだけで、値は変えない。
+///
+/// @design detailed_design.md §8 — Non-finite number monitor (nonfinite_status)  [OK]
+static void checkControllerOutputs(sf::NonFiniteMonitor& monitor, const sf::ControlOutput& control)
+{
+    const uint32_t reference_bad = sf::countNonFinite(control.rate_ref, 3)
+                                 + sf::countNonFinite(control.angle_ref, 2);
+    monitor.record(sf::NonFiniteStage::ControlReference, reference_bad);
+
+    const uint32_t output_bad = sf::countNonFinite(&control.thrust, 1)
+                              + sf::countNonFinite(control.torque, 3);
+    monitor.record(sf::NonFiniteStage::ControlOutput, output_bad);
+}
 
 /// Consume controller commands published by the StateManager transition callbacks
 /// (architecture §4): full reset (ARM), altitude/position reset (mode exit / soft
@@ -316,6 +355,12 @@ void ControlTask(void* pvParameters)
     // 来た起床と、1 周期にかかる時間。
     sf::tasks::LoopTimingScope loop_timing(sf::control_loop_timing);
 
+    // NaN / infinity check of the control path (nonfinite_status, read by the CLI `status`): counts
+    // only, in armed cycles; the motor output guard in Actuator::update() is the one that acts.
+    // 制御経路の NaN・無限大の検査（nonfinite_status、CLI の `status` が読む）: ARM 中の周期だけ数える。
+    // 動作するのは Actuator::update() のモータ出力の保護だけ。
+    sf::tasks::NonFiniteScope nonfinite(sf::nonfinite_status);
+
     while (true) {
         loop_timing.endCycle();   // close the previous cycle before waiting / 待つ前に前の周期を閉じる
         // =====================================================================
@@ -350,7 +395,9 @@ void ControlTask(void* pvParameters)
         imu_pipeline_seen = true;
         stall_count = 0;
         sf::SystemMode mode = sf::system_mode.latest();   // read once; the loop timing and this cycle share it / 1 回だけ読む（周期監視とこの周期で共有）
-        loop_timing.beginCycle(static_cast<uint32_t>(esp_timer_get_time()), mode.armed);
+        const uint32_t wake_us = static_cast<uint32_t>(esp_timer_get_time());
+        loop_timing.beginCycle(wake_us, mode.armed);
+        nonfinite.beginCycle(wake_us, sf::isArmed(static_cast<sf::FlightState>(mode.state)));
 
         // Consume controller reset/mode commands from the StateManager transition
         // callbacks (architecture §4). Done first so a reset / mode change applies
@@ -454,6 +501,7 @@ void ControlTask(void* pvParameters)
         // 経由で行い、上の processControllerCommands() が消費する（architecture §4）— ここでの
         // prev_armed エッジ検出は廃止。
         actuator.arm();
+        checkControllerInputs(nonfinite.monitor(), state, setpoint);
 
         // =====================================================================
         // Step 3: Compute control output. The flight mode is applied by the onModeChange
@@ -502,6 +550,8 @@ void ControlTask(void* pvParameters)
             }
         }
 
+        checkControllerOutputs(nonfinite.monitor(), control);
+
         // Publish control output for logging
         // ログ用に制御出力を発行
         sf::control_output.publish(control);
@@ -517,7 +567,8 @@ void ControlTask(void* pvParameters)
         // モーター HAL を駆動する。
         // =====================================================================
 
-        actuator.update();
+        actuator.update(nonfinite.monitor());
+        nonfinite.endCycle();
 
         // =====================================================================
         // Step 5: Publish the 400Hz Data Stream record (after actuator.update()

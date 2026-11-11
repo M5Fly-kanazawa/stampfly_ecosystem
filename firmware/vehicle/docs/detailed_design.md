@@ -864,6 +864,39 @@ storage,   data, spiffs,  0x310000, 0x200000,          # 2MB  — Blackbox
 
 対象外（未解決）: ARM 中に 13〜22% の周期で続く 5 ms 級の遅れが実機ログ（front_tof_poshold_yaw4x90・yaw360）にある。大半は IMU 標本の時刻が前の行と同じ、つまり標本の取り違えである。ログシンクが直す ARM の瞬間の 50 ms 級の停止とは別の現象で、候補は、400Hz の合図を出す `esp_timer` タスクがコア 0 で Wi-Fi のタスクより低い優先度であること、または ARM 中の処理時間が 2.5 ms 近いことである。別件として扱い、この症状の対策の範囲に含めない。
 
+#### 有限でない数（NaN・無限大）の監視
+
+| 項目 | 内容 |
+|------|------|
+| 問題 | 制御経路の上下限は比較式（`if (x > max) x = max`）である。NaN（非数）との比較は常に偽なので、NaN はどの上下限もそのまま通る。PID の積分器に入ると以後の出力がすべて NaN になる。最後のモータ出力で NaN を整数（PWM の duty）へ変換するのは C++ の未定義動作である |
+| 行うこと | ① 制御経路の 6 つの境界（下表）で NaN・±無限大を**数える**（値は書き換えない）。② モータ指令の出口で、有限でない値のモータの duty を 0 にする。それ以外は変えない（有限な duty は上下限・丸めの結果がビット単位で同じ） |
+| 行わないこと | 積分器・推定器の内部状態の修復、入口での値の置き換え、停止（DISARM）。検出は飛行を止めない |
+| 検出器 | `sf::NonFiniteMonitor`（`nonfinite_guard.hpp`、純粋なロジック）。境界ごとに「有限でない値があった周期」を数え、最初に検出した境界と時刻を覚える。タスク側の包み（`tasks/nonfinite_scope.hpp`）が ControlTask の周期の頭と終わりに呼び、`nonfinite_status`（型 `NonFiniteStatus`）へ発行する: ARM 中の 1 秒ごと、検出した周期ごと、ARM でなくなった時。発行は Latest トピックのコピー 1 回で待たない。400Hz のタスクからはログを出さない。CLI の `status` が `finite` 行に表示する |
+| 検査する周期 | ARM 中の制御周期だけ。数え方は起動以降の累計 |
+
+制御経路の境界（`NonFiniteStage`、入力からモータの順。1 周期の中で上流から記録するので、その周期で最初に記録された境界が最も上流）:
+
+| 境界（`status` の表示） | 検査する値 | 個数 | 検査の場所 | 現行の上下限（この境界の手前の処理） |
+|------------------------|-----------|------|-----------|--------------------------------------|
+| `EstimateInput`（estimate input） | `estimate_state` の姿勢（クォータニオン）・位置・速度・機体角速度 | 13 | `control_task.cpp` `checkControllerInputs()` | 推定器の出力。上下限なし |
+| `SetpointInput`（setpoint input） | `command_setpoint` のスロットル・スロットル軸・ロール・ピッチ・ヨー | 5 | 同上 | `sf_command` の正規化（比較式のクリップ） |
+| `ControlReference`（control reference） | 制御器の外側ループの出力 `rate_ref`・`angle_ref` | 5 | `control_task.cpp` `checkControllerOutputs()` | 外側ループ（姿勢 PID）の出力は `pid.hpp` の `±output_limit` の比較式（上限は `pid_controller.cpp` が設定） |
+| `ControlOutput`（control output） | 制御器の出力（レート PID の出力）: 推力 `thrust` とトルク `torque[3]` | 4 | 同上 | トルクは `pid.hpp` の `±output_limit` の比較式（積分器にも同じ上下限）。推力は `pid_controller.cpp` の `thrust < 0`・`> max_thrust_` の比較式と、`blind_descent.hpp`・`blind_landing.hpp` の降下推力の上下限（比較式） |
+| `MixerOutput`（mixer output） | ミキサーが出した 4 モータの duty（上下限の**前**） | 4 | `actuator.cpp` `Actuator::update()` | なし（`thrustToDuty()` は `thrust <= 0` の比較。NaN は通る） |
+| `MotorCommand`（motor command） | モータへ渡す直前の 4 つの duty（上下限の後）。有限でないと分かったモータは 0 にする | 4 | 同上 | `clampDuty()`（比較式。NaN は通り、+無限大は 1.0 になって隠れる） |
+
+出口の保護（`sf::guardMotorDuties()`）: ミキサーの出力は上下限の「前」に検査して、有限でないモータの番号を覚える（上下限は +無限大を最大 duty にして隠してしまうため）。上下限を従来どおり通したあと、覚えたモータと、上下限の後でも有限でないモータの duty を 0 にする。`actuator_motor`（テレメトリと SILS の機体モデル）にも 0 を発行する。HAL（`MotorDriver::setMotor()`）も、有限でない値を 0 として扱う（`std::clamp` は NaN を通すので、HAL 単独でも整数への変換を未定義動作にしない）。ベンチ用モータテスト（`applyTestDuties()`、DISARM 中のみ）も同じ保護を通る（数えない）。
+
+| 見る値（`status` の `finite` 行） | 意味 |
+|----------------------------------|------|
+| `all control values finite (N armed cycles checked)` | 検査した ARM 中の N 周期で、どの境界も有限だった |
+| `NON-FINITE in D of N armed cycles; first at <境界>, T s after boot` | N 周期のうち D 周期で有限でない値があった。最初に検出した境界と、起動からの時刻（`esp_timer`） |
+| `cycles per boundary: estimate …, setpoint …, reference …, controller …, mixer …, motor …` | 境界ごとの「有限でない値があった周期」の数。上流で生まれた NaN は下流のすべての境界に現れるので、最も上流で 0 でない境界が発生箇所の手がかり |
+
+1 周期あたりの費用: 検査する値は 35 個（13 + 5 + 5 + 4 + 4 + 4）で、1 個につき `std::isfinite` 1 回。ESP32-S3 向けにビルドした機械語では、1 個あたり約 10 命令（読み込み・`abs.s`・比較・分岐・ビット操作）、合計で約 350 命令。240 MHz で 1 命令 1 サイクルなら約 1.5 µs で、周期 2500 µs の 0.1% 未満（見積もり。実機での計測は未実施。実機では `status` の `control` 行の `busy max` で確かめる）。
+
+SILS: エミュレータは終了時に `[emu] nonfinite: detected N of M armed cycles, first boundary: <境界>` を出し、`sf sils scenario`・`sf sils regression` がこれを読む。`.expect` に `nonfinite_cycles <op> <回数>` の行がなければ、N が 0 であることを自動で検査する（`nonfinite_cycles == 0`。不合格のときは detail に最初の境界が出る）。意図的な検出を期待するシナリオは、その行で回数を指定する。故障注入: `sf sils scenario <シナリオ> --param rate.roll.kp=nan` のように、有限でない値（`nan`・`inf`）をパラメータに設定して走らせると、その経路の境界で検出され、出力は 0 になる（エミュレータの終了時の出力に境界ごとの周期数も出る）。この場合の判定は `nonfinite_cycles == 0` で不合格になる。ホスト試験は `test/test_nonfinite_guard.cpp`（マスク・監視器の全分岐、有限な duty がビット単位で不変、NaN・±無限大が 0、上下限に隠れる +無限大が 0）。
+
 
 ## 9. Guidance / Navigation 層の予約設計（v3）
 
@@ -1228,3 +1261,36 @@ Total task stacks: ~104KB out of 512KB RAM (LogTask 6KB, since it writes the log
 | `armed_*` | The five items above, counted only for cycles that began while armed, so the ground idle before the flight does not dilute them |
 
 Counts are since boot. ControlTask wakes on ImuTask's notification, so a late ImuTask lengthens ControlTask's interval too (both show it). If only ControlTask shows it, the control computation takes longer than one period. Host tests: `test/test_log_ring.cpp`, `test/test_loop_timing.cpp`.
+
+#### Non-finite numbers (NaN, infinity)
+
+| Item | Content |
+|------|---------|
+| Problem | The limits of the control path are comparisons (`if (x > max) x = max`). A comparison with NaN is false, so NaN passes every limit unchanged; once it enters a PID integrator every later output is NaN. Converting NaN to an integer (the PWM duty) at the last motor output is undefined behaviour in C++ |
+| What it does | (1) **Counts** NaN / +-infinity at six boundaries of the control path (table below); no value is rewritten. (2) At the motor command exit, a motor whose value is not finite is driven with duty 0. Nothing else changes (a finite duty is bit for bit the same, limits and rounding included) |
+| What it does not do | Repair of integrator / estimator state, replacement at an input, stopping (DISARM). A detection never stops the flight |
+| Detector | `sf::NonFiniteMonitor` (`nonfinite_guard.hpp`, pure logic). Per boundary it counts the cycles that held a non-finite value and remembers the first boundary and time. A task-side wrapper (`tasks/nonfinite_scope.hpp`) is called at the start and end of the ControlTask cycle and publishes `nonfinite_status` (type `NonFiniteStatus`): every second of armed cycles, at every detecting cycle, and when the craft stops being armed. The publish is one Latest-topic copy and never waits; the 400 Hz task writes no log. The CLI `status` shows it on the `finite` line |
+| Checked cycles | Only ARMED control cycles. Counts are since boot |
+
+Boundaries (`NonFiniteStage`, from input to motor; they are recorded upstream first within a cycle, so the first one recorded in a cycle is the most upstream):
+
+| Boundary (as shown by `status`) | Values checked | Count | Where | Existing limit before this boundary |
+|---------------------------------|----------------|-------|-------|-------------------------------------|
+| `EstimateInput` (estimate input) | attitude (quaternion), position, velocity, body angular rate of `estimate_state` | 13 | `control_task.cpp` `checkControllerInputs()` | the estimator output; no limit |
+| `SetpointInput` (setpoint input) | throttle, throttle axis, roll, pitch, yaw of `command_setpoint` | 5 | same | normalization in `sf_command` (comparison clips) |
+| `ControlReference` (control reference) | outer-loop output of the controller: `rate_ref`, `angle_ref` | 5 | `control_task.cpp` `checkControllerOutputs()` | the output of the outer loop (attitude PID) is a `+-output_limit` comparison in `pid.hpp` (the limit is set by `pid_controller.cpp`) |
+| `ControlOutput` (control output) | controller output (the rate PID output): `thrust` and `torque[3]` | 4 | same | torque is a `+-output_limit` comparison in `pid.hpp` (the integrator has the same limits); thrust is the `thrust < 0` / `> max_thrust_` comparisons in `pid_controller.cpp` plus the descent-thrust limits (comparisons) of `blind_descent.hpp` and `blind_landing.hpp` |
+| `MixerOutput` (mixer output) | the 4 motor duties the mixer produced, **before** the limits | 4 | `actuator.cpp` `Actuator::update()` | none (`thrustToDuty()` tests `thrust <= 0`; NaN passes) |
+| `MotorCommand` (motor command) | the 4 duties about to go to the motors (after the limits); a motor found non-finite is set to 0 | 4 | same | `clampDuty()` (comparison; NaN passes, +infinity becomes 1.0 and is hidden) |
+
+Exit guard (`sf::guardMotorDuties()`): the mixer output is checked **before** the limits and the numbers of the non-finite motors are remembered (a limit turns +infinity into the maximum duty and hides it). After the limits run exactly as before, the remembered motors and any motor whose duty is still not finite get duty 0. `actuator_motor` (telemetry and the SILS plant) gets the 0 too. The HAL (`MotorDriver::setMotor()`) also treats a non-finite value as 0 (`std::clamp` passes NaN, so the HAL alone never converts NaN to an integer). The bench motor test (`applyTestDuties()`, DISARMED only) goes through the same guard (without counting).
+
+| Value (`finite` line of `status`) | Meaning |
+|-----------------------------------|---------|
+| `all control values finite (N armed cycles checked)` | In the N armed cycles checked, every boundary was finite |
+| `NON-FINITE in D of N armed cycles; first at <boundary>, T s after boot` | D of the N cycles held a non-finite value. The first boundary detected, and the time since boot (`esp_timer`) |
+| `cycles per boundary: estimate ..., setpoint ..., reference ..., controller ..., mixer ..., motor ...` | Per boundary, the cycles that held a non-finite value. A NaN born upstream shows in every boundary downstream of it, so the most upstream boundary that is not 0 points to where it came from |
+
+Cost per cycle: 35 values are checked (13 + 5 + 5 + 4 + 4 + 4), one `std::isfinite` each. In the machine code built for the ESP32-S3 that is about 10 instructions per value (load, `abs.s`, compare, branch, bit operation), about 350 in all: about 1.5 us at 240 MHz if one instruction takes one cycle, under 0.1% of the 2500 us period (an estimate; not measured on the real craft, where `busy max` of the `control` line of `status` shows it).
+
+SILS: at its end the emulator prints `[emu] nonfinite: detected N of M armed cycles, first boundary: <boundary>`, which `sf sils scenario` and `sf sils regression` read. Without a `nonfinite_cycles <op> <count>` line in the `.expect`, N is checked to be 0 automatically (`nonfinite_cycles == 0`; a failure names the first boundary in its detail). A scenario that expects a detection states the count on that line. Fault injection: set a parameter to a value that is not finite (`nan`, `inf`), e.g. `sf sils scenario <scenario> --param rate.roll.kp=nan`; the run is detected at the boundary on that path and the outputs become 0 (the emulator also prints the cycles per boundary at its end). Such a run fails `nonfinite_cycles == 0`. Host test: `test/test_nonfinite_guard.cpp` (every branch of the mask and the monitor, finite duties bit for bit unchanged, NaN and +-infinity driven as 0, +infinity hidden by a limit driven as 0).

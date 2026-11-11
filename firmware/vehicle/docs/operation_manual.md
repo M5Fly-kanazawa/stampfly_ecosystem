@@ -309,7 +309,7 @@ TAB で補完。
 | コマンド | 引数 | 説明 |
 |---------|------|------|
 | `param` | `[list\|get <name>\|set <name> <val>\|save]` | パラメータ読み書き（範囲検証・NVS 保存）|
-| `status` | — | 状態/モード/ARM・ペアリング・姿勢・高度・電池・センサ・400Hz ループの周期（`loop` 行） |
+| `status` | — | 状態/モード/ARM・ペアリング・姿勢・高度・電池・センサ・400Hz ループの周期（`loop` 行）・制御値の有限性（`finite` 行） |
 | `sensor` | `[imu\|mag\|baro\|tof\|flow\|power\|all]` | センサ最新値表示 |
 | `version` | — | ファーム名・ビルド日時 |
 | `mac` | — | 自 MAC とラベル用の下4桁を表示（機体ラベル用） |
@@ -338,6 +338,15 @@ TAB で補完。
 | `busy max`、`over budget` | `busy max` が 2.5 ms 未満、`over budget` が 0 | 1 周期の処理時間（上位タスクに割り込まれた時間を含む）の最大と、2.5 ms を超えた回数 |
 
 確かめ方: ① 起動して `status` で `imu all`・`control all` の `late` が小さいことを見る。② ARM して数秒おいてから DISARM し、`status` で `armed` 行の `late` と `period max` を見る（ARM の瞬間の 50 ms 級の停止が直っていれば `period max` は 10 ms 未満になる。ARM 中に 13〜22% の周期で続く 5 ms 級の遅れは別件（未解決）で、`late` が 0 にならなくても本対策の不合格ではない）。③ `imu` に出て `control` に出ない遅れは ImuTask の側、`control` だけに出る遅れは制御の計算が 1 周期を超えたか、BMI270 の読み出し失敗で ImuTask が通知を飛ばしたことを示す。`imu` の遅れには 400Hz の合図を出す `esp_timer` タスクの遅れも含む。④ ログ（USB コンソール）は最大 10 ms 遅れて出る（400Hz タスクを待たせないため）。満杯で捨てたときは、抜けた位置の直後に `log sink full: N lines dropped` と出る。TCP の CLI では、コマンド処理中の警告は従来どおりその接続へ直接出る。
+
+**制御値の有限性の見方**（`status` の `finite` 行）: 制御の計算に NaN（非数）や無限大が現れなかったかを、ARM 中の制御周期だけについて、起動以降の累計で表示する。NaN が出ても機体は止まらない（検出と記録だけ）。ただしモータへの出口では、有限でない値のモータの出力を 0 にする。
+
+| 表示 | 意味 | 対応 |
+|------|------|------|
+| `finite  : no armed cycle checked yet` | まだ ARM していない | 飛行後に見る |
+| `finite  : all control values finite (N armed cycles checked)` | 健全。検査した N 周期で、どの値も有限だった | なし |
+| `finite  : NON-FINITE in D of N armed cycles; first at <境界>, T s after boot` | N 周期のうち D 周期に NaN・無限大があった。`<境界>` は最初に見つかった場所（`estimate input` 推定値の入力、`setpoint input` 目標値の入力、`control reference` 制御器の外側ループの出力、`control output` 制御器の出力（レート PID の出力）、`mixer output` ミキサの出力、`motor command` モータ指令）で、T はその起動からの時刻 | 飛行ログと突き合わせて原因を調べる。`<境界>` が上流ほど原因に近い |
+| `cycles per boundary: estimate …, setpoint …, reference …, controller …, mixer …, motor …` | 境界ごとの、有限でない値があった周期の数 | 0 でない最も上流の境界が発生箇所の手がかり（NaN は下流の境界すべてに伝わる） |
 
 **テレメトリの受信**: 機体は 50Hz のモニタ用テレメトリ（104B バイナリ、UDP ブロードキャスト :5005）を常時放送している。機体と同一ネットワークの PC で:
 
@@ -628,7 +637,7 @@ completes.
 | Command | Args | Description |
 |---------|------|-------------|
 | `param` | `[list\|get <name>\|set <name> <val>\|save]` | Read/write parameters (validated, NVS) |
-| `status` | — | State/mode/arm, pairing, attitude, altitude, battery, sensors, the 400 Hz loop period (`loop` lines) |
+| `status` | — | State/mode/arm, pairing, attitude, altitude, battery, sensors, the 400 Hz loop period (`loop` lines), finiteness of the control values (`finite` line) |
 | `sensor` | `[imu\|mag\|baro\|tof\|flow\|power\|all]` | Print sensor readings |
 | `version` | — | Firmware name / build date |
 | `mac` | — | Show this vehicle's MAC and its 4-hex-digit label (for the vehicle sticker) |
@@ -657,6 +666,15 @@ completes.
 | `busy max`, `over budget` | `busy max` below 2.5 ms, `over budget` 0 | Longest time of one cycle (preemption by higher-priority tasks included) and the number of cycles longer than 2.5 ms |
 
 How to check: (1) After boot, run `status` and see that `late` of `imu all` and `control all` is small. (2) ARM, wait a few seconds, DISARM, run `status` and read `late` and `period max` of the `armed` rows (if the 50 ms-class stall at the ARM instant is fixed, `period max` stays below 10 ms; a 5 ms-class delay that continues in 13-22% of the cycles while armed is a separate, unresolved issue, and `late` not reaching 0 is not a failure of this fix). (3) A delay that shows on `imu` and not on `control` is on the ImuTask side; a delay on `control` only means the control computation takes longer than one period or ImuTask skipped the notification after a failed BMI270 read. A delay on `imu` also includes delay of the `esp_timer` task that issues the 400 Hz tick. (4) Log lines on the USB console appear up to 10 ms late (so that the 400 Hz tasks never wait); a burst the ring could not hold prints `log sink full: N lines dropped` where the lines went missing. In the TCP CLI, warnings raised while a command runs still go straight to that connection.
+
+**Reading the finiteness of the control values** (the `finite` line of `status`): shows, for ARMED control cycles only and as totals since boot, whether NaN (not a number) or infinity appeared in the control computation. A NaN does not stop the craft (detection and recording only), but at the motor exit a motor whose value is not finite is driven with output 0.
+
+| Display | Meaning | Action |
+|---------|---------|--------|
+| `finite  : no armed cycle checked yet` | not armed yet | check after a flight |
+| `finite  : all control values finite (N armed cycles checked)` | healthy: every value was finite in the N cycles checked | none |
+| `finite  : NON-FINITE in D of N armed cycles; first at <boundary>, T s after boot` | D of the N cycles held a NaN / infinity. `<boundary>` is where it was first seen (`estimate input`, `setpoint input`, `control reference` = outer-loop output of the controller, `control output` = controller output (the rate PID output), `mixer output`, `motor command`) and T is the time since boot | compare with the flight log to find the cause; the more upstream the boundary, the closer to the cause |
+| `cycles per boundary: estimate ..., setpoint ..., reference ..., controller ..., mixer ..., motor ...` | per boundary, the number of cycles that held a non-finite value | the most upstream boundary that is not 0 points to where it came from (a NaN travels to every boundary downstream) |
 
 Every command publishes a FACT on a topic and the owning task applies it (e.g. `motor` → `motor_test`
 → ControlTask; `sound`/`led` → `ui_command` → NotifyTask; `unpair` → `button_event` → StateTask). So a

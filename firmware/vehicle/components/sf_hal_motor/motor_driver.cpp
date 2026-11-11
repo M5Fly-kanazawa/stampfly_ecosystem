@@ -15,6 +15,7 @@
 #include "esp_log.h"
 #include "driver/ledc.h"
 #include <algorithm>
+#include <cmath>
 
 static const char* TAG = "MotorDriver";
 
@@ -156,6 +157,13 @@ void MotorDriver::setMotor(int motor, float value)
         return;
     }
 
+    // std::clamp passes NaN through, and a NaN converted to the integer duty below is undefined
+    // behaviour: a value that is not finite is driven as duty 0.
+    // std::clamp は NaN を通し、NaN を下で整数の duty に変換すると未定義動作になる:
+    // 有限でない値は duty 0 で駆動する。
+    if (!std::isfinite(value)) {
+        value = 0.0f;
+    }
     motor_output_[motor] = std::clamp(value, 0.0f, 1.0f);
 
     // Calculate duty cycle based on resolution

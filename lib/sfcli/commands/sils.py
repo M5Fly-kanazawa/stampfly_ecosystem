@@ -1292,6 +1292,34 @@ def _read_xfail(expect_path: Path) -> Optional[str]:
     return None
 
 
+# The emulator's last lines include "[emu] nonfinite: detected N of M armed cycles, ..." — the number of
+# ARMED control cycles in which a NaN / infinity appeared on the control path (firmware nonfinite_status).
+# 末尾付近にエミュレータが "[emu] nonfinite: detected N of M armed cycles, ..." を出す — ARM 中の制御周期のうち、
+# 制御経路に NaN・無限大が現れた周期の数（ファームの nonfinite_status）。
+_NONFINITE_LINE = re.compile(r"\[emu\] nonfinite: detected (\d+) of (\d+) armed cycles, first boundary: (.+)")
+_NONFINITE_OPS = dict(_METRIC_OPS, **{"==": lambda a, b: a == b})
+
+
+def _nonfinite_check(stdout: str, limit):
+    """The non-finite-number check of a scenario run, or None when the emulator printed no such line.
+    limit is (op, count) from the .expect line `nonfinite_cycles <op> <count>`; without one the run must
+    have no cycle with a NaN / infinity (== 0). On failure the detail names the first boundary, so the
+    place of origin is in the verdict.
+    シナリオ実行の有限でない数の検査。エミュレータがその行を出していなければ None。limit は .expect の
+    `nonfinite_cycles <op> <回数>` の (op, 回数)。無ければ NaN・無限大のあった周期が 0 であること（== 0）。
+    不合格のときは detail に最初の境界を書き、発生箇所が判定に残るようにする。"""
+    found = _NONFINITE_LINE.search(stdout)
+    if not found:
+        return None
+    detected, checked, first_boundary = int(found.group(1)), int(found.group(2)), found.group(3).strip()
+    op, want = limit if limit else ("==", 0)
+    ok = _NONFINITE_OPS[op](detected, want)
+    detail = f"detected {detected} of {checked} armed cycles"
+    if detected:
+        detail += f", first boundary: {first_boundary}"
+    return {"name": f"nonfinite_cycles {op} {want}", "pass": bool(ok), "detail": detail}
+
+
 def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int,
                  bundle_path: Path = None):
     """Evaluate an assertions file against the captured output. Returns
@@ -1307,6 +1335,9 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
       log_absent   <out|err|any> "<text>"   stream does NOT contain the text
       order "<a>" "<b>"                       a's first occurrence precedes b's
       exit <code>                             process exit code matches
+      nonfinite_cycles <op> <count>           the ARMED control cycles in which a NaN / infinity
+                                              appeared on the control path (op ∈ == < <= > >=).
+                                              Without this line a run must have none (== 0).
       skip <reason...>                        record a capability-gated check as
                                               SKIPPED (passes, not evaluated) —
                                               e.g. stable hover gated on E3 INA3221
@@ -1327,6 +1358,7 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
     merged = out_text + err_text
     streams = {"out": out_text, "err": err_text, "any": merged}
     checks = []
+    nonfinite_limit = None
     xfail_reason = _read_xfail(expect_path)
     for raw in expect_path.read_text(encoding="utf-8").splitlines():
         stripped = raw.strip()
@@ -1373,6 +1405,9 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                 continue
             checks.append({"name": f"exit == {want}", "pass": exit_code == want,
                            "detail": f"got {exit_code}"})
+        elif kind == "nonfinite_cycles" and len(toks) >= 3 and toks[1] in _NONFINITE_OPS \
+                and toks[2].isdigit():
+            nonfinite_limit = (toks[1], int(toks[2]))   # evaluated after the loop / ループの後で評価
         elif kind == "metric" and len(toks) >= 4:
             # metric <name> <op> <value> [in <t0> <t1>]
             # Numerical physical-truth gate from the flight-log bundle (G2/G3/G4).
@@ -1417,6 +1452,9 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
     # must FAIL, not pass vacuously (all([]) is True in Python).
     # 実評価が1つも無い .expect は空虚 PASS にせず FAIL させる（all([])==True 対策）。
     evaluated = [c for c in checks if not c.get("skipped")]
+    nonfinite = _nonfinite_check(out_text, nonfinite_limit)
+    if nonfinite:
+        checks.append(nonfinite)   # not counted as an evaluated .expect assertion / .expect の実評価には数えない
     if not evaluated:
         checks.append({"name": "no assertions evaluated", "pass": False,
                        "detail": "expect file has no evaluable assertion"})

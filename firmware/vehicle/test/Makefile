@@ -110,6 +110,14 @@ TARGET_LOG_RING = test_log_ring
 SRCS_LOOP_TIMING = test_loop_timing.cpp
 TARGET_LOOP_TIMING = test_loop_timing
 
+# Non-finite number detection (nonfinite_guard.hpp): the mask, the per-boundary monitor (first boundary and time,
+# checked / detected cycles) and the motor-output guard (finite duties unchanged, NaN / infinity driven as 0).
+# Header-only logic — own binary, no extra sources.
+# 有限でない数の検出（nonfinite_guard.hpp）: マスク・境界ごとの監視器（最初の境界と時刻・検査した周期と検出した
+# 周期）・モータ出力の保護（有限な duty は不変、NaN・無限大は 0）。ヘッダのみのロジック — 独自バイナリで追加ソース不要。
+SRCS_NONFINITE_GUARD = test_nonfinite_guard.cpp
+TARGET_NONFINITE_GUARD = test_nonfinite_guard
+
 # Low-battery alert timing (sf::BatteryAlertPolicy, battery_alert_policy.hpp): the EMERGENCY on entry into the
 # critical region, its re-raise cadence, re-entry after a recovery to the warning band, the bound on a chattering
 # voltage, the WARNING latch. Header-only logic — own binary, no extra sources.
@@ -145,7 +153,7 @@ TARGET_STATE_MANAGER = test_state_manager
 
 .PHONY: all clean test
 
-all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) $(TARGET_STATE_MANAGER)
+all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_NONFINITE_GUARD) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) $(TARGET_STATE_MANAGER)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
@@ -180,6 +188,9 @@ $(TARGET_LOG_RING): $(SRCS_LOG_RING)
 $(TARGET_LOOP_TIMING): $(SRCS_LOOP_TIMING)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+$(TARGET_NONFINITE_GUARD): $(SRCS_NONFINITE_GUARD)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+
 $(TARGET_BATTERY_ALERT_POLICY): $(SRCS_BATTERY_ALERT_POLICY)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
@@ -201,9 +212,10 @@ test: all
 	./$(TARGET_TAKEOFF_POLICY)
 	./$(TARGET_LOG_RING)
 	./$(TARGET_LOOP_TIMING)
+	./$(TARGET_NONFINITE_GUARD)
 	./$(TARGET_BATTERY_ALERT_POLICY)
 	./$(TARGET_API_ARGUMENTS)
 	./$(TARGET_STATE_MANAGER)
 
 clean:
-	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) $(TARGET_STATE_MANAGER)
+	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_NONFINITE_GUARD) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) $(TARGET_STATE_MANAGER)

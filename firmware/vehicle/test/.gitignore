@@ -15,3 +15,4 @@ test_log_ring
 test_loop_timing
 test_battery_alert_policy
 test_api_arguments
+test_nonfinite_guard

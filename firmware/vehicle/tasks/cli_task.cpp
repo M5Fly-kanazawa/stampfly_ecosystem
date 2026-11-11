@@ -55,6 +55,7 @@
 #include "flight_state.hpp"
 #include "failsafe_status_guard.hpp"   // a stale failsafe_status reads as ToF silent
 #include "config.hpp"
+#include "nonfinite_guard.hpp"   // nonFiniteStageName() for `status`
 
 static const char* TAG = "CLITask";
 
@@ -338,6 +339,10 @@ static void printStatusRefusals(const sf::SystemMode& mode)
 /// 1 ミリ秒あたりのマイクロ秒（周期は µs で保持し、ms で表示する）。
 static constexpr double kMicrosecondsPerMillisecond = 1000.0;
 
+/// Microseconds per second (the first-detection time is kept in microseconds, shown in seconds).
+/// 1 秒あたりのマイクロ秒（最初の検出の時刻は µs で保持し、秒で表示する）。
+static constexpr double kMicrosecondsPerSecond = 1000000.0;
+
 /// One line of the 400Hz loop timing: the cycles counted, the longest period between two wakes, the
 /// wakes later than 1.5 periods (a missed 400Hz tick), and the longest/over-budget busy time.
 /// 400Hz ループ周期の 1 行: 数えた周期、連続する起床の最長の間隔、1.5 周期を超えた起床（400Hz ティックの
@@ -377,6 +382,37 @@ static void printLoopTiming()
                         control.armed_over_budget_count);
 }
 
+/// `status`, finite-number part: whether NaN / infinity appeared on the control path while armed, and
+/// where it first appeared. Read-only fact display (nonfinite_status).
+/// `status` の有限性の部分: ARM 中に制御経路へ NaN・無限大が現れたか、最初にどこに現れたか。読み取り専用の
+/// 事実表示（nonfinite_status）。
+static void printNonFinite()
+{
+    const sf::NonFiniteStatus status = sf::nonfinite_status.latest();
+    if (status.checked_cycles == 0) {
+        std::printf("finite  : no armed cycle checked yet\n");
+        return;
+    }
+    if (status.detected_cycles == 0) {
+        std::printf("finite  : all control values finite (%lu armed cycles checked)\n",
+                    static_cast<unsigned long>(status.checked_cycles));
+        return;
+    }
+    std::printf("finite  : NON-FINITE in %lu of %lu armed cycles; first at %s, %.3f s after boot\n",
+                static_cast<unsigned long>(status.detected_cycles),
+                static_cast<unsigned long>(status.checked_cycles),
+                sf::nonFiniteStageName(status.first_stage),
+                static_cast<double>(status.first_us) / kMicrosecondsPerSecond);
+    const auto cycles_at = [&status](sf::NonFiniteStage stage) {
+        return static_cast<unsigned long>(status.stage_count[static_cast<size_t>(stage)]);
+    };
+    std::printf("          cycles per boundary: estimate %lu, setpoint %lu, reference %lu, "
+                "controller %lu, mixer %lu, motor %lu\n",
+                cycles_at(sf::NonFiniteStage::EstimateInput), cycles_at(sf::NonFiniteStage::SetpointInput),
+                cycles_at(sf::NonFiniteStage::ControlReference), cycles_at(sf::NonFiniteStage::ControlOutput),
+                cycles_at(sf::NonFiniteStage::MixerOutput), cycles_at(sf::NonFiniteStage::MotorCommand));
+}
+
 /// `status` — flight state / mode / arm, pairing, attitude, altitude, battery, sensors, the
 /// refusal reasons and the flip gate.
 /// `status` — フライト状態/モード/ARM、ペアリング、姿勢、高度、電池、センサ、拒否の理由、宙返りの判定。
@@ -402,6 +438,7 @@ int cmd_status(int argc, char** argv)
                     static_cast<sf::FlipBlockReason>(controller.flip_block_reason)));
     }
     printLoopTiming();
+    printNonFinite();
     return 0;
 }
 

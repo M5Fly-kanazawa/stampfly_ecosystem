@@ -46,6 +46,7 @@
 #include "emu_flightlog.hpp"     // StampFly flight-log v1 bundle recorder (SILS_EMU_FLIGHTLOG)
 #include "emu_realtime.hpp"      // P6 stage 1: wall-clock pacing (SILS_EMU_REALTIME)
 #include "rc_stdin.hpp"          // P6 stage 1: live RC-over-stdin (SILS_EMU_RC_STDIN)
+#include "nonfinite_guard.hpp"   // sf::nonFiniteStageName (final nonfinite line)
 #include "flight_state.hpp"      // sf::flightStateName / sf::flightModeName (STATE HUD line)
 #include "sf_math.hpp"           // sf::math::Quat (STATE HUD line: attitude → Euler)
 #include "tasks.hpp"             // sf::tasks::flush_log_sink() before _Exit
@@ -515,8 +516,16 @@ int main(int argc, char** argv)
                 size_t hash = line.find('#');
                 if (hash != std::string::npos) line.erase(hash);   // strip comment
                 std::istringstream ls(line);
-                std::string name; double value;
-                if (!(ls >> name >> value)) continue;              // blank / malformed
+                // The value is read as text and converted with strtod, which (unlike the stream
+                // extraction) also accepts "nan" and "inf": a run can set a parameter to a value that
+                // is not finite, to test the non-finite number check.
+                // 値は文字列で読み strtod で変換する。strtod は（ストリーム抽出と違い）"nan"・"inf" も
+                // 受け付けるので、有限でない値をパラメータに設定して、有限でない数の検査を試せる。
+                std::string name; std::string value_text;
+                if (!(ls >> name >> value_text)) continue;         // blank / malformed
+                char* value_end = nullptr;
+                const double value = std::strtod(value_text.c_str(), &value_end);
+                if (value_end == value_text.c_str()) continue;     // malformed / 数として読めない
                 // Look up the param's type in the SSOT table.
                 // パラメータの型を SSOT テーブルで引く。
                 bool found = false;
@@ -581,6 +590,26 @@ int main(int argc, char** argv)
     std::printf("[emu] final state=%u sub_mode=%u armed=%d | imu.ts=%u est.ts=%u\n",
                 sm.state, sm.sub_mode, (int)sm.armed,
                 sf::sensor_imu.latest().timestamp, est.timestamp);
+
+    // Non-finite numbers seen on the control path while armed (nonfinite_status, the same facts the
+    // CLI `status` shows). `sf sils scenario` reads this line: a scenario passes only if no cycle
+    // held a NaN / infinity, unless its .expect says otherwise (nonfinite <count>).
+    // ARM 中に制御経路で見つかった有限でない数（nonfinite_status、CLI の `status` と同じ事実）。
+    // `sf sils scenario` がこの行を読む: .expect に別の指定（nonfinite <回数>）が無い限り、NaN・無限大が
+    // 1 周期もなかったシナリオだけが合格する。
+    const sf::NonFiniteStatus nonfinite = sf::nonfinite_status.latest();
+    std::printf("[emu] nonfinite: detected %u of %u armed cycles, first boundary: %s\n",
+                nonfinite.detected_cycles, nonfinite.checked_cycles,
+                sf::nonFiniteStageName(nonfinite.detected_cycles == 0 ? sf::kNonFiniteNoStage
+                                                                      : nonfinite.first_stage));
+    std::printf("[emu] nonfinite cycles per boundary: estimate %u, setpoint %u, reference %u, "
+                "controller %u, mixer %u, motor %u\n",
+                nonfinite.stage_count[static_cast<size_t>(sf::NonFiniteStage::EstimateInput)],
+                nonfinite.stage_count[static_cast<size_t>(sf::NonFiniteStage::SetpointInput)],
+                nonfinite.stage_count[static_cast<size_t>(sf::NonFiniteStage::ControlReference)],
+                nonfinite.stage_count[static_cast<size_t>(sf::NonFiniteStage::ControlOutput)],
+                nonfinite.stage_count[static_cast<size_t>(sf::NonFiniteStage::MixerOutput)],
+                nonfinite.stage_count[static_cast<size_t>(sf::NonFiniteStage::MotorCommand)]);
 
     // Exit WITHOUT running static destructors — same rationale (and pattern) as
     // emu_main_generic.cpp: the firmware's singletons are designed to live for the

@@ -609,7 +609,7 @@ sensor.power ──→ PowerTask [フェイルセーフ]
 
 そこで **`ESP_LOG` の出力関数を LogTask が差し替える（ログシンク: 出力の待ちを呼び出し側から切り離す受け渡しの仕組み）**。呼び出し側（どのタスクでも）は行を整形して固定長のリング（円環状に使い回すバッファ。`sf::LogRing`、4 KB）へ数 µs でコピーするだけで、コンソールには触れない。リングをコンソールへ書くのは LogTask（優先度 5、締切なし）だけ。メッセージの文言・出る条件は変わらず、`ESP_LOG` どうしの順序も保つ。`printf`（CLI の応答・プロンプト）との前後は変わりうる（ログは最大 10 ms 程度遅れる）。TCP の CLI では `CLITask` が `stdout` をソケットへ差し替えているので、`CLITask` が出す `ESP_LOG` はリングを通さずそのソケットへ直接書く（従来どおり。USB には出ない）。リングが満ちたときは行を捨て、捨てた直後に入った最初の行の前に「log sink full: N lines dropped」を出す。LogTask 自身がコンソールで最大 50 ms 待ちうるため、Blackbox 有効時はその間の記録が抜けうる。LogTask の起動前（起動シーケンス）のログは従来どおり直接コンソールへ出る。`reboot` は直前のログを失わないよう `sf::tasks::flush_log_sink()` で出し切ってから再起動する。
 
-周期が守れているかは `sf::LoopTimingMonitor` が測る（ImuTask は `imu_loop_timing`、ControlTask は `control_loop_timing`、毎秒発行。CLI の `status` が表示する）。詳細は `detailed_design.md` §8。
+周期が守れているかは `sf::LoopTimingMonitor` が測る（ImuTask は `imu_loop_timing`、ControlTask は `control_loop_timing`、毎秒発行。CLI の `status` が表示する）。詳細は `detailed_design.md` §8。 制御経路の NaN・無限大は `sf::NonFiniteMonitor` が境界ごとに数え（ControlTask が `nonfinite_status` を発行し、CLI の `status` が表示する）、モータ指令の出口で有限でない値のモータを duty 0 にする（`detailed_design.md` §8）。
 
 ### タスク非割当のコンポーネント
 
@@ -902,7 +902,7 @@ Motor output
 
 So **LogTask replaces the output function of `ESP_LOG` (the log sink)**. A caller (any task) formats the line and copies it into a fixed-size ring (`sf::LogRing`, 4 KB) in a few microseconds without touching the console; only LogTask (priority 5, no deadline) writes the ring to the console. The wording and conditions of every message are unchanged, and `ESP_LOG` lines keep their order among themselves. Their order relative to `printf` (CLI replies and prompts) can change (logs are up to about 10 ms late). In the TCP CLI, `CLITask` redirects `stdout` to the socket, so the `ESP_LOG` lines of `CLITask` bypass the ring and are written straight to that socket, as before (not to USB). When the ring is full the line is dropped, and "log sink full: N lines dropped" is printed before the first line stored after the loss. LogTask itself can wait up to 50 ms on the console, so Blackbox records can be missed during that wait when Blackbox is enabled. Logs before LogTask starts (the boot sequence) still go straight to the console. `reboot` drains the ring with `sf::tasks::flush_log_sink()` before restarting so the last messages are not lost.
 
-Whether the period is kept is measured by `sf::LoopTimingMonitor` (`imu_loop_timing` from ImuTask, `control_loop_timing` from ControlTask, published every second and shown by the CLI `status`). See `detailed_design.md` §8.
+Whether the period is kept is measured by `sf::LoopTimingMonitor` (`imu_loop_timing` from ImuTask, `control_loop_timing` from ControlTask, published every second and shown by the CLI `status`). See `detailed_design.md` §8. NaN and infinity on the control path are counted per boundary by `sf::NonFiniteMonitor` (ControlTask publishes `nonfinite_status`, shown by the CLI `status`), and at the motor command exit a motor whose value is not finite gets duty 0 (`detailed_design.md` §8).
 
 ### Components Without Dedicated Tasks
 

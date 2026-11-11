@@ -348,18 +348,35 @@ void Actuator::arm()
 // -----------------------------------------------------------------------------
 // update — read control output, mix, publish, then drive motors
 // 更新 — 制御出力を読み取り、ミキシングし、発行してからモーターを駆動
+//
+// Non-finite guard: the mixer output is checked BEFORE the limits (a limit turns +infinity into the
+// maximum duty and passes NaN through, so it cannot tell), the limits then run exactly as before, and
+// the final duties are checked again. A motor found non-finite at either point is driven with duty 0
+// (the PWM write converts the duty to an integer, which is undefined for NaN); finite duties are not
+// changed. Both checks only count into `monitor`.
+// 有限性の保護: ミキサーの出力は上下限の「前」に検査する（上下限は +無限大を最大 duty にし、NaN は通すので
+// 区別できない）。上下限はこれまでどおり実行し、最終の duty をもう一度検査する。どちらかで有限でないと分かった
+// モーターは duty 0 で駆動する（PWM の書き込みは duty を整数に変換し、NaN では未定義）。有限な duty は変えない。
+// どちらの検査も `monitor` へ数えるだけ。
 // -----------------------------------------------------------------------------
-void Actuator::update()
+void Actuator::update(NonFiniteMonitor& monitor)
 {
     // Subscribe to the control output topic.
     // 制御出力トピックを購読する。
     const ControlOutput cmd = control_output.latest();
 
-    // Compute mixer (with supply voltage) → clamp → publish for telemetry.
-    // ミキサー計算（電源電圧で）→ クランプ → テレメトリ発行。
-    float duties[4];
+    // Compute mixer (with supply voltage), then check it before the limits.
+    // ミキサー計算（電源電圧で）。上下限の前に検査する。
+    float duties[kMotorCount];
     mixerCompute(cmd, batteryVoltage(), duties);
+    const uint32_t mixer_mask = nonFiniteMask(duties, kMotorCount);
+    monitor.record(NonFiniteStage::MixerOutput, countMaskBits(mixer_mask));
+
+    // Clamp, guard the motor command, publish for telemetry.
+    // クランプし、モーター指令を保護し、テレメトリ発行。
     clampDuties(duties);
+    const uint32_t zeroed_mask = guardMotorDuties(duties, mixer_mask);
+    monitor.record(NonFiniteStage::MotorCommand, countMaskBits(zeroed_mask));
     publishMotorOutput(duties, cmd.timestamp);
 
     // Write duties to the physical motors. Skip if HAL is not ready yet.
@@ -409,10 +426,19 @@ void Actuator::disarm()
 void Actuator::applyTestDuties(const float duties[4])
 {
     arm();   // idempotent: ensure the motor HAL accepts duty writes
-    if (g_motor.isInitialized()) {
-        g_motor.setMotorDuties(duties);
+
+    // A value that is not finite is driven as duty 0 (finite values are copied unchanged).
+    // 有限でない値は duty 0 で駆動する（有限な値はそのままコピー）。
+    float guarded[kMotorCount];
+    for (size_t i = 0; i < kMotorCount; ++i) {
+        guarded[i] = duties[i];
     }
-    publishMotorOutput(duties, static_cast<uint32_t>(esp_timer_get_time()));
+    guardMotorDuties(guarded, 0);
+
+    if (g_motor.isInitialized()) {
+        g_motor.setMotorDuties(guarded);
+    }
+    publishMotorOutput(guarded, static_cast<uint32_t>(esp_timer_get_time()));
 }
 
 }  // namespace sf

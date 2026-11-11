@@ -59,6 +59,7 @@ Topic<FailsafeStatus,  Latest, 1>      failsafe_status;
 Topic<ToFHealth,       Latest, 1>      tof_health;
 Topic<LoopTiming,      Latest, 1>      imu_loop_timing;
 Topic<LoopTiming,      Latest, 1>      control_loop_timing;
+Topic<NonFiniteStatus, Latest, 1>      nonfinite_status;
 Topic<PairingStatus,   Latest, 1>      pairing_state;
 Topic<PairingComplete, Latest, 1>      pairing_complete;
 Topic<PairingDiag,     Latest, 1>      pairing_diag;
@@ -102,6 +103,7 @@ void topics_init()
     tof_health.init();
     imu_loop_timing.init();
     control_loop_timing.init();
+    nonfinite_status.init();
     pairing_state.init();
     pairing_complete.init();
     pairing_diag.init();

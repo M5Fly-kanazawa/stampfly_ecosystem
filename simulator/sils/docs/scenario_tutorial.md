@@ -108,6 +108,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `log_absent <out\|err\|any> "<text>"` | | 含まれ**ない**ことを確認（異常ログが出ていないことの確認等） |
 | `order "<a>" "<b>"` | | `a` の最初の出現位置が `b` の最初の出現位置より前にあるか（両方の標準出力+標準エラーの結合テキストで判定） |
 | `metric <name> <op> <value> [in <t0> <t1>]` | 例: `metric tilt_max < 0.314 in 7.0 13.0`（≈18°） | 実行結果のフライトログ一式（`truth.csv` 等のストリーム）から計算した数値でのしきい値判定。`op` は `< <= > >=` の4種類のみ（`==`/`!=` は無い）。`in <t0> <t1>` を付けると窓（**秒単位**）でフェーズを絞れる。省略すると全区間 |
+| `nonfinite_cycles <op> <回数>` | 例: `nonfinite_cycles > 0` | ARM 中の制御周期のうち、制御経路に NaN・無限大が現れた周期の数の判定。`op` は `== < <= > >=`。**この行がなくても、`==` 0 を自動で検査する**（NaN・無限大が 1 周期もなかった実行だけが合格。不合格のときは最初に現れた境界が出る）。意図的に検出を起こすシナリオ（例: `--param rate.roll.kp=nan`）だけがこの行で回数を指定する |
 | `skip <理由...>` | | この行を「合格扱いだが評価はしていない」として記録する（ハード依存の機能等で使う） |
 | `# コメント` | | 無視される |
 
@@ -386,6 +387,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 | `log_absent <out\|err\|any> "<text>"` | | The text is **not** present (e.g. confirming no error was logged) |
 | `order "<a>" "<b>"` | | `a`'s first occurrence precedes `b`'s first occurrence (checked against the merged stdout+stderr text) |
 | `metric <name> <op> <value> [in <t0> <t1>]` | e.g. `metric tilt_max < 0.314 in 7.0 13.0` (≈18°) | Numeric threshold on a value computed from the run's flight-log bundle (streams such as `truth.csv`). `op` is one of `< <= > >=` only (no `==`/`!=`). Optional `in <t0> <t1>` restricts to a window in **seconds**; omitted = the whole run |
+| `nonfinite_cycles <op> <count>` | e.g. `nonfinite_cycles > 0` | Threshold on the number of ARMED control cycles in which a NaN / infinity appeared on the control path; `op` is one of `== < <= > >=`. **Without this line `== 0` is checked automatically** (only a run with no such cycle passes; a failure names the boundary where it first appeared). Only a scenario that provokes a detection on purpose (e.g. `--param rate.roll.kp=nan`) states a count on this line |
 | `skip <reason...>` | | Records the line as passing but not actually evaluated (for hardware-gated checks) |
 | `# comment` | | Ignored |
 
