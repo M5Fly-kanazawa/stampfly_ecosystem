@@ -1,0 +1,14 @@
+# battery_emergency_takeoff_floor.expect — the EMERGENCY on the floor in TAKEOFF cuts the motors; no LANDING, the craft stays on the floor
+# TAKEOFF の床の上の EMERGENCY はモータを止める。LANDING にならず、機体は床の上のまま
+#
+exit 0
+log_contains any "Auto-takeoff engaged"
+log_contains any "Battery emergency in TAKEOFF without evidence of the air"
+log_contains any "DISARM accepted (TAKEOFF → IDLE_GROUND)"
+log_contains any "Transition: TAKEOFF → IDLE_GROUND"
+log_absent any "Battery emergency → LANDING"
+log_absent any "Transition: TAKEOFF → LANDING"
+log_absent any "Transition: TAKEOFF → FLYING"
+order "Auto-takeoff engaged" "Battery emergency in TAKEOFF without evidence of the air"
+metric alt_max < 0.05 in 7.0 16.0
+metric duty_max < 0.01 in 8.5 16.0

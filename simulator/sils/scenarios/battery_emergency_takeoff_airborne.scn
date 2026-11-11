@@ -1,0 +1,23 @@
+# battery_emergency_takeoff_airborne.scn — the battery EMERGENCY comes in the air during an auto-takeoff: LANDING, which ends on the floor
+#                                          自動離陸の最中、空中で電池の EMERGENCY が出る: LANDING になり、床の上で終わる
+#
+# The same takeoff as battery_emergency_takeoff_floor.scn, the voltage event 0.4 s after the TAKEOFF began: the craft is at about 0.2 m (the alert reaches the StateManager within 0.1 s), climbing toward the 0.5 m target, the TAKEOFF not yet complete, and
+# the healthy ToF reads valid heights above the 5 cm ground band (tof_health.floor_leaving). Spec under test (detailed_design.md §3.1, "電池の EMERGENCY" rows; takeoff_policy.hpp decideBatteryEmergency()):
+#  1. With that evidence the EMERGENCY in TAKEOFF lands the craft (TAKEOFF -> LANDING), not a motor cut: cutting the motors in the air would drop it.
+#  2. The LANDING ends by the touchdown (LANDING -> IDLE_GROUND), the motors stop on the floor: the touchdown speed is low (the descent_speed_max bound).
+#
+# battery_emergency_takeoff_floor.scn と同じ離陸で、電圧の事象は TAKEOFF の開始の 0.4 s 後: 機体は約 0.2 m（アラートは 0.1 s 以内に StateManager に届く）で目標 0.5 m へ上昇中、TAKEOFF は未完了、健全な ToF は 5 cm の接地の帯より上の有効な高さを
+# 読んでいる（tof_health.floor_leaving）。検証する仕様（detailed_design.md §3.1 の「電池の EMERGENCY」の行、takeoff_policy.hpp の decideBatteryEmergency()）:
+#  1. その証拠があれば、TAKEOFF の EMERGENCY は機体を着陸させる（TAKEOFF → LANDING）。モータ停止にはしない: 空中でモータを止めると機体が落ちる。
+#  2. LANDING は接地で終わり（LANDING → IDLE_GROUND）、モータは床の上で止まる: 接地速度は小さい（descent_speed_max の上限）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/battery_emergency_takeoff_airborne.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    param      hover.thrust.learn 0                                                # the hover-thrust estimate stays wrong
+   +    param      hover.thrust_corr 1.3                                               # estimate 30 % above the setting that the loop settles on
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED (to 7.5 s)
+   +    rc         2048  2048   2048    2048  1     720       50        1              # C: ARM in ALT_HOLD (7.5 s); the TAKEOFF begins at about 7.82 s; hold to 8.22 s
+   +    battery    2.99                                                                # D: 8.22 s — the pack falls just below the critical voltage, craft in the air
+   +    rc         2048  2048   2048    2048  1     14000     50        1              # E: nothing more from the pilot (to 22.2 s)

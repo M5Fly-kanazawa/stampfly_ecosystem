@@ -60,6 +60,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `tof_silent` | `<0\|1>` | 下向き ToF のサンプル出力を停止（1）/再開（0）する故障注入。停止中はチップモデルが「データ準備完了」を返さない（新サンプル無し・I2C エラー無し）ので、ファームからはセンサが出力停止したように見える（`tof_silent_*.scn`、`detailed_design.md` §3 注12） |
 | `tof_invalid` | `<0\|1>` | 下向き ToF の全サンプルを無効（「目標なし」、1）にする / 元に戻す（0）故障注入。サンプルは時間どおり届き続けるので出力停止ではない: センサが測れない床材（`tof_invalid_*.scn`、`tof_recover_invalid_first.scn`、`detailed_design.md` §3 注12） |
 | `tof_deadzone` | `<0\|1>` | 下向き ToF の近距離の不感帯のモデルを切る（0）/ 入れる（1）。**既定は 1**（2026-11-09 から）: 真の距離が 31 mm 未満では反射パルスが無く「目標なし」（無効）になる。実機のセンサは床の上で無効を返し、TAKEOFF に入った後 186〜344 ms 無効のまま、距離 0.031〜0.032 m の最初の有効サンプルに至るため（実機ログ 3 本）。SILS の機体モデルは床の 21 mm 上で静止するので、実機と同じく地上で無効を返し、10 mm 上がると有効になる。0 にすると 2026-11-09 より前の挙動（床まで真の距離を測る）。降下の最後の数 cm で読みが無効になるため、柔らかい接地の ToF 着陸は、不感帯での接地（有効な読みの後に無効サンプルだけが 0.2 s 続く）で終わる（`landing_dead_zone.scn`、`detailed_design.md` §3 注7）。`alt_disarm_land.scn` は 0 にして DISARM の振り分けだけを検証する |
+| `battery` | `<volts>` または `model` | 電池の端子電圧 [V] を、実行のこの時点から `<volts>`（0 超 5 以下）に保つ: モータの電源（推力）と、ファームが INA3221 電源モニタで読む電圧の両方がこの値になり、電流による電圧降下とクーロンカウントは止まる。`model` で保持を解き、電池モデル（既定の SILS は有効）が再び決める。弱った電池の電圧が、選んだ時刻に危険閾値（`critical_battery_v` = 3.0 V）を下回る状況の模擬（`battery_emergency_*.scn`、`detailed_design.md` §3 注14）。2.99 V は危険閾値のすぐ下で、モータの推力はほぼそのまま残る。この事象を使わないシナリオの出力は、バイト単位で変わらない |
 | `param` | `<name> <value>` | 実行のこの時点でファームのパラメータを 1 つ、型に正しいセッタで設定する（範囲検証あり。変更コールバックが呼ばれ、制御器のパラメータは再読込される）。ファームが頼る値に誤差を、それ以前の飛行を変えずに注入する。`t = 0` で使えば起動時の値の上書き（学習を切る、見積もりをずらす）になる（`tof_silent_est_high.scn`: `hover.thrust_corr` を真のホバーより高く、`hover.thrust.learn 0`）。注意: 飛行中に推力の見積もりを変えると、制御器が 1 周期分その値で推力を出す |
 | `bias` | `<ax> <ay> <az> <gx> <gy> <gz>` | 生IMUに決定論的なバイアスを注入（機体 FRD＝前右下座標系）。加速度 [m/s²]・角速度 [rad/s] |
 | `handle` | `<carry_alt_m> <place_x> <place_y> <lift_ms> <carry_ms> <place_ms>` | 人が持ち上げて運ぶ動作の模擬（lift→right→carry→place）。`carry_alt_m>0`、各所要時間 `>0` 必須。タイムライン上は瞬時に作動し、その後の disarmed な `rc` 保持が実時間を占有する |
@@ -94,7 +95,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 - `rc`: `hold_ms` ぶん先（0 なら単発フレームで時間を消費しない）
 - `rc_ramp`: 掃引に要するフレーム数 × 周期
 - `wind`: `dur_ms` を指定したときだけその時間ぶん（突風パルス）。省略時（定常ステップ）は瞬時
-- それ以外（`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`param`/`handle`/`btn`）: タイムライン上は瞬時（0ms）
+- それ以外（`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`battery`/`param`/`handle`/`btn`）: タイムライン上は瞬時（0ms）
 
 ## 3. `.expect` の書き方
 
@@ -339,6 +340,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 | `tof_silent` | `<0\|1>` | Fault injection: stops (1) / resumes (0) the downward ToF's sample output. While stopped the chip model never reports "data ready" (no new sample, no I2C error), so the firmware sees the sensor go silent (`tof_silent_*.scn`, `detailed_design.md` §3 note 12) |
 | `tof_invalid` | `<0\|1>` | Fault injection: makes every downward-ToF sample invalid ("no target", 1) / restores it (0). The samples keep arriving on time, so this is NOT a silence: a surface the sensor cannot range (`tof_invalid_*.scn`, `tof_recover_invalid_first.scn`, `detailed_design.md` §3 note 12) |
 | `tof_deadzone` | `<0\|1>` | Turns the downward ToF's close-range dead zone model off (0) / on (1). **The default is 1** (since 2026-11-09): a true distance below 31 mm has no return pulse and reads "no target" (invalid), because the real sensor reads invalid on the floor, stays invalid for 186-344 ms after the TAKEOFF entry and then returns its first valid sample at 0.031-0.032 m (3 real flight logs). The SILS plant rests 21 mm above the floor, so it reads invalid on the ground as the real craft does, and valid after rising 10 mm. 0 = the behaviour before 2026-11-09 (the true distance down to the floor). Because the reading goes invalid in the last centimetres of a descent, a soft ToF landing ends by the dead-zone touchdown (only invalid samples for 0.2 s after a valid reading near the floor; `landing_dead_zone.scn`, `detailed_design.md` §3 note 7). `alt_disarm_land.scn` sets 0 to test only the routing of the DISARM |
+| `battery` | `<volts>` or `model` | Holds the battery terminal voltage [V] at `<volts>` (above 0, at most 5) from this point of the run: both the motors' supply (the thrust) and the voltage that the firmware reads on the INA3221 power monitor take this value, and the current-dependent voltage drop and the Coulomb count stop. `model` releases the hold and the battery model (enabled by default in the SILS) decides again. Models a weak pack whose voltage falls below the critical threshold (`critical_battery_v` = 3.0 V) at a chosen time (`battery_emergency_*.scn`, `detailed_design.md` §3 note 14). 2.99 V is just below the critical threshold, with almost the full motor thrust left. A scenario that does not use the event is not affected by it (its output is byte-identical) |
 | `param` | `<name> <value>` | Sets one firmware parameter at this point of the run through the type-correct setter (range-validated; the change callback fires, so a controller parameter is reloaded). Injects an ERROR into a value the firmware relies on without changing the flight before it. At `t = 0` it overrides a boot value (switch learning off, shift an estimate: `tof_silent_est_high.scn` sets `hover.thrust_corr` above the true hover with `hover.thrust.learn 0`). Note: changing the thrust estimate mid-flight makes the controller output thrust from the new value for a cycle |
 | `bias` | `<ax> <ay> <az> <gx> <gy> <gz>` | Injects a deterministic raw IMU bias (body FRD = Forward-Right-Down). Accel [m/s²], gyro [rad/s] |
 | `handle` | `<carry_alt_m> <place_x> <place_y> <lift_ms> <carry_ms> <place_ms>` | Simulates a human hand-carry maneuver (lift→right→carry→place). `carry_alt_m>0` and each duration `>0` are required. Fires instantaneously on the timeline; a following disarmed `rc` hold occupies the real time it takes |
@@ -373,7 +375,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 - `rc`: `hold_ms` later (0 consumes no time — single frame)
 - `rc_ramp`: frame count needed for the sweep × its period
 - `wind`: only if `dur_ms` was given (gust pulse); a sustained step (no `dur_ms`) is instantaneous
-- everything else (`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`param`/`handle`/`btn`): instantaneous (0 ms) on the timeline
+- everything else (`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`battery`/`param`/`handle`/`btn`): instantaneous (0 ms) on the timeline
 
 ## 3. Writing a `.expect` file
 

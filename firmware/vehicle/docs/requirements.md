@@ -243,6 +243,7 @@ Tello SDK 互換 API の `flip l/r/f/b`（宙返り）に対応する（2026-09-
 | 異常角速度 | 800 deg/s × 連続2回 | 自動DISARM（状態 FLIP の間は無視。宙返りの回転は墜落ではないため。衝撃 3.0G の判定は FLIP 中も有効） |
 | 通信途絶 | 500ms | ホバリング維持3秒 → 自動着陸 |
 | LiPo低電圧 | ≤3.4V | ブザー警告のみ |
+| LiPo危険電圧 | <3.0V | 空中なら自動着陸（宙返りの間は FLYING に戻った後）。離陸の最中（TAKEOFF）は、健全な下向き ToF が機体は床を離れたと示している（接地の帯 5 cm を超える有効な高さを読んでいる）ときだけ自動着陸し、示していなければすぐモータを止める（DISARM）。床の上で始めた着陸は機体を浮かせうるため。ToF が出力停止のときは自動着陸。地上と着陸中は変化なし |
 | USB給電 | ≤3.3V | ARM禁止 |
 | 地上での姿勢推定と重力の不一致 | 暫定: 10° × 0.5s 継続（LPF 1.0s、`safety.tilt_check.*`） | 判定が通るまで ARM禁止（IDLE_GROUND）・自動DISARM（ARMED_GROUND）・推定器リセットで再水平化（再校正はしない、detailed_design §3 注10） |
 | 下向き ToF の出力停止（エピソード） | 新サンプルが 0.3 s（候補値）来ない、または空中で無効サンプルだけが続く（飛行中は 0.5 s、離陸中は上昇 5 cm の後 0.15 s、LANDING は最後の有効な高さが 0.10 m 以上のとき。候補値。地上の無効は正常）。**終わりは「サンプルが届いた」でなく「推定器が ToF を取り込み直した」**（小さなイノベーションでの採用が 10 回連続、かつ ToF が 1 s 生存） | ARMED_GROUND は DISARM。**ALT_HOLD・POS_HOLD・自動離陸は自動着陸（LANDING）**。降下は ToF なし: 推力の上限は 支持推力（加速度計で較正）× 0.95 で重さ未満、速度推定が何であれ上昇できない。速度推定を信用できる間（最後のリセットから 2 s）は速度ループ（PI）、超えたら上限の一定推力。降下 5 s 後から推力を下げる後半の低下と、LANDING に入ってから 10 s（候補値）の時間切れもある。接地は加速度計（衝撃のあとの静止、または床が機体を支えている。ToF 出力停止中の LANDING での 3 G の衝撃は非常でなく接地）。**ACRO・STABILIZE は強制着陸しない**（LED・音で警告、パイロットが飛び続ける）。エピソード中は ARM（**ACRO を含む全モード**）と ALT_HOLD・POS_HOLD への切り替えを拒否（ACRO・STABILIZE の手動飛行は ToF 故障でも可能だが、着陸後の次の ARM は拒否）。飛行中に拒否したスイッチのエッジは消費し、復帰後はパイロットが入れ直す。FLIP 中に始まったエピソードは FLIP 終了時に判断する。failsafe_status が 1 s 更新されなければ読む側は出力停止と扱う（detailed_design §3 注12） |
@@ -512,6 +513,7 @@ Task mapping for new responsibilities (Failsafe, Takeoff/Landing Manager, etc.) 
 | Abnormal angular rate | 800 deg/s × 2 consecutive | Auto DISARM (ignored while in state FLIP, since the flip's rotation is not a crash; the 3.0G impact check stays active during FLIP) |
 | Communication loss | 500ms | Hover hold 3s → auto landing |
 | LiPo low voltage | ≤3.4V | Buzzer warning only |
+| LiPo critical voltage | <3.0V | Automatic landing when airborne (after the return to FLYING during a flip). During the takeoff (TAKEOFF) the craft lands only if the healthy downward ToF shows that it is off the floor (valid heights above the 5 cm ground band); without that evidence the motors are cut at once (DISARM), because a landing that starts on the floor can float the craft up. A silent ToF lands. No change on the ground and while landing |
 | USB power | ≤3.3V | ARM prohibited |
 | Attitude estimate vs gravity on the ground | Provisional: 10 deg for 0.5 s (1.0 s LPF, `safety.tilt_check.*`) | ARM prohibited until the check passes (IDLE_GROUND), auto-DISARM (ARMED_GROUND), re-level by estimator reset (no recalibration; detailed_design §3 note 10) |
 | ESKF divergence | Position 100m or velocity 50m/s | ESKF reset |

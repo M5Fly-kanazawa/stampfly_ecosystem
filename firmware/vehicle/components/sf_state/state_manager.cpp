@@ -749,45 +749,48 @@ void StateManager::handleCommLostAlert(const SystemAlert& alert)
     }
 }
 
-/// LOW_BATTERY: warning is a notification, emergency lands (deferred during FLIP).
-/// LOW_BATTERY: 警告は通知のみ、危険電圧は着陸（FLIP 中は保留）。
+/// LOW_BATTERY: a WARNING is a notification; an EMERGENCY is decided by decideBatteryEmergency() (takeoff_policy.hpp).
+/// LOW_BATTERY: WARNING は通知のみ。EMERGENCY は decideBatteryEmergency()（takeoff_policy.hpp）が判断する。
+/// @design detailed_design.md §3.1 — battery EMERGENCY rows (TAKEOFF: LANDING with evidence of the air, DISARM without; FLYING: LANDING; FLIP: deferred) [OK]
+/// @design architecture.md INV-3 — detection in ImuTask (tof_health.floor_leaving), decision in takeoff_policy.hpp, execution here [OK]
 void StateManager::handleLowBatteryAlert(const SystemAlert& alert)
 {
-    // WARNING (3.4V): notification only (buzzer via NotifyTask).
-    // EMERGENCY (3.0V): the pack is about to sag below the cutoff — land
-    // NOW. Same Landing-verb path as the comm-loss auto-land (the
-    // onEnter(LANDING) callback engages the controller's descent).
-    // The EMERGENCY is a standing level: the failsafe raises it on entry into the region below
-    // the critical voltage and again about every 5 s while the voltage stays there
-    // (battery_alert_policy.hpp), so an alert consumed in a state that ignores it (on the ground,
-    // ARMED_GROUND) does not leave a later flight without it. Repeated alerts are harmless here:
-    // in LANDING and on the ground they only log, and the FLIP flag below is idempotent.
-    // FLIP window exception (plan §3.5/§9 item 2, §4.3 FLIP row): the next re-raise can be seconds
-    // away, and transitioning FLIP → LANDING directly here would also skip the FLIP → FLYING
-    // onExit (position/altitude re-capture). So we defer explicitly: set a pending flag instead of
-    // transitioning, and notifyFlipComplete() re-applies this same rule once back in FLYING.
-    // WARNING（3.4V）: 通知のみ（ブザーは NotifyTask）。
-    // EMERGENCY（3.0V）: パックがカットオフ割れ寸前 — 即着陸。通信断の
-    // 自動着陸と同じ Landing verb 経路（onEnter(LANDING) コールバックが
-    // 制御器の降下を発動する）。
-    // EMERGENCY は継続するレベル: failsafe は危険電圧より下の領域へ入ったときに発報し、電圧がそこに
-    // 留まる間は約 5 s ごとに再発報する（battery_alert_policy.hpp）。無視する状態（地上、
-    // ARMED_GROUND）で消費されたアラートが、後の飛行から失われることはない。繰り返し届いても
-    // 害はない: LANDING と地上ではログ出力だけで、下の FLIP の保留フラグは冪等。
-    // FLIP 窓の例外（plan §3.5/§9 項目2、§4.3 FLIP 行）: 次の再発報まで数秒かかりうるうえ、
-    // ここで FLIP → LANDING に直接遷移すると FLIP → FLYING の onExit（位置/高度
-    // 目標の取り直し）も飛ばす。よって明示的に保留する: 遷移せずフラグを
-    // 立て、notifyFlipComplete() が FLYING 復帰後に同じ規則を再適用する。
-    const bool emergency =
-        static_cast<AlertSeverity>(alert.severity) == AlertSeverity::EMERGENCY;
-    if (emergency && state_ == FlightState::FLIP) {
+    // WARNING (3.4 V): notification only (the buzzer is NotifyTask's).
+    // EMERGENCY (3.0 V): the pack is about to sag below the cutoff. The EMERGENCY is a standing level: the failsafe raises it on
+    // entry into the region below the critical voltage and again about every 5 s while the voltage stays there
+    // (battery_alert_policy.hpp), so an alert consumed in a state that only logs it (the ground, LANDING) does not leave a later
+    // flight without it. In FLIP the landing is deferred (a flag; notifyFlipComplete() lands once FLYING is back), because
+    // FLIP -> LANDING directly would skip the FLIP -> FLYING onExit (position / altitude re-capture).
+    // WARNING（3.4 V）: 通知のみ（ブザーは NotifyTask）。
+    // EMERGENCY（3.0 V）: パックがカットオフを割る寸前。EMERGENCY は継続するレベル: failsafe は危険電圧より下の領域へ入ったときに
+    // 発報し、電圧がそこに留まる間は約 5 s ごとに再発報する（battery_alert_policy.hpp）ので、ログ出力だけの状態（地上、LANDING）で
+    // 消費されたアラートが、後の飛行から失われることはない。FLIP では着陸を保留する（フラグ。FLYING に戻ったら notifyFlipComplete() が
+    // 着陸させる）: FLIP → LANDING に直接遷移すると、FLIP → FLYING の onExit（位置・高度目標の取り直し）を飛ばすため。
+    if (static_cast<AlertSeverity>(alert.severity) != AlertSeverity::EMERGENCY) {
+        ESP_LOGW(TAG, "Low battery warning");
+        return;
+    }
+    const bool tof_silent = isToFSilent();
+    BatteryEmergencyFacts facts;
+    facts.state         = state_;
+    facts.tof_silent    = tof_silent;
+    facts.floor_leaving = tof_health.latest().floor_leaving && !tof_silent;   // detected by ImuTask (INV-3), only a healthy ToF counts / ImuTask が検出（INV-3）。健全な ToF だけが数える
+    switch (decideBatteryEmergency(facts)) {
+    case BatteryEmergencyAction::Defer:
         battery_emergency_pending_ = true;
         ESP_LOGW(TAG, "Battery emergency deferred (FLIP in progress)");
-    } else if (emergency && isAirborne(state_) && state_ != FlightState::LANDING) {
+        break;
+    case BatteryEmergencyAction::Land:
         ESP_LOGE(TAG, "Battery emergency → LANDING");
         transition(FlightState::LANDING);
-    } else {
-        ESP_LOGW(TAG, "Low battery warning");
+        break;
+    case BatteryEmergencyAction::CutMotors:
+        ESP_LOGE(TAG, "Battery emergency in TAKEOFF without evidence of the air (the healthy ToF has not shown the craft off the floor) → DISARM");
+        requestDisarm();   // in TAKEOFF a DISARM is the motor cut / TAKEOFF での DISARM はモータ停止
+        break;
+    case BatteryEmergencyAction::LogOnly:
+        ESP_LOGW(TAG, "Battery emergency: no transition in %s", flightStateName(state_));
+        break;
     }
 }
 

@@ -1,0 +1,20 @@
+# battery_emergency_flying.scn — the battery EMERGENCY while FLYING in ALT_HOLD: LANDING (the rule that no scenario ran before)
+#                                ALT_HOLD の FLYING 中の電池の EMERGENCY: LANDING（これまでシナリオでは確かめられていなかった規則）
+#
+# ALT_HOLD auto-takeoff, the TAKEOFF completes at about 9.2 s (FLYING at 0.5 m), 3 s of hover, then the pack voltage is held at 2.99 V (event `battery`). Spec under test (detailed_design.md §3.1,
+# "電池の EMERGENCY" rows):
+#  1. In FLYING the EMERGENCY lands the craft (FLYING -> LANDING) whatever the ToF says: the evidence of the air is read only in TAKEOFF.
+#  2. The LANDING ends by the touchdown (LANDING -> IDLE_GROUND), gently, and the motors stop on the floor.
+#
+# ALT_HOLD の自動離陸、TAKEOFF は約 9.2 s に完了（0.5 m で FLYING）、3 s のホバーの後に電池電圧を 2.99 V に保つ（事象 `battery`）。検証する仕様（detailed_design.md §3.1 の「電池の EMERGENCY」の行）:
+#  1. FLYING の EMERGENCY は、ToF の事実に依らず機体を着陸させる（FLYING → LANDING）: 空中の証拠を読むのは TAKEOFF だけ。
+#  2. LANDING は接地で終わり（LANDING → IDLE_GROUND）、静かに、モータは床の上で止まる。
+#
+# Run: sf sils scenario simulator/sils/scenarios/battery_emergency_flying.scn --target vehicle --duration 24000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED (to 7.5 s)
+   +    rc         2048  2048   2048    2048  1     5500      50        1              # C: ARM in ALT_HOLD (7.5 s), auto-takeoff, FLYING at about 9.2 s, hover (to 13.0 s)
+   +    battery    2.99                                                                # D: 13.0 s — the pack falls just below the critical voltage
+   +    rc         2048  2048   2048    2048  1     11000     50        1              # E: nothing more from the pilot (to 24.0 s)

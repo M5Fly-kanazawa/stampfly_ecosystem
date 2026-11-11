@@ -18,7 +18,7 @@
  * できないので、ここでの安全判断は、加速度計が見た「床を離れた」を判定条件にしない。ここで使う「床にいる」証拠は、健全な ToF が示す「積極的な」もの
  * （地面の近くの有効な読みで、増えていない: TakeoffFloorWatch）だけ。
  *
- * Five decisions, all pure functions of their facts so that every cell of the normative table (detailed_design.md §3.1, INV-4) can be checked on the host
+ * Six decisions, all pure functions of their facts so that every cell of the normative table (detailed_design.md §3.1, INV-4) can be checked on the host
  * (test/test_takeoff_policy.cpp). StateTask / StateManager execute the result (INV-3): this header only DECIDES.
  *  1. decideTakeoff(): TAKEOFF -> FLYING (complete), TAKEOFF -> IDLE_GROUND (abort, DISARM), TAKEOFF -> LANDING (the latch that does not release) or stay.
  *       manual (ACRO / STABILIZE): complete when the ToF-based airborne verdict says so (while a ToF-silence episode is in progress the verdict is "armed = not
@@ -44,8 +44,12 @@
  *     takeoff threshold, OR the healthy ToF shows the craft off the floor (valid readings above kTakeoffGroundBandM, uninterrupted for kAutoTakeoffFloorHoldUs): a craft that rises with
  *     the throttle at or below the threshold (a gust, a fresh battery, ground effect) is in the air, and ARMED_GROUND is a state of the floor (it has no comm-loss landing, no battery
  *     landing, and a silent ToF cuts its motors). The evidence is POSITIVE too: a silent, invalid or in-band ToF never starts a TAKEOFF, the throttle alone decides then.
+ *  6. decideBatteryEmergency(): what the battery EMERGENCY (the voltage is below the critical threshold) does in each state. FLYING lands; FLIP defers the landing until FLYING is back; in TAKEOFF the craft
+ *     lands only when it has been shown to be OFF the floor (TakeoffFloorWatch::leaving(): the healthy ToF reads valid heights above kTakeoffGroundBandM now), or when the ToF is silent (the blind descent
+ *     of the LANDING cannot lift a craft, so nothing is lost on the floor and the craft is not dropped in the air); otherwise the motors are cut at once: a LANDING that starts on the floor can float the
+ *     craft up (detailed_design.md §3.1), and a ToF that is healthy but reads invalid (the real floor reads invalid in the dead zone) or reads in the band is no evidence of the air. The ground and LANDING only log.
  *
- * 5 つの判断で、いずれも事実の純関数なので、規範表（detailed_design.md §3.1、INV-4）の全セルをホストで検証できる（test/test_takeoff_policy.cpp）。結果の実行は
+ * 6 つの判断で、いずれも事実の純関数なので、規範表（detailed_design.md §3.1、INV-4）の全セルをホストで検証できる（test/test_takeoff_policy.cpp）。結果の実行は
  * StateTask / StateManager（INV-3）で、このヘッダは「判断」だけをする。
  *  1. decideTakeoff(): TAKEOFF → FLYING（完了）、TAKEOFF → IDLE_GROUND（中止、DISARM）、TAKEOFF → LANDING（解けないラッチ）、または留まる。
  *       手動（ACRO / STABILIZE）: ToF による空中の判定が立ったら完了（ToF 出力停止のエピソード中、この判定は「ARM 中 = 接地していない」で、ImuTask が立てる:
@@ -69,6 +73,10 @@
  *     または健全な ToF が機体は床を離れたと示す（kTakeoffGroundBandM を超える有効な読みが、途切れずに kAutoTakeoffFloorHoldUs 続く）。スロットルが閾値以下のまま浮く機体（突風・新しい電池・
  *     地面効果）は空中にいて、ARMED_GROUND は床の状態（通信断の着陸も電池の着陸も無く、ToF が出力停止するとモータを止める）。証拠はここでも「積極的な」もの:
  *     出力停止・無効・帯の中の ToF は TAKEOFF を始めさせず、そのときはスロットルだけが決める。
+ *  6. decideBatteryEmergency(): 電池の EMERGENCY（電圧が危険閾値未満）が各状態で何をするか。FLYING は着陸し、FLIP は FLYING に戻るまで着陸を保留する。TAKEOFF は、機体が床を「離れた」と示されている
+ *     （TakeoffFloorWatch::leaving(): 健全な ToF が kTakeoffGroundBandM を超える有効な高さを今読んでいる）か、ToF が出力停止のときだけ着陸する（LANDING の ToF なしの降下は機体を浮かせられないので、床の上で
+ *     失うものも、空中で機体を落とすこともない）。それ以外はすぐモータを止める: 床の上で始めた LANDING は機体を浮かせうる（detailed_design.md §3.1）うえ、無効サンプルを返す ToF（実際の床は不感帯で
+ *     無効を返す）や帯の中を読む ToF は、空中にいる証拠ではない。地上と LANDING はログ出力だけ。
  *
  * @design architecture.md INV-3 — decision here, execution in StateTask / StateManager          [OK]
  * @design architecture.md INV-4 — every (state x input) cell is in the table                    [OK]
@@ -131,6 +139,42 @@ inline constexpr TakeoffAction decideTakeoff(const TakeoffFacts& facts)
 inline constexpr bool decideCommLossLanding(FlightState state, bool grace_elapsed)
 {
     return grace_elapsed && (state == FlightState::FLYING || state == FlightState::TAKEOFF);
+}
+
+/// What StateManager does with a battery EMERGENCY alert. 電池の EMERGENCY アラートに StateManager がすること。
+enum class BatteryEmergencyAction : uint8_t {
+    LogOnly,     // no transition: LANDING already, or on the ground (the alert is re-raised while the voltage stays low) / 遷移なし: 既に LANDING、または地上（電圧が低いままなら再発報される）
+    Defer,       // FLIP: set the pending flag; the landing follows FLIP -> FLYING / FLIP: 保留フラグを立てる。着陸は FLIP → FLYING の後
+    Land,        // -> LANDING (the craft is, or may be, in the air) / LANDING（機体は空中にいる、またはいる可能性がある）
+    CutMotors,   // TAKEOFF without evidence of the air -> IDLE_GROUND by DISARM / 空中の証拠が無い TAKEOFF → DISARM で IDLE_GROUND
+};
+
+/// The facts decideBatteryEmergency() needs. decideBatteryEmergency() が要る事実。
+struct BatteryEmergencyFacts {
+    FlightState state;          ///< the flight state / 飛行状態
+    bool        tof_silent;     ///< the downward-ToF silence verdict (failsafe_status.tof_silent) / 下向き ToF の出力停止の判定
+    bool        floor_leaving;  ///< TakeoffFloorWatch::leaving() of a healthy ToF: the craft is off the floor now (tof_health.floor_leaving) / 健全な ToF による TakeoffFloorWatch::leaving(): 機体は今、床を離れている
+};
+
+/// The response to a battery EMERGENCY (rules in the file comment, item 6). Evidence of the air is POSITIVE (the healthy ToF reads valid heights above the ground band now); its absence is not evidence of
+/// the floor either, so a silent ToF lands: the blind descent starts below the supporting thrust and cannot lift the craft, on the floor or in the air. A ToF that is healthy but has shown no height above the band
+/// (invalid in the dead zone of the real floor, or in the band) cuts the motors: a LANDING there can float a craft that is on the floor (detailed_design.md §3.1).
+/// 電池の EMERGENCY への応答（規則はファイルの説明の項目 6）。空中の証拠は「積極的な」もの（健全な ToF が接地の帯より上の有効な高さを今読む）。その不在は床の証拠でもないので、出力停止の ToF は着陸する:
+/// ToF なしの降下は支持推力より下から始まり、床の上でも空中でも機体を浮かせられない。健全だが帯より上の高さを示していない ToF（実際の床の不感帯で無効、または帯の中）はモータを止める:
+/// そこでの LANDING は、床の上の機体を浮かせうる（detailed_design.md §3.1）。
+/// @design detailed_design.md §3.1 — battery EMERGENCY rows (TAKEOFF: evidence of the air -> LANDING, else DISARM; FLYING -> LANDING; FLIP deferred; LANDING / ground log only) [OK]
+inline constexpr BatteryEmergencyAction decideBatteryEmergency(const BatteryEmergencyFacts& facts)
+{
+    switch (facts.state) {
+    case FlightState::FLIP:
+        return BatteryEmergencyAction::Defer;
+    case FlightState::FLYING:
+        return BatteryEmergencyAction::Land;
+    case FlightState::TAKEOFF:
+        return (facts.floor_leaving || facts.tof_silent) ? BatteryEmergencyAction::Land : BatteryEmergencyAction::CutMotors;
+    default:
+        return BatteryEmergencyAction::LogOnly;   // LANDING, ARMED_GROUND, IDLE_GROUND, IDLE_HELD, INIT / LANDING・ARMED_GROUND・IDLE_GROUND・IDLE_HELD・INIT
+    }
 }
 
 /// True when the touchdown verdict of ImuTask (system_status.landing) ends the LANDING in force: only a verdict that ImuTask made WHILE this LANDING was in force counts. ImuTask stamps every status with the

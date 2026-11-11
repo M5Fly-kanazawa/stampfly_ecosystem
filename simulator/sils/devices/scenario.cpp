@@ -46,7 +46,7 @@ extern "C" void sils_scenario_register_api_inject(void (*fn)(const char*))
     g_api_inject_fn = fn;
 }
 
-enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api, TofSilent, TofInvalid, TofDeadZone, Param };
+enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api, TofSilent, TofInvalid, TofDeadZone, Param, Battery };
 
 // Which injector an "rc"-family event uses: the paired transmitter (rc), a
 // different non-paired one exercised AFTER bind (rc_foreign — crosstalk test), or
@@ -112,6 +112,10 @@ struct Event {
     // param: firmware parameter name (text) and value, applied mid-run (fault / error injection).
     // param: ファームのパラメータ名（text）と値。実行中に適用する（故障・誤差の注入）。
     double param_value = 0.0;
+
+    // battery: the held battery terminal voltage [V] (> 0), or 0 = release the hold (the battery model decides again).
+    // battery: 保持する電池端子電圧 [V]（0 より大きい）。0 は保持の解除（電池モデルが再び決める）。
+    float battery_v = 0.0f;
 
     // handle (P8): physical handling maneuver — carry altitude [m up], placement
     // x/y [NED m], and lift/carry/place phase durations [ms]. Instantaneous on the
@@ -296,6 +300,38 @@ int parseParamChannel(const std::string& ch, std::istringstream& iss, Event& e, 
     return 1;
 }
 
+// Parse the `battery` channel (same return convention as parseTofChannel()).
+// `battery` チャネルを解釈する（戻り値の約束は parseTofChannel() と同じ）。
+int parseBatteryChannel(const std::string& ch, std::istringstream& iss, Event& e, const char* path, int lineno)
+{
+    if (ch != "battery") {
+        return 0;
+    }
+    // battery <volts|model> — hold the battery terminal voltage [V] at this value from this point of the run
+    // (the motors' supply and the power monitor's reading; the Coulomb count stops), or `model` to release it
+    // so that the battery model decides again. Models a weak pack whose voltage falls below the critical
+    // threshold (battery_alert_policy.hpp) at a chosen time. A scenario without this event is unchanged.
+    // battery <volts|model> — 実行のこの時点から、電池の端子電圧 [V] をこの値に保つ（モータの電源と電源
+    // モニタの読み。クーロンカウントは止まる）。`model` で保持を解き、電池モデルが再び決める。弱った電池の
+    // 電圧が選んだ時刻に危険閾値（battery_alert_policy.hpp）を下回る状況を模擬する。この事象を使わない
+    // シナリオは変わらない。
+    e.ch = Channel::Battery;
+    std::string word;
+    if (!(iss >> word)) {
+        err(path, lineno, "battery needs <volts|model>"); return -1;
+    }
+    if (word == "model") {
+        e.battery_v = 0.0f;
+        return 1;
+    }
+    char* end = nullptr;
+    e.battery_v = std::strtof(word.c_str(), &end);
+    if (end == word.c_str() || *end != '\0' || !(e.battery_v > 0.0f) || e.battery_v > 5.0f) {
+        err(path, lineno, "battery <volts> must be a number in (0, 5] V (or `model`)"); return -1;
+    }
+    return 1;
+}
+
 // Parse the `handle` channel (same return convention as parseTofChannel()).
 // `handle` チャネルを解釈する（戻り値の約束は parseTofChannel() と同じ）。
 int parseHandleChannel(const std::string& ch, std::istringstream& iss, Event& e, const char* path, int lineno)
@@ -335,6 +371,8 @@ int parseExtraChannel(const std::string& ch, std::istringstream& iss, Event& e, 
     int result = parseTofChannel(ch, iss, e, path, lineno);
     if (result != 0) return result;
     result = parseParamChannel(ch, iss, e, path, lineno);
+    if (result != 0) return result;
+    result = parseBatteryChannel(ch, iss, e, path, lineno);
     if (result != 0) return result;
     return parseHandleChannel(ch, iss, e, path, lineno);
 }
@@ -426,6 +464,20 @@ void applyHandleEvent(const Event& e)
     sils_emu_record_note("handle", note);
 }
 
+// Apply a `battery` event: hold the Plant's battery terminal voltage, or release it.
+// `battery` の事象を適用する: Plant の電池端子電圧を保つ、または解く。
+void applyBatteryEvent(const Event& e)
+{
+    sils_board_hold_battery_voltage(e.battery_v);
+    char note[64];
+    if (e.battery_v > 0.0f) {
+        std::snprintf(note, sizeof(note), "%.3f V (held)", e.battery_v);
+    } else {
+        std::snprintf(note, sizeof(note), "model (hold released)");
+    }
+    sils_emu_record_note("battery", note);
+}
+
 // Apply the events beyond rc / key / api / wind / fault / bias / btn (see parseExtraChannel()).
 // rc / key / api / wind / fault / bias / btn の他の事象を適用する（parseExtraChannel() 参照）。
 void applyExtraEvent(const Event& e)
@@ -436,6 +488,7 @@ void applyExtraEvent(const Event& e)
         case Channel::TofDeadZone: applyTofEvent(e);    break;
         case Channel::Param:       applyParamEvent(e);  break;
         case Channel::Handle:      applyHandleEvent(e); break;
+        case Channel::Battery:     applyBatteryEvent(e); break;
         default:                   break;
     }
 }
@@ -821,6 +874,7 @@ void sils_scenario_driver_task(void* /*arg*/)
             case Channel::TofInvalid:
             case Channel::TofDeadZone:
             case Channel::Param:
+            case Channel::Battery:
             case Channel::Handle:
                 applyExtraEvent(e);   // ToF fault injection, param, handle / ToF の故障注入、param、handle
                 break;

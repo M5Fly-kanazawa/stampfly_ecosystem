@@ -41,7 +41,10 @@
  *  Alert rows: COMM_LOST                                 comm_loss_lands_after_the_hover_grace_from_takeoff_and_flying,
  *                                                        comm_loss_before_flight_does_not_land_a_later_flight,
  *                                                        comm_loss_in_flip_waits_for_flying
- *  Alert rows: LOW_BATTERY                               battery_emergency_lands_takeoff_and_flying_only,
+ *  Alert rows: LOW_BATTERY                               battery_emergency_follows_the_table_for_every_state_and_fact,
+ *                                                        battery_emergency_in_takeoff_follows_the_evidence_in_every_mode,
+ *                                                        battery_emergency_in_flying_lands_in_every_mode,
+ *                                                        battery_emergency_on_the_floor_ends_in_idle_ground_with_the_mode_reset,
  *                                                        battery_warning_changes_nothing,
  *                                                        battery_emergency_in_flip_is_deferred_until_flying,
  *                                                        deferred_battery_emergency_is_dropped_when_flip_ends_on_the_ground
@@ -234,6 +237,15 @@ public:
     {
         tof_silent_ = silent;
         publishFailsafeStatus();
+    }
+
+    /// Publish the ToF fact ImuTask detects in TAKEOFF: the healthy ToF reads valid heights above the ground band now (tof_health.floor_leaving).
+    /// ImuTask が TAKEOFF で検出する ToF の事実を発行する: 健全な ToF が接地の帯より上の有効な高さを今読んでいる（tof_health.floor_leaving）。
+    void setFloorLeaving(bool leaving)
+    {
+        ToFHealth health = {};
+        health.floor_leaving = leaving;
+        tof_health.publish(health);
     }
 
     void publishFailsafeStatus()
@@ -954,17 +966,83 @@ TEST(pending_comm_loss_is_dropped_on_the_ground)
 // アラート: LOW_BATTERY
 // =============================================================================
 
-TEST(battery_emergency_lands_takeoff_and_flying_only)
+/// Expected outcome of a battery EMERGENCY, written out from the table (detailed_design.md §3.1, "電池の EMERGENCY" rows).
+/// 電池の EMERGENCY の期待される結果を、表から書き下したもの（detailed_design.md §3.1 の「電池の EMERGENCY」の行）。
+static FlightState expectedAfterBatteryEmergency(FlightState state, bool tof_silent, bool floor_leaving)
+{
+    switch (state) {
+    case FlightState::TAKEOFF:
+        return (floor_leaving || tof_silent) ? FlightState::LANDING : FlightState::IDLE_GROUND;   // evidence of the air lands, none cuts the motors / 空中の証拠があれば着陸、無ければモータ停止
+    case FlightState::FLYING:
+        return FlightState::LANDING;
+    default:
+        return state;   // FLIP defers, LANDING is already landing, the ground and INIT only log / FLIP は保留、LANDING は既に着陸、地上と INIT はログ出力だけ
+    }
+}
+
+TEST(battery_emergency_follows_the_table_for_every_state_and_fact)
 {
     for (FlightState state : kAllStates) {
+        for (bool tof_silent : {false, true}) {
+            for (bool floor_leaving : {false, true}) {
+                Fixture fixture;
+                fixture.driveTo(state);
+                fixture.setToFSilent(tof_silent);
+                fixture.setFloorLeaving(floor_leaving);
+                fixture.raise(AlertType::LOW_BATTERY, AlertSeverity::EMERGENCY);
+                const FlightState expected = expectedAfterBatteryEmergency(state, tof_silent, floor_leaving);
+                ASSERT_MSG(fixture.manager.getState() == expected, "battery emergency in %s (tof_silent=%d, floor_leaving=%d): got %s, wanted %s",
+                           flightStateName(state), tof_silent, floor_leaving, flightStateName(fixture.manager.getState()), flightStateName(expected));
+            }
+        }
+    }
+}
+
+TEST(battery_emergency_in_takeoff_follows_the_evidence_in_every_mode)
+{
+    // TAKEOFF, every flight mode: the healthy ToF shows the craft off the floor -> LANDING; no evidence (not leaving, ToF healthy) -> the motors are cut.
+    // TAKEOFF、全ての飛行モード: 健全な ToF が機体は床を離れたと示す → LANDING。証拠が無い（離れていない、ToF は健全）→ モータ停止。
+    for (FlightMode mode : {FlightMode::ACRO, FlightMode::STABILIZE, FlightMode::ALT_HOLD, FlightMode::POS_HOLD}) {
+        Fixture off_the_floor;
+        off_the_floor.driveTo(FlightState::TAKEOFF, mode);
+        off_the_floor.setFloorLeaving(true);
+        off_the_floor.raise(AlertType::LOW_BATTERY, AlertSeverity::EMERGENCY);
+        ASSERT_MSG(off_the_floor.manager.getState() == FlightState::LANDING, "off the floor in %s: got %s", flightModeName(mode),
+                   flightStateName(off_the_floor.manager.getState()));
+
+        Fixture no_evidence;
+        no_evidence.driveTo(FlightState::TAKEOFF, mode);
+        no_evidence.raise(AlertType::LOW_BATTERY, AlertSeverity::EMERGENCY);
+        ASSERT_MSG(no_evidence.manager.getState() == FlightState::IDLE_GROUND, "no evidence in %s: got %s", flightModeName(mode),
+                   flightStateName(no_evidence.manager.getState()));
+    }
+}
+
+TEST(battery_emergency_in_flying_lands_in_every_mode)
+{
+    // FLYING lands whatever the ToF facts say (the evidence is read only in TAKEOFF).
+    // FLYING は ToF の事実に依らず着陸する（証拠を読むのは TAKEOFF だけ）。
+    for (FlightMode mode : {FlightMode::ACRO, FlightMode::STABILIZE, FlightMode::ALT_HOLD, FlightMode::POS_HOLD}) {
         Fixture fixture;
-        fixture.driveTo(state);
+        fixture.driveTo(FlightState::FLYING, mode);
+        fixture.setFloorLeaving(false);
         fixture.raise(AlertType::LOW_BATTERY, AlertSeverity::EMERGENCY);
-        const bool lands = state == FlightState::TAKEOFF || state == FlightState::FLYING;
-        const FlightState expected = lands ? FlightState::LANDING : state;   // FLIP defers, LANDING is already landing / FLIP は保留、LANDING は既に着陸
-        ASSERT_MSG(fixture.manager.getState() == expected, "battery emergency in %s: got %s", flightStateName(state),
+        ASSERT_MSG(fixture.manager.getState() == FlightState::LANDING, "FLYING in %s: got %s", flightModeName(mode),
                    flightStateName(fixture.manager.getState()));
     }
+}
+
+TEST(battery_emergency_on_the_floor_ends_in_idle_ground_with_the_mode_reset)
+{
+    // The motor cut is the ordinary DISARM of TAKEOFF: IDLE_GROUND, the mode back to STABILIZE (the ground reset), and the re-raised alert changes nothing there.
+    // モータ停止は TAKEOFF の通常の DISARM: IDLE_GROUND、モードは STABILIZE に戻る（接地リセット）。再発報されたアラートは、そこでは何も変えない。
+    Fixture fixture;
+    fixture.driveTo(FlightState::TAKEOFF, FlightMode::ALT_HOLD);
+    fixture.raise(AlertType::LOW_BATTERY, AlertSeverity::EMERGENCY);
+    ASSERT_TRUE(fixture.manager.getState() == FlightState::IDLE_GROUND);
+    ASSERT_TRUE(fixture.manager.getMode() == FlightMode::STABILIZE);
+    fixture.raise(AlertType::LOW_BATTERY, AlertSeverity::EMERGENCY);
+    ASSERT_TRUE(fixture.manager.getState() == FlightState::IDLE_GROUND);
 }
 
 TEST(battery_warning_changes_nothing)

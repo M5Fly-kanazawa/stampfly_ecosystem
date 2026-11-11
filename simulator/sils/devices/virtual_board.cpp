@@ -420,6 +420,12 @@ void sils_board_set_wind(float fx, float fy, float fz)
     g_plant->setWind(sf::math::Vec3{fx, fy, fz});
 }
 
+void sils_board_hold_battery_voltage(float volts)
+{
+    if (g_plant == nullptr) return;
+    g_plant->holdBatteryVoltage(volts);
+}
+
 void sils_board_set_motor_health(int motor, float gain)
 {
     if (g_plant == nullptr) return;

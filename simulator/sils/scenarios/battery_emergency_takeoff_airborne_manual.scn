@@ -1,0 +1,22 @@
+# battery_emergency_takeoff_airborne_manual.scn — the battery EMERGENCY in a manual (STABILIZE) TAKEOFF once the craft has lifted off the floor: LANDING
+#                                                 手動（STABILIZE）の TAKEOFF で、機体が床を離れた後の電池の EMERGENCY: LANDING
+#
+# STABILIZE with the throttle a little higher than in battery_emergency_takeoff_floor_manual.scn: 0.5 s after the TAKEOFF began the craft has lifted a few centimetres (truth height 0.081 m), the healthy ToF
+# reads valid heights above the 5 cm ground band (floor_leaving), and the TAKEOFF is not complete (that needs the ToF-based airborne verdict, above 15 cm). The pack voltage is held at 2.99 V then. Spec under
+# test (detailed_design.md §3.1, "電池の EMERGENCY" rows):
+#  1. With evidence of the air the EMERGENCY lands the craft (TAKEOFF -> LANDING), whatever the flight mode: the motors are not cut in the air.
+#  2. The LANDING ends by the touchdown (LANDING -> IDLE_GROUND), gently.
+#
+# STABILIZE で、battery_emergency_takeoff_floor_manual.scn よりスロットルを少し上げる: TAKEOFF の開始の 0.5 s 後、機体は数 cm 浮き（真の高さ 0.081 m）、健全な ToF は 5 cm の接地の帯より上の有効な高さを
+# 読み（floor_leaving）、TAKEOFF は未完了（完了には 15 cm を超える ToF による空中の判定が要る）。そこで電池電圧を 2.99 V に保つ。検証する仕様（detailed_design.md §3.1 の「電池の EMERGENCY」の行）:
+#  1. 空中の証拠があれば、EMERGENCY は飛行モードに依らず機体を着陸させる（TAKEOFF → LANDING）。空中でモータを止めない。
+#  2. LANDING は接地で終わる（LANDING → IDLE_GROUND）。静かに。
+#
+# Run: sf sils scenario simulator/sils/scenarios/battery_emergency_takeoff_airborne_manual.scn --target vehicle --duration 14000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  1     1000      50                       # B: ARM in STABILIZE (4.0 s), idle in ARMED_GROUND (to 5.0 s)
+   +    rc         3300  2048   2048    2048  1     500       50                       # C: throttle past the takeoff threshold (5.0 s): TAKEOFF, the craft lifts a few cm; hold to 5.5 s
+   +    battery    2.99                                                                # D: 5.5 s — the pack falls just below the critical voltage, craft a few cm up
+   +    rc         3300  2048   2048    2048  1     8000      50                       # E: the pilot keeps the throttle (to 13.5 s)

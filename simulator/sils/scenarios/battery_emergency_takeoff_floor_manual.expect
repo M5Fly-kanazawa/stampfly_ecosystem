@@ -1,0 +1,13 @@
+# battery_emergency_takeoff_floor_manual.expect — the EMERGENCY on the floor in a manual TAKEOFF cuts the motors; no LANDING
+# 手動の TAKEOFF の床の上の EMERGENCY はモータを止める。LANDING にならない
+#
+exit 0
+log_contains any "Takeoff detected"
+log_contains any "Battery emergency in TAKEOFF without evidence of the air"
+log_contains any "DISARM accepted (TAKEOFF → IDLE_GROUND)"
+log_contains any "Transition: TAKEOFF → IDLE_GROUND"
+log_absent any "Battery emergency → LANDING"
+log_absent any "Transition: TAKEOFF → LANDING"
+order "Takeoff detected" "Battery emergency in TAKEOFF without evidence of the air"
+metric alt_max < 0.05 in 4.5 12.0
+metric duty_max < 0.01 in 6.0 12.0

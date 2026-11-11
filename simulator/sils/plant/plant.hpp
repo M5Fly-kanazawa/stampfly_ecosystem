@@ -532,6 +532,15 @@ public:
     /// とファーム(推力→duty)が同じ値を使うので閉ループが整合（Model Identity）。
     float batteryVoltage() const { return v_batt_; }
 
+    /// Hold the battery terminal voltage at `volts` [V] from now on (scenario `battery <V>`): the
+    /// supply of the motor curve and the INA3221 reading stay at this value, whatever the current
+    /// draw, and the Coulomb count stops. A value <= 0 releases the hold: the terminal voltage
+    /// follows the battery model (or the fixed nominal) again from the next substep.
+    /// 電池端子電圧を以後 `volts` [V] に保つ（シナリオ `battery <V>`）: モータ曲線の電源と INA3221 の
+    /// 読みは、電流に依らずこの値のまま、クーロンカウントは止まる。0 以下で解除: 次の substep から、
+    /// 端子電圧は電池モデル（または固定の公称値）に戻る。
+    void holdBatteryVoltage(float volts);
+
     /// Advance the physics by dt of VIRTUAL time, integrating in fixed
     /// model-timestep (m_->opt.timestep) substeps with a carried remainder, so
     /// the physics clock tracks the caller's virtual clock 1:1. mj_step always
@@ -648,6 +657,7 @@ private:
     double step_accum_ = 0.0;  ///< virtual-time accumulator [s] for fixed substeps
 
     float v_batt_ = 3.7f;          ///< current supply (terminal) voltage [V]
+    float batt_hold_v_ = 0.0f;     ///< held terminal voltage [V] (holdBatteryVoltage(); 0 = not held) / 保持する端子電圧 [V]（0 = 保持しない）
     float batt_charge_mah_ = 0.0f; ///< remaining battery charge [mAh] (model on)
 
     // --- Physical handling maneuver (kinematic override) state ---

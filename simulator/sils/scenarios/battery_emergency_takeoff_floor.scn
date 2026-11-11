@@ -1,0 +1,28 @@
+# battery_emergency_takeoff_floor.scn — the battery EMERGENCY comes on the floor at the start of an auto-takeoff: the motors are cut, no LANDING
+#                                       自動離陸の開始直後の床の上で電池の EMERGENCY が出る: モータを止める。LANDING にはしない
+#
+# ALT_HOLD auto-takeoff with the hover-thrust estimate 30 % high (hover.thrust_corr 1.3, learning off). The pack voltage is held at 2.99 V (event `battery`: just below the critical threshold,
+# critical_battery_v = 3.0 V in Failsafe's configuration, so the motors still have almost their full thrust) 0.1 s after the TAKEOFF began, while the craft is still on the floor (truth height 0.021-0.028 m, the ToF reads
+# invalid in its dead zone or inside the 5 cm band). The EMERGENCY alert reaches the StateManager within about 0.1 s. Spec under test (detailed_design.md §3.1, "電池の EMERGENCY" rows and the cells below them;
+# takeoff_policy.hpp decideBatteryEmergency()):
+#  1. In TAKEOFF the EMERGENCY lands the craft only with evidence that it is off the floor (the healthy ToF reads valid heights above the ground band now, tof_health.floor_leaving). Here there is none, so the
+#     motors are cut at once (DISARM -> IDLE_GROUND): a LANDING that starts on the floor can float the craft up (detailed_design.md §3.1, TAKEOFF -> LANDING row).
+#  2. The craft stays on the floor and the motors stay off (the re-raised alerts, about every 5 s while the voltage stays low, change nothing on the ground; ARM is refused at a critical voltage).
+#
+# ALT_HOLD の自動離陸、ホバー推力の見積もりが 30 % 高い（hover.thrust_corr 1.3、学習は切る）。電池電圧は TAKEOFF の開始の 0.1 s 後に 2.99 V に保つ（事象 `battery`: 危険閾値 Failsafe の critical_battery_v = 3.0 V の
+# すぐ下で、モータの推力はほぼそのまま）。そのとき機体はまだ床の上（真の高さ 0.021〜0.028 m。ToF は不感帯で無効、または 5 cm の帯の中）。EMERGENCY のアラートは約 0.1 s 以内に StateManager に届く。
+# 検証する仕様（detailed_design.md §3.1 の「電池の EMERGENCY」の行とその下のセル、takeoff_policy.hpp の decideBatteryEmergency()）:
+#  1. TAKEOFF の EMERGENCY が機体を着陸させるのは、床を離れた証拠（健全な ToF が接地の帯より上の有効な高さを今読んでいる: tof_health.floor_leaving）があるときだけ。ここには無いので、すぐ
+#     モータを止める（DISARM → IDLE_GROUND）: 床の上で始めた LANDING は機体を浮かせうる（detailed_design.md §3.1 の TAKEOFF → LANDING の行）。
+#  2. 機体は床の上のまま、モータは止まったまま（電圧が低い間、約 5 s ごとに再発報されるアラートは地上では何も変えない。危険電圧では ARM を拒否する）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/battery_emergency_takeoff_floor.scn --target vehicle --duration 16000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    param      hover.thrust.learn 0                                                # the hover-thrust estimate stays wrong
+   +    param      hover.thrust_corr 1.3                                               # estimate 30 % above the setting that the loop settles on
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED (to 7.5 s)
+   +    rc         2048  2048   2048    2048  1     420       50        1              # C: ARM in ALT_HOLD (7.5 s); the TAKEOFF begins at about 7.82 s; hold to 7.92 s
+   +    battery    2.99                                                                # D: 7.92 s — the pack falls just below the critical voltage, craft still on the floor
+   +    rc         2048  2048   2048    2048  1     8000      50        1              # E: nothing more from the pilot (to 15.9 s)

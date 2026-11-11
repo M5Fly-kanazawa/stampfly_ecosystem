@@ -456,6 +456,7 @@ float Plant::ocvFromCharge(float charge_mah) const
 // モデル無効時は何もしない。
 void Plant::updateBattery(float i_total_a, float h)
 {
+    if (batt_hold_v_ > 0.0f) return;                // held by the scenario: v_batt_ stays / シナリオが保持中: v_batt_ はそのまま
     if (!cfg_.batt_model_enable) return;            // constant v_batt_ (= cfg_.v_batt)
 
     // Coulomb counting: charge[mAh] -= I[A]·h[s] / 3.6  (A·s → mAh).
@@ -466,6 +467,22 @@ void Plant::updateBattery(float i_total_a, float h)
     // Terminal voltage = open-circuit voltage minus the internal-resistance drop.
     // 端子電圧 = 開回路電圧 − 内部抵抗による電圧降下。
     v_batt_ = ocvFromCharge(batt_charge_mah_) - i_total_a * cfg_.batt_r_int;
+}
+
+// holdBatteryVoltage — pin the terminal voltage (scenario `battery <V>`); <= 0 releases it.
+// With the battery model OFF a release returns to the fixed nominal at once (updateBattery()
+// would leave the held value in place).
+// holdBatteryVoltage — 端子電圧を固定する（シナリオ `battery <V>`）。0 以下で解除。電池モデル OFF
+// の解除は固定の公称値にすぐ戻す（updateBattery() は保持していた値をそのまま残すため）。
+void Plant::holdBatteryVoltage(float volts)
+{
+    if (volts > 0.0f) {
+        batt_hold_v_ = volts;
+        v_batt_      = volts;
+        return;
+    }
+    batt_hold_v_ = 0.0f;
+    if (!cfg_.batt_model_enable) v_batt_ = cfg_.v_batt;
 }
 
 // -----------------------------------------------------------------------------

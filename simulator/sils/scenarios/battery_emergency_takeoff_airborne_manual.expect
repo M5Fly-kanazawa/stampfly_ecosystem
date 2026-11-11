@@ -1,0 +1,15 @@
+# battery_emergency_takeoff_airborne_manual.expect — the EMERGENCY in the air in a manual TAKEOFF lands the craft
+# 手動の TAKEOFF の空中の EMERGENCY は機体を着陸させる
+#
+exit 0
+log_contains any "Takeoff detected"
+log_contains any "Battery emergency → LANDING"
+log_contains any "Transition: TAKEOFF → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_absent any "without evidence of the air"
+log_absent any "Transition: TAKEOFF → IDLE_GROUND"
+order "Takeoff detected" "Battery emergency → LANDING"
+order "Battery emergency → LANDING" "Transition: LANDING → IDLE_GROUND"
+metric alt_max < 0.5 in 5.0 13.5
+metric alt_max < 0.05 in 12.0 13.5
+metric duty_max < 0.01 in 12.0 13.5

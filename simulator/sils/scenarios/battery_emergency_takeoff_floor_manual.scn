@@ -1,0 +1,23 @@
+# battery_emergency_takeoff_floor_manual.scn — the battery EMERGENCY on the floor in a manual (STABILIZE) TAKEOFF: the motors are cut, no LANDING
+#                                              手動（STABILIZE）の TAKEOFF の床の上の電池の EMERGENCY: モータを止める。LANDING にはしない
+#
+# STABILIZE: the pilot raises the throttle above the takeoff threshold (0.5) in ARMED_GROUND, so the TAKEOFF begins; the craft has not left the floor yet (truth height 0.021 m) when the pack voltage is held at
+# 2.99 V (event `battery`) 0.06 s later. The evidence of the air is the same as in the auto-takeoff (tof_health.floor_leaving, a healthy ToF reading valid heights above the 5 cm ground band); in a manual
+# TAKEOFF it is read for nothing else. Spec under test (detailed_design.md §3.1, "電池の EMERGENCY" rows):
+#  1. No evidence of the air: the EMERGENCY cuts the motors (TAKEOFF -> IDLE_GROUND), whatever the flight mode.
+#  2. The craft stays on the floor, the motors stay off.
+#
+# STABILIZE: パイロットが ARMED_GROUND で離陸の閾値（0.5）を超えるスロットルを入れ、TAKEOFF が始まる。その 0.06 s 後、機体がまだ床を離れていない（真の高さ 0.021 m）ときに電池電圧を 2.99 V に保つ
+# （事象 `battery`）。空中の証拠は自動離陸と同じ（tof_health.floor_leaving: 健全な ToF が接地の帯より上の有効な高さを読んでいる）。手動の TAKEOFF では、これを他の目的には読まない。
+# 検証する仕様（detailed_design.md §3.1 の「電池の EMERGENCY」の行）:
+#  1. 空中の証拠が無ければ、EMERGENCY はモータを止める（TAKEOFF → IDLE_GROUND）。飛行モードに依らない。
+#  2. 機体は床の上のまま、モータは止まったまま。
+#
+# Run: sf sils scenario simulator/sils/scenarios/battery_emergency_takeoff_floor_manual.scn --target vehicle --duration 12000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  1     1000      50                       # B: ARM in STABILIZE (4.0 s), idle in ARMED_GROUND (to 5.0 s)
+   +    rc         3171  2048   2048    2048  1     60        50                       # C: throttle past the takeoff threshold (5.0 s): TAKEOFF; hold to 5.06 s
+   +    battery    2.99                                                                # D: 5.06 s — the pack falls just below the critical voltage, craft still on the floor
+   +    rc         3171  2048   2048    2048  1     6000      50                       # E: the pilot keeps the throttle (to 11.1 s)

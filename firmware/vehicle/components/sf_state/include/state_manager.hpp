@@ -143,10 +143,10 @@ public:
 
     /// Request DISARM. On the ground, in TAKEOFF (any mode) and in ACRO / STABILIZE it is an immediate motor cut (-> IDLE_GROUND). In ALT_HOLD / POS_HOLD while FLYING
     /// it starts an AUTO-LANDING (-> LANDING, gradual descent) instead of dropping the craft; touchdown then disarms. A DISARM pressed again while already LANDING
-    /// is the emergency cut (see below). The ways into LANDING from TAKEOFF are the loss of the link, the battery EMERGENCY, the ToF rules and notifyTakeoffEndedByLanding() (a takeoff that does not lift).
+    /// is the emergency cut (see below). The ways into LANDING from TAKEOFF are the loss of the link, the battery EMERGENCY with evidence that the craft is off the floor (without it the EMERGENCY is this DISARM, decideBatteryEmergency()), the ToF rules and notifyTakeoffEndedByLanding() (a takeoff that does not lift).
     /// DISARM リクエスト。地上・TAKEOFF（どのモードでも）・ACRO / STABILIZE では即モータ停止（→IDLE_GROUND）。ALT_HOLD / POS_HOLD の FLYING 中は機体を落とさず
     /// 自動着陸を開始（→LANDING, 緩降下）し、接地で DISARM する。LANDING 中の再 DISARM は緊急カット（下記）。TAKEOFF から LANDING に入るのは
-    /// 通信の途絶・電池の EMERGENCY・ToF の規則・notifyTakeoffEndedByLanding()（浮けない離陸）。
+    /// 通信の途絶・機体が床を離れた証拠のある電池の EMERGENCY（証拠が無い EMERGENCY はこの DISARM になる。decideBatteryEmergency()）・ToF の規則・notifyTakeoffEndedByLanding()（浮けない離陸）。
     ///
     /// @return true if transition succeeded
     bool requestDisarm();

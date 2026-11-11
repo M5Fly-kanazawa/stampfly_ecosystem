@@ -1,0 +1,15 @@
+# battery_emergency_flying.expect — the EMERGENCY in FLYING lands the craft; it touches down gently and the motors stop on the floor
+# FLYING の EMERGENCY は機体を着陸させる。静かに接地し、モータは床の上で止まる
+#
+exit 0
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "Battery emergency → LANDING"
+log_contains any "Transition: FLYING → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_absent any "without evidence of the air"
+order "Transition: TAKEOFF → FLYING" "Battery emergency → LANDING"
+order "Battery emergency → LANDING" "Transition: LANDING → IDLE_GROUND"
+metric alt_mean > 0.3 in 11.0 13.0
+metric alt_max < 0.05 in 22.0 24.0
+metric duty_max < 0.01 in 22.0 24.0
+metric descent_speed_max < 0.7 in 13.0 24.0

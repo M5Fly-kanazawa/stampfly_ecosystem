@@ -21,6 +21,8 @@
  *     ground band for the hold time, or one valid reading above kTakeoffAirborneBandM; an in-band reading, a silent ToF or a reset ends the run above the band).
  *  4. decideArmedGroundTakeoff(): auto_takeoff x spool_elapsed x throttle_past_threshold x lifted_off (all 16 cells), and LiftoffWatch: the lift-off evidence of ARMED_GROUND (valid readings above the
  *     ground band, uninterrupted for the hold time; an in-band reading, an invalid sample, a silent ToF or a reset ends the run; the latch survives until reset()).
+ *  5. decideBatteryEmergency(): every FlightState x ToF silent x floor_leaving (32 cells): FLYING lands, FLIP defers, TAKEOFF lands with evidence of the air (floor_leaving) or a silent ToF and cuts the motors
+ *     without, every other state only logs.
  * The expected values are written out cell by cell from the table, not recomputed with the function's own expression.
  * Own TEST/ASSERT framework and main(), same pattern as test_tof_silence.cpp.
  *
@@ -37,6 +39,8 @@
 #include "takeoff_policy.hpp"
 
 using sf::ArmedGroundFacts;
+using sf::BatteryEmergencyAction;
+using sf::BatteryEmergencyFacts;
 using sf::FlightState;
 using sf::LiftoffWatch;
 using sf::TakeoffAction;
@@ -695,6 +699,35 @@ TEST(liftoff_watch_gives_no_evidence_on_the_floor_whatever_the_floor_reads)
     ASSERT_TRUE(!noisy_floor.lifted());
 }
 
+// ----------------------------------------------------------------------------
+// 5. decideBatteryEmergency()
+// ----------------------------------------------------------------------------
+
+TEST(battery_emergency_in_every_state_with_every_tof_fact)
+{
+    // The cells, written out from the table (detailed_design.md §3.1, "電池の EMERGENCY" rows). The facts are read only in TAKEOFF.
+    // 表から書き下したセル（detailed_design.md §3.1 の「電池の EMERGENCY」の行）。事実を読むのは TAKEOFF だけ。
+    struct Row { FlightState state; BatteryEmergencyAction silent_or_leaving; BatteryEmergencyAction neither; };
+    const Row rows[] = {
+        {FlightState::INIT,         BatteryEmergencyAction::LogOnly,   BatteryEmergencyAction::LogOnly},
+        {FlightState::IDLE_GROUND,  BatteryEmergencyAction::LogOnly,   BatteryEmergencyAction::LogOnly},
+        {FlightState::IDLE_HELD,    BatteryEmergencyAction::LogOnly,   BatteryEmergencyAction::LogOnly},
+        {FlightState::ARMED_GROUND, BatteryEmergencyAction::LogOnly,   BatteryEmergencyAction::LogOnly},
+        {FlightState::TAKEOFF,      BatteryEmergencyAction::Land,      BatteryEmergencyAction::CutMotors},   // evidence of the air lands, none cuts the motors / 空中の証拠があれば着陸、無ければモータ停止
+        {FlightState::FLYING,       BatteryEmergencyAction::Land,      BatteryEmergencyAction::Land},
+        {FlightState::LANDING,      BatteryEmergencyAction::LogOnly,   BatteryEmergencyAction::LogOnly},     // already landing / 既に着陸中
+        {FlightState::FLIP,         BatteryEmergencyAction::Defer,     BatteryEmergencyAction::Defer},       // lands after FLIP -> FLYING / FLIP → FLYING の後に着陸
+    };
+    for (const Row& row : rows) {
+        for (bool tof_silent : {false, true}) {
+            for (bool floor_leaving : {false, true}) {
+                const BatteryEmergencyAction wanted = (tof_silent || floor_leaving) ? row.silent_or_leaving : row.neither;
+                ASSERT_TRUE(sf::decideBatteryEmergency(BatteryEmergencyFacts{row.state, tof_silent, floor_leaving}) == wanted);
+            }
+        }
+    }
+}
+
 int main()
 {
     printf("=== takeoff_policy host tests ===\n");
@@ -707,6 +740,7 @@ int main()
     run_a_latched_takeoff_is_not_landed_while_the_craft_is_lifting_off();
     run_abort_time_is_longer_than_the_controller_backstop_and_the_ordinary_takeoff();
     run_comm_loss_lands_from_takeoff_and_flying_only_after_the_grace();
+    run_battery_emergency_in_every_state_with_every_tof_fact();
     run_a_touchdown_verdict_counts_only_with_the_stamp_of_the_present_landing();
     run_floor_watch_needs_a_valid_reading_in_the_band_held_for_the_hold_time();
     run_floor_watch_takes_no_evidence_from_invalid_samples_or_a_silent_tof();

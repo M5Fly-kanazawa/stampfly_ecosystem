@@ -76,7 +76,14 @@ void sils_board_get_motor_duty(float out[4]);
 // P7 外乱フック（シナリオの wind/fault → Plant）。NED 風力 [N] の設定、または1モータの
 // 推力健全度ゲインの劣化（motor 0..3, 1=正常/0=停止）。Plant 未接続なら no-op。
 void sils_board_set_wind(float fx, float fy, float fz);
+
 void sils_board_set_motor_health(int motor, float gain);
+
+// Scenario `battery <V>`: hold the Plant's battery terminal voltage at `volts` [V] (the motors' supply and
+// the INA3221 reading); `volts` <= 0 releases the hold (the battery model takes over again).
+// シナリオ `battery <V>`: Plant の電池端子電圧（モータの電源と INA3221 の読み）を `volts` [V] に保つ。
+// `volts` が 0 以下なら保持を解く（電池モデルが再び決める）。
+void sils_board_hold_battery_voltage(float volts);
 
 // Set a deterministic raw IMU bias (body FRD): accel [m/s²], gyro [rad/s]. Models a
 // pre-calibration MEMS offset so the firmware boot calibration has something to remove
