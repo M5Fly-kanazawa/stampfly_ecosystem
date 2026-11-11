@@ -372,6 +372,26 @@ sils::Plant::Config plant_config_from_env()
     return cfg;
 }
 
+// Fault injection: write a value that is not finite (NaN, infinity) into a float parameter,
+// past the range check that params::set_float applies to every value that reaches the vehicle
+// (the CLI, the API, the NVS load). Only this SILS driver does so, to test the non-finite number
+// check downstream of the parameters; the check of the vehicle itself stays as it is. The
+// parameter's change callback runs as it does after a set.
+// 故障注入: 有限でない値（NaN・無限大）を、float パラメータへ範囲検査を通さずに書き込む。
+// 範囲検査（params::set_float）は機体に届くすべての値（CLI・API・NVS の読み込み）に掛かる。
+// それを通さないのはこの SILS の駆動部だけで、パラメータより下流の有限でない数の検査を試すため。
+// 機体側の検査はそのまま。変更コールバックは、設定の後と同じく呼ぶ。
+bool injectNonFiniteFloatParam(const sf::params::ParamEntry& entry, float value)
+{
+    *static_cast<float*>(entry.value_ptr) = value;
+    std::printf("[emu] PARAMS_FILE: '%s'=%g written without the range check (fault injection)\n",
+                entry.name, static_cast<double>(value));
+    if (entry.callback) {
+        entry.callback();
+    }
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -528,21 +548,29 @@ int main(int argc, char** argv)
                 if (value_end == value_text.c_str()) continue;     // malformed / 数として読めない
                 // Look up the param's type in the SSOT table.
                 // パラメータの型を SSOT テーブルで引く。
-                bool found = false;
-                sf::params::ParamType type = sf::params::ParamType::FLOAT;
+                const sf::params::ParamEntry* found = nullptr;
                 for (int i = 0; i < sf::params::count(); ++i) {
                     const sf::params::ParamEntry* e = sf::params::entry(i);
-                    if (e && name == e->name) { type = e->type; found = true; break; }
+                    if (e && name == e->name) { found = e; break; }
                 }
-                if (!found) {
+                if (found == nullptr) {
                     std::printf("[emu] PARAMS_FILE: unknown param '%s' — skipped\n", name.c_str());
                     continue;
                 }
+                const sf::params::ParamType type = found->type;
                 bool ok = false;
                 switch (type) {
-                    case sf::params::ParamType::FLOAT: ok = sf::params::set_float(name.c_str(), (float)value); break;
-                    case sf::params::ParamType::BOOL:  ok = sf::params::set_bool(name.c_str(), value != 0.0);  break;
-                    case sf::params::ParamType::INT:   ok = sf::params::set_int(name.c_str(), (int32_t)value); break;
+                    case sf::params::ParamType::FLOAT:
+                        ok = std::isfinite(value)
+                                 ? sf::params::set_float(name.c_str(), (float)value)
+                                 : injectNonFiniteFloatParam(*found, (float)value);
+                        break;
+                    case sf::params::ParamType::BOOL:
+                        ok = std::isfinite(value) && sf::params::set_bool(name.c_str(), value != 0.0);
+                        break;
+                    case sf::params::ParamType::INT:
+                        ok = std::isfinite(value) && sf::params::set_int(name.c_str(), (int32_t)value);
+                        break;
                 }
                 if (ok) ++applied;
                 else std::printf("[emu] PARAMS_FILE: '%s'=%g rejected (out of range?)\n", name.c_str(), value);

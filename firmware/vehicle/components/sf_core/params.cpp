@@ -17,6 +17,7 @@
 
 #include "topics.hpp"
 #include "params.hpp"
+#include "param_range.hpp"   // isFloatInRange: finite and inside the range / 有限かつ範囲内
 #include "flight_limits.hpp"   // limits::kBlindTouchdownAccelG (the default of safety.blind_touchdown.accel_g) / 同パラメータの既定値
 #include "esp_log.h"
 #include "esp_timer.h"   // reload-callback timestamps / 再読込コールバックの時刻印
@@ -1189,9 +1190,9 @@ bool set_float(const char* name, float value)
         return false;
     }
 
-    // Validate range
-    // 範囲を検証
-    if (value < e->min_val || value > e->max_val) {
+    // Validate range (a NaN or an infinity is refused)
+    // 範囲を検証（NaN・無限大は拒否する）
+    if (!isFloatInRange(value, e->min_val, e->max_val)) {
         ESP_LOGW(TAG, "set_float: '%s' = %f out of range [%f, %f]",
                  name, value, e->min_val, e->max_val);
         return false;
@@ -1386,9 +1387,9 @@ void load()
             if (nvs_get_u32(handle, key, &raw) == ESP_OK) {
                 float val;
                 memcpy(&val, &raw, sizeof(float));
-                // Validate range before applying
-                // 適用前に範囲を検証
-                if (val >= e.min_val && val <= e.max_val && !std::isnan(val)) {
+                // Validate range before applying (a NaN or an infinity is refused)
+                // 適用前に範囲を検証（NaN・無限大は拒否する）
+                if (isFloatInRange(val, e.min_val, e.max_val)) {
                     *static_cast<float*>(e.value_ptr) = val;
                     loaded++;
                 }
