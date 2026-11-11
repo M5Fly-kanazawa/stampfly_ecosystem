@@ -59,7 +59,7 @@ IDLE_GROUND
 | INIT → IDLE_GROUND | 初期化完了 |
 | IDLE_GROUND ↔ IDLE_HELD | ToF距離による自動判定 |
 | IDLE_GROUND → ARMED_GROUND | ARMアクション（ボタン or コントローラ） |
-| ARMED_GROUND → TAKEOFF | **ALT_HOLD/POS_HOLD: ARM 自体がトリガ**（スロットル入力不要）。短いスプール/整定ドウェル（0.3s, モータはゼロ）の後、自動離陸シーケンス開始: 固定上昇率＋水平姿勢で**目標高度 0.5m**（地面効果回避, config）まで。**ACRO/STABILIZE: 手動スロットル入力**（生スロットル＝推力、自動離陸なし） |
+| ARMED_GROUND → TAKEOFF | **ALT_HOLD/POS_HOLD: ARM 自体がトリガ**（スロットル入力不要）。短いスプール/整定ドウェル（0.3s, モータはゼロ）の後、自動離陸シーケンス開始: 固定上昇率＋水平姿勢で**目標高度 0.5m**（地面効果回避, config）まで。**ACRO/STABILIZE: 手動スロットル入力**（生スロットル＝推力、自動離陸なし）、**または、スロットルが閾値以下のまま浮いたとき、健全な下向き ToF が 5 cm を超える有効な高さを 1 s 途切れずに示す**（detailed_design.md §3.1） |
 | TAKEOFF → FLYING | 離陸完了。**ALT/POS: 制御器が目標高度 0.5m を捕捉して通知**（運動量による行き過ぎでなく目標値を捕捉）。**ACRO/STABILIZE: ToF 空中検知（0.15m）**。なお ToF 空中検知 0.15m は ESKF 鉛直ハンドオフ（ImuTask, クラスB）に役割分離され、ALT/POS の離陸完了判定には用いない |
 | サブモード切替 | コントローラからのモード切替コマンド。**地上（IDLE_GROUND/ARMED_GROUND）と FLYING で受理**（設置時の変更が最も安全なため。INIT/TAKEOFF/LANDING/IDLE_HELD 中は拒否し、遷移完了後に適用） |
 | FLYING → FLIP | API `flip x`（x = l/r/f/b）またはコントローラ FLIP ボタンの立ち上がり。実行条件（高度・姿勢・速度・電池電圧・推定器の健全性・前回からの間隔）を制御器が判定し、不成立なら遷移しない（詳細は §7） |
@@ -326,7 +326,7 @@ IDLE_GROUND
 | INIT → IDLE_GROUND | Initialization complete |
 | IDLE_GROUND ↔ IDLE_HELD | Automatic detection by ToF distance |
 | IDLE_GROUND → ARMED_GROUND | ARM action (button or controller) |
-| ARMED_GROUND → TAKEOFF | Throttle input |
+| ARMED_GROUND → TAKEOFF | Throttle input (ACRO / STABILIZE), or the healthy downward ToF shows the craft off the floor (valid heights above 5 cm for 1 s without a break) |
 | TAKEOFF → FLYING | Takeoff complete (altitude threshold reached) |
 | FLYING sub-mode switch | Mode switch command from controller |
 | FLYING → FLIP | API `flip x` (x = l/r/f/b) or a rising edge of the controller's FLIP button. The controller evaluates the execution conditions (altitude, attitude, velocity, battery voltage, estimator health, time since the last Flip) and does not transition if they are not met (see §7) |

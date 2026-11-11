@@ -45,7 +45,7 @@
 #include "failsafe.hpp"     // ImuAnomalyDetector (400Hz impact/gyro checks)
 #include "failsafe_status_guard.hpp"   // reader-side guard: a stale failsafe_status reads as ToF silent
 #include "tof_health_tracker.hpp"       // has the estimator re-acquired the downward ToF?
-#include "takeoff_policy.hpp"           // TakeoffFloorWatch: the positive evidence that an auto-takeoff is still on the floor
+#include "takeoff_policy.hpp"           // TakeoffFloorWatch / LiftoffWatch: the positive evidence that an auto-takeoff is still on the floor / that a craft in ARMED_GROUND is off it
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
 #include "loop_timing_scope.hpp"      // period / busy-time monitor of this 400Hz loop
@@ -141,6 +141,7 @@ static bool g_tof_vertical = true;
 /// tof_health に出す。判定（failsafe_status.tof_silent）は Failsafe が出す。
 static sf::ToFHealthTracker g_tof_health;
 static sf::TakeoffFloorWatch g_takeoff_floor_watch;   // the healthy ToF shows the craft on the floor, not rising (published as tof_health.floor_stays) / 健全な ToF が、機体は床の上で読みが増えないと示す（tof_health.floor_stays として発行）
+static sf::LiftoffWatch g_liftoff_watch;   // the healthy ToF shows the craft off the floor in ARMED_GROUND (published as tof_health.lifted_off) / ARMED_GROUND で、健全な ToF が機体は床を離れたと示す（tof_health.lifted_off として発行）
 
 /// This task's guard on failsafe_status (a status nobody refreshes reads as "ToF silent") and the
 /// guarded value of the current IMU cycle (refreshed by refreshToFSilenceInputs()).
@@ -399,6 +400,11 @@ static void feedToFHealth(const sf::TofData& tof)
     } else {
         g_takeoff_floor_watch.reset();
     }
+    if (state == sf::FlightState::ARMED_GROUND) {   // the lift-off evidence is an ARMED_GROUND fact / 浮上の証拠は ARMED_GROUND の事実
+        g_liftoff_watch.onSample(facts.now_us, !g_failsafe.tof_silent, tof.valid, tof.distance);
+    } else {
+        g_liftoff_watch.reset();
+    }
 }
 
 /// Publish the tracker's facts on tof_health (Failsafe reads them). / トラッカーの事実を tof_health に
@@ -412,6 +418,7 @@ static void publishToFHealth()
     health.floor_stays       = g_takeoff_floor_watch.stays(health.timestamp, !g_failsafe.tof_silent);
     health.floor_seen        = g_takeoff_floor_watch.seen();   // the latch; released by the craft leaving the floor (TakeoffFloorWatch) / ラッチ。機体が床を離れると解ける（TakeoffFloorWatch）
     health.floor_leaving     = g_takeoff_floor_watch.leaving() && !g_failsafe.tof_silent;   // the craft is lifting off the floor now (a run above the band) / 機体は今、床を離れつつある（帯より上の区間）
+    health.lifted_off        = g_liftoff_watch.lifted() && !g_failsafe.tof_silent;   // the craft in ARMED_GROUND is off the floor (valid readings above the band, uninterrupted) / ARMED_GROUND の機体は床を離れた（帯より上の有効な読みが途切れず続いた）
     sf::tof_health.publish(health);
 }
 

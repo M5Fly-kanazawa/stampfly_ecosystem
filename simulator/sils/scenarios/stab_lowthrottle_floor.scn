@@ -1,0 +1,30 @@
+# stab_lowthrottle_floor.scn — STABILIZE, a craft on the floor with the throttle at or below the threshold stays ARMED_GROUND, whatever the ToF reads on the floor
+#                              STABILIZE、床の上でスロットルが閾値以下の機体は、ToF が床の上で何を読んでも ARMED_GROUND に留まる
+#
+# The counterpart of `stab_lowthrottle_lift_commloss`: the same raw 3060 (norm 0.494) with NO gust. The craft rests on the floor with the motors spooled (idle, spool-up, small roll / pitch / yaw
+# sticks that tilt the thrust a little) for 22 s, the first 11 s with the ToF dead zone ON (the real floor: invalid samples only, the default) and the next 11 s with it OFF (`tof_deadzone 0`: valid
+# readings of 0.021 m on the floor, in the ground band). The lift-off evidence needs valid readings above 5 cm for 1 s without a break, so neither floor may start a TAKEOFF.
+# Spec under test (detailed_design.md §3.1, ARMED_GROUND -> TAKEOFF manual row; takeoff_policy.hpp LiftoffWatch):
+#  1. No ARMED_GROUND -> TAKEOFF, no state change at all after the ARM; the altitude stays below 5 cm over the whole run.
+#  2. The pilot's DISARM at the end is ARMED_GROUND -> IDLE_GROUND.
+#
+# `stab_lowthrottle_lift_commloss` の対で、同じ生値 3060（正規化 0.494）で突風は無し。機体はモータが回った状態（アイドル、スプールアップ、推力を少し傾ける小さなロール・ピッチ・ヨーのスティック）で
+# 22 s 床の上にいる。最初の 11 s は ToF の不感帯を入れ（実際の床。無効サンプルだけ。既定）、次の 11 s は切る（`tof_deadzone 0`: 床の上で 0.021 m の有効な読み。接地の帯の中）。浮上の証拠は
+# 5 cm を超える有効な読みが途切れずに 1 s 続くことを要するので、どちらの床でも TAKEOFF を始めない。検証する仕様: (1) ARMED_GROUND → TAKEOFF が無く、ARM の後に状態の変化が一切無い。高度は全区間で 5 cm 未満。
+# (2) 最後のパイロットの DISARM は ARMED_GROUND → IDLE_GROUND。
+#
+# Run: sf sils scenario simulator/sils/scenarios/stab_lowthrottle_floor.scn --target vehicle --duration 28000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  1     1000      50                       # B: ARM (4.0 s), STABILIZE
+   +    rc         2900  2048   2048    2048  1     3000      50                       # C: spool-up, throttle 0.416 (5.0-8.0 s), dead zone ON
+   +    rc         3060  2048   2048    2048  1     3000      50                       # D: throttle 0.494 (8.0-11.0 s)
+   +    tof_deadzone 0                                                                 # E: the floor reads valid 0.021 m from 11.0 s
+   +    rc         3060  2108   2048    2048  1     3000      50                       # F: small roll stick (11.0-14.0 s)
+   +    rc         3060  2048   2000    2048  1     3000      50                       # G: small pitch stick (14.0-17.0 s)
+   +    rc         2800  2048   2048    2200  1     3000      50                       # H: small yaw stick (17.0-20.0 s)
+   +    rc         3060  2048   2048    2048  1     2000      50                       # I: throttle 0.494 (20.0-22.0 s)
+   +    rc         2048  2048   2048    2048  0     300       50                       # J: release the ARM button
+   +    rc         2048  2048   2048    2048  1     300       50                       # K: press again -> DISARM (ARMED_GROUND -> IDLE_GROUND)
+   +    rc         2048  2048   2048    2048  0     2000      50                       # L: settle

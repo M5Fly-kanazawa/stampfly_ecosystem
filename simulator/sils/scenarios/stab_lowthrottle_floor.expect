@@ -1,0 +1,11 @@
+# stab_lowthrottle_floor.expect — on the floor with the throttle below the threshold the state stays ARMED_GROUND, with the ToF dead zone on and off
+# 床の上でスロットルが閾値より下なら、ToF の不感帯が有りでも無しでも状態は ARMED_GROUND に留まる
+#
+# No TAKEOFF at all; the altitude stays below 5 cm over the whole run; the pilot's DISARM ends the ARMED_GROUND.
+# TAKEOFF は一切無い。高度は全区間で 5 cm 未満。パイロットの DISARM が ARMED_GROUND を終わらせる。
+exit 0
+log_contains any "Transition: IDLE_GROUND → ARMED_GROUND"
+log_absent any "Transition: ARMED_GROUND → TAKEOFF"
+log_absent any "Takeoff detected"
+log_contains any "Transition: ARMED_GROUND → IDLE_GROUND"
+metric alt_max < 0.05

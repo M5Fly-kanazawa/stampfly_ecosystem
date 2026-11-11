@@ -523,6 +523,10 @@ struct ToFHealth {
                                  // kAutoTakeoffFloorHoldUs of it. While it is true a latched TAKEOFF is not ended by a LANDING (a slow lift must not be landed in the middle of leaving). False when the ToF is silent or the reading is back in the band.
                                  // TAKEOFF 中: 健全な ToF が kTakeoffGroundBandM を超える有効な高さを「今」読み、その区間が続いている（TakeoffFloorWatch::leaving()）: 機体は床を離れつつあり、ラッチ（floor_seen）は
                                  // その状態が kAutoTakeoffFloorHoldUs 続くと解ける。真の間は、ラッチ中の TAKEOFF を LANDING で終わらせない（ゆっくり浮く機体を、離れつつある途中で着陸させない）。ToF が出力停止、または読みが帯の中へ戻ったら偽。
+    bool     lifted_off;         // ARMED_GROUND: the healthy ToF has read valid heights above kTakeoffGroundBandM for kAutoTakeoffFloorHoldUs without a break (LiftoffWatch::lifted(), takeoff_policy.hpp): the POSITIVE
+                                 // evidence that the craft is off the floor. A latch (cleared when the state is not ARMED_GROUND). False when the ToF is silent, reads invalid or reads in the band.
+                                 // ARMED_GROUND 中: 健全な ToF が kTakeoffGroundBandM を超える有効な高さを、途切れずに kAutoTakeoffFloorHoldUs 読んだ（LiftoffWatch::lifted()、takeoff_policy.hpp）: 機体が床を離れたという
+                                 // 「積極的な」証拠。ラッチ（状態が ARMED_GROUND でないと消える）。ToF が出力停止・無効・帯の中の読みのときは偽。
     uint32_t timestamp;          // [us]
 };
 

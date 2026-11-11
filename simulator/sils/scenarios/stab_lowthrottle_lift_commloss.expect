@@ -1,0 +1,18 @@
+# stab_lowthrottle_lift_commloss.expect — a craft that rises with the throttle below the threshold is in the air for the state machine: TAKEOFF, FLYING, and the comm-loss landing
+# 閾値以下のスロットルで浮いた機体は、状態機械にとって空中にいる: TAKEOFF、FLYING、通信断の着陸
+#
+# On the floor at 5.0-6.0 s (alt < 5 cm); the gust lifts the craft (alt > 0.3 m at 7.0-9.0 s); the transitions follow in the order of the table; the link loss lands the craft.
+# 5.0〜6.0 s は床の上（高度 5 cm 未満）。突風が機体を浮かせる（7.0〜9.0 s に 0.3 m 超）。遷移は表の順に続く。リンクが途絶えると着陸する。
+exit 0
+log_contains any "Transition: ARMED_GROUND → TAKEOFF"
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "Comm lost → LANDING (hover grace elapsed)"
+log_contains any "Transition: FLYING → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+order "Transition: ARMED_GROUND → TAKEOFF" "Transition: TAKEOFF → FLYING"
+order "Transition: TAKEOFF → FLYING" "Comm lost → hover"
+order "Comm lost → hover" "Comm lost → LANDING (hover grace elapsed)"
+order "Comm lost → LANDING (hover grace elapsed)" "Transition: FLYING → LANDING"
+order "Transition: FLYING → LANDING" "Transition: LANDING → IDLE_GROUND"
+metric alt_max < 0.05 in 5.0 6.0
+metric alt_max > 0.30 in 7.0 9.0

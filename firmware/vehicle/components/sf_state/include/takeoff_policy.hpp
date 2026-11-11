@@ -8,8 +8,8 @@
 
 /**
  * @file takeoff_policy.hpp
- * @brief How a TAKEOFF ends, and what a lost link does during it (pure decisions)
- *        TAKEOFF がどう終わるか、その間に通信が途絶えたらどうなるか（純粋な判断関数）
+ * @brief How a TAKEOFF starts and ends, and what a lost link does during it (pure decisions)
+ *        TAKEOFF がどう始まりどう終わるか、その間に通信が途絶えたらどうなるか（純粋な判断関数）
  *
  * Principle: the ABSENCE of evidence is never treated as evidence that the craft is on the floor. The accelerometer alone cannot tell a craft that
  * lifts slowly from one that the floor still holds, so no safety decision here is gated on "the craft has left the floor" as seen by the accelerometer. The
@@ -18,7 +18,7 @@
  * できないので、ここでの安全判断は、加速度計が見た「床を離れた」を判定条件にしない。ここで使う「床にいる」証拠は、健全な ToF が示す「積極的な」もの
  * （地面の近くの有効な読みで、増えていない: TakeoffFloorWatch）だけ。
  *
- * Four decisions, all pure functions of their facts so that every cell of the normative table (detailed_design.md §3.1, INV-4) can be checked on the host
+ * Five decisions, all pure functions of their facts so that every cell of the normative table (detailed_design.md §3.1, INV-4) can be checked on the host
  * (test/test_takeoff_policy.cpp). StateTask / StateManager execute the result (INV-3): this header only DECIDES.
  *  1. decideTakeoff(): TAKEOFF -> FLYING (complete), TAKEOFF -> IDLE_GROUND (abort, DISARM), TAKEOFF -> LANDING (the latch that does not release) or stay.
  *       manual (ACRO / STABILIZE): complete when the ToF-based airborne verdict says so (while a ToF-silence episode is in progress the verdict is "armed = not
@@ -40,8 +40,12 @@
  *     TAKEOFF that never completed kept the craft climbing for ever).
  *  3. TakeoffFloorWatch: the detection of the positive evidence.
  *  4. landingVerdictCounts(): whether a touchdown verdict of ImuTask ends the LANDING in force (only a verdict judged in that very LANDING does).
+ *  5. decideArmedGroundTakeoff() and LiftoffWatch: how ARMED_GROUND ends in TAKEOFF. ALT_HOLD / POS_HOLD: the spool dwell has elapsed. ACRO / STABILIZE: the throttle is past the
+ *     takeoff threshold, OR the healthy ToF shows the craft off the floor (valid readings above kTakeoffGroundBandM, uninterrupted for kAutoTakeoffFloorHoldUs): a craft that rises with
+ *     the throttle at or below the threshold (a gust, a fresh battery, ground effect) is in the air, and ARMED_GROUND is a state of the floor (it has no comm-loss landing, no battery
+ *     landing, and a silent ToF cuts its motors). The evidence is POSITIVE too: a silent, invalid or in-band ToF never starts a TAKEOFF, the throttle alone decides then.
  *
- * 4 つの判断で、いずれも事実の純関数なので、規範表（detailed_design.md §3.1、INV-4）の全セルをホストで検証できる（test/test_takeoff_policy.cpp）。結果の実行は
+ * 5 つの判断で、いずれも事実の純関数なので、規範表（detailed_design.md §3.1、INV-4）の全セルをホストで検証できる（test/test_takeoff_policy.cpp）。結果の実行は
  * StateTask / StateManager（INV-3）で、このヘッダは「判断」だけをする。
  *  1. decideTakeoff(): TAKEOFF → FLYING（完了）、TAKEOFF → IDLE_GROUND（中止、DISARM）、TAKEOFF → LANDING（解けないラッチ）、または留まる。
  *       手動（ACRO / STABILIZE）: ToF による空中の判定が立ったら完了（ToF 出力停止のエピソード中、この判定は「ARM 中 = 接地していない」で、ImuTask が立てる:
@@ -61,10 +65,15 @@
  *     機体は上昇し続けた）。
  *  3. TakeoffFloorWatch: 積極的な証拠の検出。
  *  4. landingVerdictCounts(): ImuTask の接地の判定が、有効な LANDING を終わらせるか（その LANDING の中で出された判定だけが終わらせる）。
+ *  5. decideArmedGroundTakeoff() と LiftoffWatch: ARMED_GROUND がどう TAKEOFF に至るか。ALT_HOLD / POS_HOLD: スプールの待ちが過ぎた。ACRO / STABILIZE: スロットルが離陸の閾値を超えた、
+ *     または健全な ToF が機体は床を離れたと示す（kTakeoffGroundBandM を超える有効な読みが、途切れずに kAutoTakeoffFloorHoldUs 続く）。スロットルが閾値以下のまま浮く機体（突風・新しい電池・
+ *     地面効果）は空中にいて、ARMED_GROUND は床の状態（通信断の着陸も電池の着陸も無く、ToF が出力停止するとモータを止める）。証拠はここでも「積極的な」もの:
+ *     出力停止・無効・帯の中の ToF は TAKEOFF を始めさせず、そのときはスロットルだけが決める。
  *
  * @design architecture.md INV-3 — decision here, execution in StateTask / StateManager          [OK]
  * @design architecture.md INV-4 — every (state x input) cell is in the table                    [OK]
  * @design detailed_design.md §3.1 — TAKEOFF -> FLYING / IDLE_GROUND / LANDING rows, "TAKEOFF の完了とラッチのセル" table, comm-loss row [OK]
+ * @design detailed_design.md §3.1 — ARMED_GROUND -> TAKEOFF rows (spool / throttle / lift-off evidence), "ARMED_GROUND の離陸のセル" table [OK]
  * @design coding_and_education.md §2 — Bilingual comments                                       [OK]
  */
 
@@ -255,6 +264,83 @@ private:
     bool     above_active_  = false;   // a run of valid readings above the ground band is in progress / 帯より上の有効な読みの連続区間が進行中
     uint32_t above_since_us_ = 0;      // start of that run [us] / その区間の開始 [us]
     bool     seen_          = false;   // the latch (see seen()) / ラッチ（seen() 参照）
+};
+
+
+/// The facts decideArmedGroundTakeoff() needs. decideArmedGroundTakeoff() が要る事実。
+struct ArmedGroundFacts {
+    bool auto_takeoff;              ///< ALT_HOLD / POS_HOLD: ARM itself starts the takeoff / ARM 自体が離陸を始める
+    bool spool_elapsed;             ///< the spool/settle dwell of ARMED_GROUND has elapsed / ARMED_GROUND のスプール・整定の待ちが過ぎた
+    bool throttle_past_threshold;   ///< the throttle is above the manual takeoff threshold / スロットルが手動離陸の閾値より上
+    bool lifted_off;                ///< LiftoffWatch::lifted() of a healthy ToF: the craft is off the floor / 健全な ToF による LiftoffWatch::lifted(): 機体は床を離れた
+};
+
+/// True when ARMED_GROUND must become TAKEOFF this cycle. Auto modes: the spool dwell has elapsed. Manual modes: the throttle is past the threshold, or the healthy ToF shows
+/// the craft off the floor (a craft that rises at or below the threshold is in the air: it must not stay in a state that has no comm-loss or battery landing and cuts the motors
+/// when the ToF falls silent). The ToF evidence only ADDS to the throttle: without it (silent, invalid, in the band) the throttle decides alone.
+/// この周期に ARMED_GROUND を TAKEOFF にすべきなら true。自動のモード: スプールの待ちが過ぎた。手動のモード: スロットルが閾値を超えた、または健全な ToF が機体は床を離れたと示す
+/// （閾値以下で浮く機体は空中にいる。通信断の着陸も電池の着陸も無く、ToF が出力停止するとモータを止める状態に留まってはならない）。ToF の証拠はスロットルに「足す」だけ:
+/// 無い（出力停止・無効・帯の中）ときはスロットルだけが決める。
+/// @design detailed_design.md §3.1 — ARMED_GROUND -> TAKEOFF (auto: spool; manual: throttle, or the ToF shows the craft off the floor); the cells: "ARMED_GROUND の離陸のセル" [OK]
+inline constexpr bool decideArmedGroundTakeoff(const ArmedGroundFacts& facts)
+{
+    if (facts.auto_takeoff) {
+        return facts.spool_elapsed;
+    }
+    return facts.throttle_past_threshold || facts.lifted_off;
+}
+
+/// Detects, in ARMED_GROUND, the POSITIVE evidence that the craft is off the floor: the healthy ToF reads valid heights above kTakeoffGroundBandM for kAutoTakeoffFloorHoldUs without a break (the same
+/// weight of evidence as the one that releases the latch of TakeoffFloorWatch, whose run it is). Unlike that run, an INVALID sample ends it too: the real floor reads invalid in the dead zone, so
+/// two stray readings a second apart with invalid samples between them would otherwise prove a lift-off, and here the evidence starts a TAKEOFF (there it only releases a latch). A flying craft reads
+/// valid heights on every sample (three real flight logs: no invalid sample in flight). An in-band reading, an invalid sample, a silent ToF or reset() ends the run. lifted() is a LATCH, so that the 30 Hz ToF
+/// samples and the StateTask cycle need no common clock; reset() clears it. ImuTask owns it (INV-3): ONE call per NEW ToF sample while in ARMED_GROUND, reset() for every NEW ToF sample taken
+/// outside it; the fact goes out as tof_health.lifted_off.
+/// ARMED_GROUND で、機体が床を離れたという「積極的な」証拠を検出する: 健全な ToF が kTakeoffGroundBandM を超える有効な高さを、途切れずに kAutoTakeoffFloorHoldUs 読む（TakeoffFloorWatch のラッチを
+/// 解くのと同じ重さの証拠で、その区間と同じもの）。その区間と違い、「無効」サンプルも区間を終わらせる: 実際の床は不感帯で無効を返すので、無効サンプルを挟んで 1 s 離れた 2 つの外れ値が
+/// 浮上の証拠になってしまう（そちらはラッチを解くだけ、こちらは TAKEOFF を始める）。飛んでいる機体は毎サンプル有効な高さを読む（実機ログ: 飛行中の無効サンプルは無い）。帯の中の読み・無効サンプル・
+/// 出力停止の ToF・reset() が区間を終わらせる。lifted() はラッチで、30 Hz の ToF サンプルと StateTask の周期が共通の時計を要らないようにする。reset() で消える。ImuTask が持つ（INV-3）:
+/// ARMED_GROUND の間は新しい ToF サンプルごとに 1 回呼び、その外では新しい ToF サンプルごとに reset() する。事実は tof_health.lifted_off として発行する。
+/// @design detailed_design.md §3.1 — the lift-off evidence of ARMED_GROUND ("ARMED_GROUND の離陸のセル") [OK]
+class LiftoffWatch {
+public:
+    /// Forget the run and the latch. ImuTask calls it for EVERY ToF sample taken outside ARMED_GROUND, so an ARMED_GROUND always starts clean.
+    /// 区間とラッチを忘れる。ImuTask は ARMED_GROUND の「外」で取った ToF サンプルごとに呼ぶので、ARMED_GROUND は必ず白紙から始まる。
+    void reset()
+    {
+        run_active_   = false;
+        run_since_us_ = 0;
+        lifted_       = false;
+    }
+
+    /// One NEW ToF sample. 新しい ToF サンプル 1 つ。
+    /// @param now_us      Time of the sample [us]          サンプルの時刻 [us]
+    /// @param tof_healthy The ToF is not silent           ToF が出力停止でない
+    /// @param valid       The sample is a valid range      サンプルが有効な測距
+    /// @param distance_m  Measured height [m]              測った高さ [m]
+    void onSample(uint32_t now_us, bool tof_healthy, bool valid, float distance_m)
+    {
+        if (!tof_healthy || !valid || distance_m <= limits::kTakeoffGroundBandM) {
+            run_active_ = false;   // no evidence in this sample: the run is broken (the latch stays) / このサンプルに証拠は無い: 区間は途切れる（ラッチは残る）
+            return;
+        }
+        if (!run_active_) {
+            run_active_   = true;
+            run_since_us_ = now_us;
+        }
+        const uint32_t held_us = static_cast<uint32_t>(now_us - run_since_us_);   // unsigned difference: correct across a wrap / 符号なしの差: 巻き戻りをまたいでも正しい
+        if (held_us >= limits::kAutoTakeoffFloorHoldUs) {
+            lifted_ = true;
+        }
+    }
+
+    /// The craft has been shown off the floor since the last reset(). 直近の reset() 以後、機体が床を離れたと示された。
+    bool lifted() const { return lifted_; }
+
+private:
+    bool     run_active_   = false;   // a run of valid readings above the ground band is in progress / 帯より上の有効な読みの連続区間が進行中
+    uint32_t run_since_us_ = 0;       // start of the run [us] / 区間の開始 [us]
+    bool     lifted_       = false;   // the latch (see lifted()) / ラッチ（lifted() 参照）
 };
 
 }  // namespace sf

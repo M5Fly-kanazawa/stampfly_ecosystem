@@ -1,0 +1,27 @@
+# stab_lowthrottle_lift_tofsilent.scn — STABILIZE, a craft that rises with the throttle below the threshold keeps its motors when the downward ToF falls silent in the air
+#                                       STABILIZE、閾値以下のスロットルで浮いた機体は、空中で下向き ToF が出力停止してもモータを止められない
+#
+# The same lift as `stab_lowthrottle_lift_commloss` (raw 3060 = norm 0.494, below TAKEOFF_THROTTLE_THRESH = 0.5; the 0.05 N / 0.4 s gust stands for the lift that the throttle does not give). Without the
+# lift-off evidence the state stays ARMED_GROUND in the air, and in ARMED_GROUND a silent ToF is a DISARM (the motors stop): a craft about 0.5 m up falls. With it the state is FLYING, and in FLYING in STABILIZE
+# a silent ToF is a warning only (detailed_design.md §3 note 12): "NO forced landing, fly on".
+# Spec under test (detailed_design.md §3.1, ARMED_GROUND -> TAKEOFF manual row; ToF silence, FLYING / TAKEOFF in ACRO / STABILIZE rows):
+#  1. ARMED_GROUND -> TAKEOFF -> FLYING after the gust, with the throttle below the threshold.
+#  2. The ToF falls silent at 7.6 s (the craft is about 0.5 m up): no DISARM (no ARMED_GROUND -> IDLE_GROUND), "NO forced landing, fly on", the motors keep turning (duty above 0.3 at 8.5-10.0 s).
+#
+# `stab_lowthrottle_lift_commloss` と同じ浮上（生値 3060 = 正規化 0.494 で TAKEOFF_THROTTLE_THRESH = 0.5 より下。0.05 N・0.4 s の突風が、スロットルが与えない揚力を代用する）。浮上の証拠が無ければ、
+# 状態は空中で ARMED_GROUND のままで、ARMED_GROUND での ToF 出力停止は DISARM（モータ停止）なので、約 0.5 m 上の機体が落ちる。証拠があれば状態は FLYING で、STABILIZE の FLYING での ToF 出力停止は
+# 警告だけ（detailed_design.md §3 注12）: "NO forced landing, fly on"。検証する仕様: (1) 突風の後、スロットルは閾値以下のまま ARMED_GROUND → TAKEOFF → FLYING。
+# (2) 7.6 s（機体は約 0.5 m 上）に ToF が出力停止: DISARM しない（ARMED_GROUND → IDLE_GROUND が無い）、"NO forced landing, fly on"、モータは回り続ける（8.5〜10.0 s の duty が 0.3 超）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/stab_lowthrottle_lift_tofsilent.scn --target vehicle --duration 16000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  1     1000      50                       # B: ARM (4.0 s), STABILIZE
+   +    rc         3060  2048   2048    2048  1     1000      50                       # C: throttle 0.494, below the takeoff threshold (5.0-6.0 s): stays ARMED_GROUND on the floor
+   +    wind 0 0 -0.05 400                                                             # D: the gust (6.0-6.4 s): the craft rises with the throttle below the threshold
+   +    rc         3060  2048   2048    2048  1     1200      50                       # E: (6.4-7.6 s) ARMED_GROUND -> TAKEOFF -> FLYING
+   +    tof_silent 1                                                                   # F: the downward ToF falls silent at 7.6 s, the craft in the air
+   +    rc         3060  2048   2048    2048  1     3400      50                       # G: (7.6-11.0 s) the motors keep turning; the craft comes down by itself
+   +    rc         2048  2048   2048    2048  0     300       50                       # H: release the ARM button
+   +    rc         2048  2048   2048    2048  0     2000      50                       # I: settle

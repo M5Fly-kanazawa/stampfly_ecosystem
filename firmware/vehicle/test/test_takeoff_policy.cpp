@@ -19,6 +19,8 @@
  *  3. TakeoffFloorWatch: the positive floor evidence (in band and not rising for the hold time; an invalid sample is neutral; a silent ToF, a reading above the band
  *     or a rise ends or restarts it), and its latch (once the evidence has held, the completion stays blocked until the craft is shown to leave the floor: valid readings above the
  *     ground band for the hold time, or one valid reading above kTakeoffAirborneBandM; an in-band reading, a silent ToF or a reset ends the run above the band).
+ *  4. decideArmedGroundTakeoff(): auto_takeoff x spool_elapsed x throttle_past_threshold x lifted_off (all 16 cells), and LiftoffWatch: the lift-off evidence of ARMED_GROUND (valid readings above the
+ *     ground band, uninterrupted for the hold time; an in-band reading, an invalid sample, a silent ToF or a reset ends the run; the latch survives until reset()).
  * The expected values are written out cell by cell from the table, not recomputed with the function's own expression.
  * Own TEST/ASSERT framework and main(), same pattern as test_tof_silence.cpp.
  *
@@ -34,7 +36,9 @@
 #include "flight_state.hpp"
 #include "takeoff_policy.hpp"
 
+using sf::ArmedGroundFacts;
 using sf::FlightState;
+using sf::LiftoffWatch;
 using sf::TakeoffAction;
 using sf::TakeoffFacts;
 using sf::TakeoffFloorWatch;
@@ -576,6 +580,121 @@ TEST(floor_watch_reset_forgets_the_run_and_the_wrap_of_the_clock_is_harmless)
     ASSERT_TRUE(!watch.stays(last, true));
 }
 
+// ----------------------------------------------------------------------------
+// 4. decideArmedGroundTakeoff() and LiftoffWatch
+// ----------------------------------------------------------------------------
+
+static bool armedGroundTakeoff(bool auto_takeoff, bool spool_elapsed, bool throttle_past_threshold, bool lifted_off)
+{
+    return sf::decideArmedGroundTakeoff(ArmedGroundFacts{auto_takeoff, spool_elapsed, throttle_past_threshold, lifted_off});
+}
+
+TEST(armed_ground_takeoff_in_an_auto_mode_follows_the_spool_dwell_only)
+{
+    // ALT_HOLD / POS_HOLD: the spool dwell alone; the throttle and the lift-off evidence are not read. ALT_HOLD / POS_HOLD: スプールの待ちだけ。スロットルと浮上の証拠は読まない。
+    for (bool throttle : {false, true}) {
+        for (bool lifted : {false, true}) {
+            ASSERT_TRUE(!armedGroundTakeoff(true, false, throttle, lifted));
+            ASSERT_TRUE( armedGroundTakeoff(true, true,  throttle, lifted));
+        }
+    }
+}
+
+TEST(armed_ground_takeoff_in_a_manual_mode_is_the_throttle_or_the_liftoff_evidence)
+{
+    // ACRO / STABILIZE: the spool dwell is not read; the cells, written out. ACRO / STABILIZE: スプールの待ちは読まない。セルを書き出す。
+    for (bool spool : {false, true}) {
+        ASSERT_TRUE(!armedGroundTakeoff(false, spool, false, false));   // on the floor, throttle at or below the threshold, no evidence: stays / 床の上、閾値以下、証拠なし: 留まる
+        ASSERT_TRUE( armedGroundTakeoff(false, spool, true,  false));   // the throttle, as before / 従来どおりスロットル
+        ASSERT_TRUE( armedGroundTakeoff(false, spool, false, true));    // rising at or below the threshold: in the air / 閾値以下で浮いている: 空中
+        ASSERT_TRUE( armedGroundTakeoff(false, spool, true,  true));
+    }
+}
+
+// Feed `count` samples of a constant reading from `start_us`; returns the time of the last one. 一定の読みのサンプルを count 個与える。
+static uint32_t feedLift(LiftoffWatch& watch, uint32_t start_us, int count, float distance_m, bool healthy = true, bool valid = true)
+{
+    uint32_t t = start_us;
+    for (int i = 0; i < count; ++i) {
+        watch.onSample(t, healthy, valid, distance_m);
+        t += kSampleUs;
+    }
+    return t - kSampleUs;
+}
+
+TEST(liftoff_watch_needs_valid_readings_above_the_ground_band_for_the_hold_time)
+{
+    LiftoffWatch watch;
+    watch.reset();
+    ASSERT_TRUE(!watch.lifted());
+    const uint32_t start = 1000000u;
+    watch.onSample(start, true, true, kBandM + 0.001f);                    // just above the band starts the run / 帯のすぐ上で区間が始まる
+    watch.onSample(start + kHoldUs - 1u, true, true, kBandM + 0.001f);
+    ASSERT_TRUE(!watch.lifted());                                          // boundary: one microsecond short / 境界: 1 マイクロ秒足りない
+    watch.onSample(start + kHoldUs, true, true, kBandM + 0.001f);
+    ASSERT_TRUE(watch.lifted());                                           // boundary: exactly the hold time / 境界: ちょうど保持時間
+}
+
+TEST(liftoff_watch_takes_one_reading_even_above_the_airborne_band_as_no_evidence)
+{
+    LiftoffWatch watch;
+    watch.reset();
+    watch.onSample(1000000u, true, true, 2.8f);                            // one stray reflection / 1 回の誤反射
+    watch.onSample(1033000u, true, true, 0.03f);                           // back in the band / 帯の中へ戻る
+    ASSERT_TRUE(!watch.lifted());
+    LiftoffWatch dead_zone;
+    dead_zone.reset();
+    dead_zone.onSample(1000000u, true, true, 2.8f);                        // a stray reading, then the invalid samples of the dead zone, then another stray reading more than the hold time later / 外れ値、不感帯の無効サンプル、保持時間より後のもう 1 つの外れ値
+    dead_zone.onSample(1500000u, true, false, 0.0f);
+    dead_zone.onSample(1000000u + 5 * kHoldUs, true, true, 2.8f);
+    ASSERT_TRUE(!dead_zone.lifted());
+}
+
+TEST(liftoff_watch_is_broken_by_an_in_band_reading_an_invalid_sample_or_a_silent_tof)
+{
+    struct Break { bool healthy; bool valid; float distance_m; };
+    const Break breaks[] = {{true, true, kBandM}, {true, true, 0.03f}, {true, false, 0.0f}, {false, true, 0.20f}};   // the boundary of the band belongs to the band / 帯の境界は帯に含む
+    for (const Break& b : breaks) {
+        LiftoffWatch watch;
+        watch.reset();
+        uint32_t last = feedLift(watch, 1000000u, 20, 0.10f);              // 0.66 s above the band / 帯より上に 0.66 s
+        watch.onSample(last + kSampleUs, b.healthy, b.valid, b.distance_m);
+        last = feedLift(watch, last + 2 * kSampleUs, 20, 0.10f);          // another 0.66 s: 1.3 s in all, but not without a break / さらに 0.66 s: 合計 1.3 s だが途切れている
+        ASSERT_TRUE(!watch.lifted());
+        feedLift(watch, last + kSampleUs, 20, 0.10f);                     // the run that follows the break lasts the hold time / 途切れの後の区間が保持時間に届く
+        ASSERT_TRUE(watch.lifted());
+    }
+}
+
+TEST(liftoff_watch_latches_until_reset_and_survives_a_wrap_of_the_clock)
+{
+    LiftoffWatch watch;
+    watch.reset();
+    uint32_t last = feedLift(watch, 0xFFFFF000u, 60, 0.12f);               // the clock wraps inside the run / 区間の途中で時計が巻き戻る
+    ASSERT_TRUE(watch.lifted());
+    watch.onSample(last + kSampleUs, true, true, 0.03f);                   // the reading falls back, the latch stays: StateTask need not share a clock with the ToF / 読みが戻ってもラッチは残る
+    ASSERT_TRUE(watch.lifted());
+    watch.reset();
+    ASSERT_TRUE(!watch.lifted());
+}
+
+TEST(liftoff_watch_gives_no_evidence_on_the_floor_whatever_the_floor_reads)
+{
+    // The real floor in the dead zone (invalid only), and a floor that reads inside the band with noise: no evidence in 30 s. 不感帯の実際の床（無効のみ）と、帯の中でノイズを持つ床: 30 s で証拠なし。
+    LiftoffWatch invalid_only;
+    invalid_only.reset();
+    feedLift(invalid_only, 1000000u, 900, 0.0f, true, false);
+    ASSERT_TRUE(!invalid_only.lifted());
+    LiftoffWatch noisy_floor;
+    noisy_floor.reset();
+    uint32_t t = 1000000u;
+    for (int i = 0; i < 900; ++i) {
+        noisy_floor.onSample(t, true, true, (i % 2 == 0) ? 0.031f : kBandM);   // the span of the real floor, 0.031-0.050 m / 実際の床の幅 0.031〜0.050 m
+        t += kSampleUs;
+    }
+    ASSERT_TRUE(!noisy_floor.lifted());
+}
+
 int main()
 {
     printf("=== takeoff_policy host tests ===\n");
@@ -603,6 +722,13 @@ int main()
     run_readings_that_straddle_the_ground_band_end_the_takeoff_by_a_landing_never_by_flying_on_the_floor();
     run_leaving_is_a_run_above_the_ground_band_that_ends_with_an_in_band_reading_a_silent_tof_or_a_reset();
     run_floor_watch_reset_forgets_the_run_and_the_wrap_of_the_clock_is_harmless();
+    run_armed_ground_takeoff_in_an_auto_mode_follows_the_spool_dwell_only();
+    run_armed_ground_takeoff_in_a_manual_mode_is_the_throttle_or_the_liftoff_evidence();
+    run_liftoff_watch_needs_valid_readings_above_the_ground_band_for_the_hold_time();
+    run_liftoff_watch_takes_one_reading_even_above_the_airborne_band_as_no_evidence();
+    run_liftoff_watch_is_broken_by_an_in_band_reading_an_invalid_sample_or_a_silent_tof();
+    run_liftoff_watch_latches_until_reset_and_survives_a_wrap_of_the_clock();
+    run_liftoff_watch_gives_no_evidence_on_the_floor_whatever_the_floor_reads();
 
     printf("\n=== Results: %d run, %d passed, %d failed ===\n",
            tests_run, tests_passed, tests_failed);

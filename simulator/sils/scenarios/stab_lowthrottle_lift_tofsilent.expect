@@ -1,0 +1,14 @@
+# stab_lowthrottle_lift_tofsilent.expect — a craft that rises with the throttle below the threshold is not DISARMed when the ToF falls silent in the air
+# 閾値以下のスロットルで浮いた機体は、空中で ToF が出力停止しても DISARM されない
+#
+# TAKEOFF and FLYING after the gust; the silent ToF is a warning (no forced landing in STABILIZE) and the motors keep turning at 8.5-10.0 s; the craft was lifted (alt > 0.3 m at 7.0-7.6 s).
+# 突風の後に TAKEOFF と FLYING。出力停止の ToF は警告だけ（STABILIZE に強制着陸は無い）で、8.5〜10.0 s もモータは回り続ける。機体は浮いた（7.0〜7.6 s に 0.3 m 超）。
+exit 0
+log_contains any "Transition: ARMED_GROUND → TAKEOFF"
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "NO forced landing, fly on"
+log_absent any "Transition: ARMED_GROUND → IDLE_GROUND"
+order "Transition: ARMED_GROUND → TAKEOFF" "Transition: TAKEOFF → FLYING"
+order "Transition: TAKEOFF → FLYING" "NO forced landing, fly on"
+metric alt_max > 0.30 in 7.0 7.6
+metric duty_max > 0.30 in 8.5 10.0

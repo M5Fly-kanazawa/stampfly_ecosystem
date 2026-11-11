@@ -650,6 +650,19 @@ static void arbitrateFlightMode(sf::FlightMode want)
     // それ以外の拒否時: prev_want 不変 — エッジは持続（上記参照）。
 }
 
+/// Collect the facts of ARMED_GROUND and ask takeoff_policy.hpp (decideArmedGroundTakeoff()) whether it must become TAKEOFF now: the judgement is the pure function's, StateTask only collects the facts (INV-3).
+/// ARMED_GROUND の事実を集め、今 TAKEOFF にすべきかを takeoff_policy.hpp（decideArmedGroundTakeoff()）に問う: 判断は純関数のもので、StateTask は事実を集めるだけ（INV-3）。
+/// @design detailed_design.md §3.1 — ARMED_GROUND -> TAKEOFF (auto: spool dwell; manual: throttle above the threshold, or the healthy ToF shows the craft off the floor) [OK]
+static bool armedGroundTakeoffDue(uint32_t now_us, uint32_t armed_ground_since_us)
+{
+    sf::ArmedGroundFacts facts;
+    facts.auto_takeoff            = sf::flightModeNeedsAltitude(g_state_manager.getMode());
+    facts.spool_elapsed           = static_cast<int32_t>(now_us - armed_ground_since_us) >= static_cast<int32_t>(config::ARMED_GROUND_SPOOL_US);
+    facts.throttle_past_threshold = sf::command_setpoint.latest().throttle > config::TAKEOFF_THROTTLE_THRESH;
+    facts.lifted_off              = sf::tof_health.latest().lifted_off && !g_state_manager.isToFSilent();   // detected by ImuTask (INV-3), only a healthy ToF counts / ImuTask が検出（INV-3）。健全な ToF だけが数える
+    return sf::decideArmedGroundTakeoff(facts);
+}
+
 /// Execute the TAKEOFF decision of takeoff_policy.hpp (decideTakeoff()): the judgement is the pure function's, StateTask only collects the facts and acts (INV-3).
 /// takeoff_policy.hpp の TAKEOFF の判断（decideTakeoff()）を実行する: 判断は純関数のもので、StateTask は事実を集めて実行するだけ（INV-3）。
 /// @design detailed_design.md §3.1 — TAKEOFF -> FLYING (manual: ToF airborne / auto: captured, no floor evidence, none latched; the latch is released by the craft leaving the floor) [OK]
@@ -957,7 +970,9 @@ void StateTask(void* pvParameters)
         //     attitude-covariance inflation re-converges from gravity and the launch is
         //     not instantaneous. The pilot need not time the throttle stick (Tello-like).
         //   ACRO/STABILIZE: manual takeoff — throttle past TAKEOFF_THROTTLE_THRESH
-        //     (raw throttle is thrust in these modes; no auto-takeoff).
+        //     (raw throttle is thrust in these modes; no auto-takeoff), or the healthy ToF
+        //     shows the craft off the floor (tof_health.lifted_off): a craft that rises at
+        //     or below the threshold is in the air (takeoff_policy.hpp).
         // TAKEOFF → FLYING — also split:
         //   ALT/POS auto-takeoff: completes when the CONTROLLER captures its target
         //     altitude (controller_status.takeoff_reached) — decoupled from the ToF
@@ -972,7 +987,9 @@ void StateTask(void* pvParameters)
         //     重力から再収束し、打ち上げが即座にならないようにする。パイロットはスロットルの
         //     タイミングを計る必要がない（Tello 風）。
         //   ACRO/STABILIZE: 手動離陸 — スロットルが TAKEOFF_THROTTLE_THRESH 超
-        //     （これらのモードでは生スロットルが推力。自動離陸なし）。
+        //     （これらのモードでは生スロットルが推力。自動離陸なし）、または健全な ToF が
+        //     機体は床を離れたと示す（tof_health.lifted_off）: 閾値以下で浮く機体は空中に
+        //     いる（takeoff_policy.hpp）。
         // TAKEOFF → FLYING — これもモード別:
         //   ALT/POS 自動離陸: 制御器が目標高度を捕捉したとき完了
         //     （controller_status.takeoff_reached）— ToF 0.15m 空中エッジとは分離。後者は
@@ -995,18 +1012,8 @@ void StateTask(void* pvParameters)
         prev_fs = fs;
 
         if (fs == sf::FlightState::ARMED_GROUND) {
-            if (g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD) {
-                // ALT/POS: ARM triggers the auto-takeoff after the spool/settle dwell.
-                // ALT/POS: スプール/整定ドウェル後に ARM が自動離陸をトリガ。
-                if (static_cast<int32_t>(now_us - armed_ground_since_us) >=
-                    static_cast<int32_t>(config::ARMED_GROUND_SPOOL_US)) {
-                    g_state_manager.notifyTakeoff();      // → TAKEOFF (auto-takeoff)
-                }
-            } else if (sf::command_setpoint.latest().throttle >
-                       config::TAKEOFF_THROTTLE_THRESH) {
-                // ACRO/STABILIZE: manual throttle takeoff.
-                // ACRO/STABILIZE: 手動スロットル離陸。
-                g_state_manager.notifyTakeoff();          // → TAKEOFF (manual)
+            if (armedGroundTakeoffDue(now_us, armed_ground_since_us)) {
+                g_state_manager.notifyTakeoff();   // → TAKEOFF (auto: after the spool dwell; manual: throttle, or the ToF shows the craft off the floor) / → TAKEOFF（自動: スプールの後、手動: スロットル、または ToF が機体は床を離れたと示す）
             }
         } else if (fs == sf::FlightState::TAKEOFF) {
             updateTakeoff(now_us);   // manual: ToF airborne; auto: 0.5 m captured, or the floor shown for 5 s / 手動: ToF が空中、自動: 0.5 m 捕捉、または床が 5 s 示された

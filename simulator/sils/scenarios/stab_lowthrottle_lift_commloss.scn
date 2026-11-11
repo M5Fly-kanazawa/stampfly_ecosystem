@@ -1,0 +1,28 @@
+# stab_lowthrottle_lift_commloss.scn — STABILIZE, a craft that rises with the throttle BELOW the takeoff threshold becomes TAKEOFF / FLYING, and a lost link then lands it
+#                                      STABILIZE、離陸の閾値「以下」のスロットルで浮いた機体は TAKEOFF / FLYING になり、その後リンクが途絶えると着陸する
+#
+# The plant has no way to make a healthy craft lift below the threshold (the motor health is at most 1.0), so an upward gust stands for the lift that the throttle does not give:
+# `wind 0 0 -0.05 400` is a 0.05 N upward force for 0.4 s (an updraft; a fresh battery or the ground effect lift a real craft the same way). The throttle stays at raw 3060 (norm 0.494,
+# below TAKEOFF_THROTTLE_THRESH = 0.5, thrust below the weight): without the gust the craft does not leave the floor (`stab_lowthrottle_floor`). Without the lift-off evidence the state stays
+# ARMED_GROUND for the whole flight (no transition, so no comm-loss landing and no battery landing, and a silent ToF cuts the motors): this scenario then fails.
+# Spec under test (detailed_design.md §3.1, ARMED_GROUND -> TAKEOFF manual row; takeoff_policy.hpp decideArmedGroundTakeoff(), LiftoffWatch):
+#  1. The gust lifts the craft (about 0.8 m): the healthy ToF reads valid heights above 5 cm without a break for 1 s, so ARMED_GROUND -> TAKEOFF (the throttle is still below the threshold), then FLYING (ToF airborne verdict).
+#  2. The link is lost in the air (the gap below): COMM_LOST, the 3 s hover grace, FLYING -> LANDING, then LANDING -> IDLE_GROUND (the same as a craft that took off with the throttle).
+#
+# 突風が機体を浮かせる（約 0.8 m）と、健全な ToF が 5 cm を超える有効な高さを 1 s 途切れずに読むので、ARMED_GROUND → TAKEOFF（スロットルは閾値以下のまま）、続いて FLYING。
+# 空中でリンクが途絶えると（下の空白）、COMM_LOST、3 s のホバー猶予の後、FLYING → LANDING、続いて LANDING → IDLE_GROUND（スロットルで離陸した機体と同じ）。
+# プラントには健全な機体を閾値以下で浮かせる手段が無い（モータの健全度は 1.0 が上限）ので、スロットルが与えない揚力を上向きの突風で代用する: `wind 0 0 -0.05 400` は 0.4 s の上向きの力 0.05 N
+# （上昇気流。実機では新しい電池や地面効果が同じ働きをする）。スロットルは生値 3060（正規化 0.494。TAKEOFF_THROTTLE_THRESH = 0.5 より下で、推力は重さより小さい）のまま。突風が無ければ機体は床を離れない
+# （`stab_lowthrottle_floor`）。浮上の証拠が無ければ、状態は飛行の間ずっと ARMED_GROUND のままになる（遷移が無いので通信断の着陸も電池の着陸も無く、ToF が出力停止するとモータが止まる）: そのときこのシナリオは不合格になる。
+#
+# Run: sf sils scenario simulator/sils/scenarios/stab_lowthrottle_lift_commloss.scn --target vehicle --duration 20000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  1     1000      50                       # B: ARM (4.0 s), STABILIZE
+   +    rc         3060  2048   2048    2048  1     1000      50                       # C: throttle 0.494, below the takeoff threshold (5.0-6.0 s): stays ARMED_GROUND on the floor
+   +    wind 0 0 -0.05 400                                                             # D: the gust (6.0-6.4 s): the craft rises with the throttle below the threshold
+   +    rc         3060  2048   2048    2048  1     1100      50                       # E: (6.4-7.5 s) ARMED_GROUND -> TAKEOFF about 1 s after leaving the floor, then FLYING
+   +8000 rc        3060  2048   2048    2048  1     300       50                       # F: 8 s of silence on the link (7.5-15.5 s) -> COMM_LOST -> 3 s hover grace -> LANDING
+   +    rc         2048  2048   2048    2048  0     300       50                       # G: release the ARM button
+   +    rc         2048  2048   2048    2048  0     3000      50                       # H: settle
