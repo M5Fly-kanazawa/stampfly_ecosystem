@@ -126,17 +126,26 @@ TARGET_BATTERY_ALERT_POLICY = test_battery_alert_policy
 SRCS_API_ARGUMENTS = test_api_arguments.cpp
 TARGET_API_ARGUMENTS = test_api_arguments
 
-# NOTE: test_state_manager is temporarily disabled. It compiled the firmware
-# state_manager/failsafe through the now-removed simulator/sils/compat shim and
-# sils_topics.cpp (deleted in the SILS clean-slate, 2026-05-31). It will be
-# re-wired onto the new SILS host shim; test_state_manager.cpp is kept for that.
-# 注: test_state_manager は一時無効化。削除済み simulator/sils/compat シム +
-# sils_topics.cpp 経由でビルドしていたため(SILS更地化)。新SILSのホストシム上で
-# 再配線予定。test_state_manager.cpp は再配線のため残置。
+# StateManager against the normative table (detailed_design.md §3.1). state_manager.cpp is compiled unmodified; the topics
+# (sf_core/params.cpp) and the clock, log and NVS shims come from simulator/sils/compat, the same host shims the SILS uses.
+# It does NOT use -I. (the local esp_log.h / esp_timer.h stubs): the SILS shims provide the virtual clock and the log hook.
+# 規範表（detailed_design.md §3.1）に対する StateManager。state_manager.cpp は無改変でコンパイルし、トピック
+# （sf_core/params.cpp）と時計・ログ・NVS の代用は SILS と同じホスト用シム simulator/sils/compat から取る。
+# -I.（ローカルの esp_log.h / esp_timer.h の代用）は使わない: 仮想時計とログのフックは SILS のシムが提供する。
+SILS_COMPAT = ../../../simulator/sils/compat
+CXXFLAGS_STATE_MANAGER = -std=c++17 -D_USE_MATH_DEFINES -Wall -Wextra -O2 \
+    -I$(SILS_COMPAT) -I../../../simulator/sils/esp_idf_host \
+    -I../components/sf_math/include \
+    -I../components/sf_core/include \
+    -I../components/sf_state/include
+SRCS_STATE_MANAGER = test_state_manager.cpp \
+       ../components/sf_state/state_manager.cpp ../components/sf_core/params.cpp \
+       $(SILS_COMPAT)/clock_shim.cpp $(SILS_COMPAT)/log_shim.cpp $(SILS_COMPAT)/nvs_shim.cpp
+TARGET_STATE_MANAGER = test_state_manager
 
 .PHONY: all clean test
 
-all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS)
+all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) $(TARGET_STATE_MANAGER)
 
 $(TARGET): $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
@@ -177,6 +186,9 @@ $(TARGET_BATTERY_ALERT_POLICY): $(SRCS_BATTERY_ALERT_POLICY)
 $(TARGET_API_ARGUMENTS): $(SRCS_API_ARGUMENTS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
 
+$(TARGET_STATE_MANAGER): $(SRCS_STATE_MANAGER)
+	$(CXX) $(CXXFLAGS_STATE_MANAGER) -o $@ $^ -lm
+
 test: all
 	./$(TARGET)
 	./$(TARGET_ESKF_FLIP)
@@ -191,6 +203,7 @@ test: all
 	./$(TARGET_LOOP_TIMING)
 	./$(TARGET_BATTERY_ALERT_POLICY)
 	./$(TARGET_API_ARGUMENTS)
+	./$(TARGET_STATE_MANAGER)
 
 clean:
-	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) test_state_manager
+	rm -f $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOOP_TIMING) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) $(TARGET_STATE_MANAGER)
