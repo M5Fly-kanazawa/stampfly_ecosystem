@@ -49,7 +49,7 @@ IDLE_GROUND
 - ARM/DISARMはアクション（モードではない）
 - 親状態が共通処理を保証
 - TAKEOFF/LANDINGは専用モード（離着陸マネージャーが統括）
-- FLIP は 2026-09-16 に専用シーケンス状態として導入。他のシーケンス（AUTO_LAND 等）は将来拡張可能
+- FLIP は専用シーケンス状態として実装する。他のシーケンス（AUTO_LAND 等）は将来拡張可能
 - FAILSAFEは状態ではなくイベント — フェイルセーフコンポーネントが `system.alert` を発行し、状態管理が既存モードへの遷移で対応する
 
 ### 遷移条件
@@ -91,9 +91,9 @@ PairingState（FlightState と並行）
 | 任意 → Pairing（再ペアリング）| ボタン長押し3秒（IDLE_GROUND / IDLE_HELD）。既存ペアを破棄して再探索 |
 
 **制約:**
-- PAIRING 突入は IDLE_GROUND / IDLE_HELD（地上または手持ち）で可能（2026-09-12: 手に持った
-  ままボタンを押すのが利用者にとって一般的な操作のため IDLE_HELD からの突入も認めた。ARM は
-  従来どおり IDLE_GROUND 限定のままで、**Pairing 中は ARM 要求を拒否**するので、この変更は
+- PAIRING 突入は IDLE_GROUND / IDLE_HELD（地上または手持ち）で可能（手に持った
+  ままボタンを押すのが利用者にとって一般的な操作のため IDLE_HELD からの突入も認める。ARM は
+  IDLE_GROUND 限定で、**Pairing 中は ARM 要求を拒否**するので、IDLE_HELD からの突入は
   モータ起動の安全性に影響しない）。
 - ハンドシェイクは**相互 MAC 学習**: 機体が自 MAC を PairingPacket で広告 → コントローラが学習して
   機体 MAC 宛に ControlPacket をユニキャスト送信 → 機体が受信パケットの src MAC を相手側として確定。
@@ -207,7 +207,7 @@ PairingState を参照。
 
 ### Tello API: flip コマンド
 
-Tello SDK 互換 API の `flip l/r/f/b`（宙返り）に対応する（2026-09-16。設計の詳細は
+Tello SDK 互換 API の `flip l/r/f/b`（宙返り）に対応する（設計の詳細は
 `docs/plans/flip-maneuver-plan.md` を参照）。
 
 | 項目 | 内容 |
@@ -317,7 +317,7 @@ IDLE_GROUND
 - ARM/DISARM are actions (not modes)
 - Parent state guarantees common behavior
 - TAKEOFF/LANDING are dedicated modes (managed by Takeoff/Landing Manager)
-- FLIP was introduced as a dedicated sequence state on 2026-09-16. Other sequences (AUTO_LAND, etc.) remain extensible for future use
+- FLIP is a dedicated sequence state. Other sequences (AUTO_LAND, etc.) remain extensible for future use
 - FAILSAFE is an event, not a state — Failsafe component publishes `system.alert`, State Management responds with mode transitions
 
 ### Transition Conditions
@@ -361,9 +361,9 @@ PairingState (parallel to FlightState)
 
 **Constraints:**
 - Pairing can be entered from IDLE_GROUND / IDLE_HELD (on the ground or held in hand)
-  (2026-09-12: allowed from IDLE_HELD too, since pressing the button while holding the
-  vehicle is the common way users start pairing. ARM is still IDLE_GROUND-only, and
-  **ARM requests are rejected while Pairing**, so this does not affect motor-start safety).
+  (IDLE_HELD is allowed too, since pressing the button while holding the
+  vehicle is the common way users start pairing. ARM is IDLE_GROUND-only, and
+  **ARM requests are rejected while Pairing**, so entering from IDLE_HELD does not affect motor-start safety).
 - The handshake is **mutual MAC learning**: the vehicle advertises its own MAC via PairingPacket →
   the controller learns it and unicasts ControlPackets to the vehicle MAC → the vehicle fixes the
   received packet's src MAC as its peer.
@@ -477,7 +477,7 @@ the §2 State Model for details.
 
 ### Tello API: the flip command
 
-Supports the Tello SDK-compatible `flip l/r/f/b` command (2026-09-16; see
+Supports the Tello SDK-compatible `flip l/r/f/b` command (see
 `docs/plans/flip-maneuver-plan.md` for the design).
 
 | Item | Content |

@@ -190,10 +190,10 @@ void PidController::loadParams()
     // Output limits — each loop is clamped to what its downstream stage may
     // deliver, so the conditional-integration anti-windup (pid.hpp) sees the
     // REAL saturation instead of the meaningless default 1.0. The values follow
-    // the flight-proven legacy vehicle/ limits (see pid_controller.hpp).
+    // the limits of the flight-proven reference firmware (see pid_controller.hpp).
     // 出力上限 — 各ループを下流段に渡してよい量でクランプし、条件付き積分の
     // アンチワインドアップ（pid.hpp）が無意味な既定 1.0 でなく実際の飽和を見るように
-    // する。値は旧 vehicle/ の飛行実績リミットに従う（pid_controller.hpp 参照）。
+    // する。値は飛行実績のある別ファームのリミットに従う（pid_controller.hpp 参照）。
     rate_roll_.output_limit  = max_roll_pitch_torque_;          // [Nm]
     rate_pitch_.output_limit = max_roll_pitch_torque_;          // [Nm]
     rate_yaw_.output_limit   = max_yaw_torque_;                 // [Nm]
@@ -312,11 +312,11 @@ void PidController::applyGroundIntegratorHold()
 
 /// Climb rate [m/s] the throttle stick commands: symmetric, spring-centred throttle. throttle_axis in
 /// [-1,+1] with centre(2048)=0: centre = HOLD, up = climb (up to max_climb_rate_), down = descend (up to
-/// max_descent_rate_) — the stick raises/lowers the TARGET altitude (flight-proven legacy vehicle scheme).
+/// max_descent_rate_) — the stick raises/lowers the TARGET altitude (scheme of the flight-proven reference firmware).
 /// The stick range beyond the deadzone is rescaled to [0..1], then to the climb or descent rate (separate limits).
 /// スロットルスティックが指令する上昇率 [m/s]: 対称、バネ中央スロットル。throttle_axis ∈ [-1,+1]、中央(2048)=0:
 /// 中央=ホールド、上=上昇（max_climb_rate_ まで）、下=降下（max_descent_rate_ まで）— スティックで目標高度を
-/// 上下する（旧 vehicle 実績方式）。デッドゾーン外を [0..1] に再スケールし、上昇/降下速度（別リミット）へ。
+/// 上下する（飛行実績のある別ファームの方式）。デッドゾーン外を [0..1] に再スケールし、上昇/降下速度（別リミット）へ。
 float PidController::stickClimbRate(float throttle_axis) const
 {
     const float magnitude = (fabsf(throttle_axis) - stick_deadzone_) / (1.0f - stick_deadzone_);
@@ -339,12 +339,12 @@ float PidController::altitudeHoldClimbRate(float throttle_axis, float altitude)
     // Re-center gate: after an (auto-)takeoff or an in-flight switch INTO ALT/POS the stick may rest
     // off-center (e.g. STABILIZE hover throttle is up), which would jump the altitude. The gate
     // suppresses the command until the stick first returns to the center deadzone (= the spring rest),
-    // then opens — the legacy "release the spring stick to unlock" behavior. Guidance/API own the
+    // then opens — the usual "release the spring stick to unlock" behavior. Guidance/API own the
     // target via the walking setpoint and never reach the stick path.
     // スロットル再センターロック: （自動）離陸後や飛行中の ALT/POS 進入直後はスティックが中央から外れて
     // いることがあり（例: STABILIZE のホバースロットルは上）、高度がジャンプする。ロックはスティックが
-    // 初めて中央デッドゾーン（=バネ静止）に戻るまで指令を抑え、戻ると解除する — 旧来の「バネ式は離せば
-    // 解除」。誘導/API は歩く設定点で目標を所有し、スティック経路に達しない。
+    // 初めて中央デッドゾーン（=バネ静止）に戻るまで指令を抑え、戻ると解除する — 通常の「バネ式は離せば
+    // 解除」の動作。誘導/API は歩く設定点で目標を所有し、スティック経路に達しない。
     if (!throttle_recentered_ && fabsf(throttle_axis) < stick_deadzone_) {
         throttle_recentered_ = true;
     }
@@ -681,18 +681,18 @@ ControlOutput PidController::compute(
         // attitude control throughout — roll/pitch tilt the craft and yaw turns it,
         // exactly as in normal flight (centered sticks → level → straight-up climb;
         // hands-on → the pilot steers while climbing; tilting only costs ~cosθ of lift,
-        // which the altitude loop compensates). Earlier TakeoffClimb forced level attitude
-        // (roll_sp=pitch_sp=yaw=0), which DEAD-STICKED roll/pitch whenever the craft stayed
-        // in that phase — the flight-test bug (2026-06-14). Never lock out attitude: the
-        // pilot must be able to steer in any state (user decision). POS_HOLD still holds the
+        // which the altitude loop compensates). Rejected alternative: forcing level attitude in
+        // TakeoffClimb (roll_sp=pitch_sp=yaw=0) DEAD-STICKS roll/pitch whenever the craft stays
+        // in that phase. Never lock out attitude: the
+        // pilot must be able to steer in any state. POS_HOLD still holds the
         // launch point via the position cascade below (that override is by design, and
         // pilot intent in POS_HOLD is "hold", not "tilt").
         // 自動離陸は「鉛直のみ自動」: 制御器は目標高度まで上昇する（推力は下の高度ブロックが
         // 所有）が、パイロットは終始「完全な姿勢制御」を保つ — roll/pitch で傾け yaw で回頭、
         // 通常飛行と全く同じ（中立→水平→真上に上昇／倒せば上昇中も操縦／傾きは ~cosθ の揚力損
-        // のみで高度ループが補償）。旧来は TakeoffClimb で水平強制（roll_sp=pitch_sp=yaw=0）し、
-        // そのフェーズに留まるとロール/ピッチが応答しなくなった（実機バグ 2026-06-14）。どの状態でも姿勢を
-        // 奪わない（ユーザー判断）。POS_HOLD は下の位置カスケードで発進点を保持する（設計どおり。
+        // のみで高度ループが補償）。不採用の案: TakeoffClimb で水平強制（roll_sp=pitch_sp=yaw=0）すると、
+        // そのフェーズに留まる間ロール/ピッチが応答しなくなる。どの状態でも姿勢を
+        // 奪わない。POS_HOLD は下の位置カスケードで発進点を保持する（設計どおり。
         // POS_HOLD のパイロット意図は「保持」であって「傾ける」ではない）。
 
         // Guidance: walk the POS_HOLD setpoints toward the target and steer yaw
@@ -918,14 +918,14 @@ ControlOutput PidController::compute(
             // Takeoff-complete detection — robust ONE-SIDED reach + timeout backstop.
             // reached: the craft has CLIMBED to within kTakeoffCaptureBandM of the target
             // (altitude >= target - band), sustained briefly → fires on the way UP, immune
-            // to a steady-state hover offset and to vertical-velocity noise (the old
-            // two-sided band + low-velocity settle never fired on hardware, dead-sticking
+            // to a steady-state hover offset and to vertical-velocity noise (a two-sided
+            // band + low-velocity settle never fires on hardware, dead-sticking
             // roll/pitch — see pid_controller.hpp). The timeout guarantees we always leave
             // TakeoffClimb so the pilot regains attitude control even if "reached" never trips.
             // 離陸完了検出 — ロバストな片側到達＋タイムアウト・バックストップ。到達: 機体が目標の
             // kTakeoffCaptureBandM 以内まで上昇（altitude>=target-band）を短時間持続 → 上昇途中で
-            // 成立し、定常ホバー偏差・鉛直速度ノイズに非依存（旧両側バンド+低速整定は実機で成立せず
-            // ロール/ピッチを0固定した。pid_controller.hpp 参照）。タイムアウトは、到達が成立しなく
+            // 成立し、定常ホバー偏差・鉛直速度ノイズに非依存（両側バンド+低速整定は実機で成立せず
+            // ロール/ピッチを0固定する。pid_controller.hpp 参照）。タイムアウトは、到達が成立しなく
             // ても必ず TakeoffClimb を抜けてパイロットが姿勢制御を取り戻すことを保証する。
             if (takeoff_elapsed_cycles_ < UINT16_MAX) ++takeoff_elapsed_cycles_;   // saturates: a uint16 counter would wrap at 163.8 s / 上限で止める: uint16 は 163.8 s で一周する
             if (altitude >= takeoff_target_alt_ - kTakeoffCaptureBandM) {
@@ -1134,9 +1134,9 @@ ControlOutput PidController::compute(
     // 状態推定からのジャイロフィードバック（ESKFでバイアス補正済み）
     // =========================================================================
     // Body angular rate from the state estimate (bias-corrected by the ESKF, FRD).
-    // This closes the rate inner loop; it was previously hardcoded to 0 (open loop).
+    // This closes the rate inner loop (a gyro input fixed at 0 would leave it open).
     // 状態推定からの機体角速度（ESKF でバイアス補正済み、FRD）。これでレート内ループが
-    // 閉じる。以前は 0 固定＝開ループだった。
+    // 閉じる（ジャイロ入力を 0 固定にすると開ループになる）。
     math::Vec3 gyro_rate;
     gyro_rate.x = state.angular_rate[0];
     gyro_rate.y = state.angular_rate[1];
@@ -1147,13 +1147,13 @@ ControlOutput PidController::compute(
     // of the flight-proven normal clamp: the collective sits at mid-scale
     // (thrust_spin_hi_ratio 0.5) precisely so that +-torque headroom exists,
     // and the heavier pitch axis (Iyy) needs it to brake inside 360 deg (SILS
-    // api_flip 2026-09-16: 383 deg overshoot at the normal clamp). Restored
+    // api_flip: 383 deg overshoot at the normal clamp). Restored
     // every cycle so nothing leaks into normal flight.
     // 回転中（レートのみのフェーズ）は回転軸のレートループにミキサーの幾何学的な
     // トルク余裕（flip.spin_torque_limit_nm）を使わせ、通常飛行の実績上限を
     // 使わない: 集合推力を中点（thrust_spin_hi_ratio 0.5）にしたのは ± のトルク
     // 余裕を作るためで、慣性の大きいピッチ軸は 360° 以内で減速するのにそれが要る
-    // （SILS api_flip 2026-09-16: 通常上限では 383° まで行き過ぎ）。毎周期戻すので
+    // （SILS api_flip: 通常上限では 383° まで行き過ぎ）。毎周期戻すので
     // 通常飛行には漏れない。
     const bool flip_spinning = flip_active && !flip_out.attitude_loop;
     const float spin_limit = flip_spinning ? flip_.config.spin_torque_limit_nm
@@ -1167,14 +1167,14 @@ ControlOutput PidController::compute(
     // tau/(4*kappa) of thrust per motor (0.075 N at the 1.23 mNm clamp — as much
     // as the whole per-motor collective), so a small yaw-rate error saturating
     // the yaw loop would eat the mixer headroom the flip axis needs. SILS
-    // api_flip (2026-09-16): a -15 deg/s yaw transient during the pitch spin-up
+    // api_flip: a -15 deg/s yaw transient during the pitch spin-up
     // drove the yaw loop to its clamp, the per-motor clamp then cut the pitch
     // torque to 1/10 and the brake failed. A few degrees of yaw drift over the
     // 0.3 s spin is harmless; the heading hold in Recover restores it.
     // 回転中（レートのみのフェーズ）はヨートルクに上限を設ける: ヨーは 1 モータ
     // あたり τ/(4κ) の推力差が要り（クランプ 1.23 mN·m で 0.075 N — 集合推力の
     // 1 モータ分に匹敵）、小さなヨーレート誤差でヨーループが飽和すると回転軸に
-    // 必要なミキサーの余裕を食い尽くす。SILS api_flip（2026-09-16）: ピッチ加速中の
+    // 必要なミキサーの余裕を食い尽くす。SILS api_flip: ピッチ加速中の
     // −15 °/s のヨー過渡でヨーループが上限に張り付き、モータごとのクランプで
     // ピッチトルクが 1/10 になり減速に失敗した。0.3 s の回転中の数度のヨーずれは
     // 無害で、Recover のヘディング保持が戻す。
@@ -1576,12 +1576,12 @@ float PidController::computeDobCorrection(const StateEstimate& state, float dt)
     // residual carries a standing DC (thrust-calibration deficit k_T≈0.95,
     // README §2) AND Airborne entry usually lands mid-transient; see the
     // "engage conditioning" doc in pid_controller.hpp (SILS-measured collapse
-    // with an instantaneous-sample prime, 2026-07-18).
+    // with an instantaneous-sample prime).
     // 第1段 — プライム: 最初の kDobPrimeCycles で残差を平均（この間 d_hat=0）し、
     // その平均の定常状態へ Q・ウォッシュアウトをプリセット — 人工ステップなしの
     // 平衡からエンゲージ。残差には定在DC（推力較正欠損 k_T≈0.95、README §2）が
     // あり、さらに Airborne 進入はたいてい過渡の最中に起きる。瞬時値プライムでの
-    // SILS実測墜落（2026-07-18）含め pid_controller.hpp「エンゲージ整形」解説参照。
+    // SILS実測墜落を含め pid_controller.hpp「エンゲージ整形」解説参照。
     if (dob_prime_count_ < kDobPrimeCycles) {
         dob_prime_accum_ += residual;
         ++dob_prime_count_;
@@ -1734,13 +1734,13 @@ void PidController::computePositionHold(const StateEstimate& state,
         }
         // During the post-flip settle window the target TRACKS the craft: the
         // flip leaves up to ~1.4 m/s of horizontal velocity, and capturing the
-        // position at FlipComplete made the craft overshoot 1 m and fly back at
-        // the position loop's pace (SILS 2026-09-17). Tracking lets the velocity
+        // position at FlipComplete makes the craft overshoot 1 m and fly back at
+        // the position loop's pace (SILS). Tracking lets the velocity
         // loop bleed the speed off and the hold point becomes wherever the craft
         // stops — the same behaviour as the factory Tello.
         // 宙返り後の整定窓では目標が機体に追従する: 宙返りで最大約 1.4 m/s の水平速度が
         // 残り、FlipComplete の位置を取り込むと 1 m 行き過ぎてから位置ループの速さで
-        // 戻っていた（SILS 2026-09-17）。追従させると速度ループが速度を抜き、止まった
+        // 戻る（SILS）。追従させると速度ループが速度を抜き、止まった
         // 場所が保持点になる — 工場出荷の Tello と同じ振る舞い。
         const bool flip_settling = flip_settle_remaining_s_ > 0.0f && !flip_.active();
         if (capture_pos_ || flip_settling) {
@@ -1823,11 +1823,11 @@ float PidController::brakeRiseInLanding(float thrust, float climb_rate) const
     return sf::brakeRiseThrust(thrust, climb_rate, supportReferenceThrust());   // the pure function, host-tested (blind_landing.hpp) / 純関数。ホスト試験あり（blind_landing.hpp）
 }
 
-/// Near-ground settle assist: a constant-velocity descent is BALANCED by ground effect near the floor (more rotor lift on reduced thrust), so the craft lingers and the descent stalls (pilot report 2026-06-14). Once the
+/// Near-ground settle assist: a constant-velocity descent is BALANCED by ground effect near the floor (more rotor lift on reduced thrust), so the craft lingers and the descent stalls. Once the
 /// altitude estimate is near the ground, the thrust CEILING is ramped down from hover toward kLandingSettleThrustFrac x hover over kLandingSettleRampS. The velocity loop still modulates within the ceiling (so a normal descent
 /// touches down gently before the ceiling bites), but if the craft is STILL floating the falling ceiling drops below what ground effect can support and the craft positively SETTLES: a bounded linger, no thrust-threshold
 /// guesswork, and no free fall (the floor is a fraction of hover, not 0). Only the vertical channel is shaped (INV-1); attitude is untouched. Returns the ceiling [N] (max_thrust_ away from the ground).
-/// 近地面の着地アシスト: 定速降下は接地近傍で地面効果（低推力でローター揚力増）と釣り合い、機体が粘って降下停滞する（パイロット報告）。高度推定が接地近傍に来たら、推力の上限を hover から
+/// 近地面の着地アシスト: 定速降下は接地近傍で地面効果（低推力でローター揚力増）と釣り合い、機体が粘って降下停滞する。高度推定が接地近傍に来たら、推力の上限を hover から
 /// kLandingSettleThrustFrac × hover へ kLandingSettleRampS かけて絞る。速度ループは上限内で調整（通常降下は上限が効く前に穏やかに接地）だが、まだ浮いていれば下がる上限が地面効果の支えを下回り機体は
 /// 確実に沈む — 粘りは有界、推力閾値の当て推量も自由落下もない（床は hover の一定割合で 0 でない）。鉛直チャネルのみ整形（INV-1）、姿勢は不変。上限 [N] を返す（地面から離れていれば max_thrust_）。
 /// @design detailed_design.md §3 注8 — near-ground settle assist: the thrust ceiling falls toward a fraction of the hover thrust [OK]
@@ -2029,13 +2029,13 @@ void PidController::onTakeoffComplete()
 
     // ALT_HOLD holds the TARGET altitude that TakeoffClimb already captured
     // (alt_setpoint_ == takeoff_target_alt_) — NOT the instantaneous altitude, so any
-    // residual climb momentum cannot bias the hold height (decision ②: capture at the
+    // residual climb momentum cannot bias the hold height (capture at the
     // target value, not the overshoot). The vertical-loop integral is kept (it spooled
     // to near-hover thrust — a smooth handoff). The takeoff-complete signal is cleared
     // now that the state machine has consumed it.
     // ALT_HOLD は TakeoffClimb が既に捕捉した「目標」高度（alt_setpoint_ ==
     // takeoff_target_alt_）を保持する — 瞬時高度ではない。残留する上昇運動量が保持高度を
-    // バイアスしない（確定②: 行き過ぎでなく目標値で捕捉）。鉛直ループの積分は維持
+    // バイアスしない（行き過ぎでなく目標値で捕捉）。鉛直ループの積分は維持
     // （ほぼホバー推力まで巻き上がり、滑らかな引き継ぎ）。状態機械が消費済みの離陸完了
     // 信号はここでクリアする。
     takeoff_reached_        = false;
@@ -2249,10 +2249,10 @@ void PidController::onModeChange(FlightMode new_mode)
         // Entering ALT_HOLD/POS_HOLD in flight (Case B): capture the current altitude
         // as the hold target, and close the throttle re-center gate so the stick must
         // pass through center before it commands climb/descent — the stick is at an
-        // arbitrary position at the switch and must not jump the altitude (decision ②).
+        // arbitrary position at the switch and must not jump the altitude.
         // 飛行中の ALT_HOLD/POS_HOLD 進入（Case B）: 現在高度を保持目標として捕捉し、
         // スロットル再センターロックを掛ける — スティックは切替時に任意位置にあり、
-        // 高度をジャンプさせないため中央を通すまで上昇/下降を指令させない（確定②）。
+        // 高度をジャンプさせないため中央を通すまで上昇/下降を指令させない。
         if (new_mode >= FlightMode::ALT_HOLD && current_mode_ < FlightMode::ALT_HOLD) {
             capture_alt_         = true;
             throttle_recentered_ = false;
@@ -2389,24 +2389,23 @@ void PidController::onFlipComplete()
 {
     // Altitude target = the PRE-flip altitude (plan §4.1 onExit), not the
     // current one: Recover ends near the lowest point, so re-capturing there
-    // would ratchet the hover down by ~0.1 m per flip (SILS 2026-09-16).
+    // would ratchet the hover down by ~0.1 m per flip (SILS).
     // 高度目標は「宙返り前」の高度（plan §4.1 onExit）。現在高度で取り直すと
-    // Recover の終わりは最低点付近なので宙返りごとに約 0.1 m ずつ下がる（SILS
-    // 2026-09-16）。
+    // Recover の終わりは最低点付近なので宙返りごとに約 0.1 m ずつ下がる（SILS）。
     alt_setpoint_ = flip_.startHeightM();
     capture_alt_ = false;
     capture_pos_ = true;
     // Keep the altitude and horizontal-velocity integrators: they hold the
     // hover-thrust and tilt trim learned BEFORE the flip (the cascade was
-    // paused, not disturbed, during it). Resetting them made the hover sag
+    // paused, not disturbed, during it). Resetting them makes the hover sag
     // 0.1-0.15 m for several seconds after each flip and, with a 1.0 m
-    // minimum height, refused the next flip as "too low" (SILS 2026-09-17
+    // minimum height, the next flip is refused as "too low" (SILS
     // perturbation runs). Only the outer position P loops start afresh
     // from the re-captured position.
     // 高度と水平速度の積分項は保持する: 宙返り前に学習したホバー推力と傾きの
     // 補正を持っており、宙返り中は休止していただけで乱れていない。リセットすると
     // 宙返りのたびにホバーが 0.1〜0.15 m 沈んで数秒続き、最低高度 1.0 m のもとで
-    // 次の宙返りが「too low」で拒否された（SILS 2026-09-17 摂動族）。取り直した
+    // 次の宙返りが「too low」で拒否される（SILS 摂動試験）。取り直した
     // 位置から始め直すのは外側の位置 P ループだけ。
     pos_x_.reset();
     pos_y_.reset();

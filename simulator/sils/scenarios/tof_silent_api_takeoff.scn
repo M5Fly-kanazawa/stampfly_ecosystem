@@ -1,7 +1,7 @@
-# tof_silent_api_takeoff.scn — the 2026-11 accident chain: API takeoff (POS_HOLD), ToF goes silent
-#                              2026-11 の事故の連鎖: API 離陸（POS_HOLD）の最中に ToF が出力停止
+# tof_silent_api_takeoff.scn — API takeoff (POS_HOLD), ToF goes silent: guard against the in-flight failure
+#                              API 離陸（POS_HOLD）の最中に ToF が出力停止: 実機飛行で見つかった不具合の再発防止試験
 #
-# Same chain as the accident: the Tello-style `takeoff` verb (ground mode change to POS_HOLD ->
+# The failure chain found in flight: the Tello-style `takeoff` verb (ground mode change to POS_HOLD ->
 # ARM -> auto-takeoff climb) is running when the downward ToF delivers its last sample and then
 # nothing. Spec under test:
 #  1. The state machine aborts the climb (TAKEOFF -> LANDING); the blind descent ends by touchdown and the motors stop.
@@ -9,7 +9,7 @@
 #  3. A second `takeoff` while the ToF is still silent is refused up front:
 #     "error tof silent - check the sensor" (nothing is armed).
 #
-# 事故と同じ連鎖: Tello 風 `takeoff` verb（地上の POS_HOLD モード変更 → ARM → 自動離陸の上昇）が
+# 実機飛行で見つかった連鎖: Tello 風 `takeoff` verb（地上の POS_HOLD モード変更 → ARM → 自動離陸の上昇）が
 # 実行されている最中に、下向き ToF が最後のサンプルを出し、以後は何も来ない。検証する仕様:
 #  1. 状態機械が上昇を中止（TAKEOFF → LANDING）し、ToF なしの降下が接地で終わってモータが止まる。
 #  2. API は 12 s の離陸タイムアウトを待たず "error takeoff aborted" を返す。

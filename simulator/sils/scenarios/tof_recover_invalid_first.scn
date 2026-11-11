@@ -3,9 +3,9 @@
 #
 # The first sample after the silence is out of range / invalid, with the SILS fault
 # injection `tof_invalid`, in the ToF range. STABILIZE, the ToF stops at 5.0 s on the ground; the craft climbs blind
-# at 0.17 m/s; at 8.5 s samples come back but all invalid (a floor the sensor cannot range) until 10.0 s. Before the
-# fix the invalid first sample was skipped, the frozen "ground" flag was trusted again and the estimator pinned
-# position/velocity to 0 while the craft climbed. Spec under test:
+# at 0.17 m/s; at 8.5 s samples come back but all invalid (a floor the sensor cannot range) until 10.0 s. If the
+# invalid first sample were skipped, the frozen "ground" flag would be trusted again and the estimator would pin
+# position/velocity to 0 while the craft climbs. Spec under test:
 #  1. Samples that arrive but are all invalid while flying are NOT a recovery: the episode goes on
 #     (log "only invalid samples while flying"), ARM / altitude modes stay refused.
 #  2. When valid samples return (10.0 s) the estimator re-acquires the ToF (innovation 0.93 m, beyond the
@@ -14,8 +14,8 @@
 #
 # 出力停止の後の最初のサンプルが範囲外で無効、を、SILS の故障注入 `tof_invalid` で、ToF の
 # レンジ内で再現。STABILIZE、5.0 s に地上で ToF が停止、機体は 0.17 m/s で ToF なしの上昇、8.5 s にサンプルが戻るが
-# 10.0 s まで全て無効（センサが測れない床）。main（2026-11-08 時点）は無効の最初のサンプルが読み飛ばされ、固定されたままの「接地」フラグが
-# 再び信用され、推定器は機体が上昇する間位置・速度を 0 に固定した。検証する仕様: (1) 飛行中に届くが全て無効の
+# 10.0 s まで全て無効（センサが測れない床）。無効の最初のサンプルが読み飛ばされると、固定されたままの「接地」フラグが
+# 再び信用され、推定器は機体が上昇する間位置・速度を 0 に固定する。検証する仕様: (1) 飛行中に届くが全て無効の
 # サンプルは復帰ではない: エピソードは続き（ログ "only invalid samples while flying"）、ARM・高度モードは拒否される。
 # (2) 有効なサンプルが戻ると（10.0 s）推定器が ToF を取り込み直し（イノベーション 0.93 m、判定 0.5 m を超える）、
 # 推定が真値と一致する。(3) ALT スイッチ（11.7 s）はその後に初めて受理され、高度を保持する。

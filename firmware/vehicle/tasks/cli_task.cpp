@@ -733,9 +733,9 @@ int s_active_tcp_client_fd = -1;
 /// to read stdin concurrently, and ESP-IDF exposes no PUBLIC non-blocking
 /// "bytes waiting" query for the USB console (only a private one explicitly
 /// marked "not for applications" — esp_private/usb_console.h). A USB user
-/// currently has to wait out the (now bounded-by-abort-elsewhere) sweep or
-/// power-cycle; the WiFi/TCP path — the reported failure, `motor stop` sent
-/// over WiFi was never read — now aborts immediately.
+/// currently has to wait out the sweep (its duration is bounded) or
+/// power-cycle; the WiFi/TCP path aborts immediately (a `motor stop` sent
+/// over WiFi is read).
 /// `motor sweep` の非ブロッキング中断チェック（下記 collectPower() が使用）:
 /// コマンドを発行した TCP セッションが前回ポーリング以降に何か送信（または切断）
 /// していれば true。MSG_DONTWAIT（api_task.cpp の UDP コマンドソケットと同じ
@@ -745,9 +745,9 @@ int s_active_tcp_client_fd = -1;
 /// REPL タスク自身が本コマンドの実行でブロックしており並行して stdin を読める者が
 /// おらず、ESP-IDF は USB コンソールの「入力待ち」を問い合わせる公開の非ブロッキング
 /// API を持たない（非公開・「アプリから呼ぶな」明記の esp_private/usb_console.h の
-/// みが存在）。USB ユーザーは現状スイープを待つか電源断で対応するしかないが、
-/// WiFi/TCP 経路（報告された不具合 — WiFi 越しの `motor stop` が読まれない）は
-/// 今すぐ中断できるようになった。
+/// みが存在）。USB ユーザーはスイープ（所要時間には上限がある）を待つか電源断で
+/// 対応するしかないが、WiFi/TCP 経路は即座に中断できる（WiFi 越しの
+/// `motor stop` は読まれる）。
 bool tcpAbortRequested()
 {
     if (s_active_tcp_client_fd < 0) {

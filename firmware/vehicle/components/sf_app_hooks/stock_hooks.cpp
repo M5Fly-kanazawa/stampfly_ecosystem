@@ -41,25 +41,23 @@ namespace sf::app::stock {
 
 sf::IController& controller()
 {
-    // Function-local static: constructed once (first call), matching the
-    // lifetime of the former file-scope `static sf::PidController controller;`
-    // in control_task.cpp. init() is called exactly once, on that first call —
+    // Function-local static: constructed once (first call), so its lifetime is
+    // that of a file-scope `static sf::PidController controller;`. init() is
+    // called exactly once, on that first call —
     // the hook contract says ControlTask calls this once, but the guard costs
     // nothing and protects against a future caller that does not honor it.
-    // 関数内 static: 初回呼び出しで構築される — control_task.cpp にあった
-    // 旧来のファイルスコープ `static sf::PidController controller;` と同じ
-    // 寿命。init() は最初の呼び出しで一度だけ実行する — フック契約では
+    // 関数内 static: 初回呼び出しで構築される — ファイルスコープの
+    // `static sf::PidController controller;` と同じ寿命。init() は最初の呼び出しで一度だけ実行する — フック契約では
     // ControlTask が1回だけ呼ぶ約束だが、ガードは無害で、契約を守らない
     // 将来の呼び出し元からも保護する。
     //
-    // controller.type (0 = PID, 1 = SNN) added 2026-09-17 for the SNN Stage 1
-    // wiring skeleton (Stroobants et al. 2025 port, arXiv:2411.13945). The PID
-    // branch below — including its init()-once guard — is UNCHANGED; the SNN
-    // branch mirrors the same guarded-init pattern for its own static.
-    // controller.type（0=PID, 1=SNN）を2026-09-17に追加（SNN Stage1配線骨格、
-    // Stroobants et al. 2025 移植, arXiv:2411.13945）。下のPID分岐は
-    // init()一回ガードも含め無変更。SNN分岐は自身のstaticに同じガード付き
-    // 初期化パターンを踏襲する。
+    // controller.type (0 = PID, 1 = SNN) selects the implementation; the SNN
+    // branch is the Stage 1 wiring skeleton (Stroobants et al. 2025 port,
+    // arXiv:2411.13945). Each branch uses the same guarded-init pattern
+    // (init() once) for its own static.
+    // controller.type（0=PID, 1=SNN）で実装を選ぶ。SNN 分岐は Stage1 配線骨格
+    // （Stroobants et al. 2025 移植, arXiv:2411.13945）。各分岐は自身の static に
+    // 同じガード付き初期化パターン（init() を1回だけ）を使う。
     static sf::PidController pid_controller;
     static bool pid_initialized = false;
     static sf::SnnController snn_controller;
@@ -87,18 +85,15 @@ sf::IEstimator& estimator()
 {
     // Estimator factory: select by estimator.type (0 = ESKF, 1 = complementary,
     // 2 = SNN placeholder), construct statically (no heap), initialize, and
-    // return via IEstimator. Moved unchanged from imu_task.cpp's
-    // createEstimator() (RESET_PLAN P2: algorithm-independence) — this is
-    // still the only place that names the concrete estimator types;
-    // everything else uses IEstimator. The type==2 (SNN) branch was added
-    // 2026-09-17 (Stroobants et al. 2025 port, arXiv:2411.13945); the ESKF/
-    // complementary branches are UNCHANGED.
+    // return via IEstimator (RESET_PLAN P2: algorithm-independence) — this is
+    // the only place that names the concrete estimator types; everything else
+    // uses IEstimator. The type==2 (SNN) branch is the Stroobants et al. 2025
+    // port (arXiv:2411.13945).
     // 推定器ファクトリ: estimator.type（0=ESKF, 1=相補, 2=SNNプレースホルダー）
-    // で選び、静的生成・初期化して IEstimator で返す。imu_task.cpp の
-    // createEstimator() から挙動を変えず移設（RESET_PLAN P2: アルゴリズム
-    // 非依存）— 具象型の情報を持つのは今もここだけで、他は全て IEstimator を
-    // 使う。type==2（SNN）分岐は2026-09-17追加（Stroobants et al. 2025 移植,
-    // arXiv:2411.13945）。ESKF/相補分岐は無変更。
+    // で選び、静的生成・初期化して IEstimator で返す（RESET_PLAN P2: アルゴリズム
+    // 非依存）— 具象型の名を持つのはここだけで、他は全て IEstimator を
+    // 使う。type==2（SNN）分岐は Stroobants et al. 2025 の移植
+    // （arXiv:2411.13945）。
     static sf::EskfEstimator eskf;
     static sf::ComplementaryEstimator comp;
     static sf::SnnEstimator snn;

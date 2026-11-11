@@ -205,22 +205,22 @@ private:
     PID vel_x_, vel_y_;
 
     // Constants / 定数
-    float max_rate_       = 1.0f;    // [rad/s] ACRO stick → rate sp scale (legacy ROLL/PITCH_RATE_MAX)
-    float max_yaw_rate_   = 5.0f;    // [rad/s] max yaw rate (legacy YAW_RATE_MAX)
+    float max_rate_       = 1.0f;    // [rad/s] ACRO stick → rate sp scale (same value as ROLL/PITCH_RATE_MAX of the flight-proven reference firmware)
+    float max_yaw_rate_   = 5.0f;    // [rad/s] max yaw rate (same value as YAW_RATE_MAX of the flight-proven reference firmware)
     float max_angle_      = 0.5236f; // [rad] max tilt (30 deg)
     // Attitude-loop output limit: how hard the angle loop may command the rate
     // loop. Distinct from max_rate_ (the ACRO stick scale): a 30° tilt error with
     // kp=5 wants 2.6 rad/s, so clamping at the 1.0 rad/s stick scale would cripple
-    // STABILIZE recovery. Legacy vehicle/ MAX_RATE_SETPOINT = 3.0 rad/s.
+    // STABILIZE recovery. Same value as MAX_RATE_SETPOINT (3.0 rad/s) of the flight-proven reference firmware.
     // 姿勢ループ出力上限: 角度ループがレートループに指令できる上限。max_rate_
     // （ACRO スティックスケール）とは別物 — 30° 誤差×kp=5 は 2.6 rad/s を要求するため
-    // 1.0 rad/s で切ると STABILIZE の復元が利かない。旧 vehicle/ の
-    // MAX_RATE_SETPOINT = 3.0 rad/s を踏襲。
+    // 1.0 rad/s で切ると STABILIZE の復元が利かない。飛行実績のある別ファームの
+    // MAX_RATE_SETPOINT = 3.0 rad/s と同じ値。
     float max_att_rate_sp_ = 3.0f;   // [rad/s] attitude-loop output limit
     // Thrust output is PHYSICAL total thrust [N]: the B^-1 mixer (actuator.cpp)
     // allocates it across the motors and converts to duty via the motor curve.
     // max_thrust_ = 4 × max-per-motor (0.168 N) = 0.672 N (T/W ≈ 1.85).
-    // hover_thrust_ = mg × 1.12: the 1.12 is the legacy vehicle/'s FLIGHT-MEASURED
+    // hover_thrust_ = mg × 1.12: the 1.12 is the FLIGHT-MEASURED correction of the flight-proven reference firmware
     // correction (HOVER_THRUST_CORRECTION, stable 1.11–1.13 across logs) — the
     // motor curve over-promises thrust by ~12% on real hardware, and both
     // firmwares share that curve. In SILS the plant inverts the curve exactly, so
@@ -228,7 +228,7 @@ private:
     // ±0.15 N limit).
     // スラスト出力は物理の総推力 [N]: B^-1 ミキサーが各モータに配分しモータ曲線で duty に。
     // max_thrust_ = 4×最大/モータ(0.168N) = 0.672N（T/W≈1.85）。
-    // hover_thrust_ = mg×1.12: 1.12 は旧 vehicle/ の「飛行実測」補正
+    // hover_thrust_ = mg×1.12: 1.12 は飛行実績のある別ファームの「飛行実測」補正
     // （HOVER_THRUST_CORRECTION、ログ全体で 1.11–1.13 と安定）— モータ曲線は実機で
     // 推力を約12%過大に見積もり、曲線は両ファーム共通。SILS ではプラントが曲線を厳密に
     // 逆変換するため +12% の偏りは速度ループ積分（±0.15N 上限内）が吸収する。
@@ -237,23 +237,23 @@ private:
     // ALT_HOLD manual stick rates (param altitude.climb_rate / .descent_rate, separately
     // tunable). Throttle stick is spring-centred (centre=hold); up commands a climb up to
     // max_climb_rate_, down a descent up to max_descent_rate_. Distinct from the AUTO rates
-    // (takeoff_climb_rate_ / landing_descent_rate_). Legacy vehicle's MAX_CLIMB/DESCENT_RATE.
+    // (takeoff_climb_rate_ / landing_descent_rate_). Same values as MAX_CLIMB/DESCENT_RATE of the flight-proven reference firmware.
     // ALT_HOLD の手動スティック速度（param altitude.climb_rate / .descent_rate、別々に調整可）。
     // スロットルはバネ中央（中央=ホールド）、上=max_climb_rate_ まで上昇・下=max_descent_rate_
     // まで降下。自動レート（takeoff_climb_rate_ / landing_descent_rate_）とは別物。
-    float max_climb_rate_   = 0.5f;  // [m/s] up   (= legacy MAX_CLIMB_RATE / ALT_OUTPUT_MAX)
-    float max_descent_rate_ = 0.5f;  // [m/s] down (= legacy MAX_DESCENT_RATE)
-    // Vertical-velocity-loop output limit [N]. Legacy vehicle/ VEL_OUTPUT_MAX:
+    float max_climb_rate_   = 0.5f;  // [m/s] up   (= MAX_CLIMB_RATE / ALT_OUTPUT_MAX of the reference firmware)
+    float max_descent_rate_ = 0.5f;  // [m/s] down (= MAX_DESCENT_RATE of the reference firmware)
+    // Vertical-velocity-loop output limit [N]. VEL_OUTPUT_MAX of the flight-proven reference firmware:
     // the proven alt gains were tuned against this saturation, and it also bounds
     // how far the hover-thrust bias can pull the integrator.
-    // 鉛直速度ループ出力上限 [N]。旧 vehicle/ の VEL_OUTPUT_MAX。実績高度ゲインは
+    // 鉛直速度ループ出力上限 [N]。飛行実績のある別ファームの VEL_OUTPUT_MAX。実績高度ゲインは
     // この飽和と組で調整されており、ホバー推力偏りによる積分の引き込みも抑える。
-    float max_thrust_correction_ = 0.15f;  // [N] (= legacy VEL_OUTPUT_MAX)
+    float max_thrust_correction_ = 0.15f;  // [N] (= VEL_OUTPUT_MAX of the reference firmware)
     float stick_deadzone_ = 0.1f;
     float alt_setpoint_   = 0;       // [m] captured altitude (ALT_HOLD target)
     bool  capture_alt_    = false;   // capture alt_setpoint on the next ALT_HOLD compute
 
-    // Throttle re-center gate (2026-06-14 redesign). After an (auto-)takeoff or an
+    // Throttle re-center gate. After an (auto-)takeoff or an
     // in-flight switch INTO ALT/POS, the throttle stick may rest off-center; treating
     // it immediately as a climb/descend command would jump the altitude. The gate
     // stays CLOSED (throttle ignored for altitude) until the stick is first seen within
@@ -262,7 +262,7 @@ private:
     // in-flight switch) and reset(). RC-only: guidance/API drives altitude via the
     // walking setpoint, not the throttle path, so the gate never blocks an API flight.
     // No timeout — re-centering the throttle is the pilot's natural next action.
-    // スロットル再センターロック（2026-06-14 再設計）。（自動）離陸後や飛行中の ALT/POS
+    // スロットル再センターロック。（自動）離陸後や飛行中の ALT/POS
     // 進入直後はスロットルが中央から外れていることがあり、それを即座に上昇/下降指令と
     // みなすと高度がジャンプする。ロックはスティックが初めて中央デッドゾーン内に入るまで
     // 「掛かった」状態（高度に対しスロットル無視）で、中央に戻ると「解除」されて通常どおり上昇/下降を指令する。
@@ -377,14 +377,14 @@ private:
     // estimator yaw (= bias-corrected gyro integral — no magnetometer needed).
     // Rationale: the rate loop nulls yaw RATE, not angle, so a yaw disturbance
     // torque random-walks the heading between pilot corrections. Flight-log
-    // replay (2026-06-11, kp=3): hands-off heading excursion 12.3°→5.7° mean,
+    // replay (kp=3): hands-off heading excursion 12.3°→5.7° mean,
     // and the heading RETURNS to target instead of drifting. Pilot yaw input
     // wins instantly; guidance owns yaw in API flights; kp=0 disables.
     // ヘディングホールド（STABILIZE 以上）。ヨースティック中立の間、離した瞬間に捕捉
     // した方位を推定ヨー角（=バイアス補正済みジャイロ積分 — 地磁気不要）のレート制限
     // 付き P ループで保持する。理由: レートループはヨー「角速度」しか戻さないため、
     // ヨー外乱トルクで方位は操縦修正の合間にランダムウォークする。フライトログ再生
-    // （2026-06-11, kp=3）: 手放し方位ずれ平均 12.3°→5.7°、かつ方位は流れず目標へ
+    // （kp=3）: 手放し方位ずれ平均 12.3°→5.7°、かつ方位は流れず目標へ
     // 戻る。パイロットのヨー入力が常に優先。API 飛行では誘導がヨーを所有。kp=0 で無効。
     bool  yaw_hold_active_ = false;
     float yaw_hold_target_ = 0;        // [rad] captured heading / 捕捉方位
@@ -469,8 +469,8 @@ private:
 
     // --- Acceleration-based disturbance observer (DOB) for the altitude vel
     // loop (opt-in, param altitude.dob.fc = 0 disables it — default OFF). ---
-    // Design: analysis/scripts/alt_dob_design/README.md §5 (2026-07-18,
-    // flight-log-driven closed-loop replay). Compares a nominal actuation
+    // Design: analysis/scripts/alt_dob_design/README.md §5 (flight-log-driven
+    // closed-loop replay). Compares a nominal actuation
     // model (pure delay + 1st-order lag) driven by the PAST thrust command
     // against the measured vertical specific force; the residual (external
     // disturbance the model does not explain) passes through a 2nd-order
@@ -481,8 +481,8 @@ private:
     // computeDobCorrection() / resetDobStates() in pid_controller.cpp.
     // --- 高度速度ループ用の加速度ベース外乱オブザーバ（DOB, opt-in, param
     // altitude.dob.fc=0 で無効=既定OFF）。---
-    // 設計: analysis/scripts/alt_dob_design/README.md §5（2026-07-18、フライト
-    // ログ駆動閉ループ再生）。過去の推力指令で駆動したノミナルアクチュエーション
+    // 設計: analysis/scripts/alt_dob_design/README.md §5（フライトログ駆動の
+    // 閉ループ再生）。過去の推力指令で駆動したノミナルアクチュエーション
     // モデル（純遅れ+1次遅れ）と実測鉛直の加速度計測定値を比較し、残差（モデルで説明できない
     // 外乱）を2次バターワースLPF（Q, 調整可fc）→固定0.03Hz HP（ウォッシュアウト、
     // DC所有権を速度ループ積分器＋ホバー推力学習へ残す＝帯域分離。README §3）に
@@ -552,7 +552,7 @@ private:
     // usually happens mid-transient (takeoff capture / in-flight switch while
     // arresting a climb). Zero-init or instantaneous-sample priming turns
     // either into a multi-second thrust bump — SILS flight test showed a full
-    // clamp-pinned collapse (alt_flight, DOB-enabled run, 2026-07-18). So:
+    // clamp-pinned collapse (alt_flight, DOB-enabled run). So:
     //  1) PRIME: average the residual over kDobPrimeCycles (0.25 s — the same
     //     window the sim's equilibrium init used), d_hat forced 0 meanwhile,
     //     then preset Q+washout to that average's steady state.
@@ -565,7 +565,7 @@ private:
     // §2）があり、さらに Airborne 進入はたいてい過渡の最中（離陸捕捉・上昇減速
     // 中の飛行中切替）に起きる。ゼロ初期化や瞬時値プライミングはどちらも数秒
     // スケールの推力バンプになる — DOB有効SILS飛行試験でクランプ張り付きの墜落を
-    // 実測（alt_flight, 2026-07-18）。よって:
+    // 実測（alt_flight）。よって:
     //  1) プライム: kDobPrimeCycles（0.25s、シムの平衡初期化と同じ窓）の残差
     //     平均を取り（その間 d_hat=0）、その定常状態へ Q+ウォッシュアウトを
     //     プリセット。
@@ -624,27 +624,25 @@ private:
     // clamps its output and gates its integrator at ±output_limit, so the limit
     // must be on the order of what the plant can deliver — with the default 1.0
     // the rate integrators could wind up to ~130× the available torque.
-    // Roll/pitch is the legacy vehicle/'s FLIGHT-PROVEN limit (ROLL/PITCH
+    // Roll/pitch is the FLIGHT-PROVEN limit of the reference firmware (ROLL/PITCH
     // _OUTPUT_LIMIT): the proven rate gains were tuned against this saturation.
     // It sits below the geometric maximum (2·0.168 N·0.023 m ≈ 7.7e-3 Nm),
     // leaving thrust headroom — full differential torque would starve the
     // collective. Yaw (geometric max 2·0.168 N·κ ≈ 1.38e-3 Nm at κ=4.10e-3,
-    // actuator.cpp; was ≈2.06e-3 Nm under the 2026-07-17..2026-08-02 κ=6.12e-3)
-    // is runtime-tunable via rate.yaw.max_torque after the NT-Kanazawa
-    // yaw-saturation diagnosis — default is the treatment value, rescaled by
-    // the exact same ratio as κ on 2026-08-03 (PURE rescale, physical torque
+    // actuator.cpp) is runtime-tunable via rate.yaw.max_torque after the
+    // NT-Kanazawa yaw-saturation diagnosis — default is the treatment value,
+    // scaled by the same ratio as κ (a pure rescale, physical torque
     // cap unchanged); provenance and the flight-proven-equivalent fallback
     // are in params.cpp.
     // レートループ出力上限（PID アンチワインドアップ用、loadParams 参照）。各 PID は
     // 出力と積分器を ±output_limit で判定するため、上限はプラントが出せる量の
     // オーダーと一致させる必要がある — 既定 1.0 のままだと積分器は実トルクの約130倍
-    // まで巻き上がる。ロール/ピッチは旧 vehicle/ の「飛行実績」上限（*_OUTPUT_LIMIT）で、
+    // まで巻き上がる。ロール/ピッチは飛行実績のある別ファームの「飛行実績」上限（*_OUTPUT_LIMIT）で、
     // 幾何最大値（2·0.168N·0.023m≈7.7e-3 Nm）より低く総推力の余裕を残す。ヨー（幾何最大
-    // 2·0.168N·κ≈1.38e-3 Nm、κ=4.10e-3。2026-07-17〜2026-08-02のκ=6.12e-3下では
-    // ≈2.06e-3 Nmだった）は NT金沢ヨー飽和診断を受け rate.yaw.max_torque でランタイム
-    // 調整可能 — 既定は治療値。2026-08-03にκと厳密に同じ比で再スケール（純粋な再スケール、
+    // 2·0.168N·κ≈1.38e-3 Nm、κ=4.10e-3）は NT金沢ヨー飽和診断を受け rate.yaw.max_torque でランタイム
+    // 調整可能 — 既定は治療値で、κと同じ比で換算した値（純粋な再スケール、
     // 物理トルク上限は不変）。出典と飛行実績等価のフォールバック値は params.cpp のコメント参照。
-    float max_roll_pitch_torque_ = 5.2e-3f;  // [Nm] legacy ROLL/PITCH_OUTPUT_LIMIT
+    float max_roll_pitch_torque_ = 5.2e-3f;  // [Nm] ROLL/PITCH_OUTPUT_LIMIT of the reference firmware
     float max_yaw_torque_        = 1.226e-3f; // [Nm] default = param rate.yaw.max_torque (SSOT params.cpp)
 
     // Autonomous landing descent rate (VerticalPhase::Landing — set by onLanding,
@@ -756,22 +754,22 @@ private:
     //              (one-sided, altitude >= target - band) sustained kTakeoffSettleCycles.
     //   backstop = after kTakeoffMaxCycles in TakeoffClimb, complete unconditionally. A craft that the ToF positively shows to be still on the floor is NOT let through by StateTask
     //              (decideTakeoff(), takeoff_policy.hpp: it holds TAKEOFF there and aborts after kAutoTakeoffNoLiftAbortUs); this controller does not judge the floor.
-    // The earlier two-sided band (|target-alt|<band) + low-velocity-settle never fired on
+    // Rejected alternative: a two-sided band (|target-alt|<band) + low-velocity-settle never fires on
     // hardware: a steady-state offset (real hover altitude ≠ setpoint) or vertical-velocity
-    // noise kept it out of the tight window, so the craft stayed in TakeoffClimb with the
+    // noise keeps it out of the tight window, so the craft stays in TakeoffClimb with the
     // roll/pitch sticks dead-sticked level (pid_controller.cpp lines ~190). The one-sided
     // reach is offset-immune (it fires on the way UP), and the timeout guarantees we always
     // leave TakeoffClimb so the pilot regains attitude control. Airborne ALT_HOLD then holds
-    // alt_setpoint_ = target (decision ②) and arrests any climb overshoot.
+    // alt_setpoint_ = target and arrests any climb overshoot.
     // 自動離陸完了（TakeoffClimb→Airborne、制御器側 TAKEOFF→FLYING 信号 isTakeoffComplete）。
     // ロバストな「片側到達」＋タイムアウト・バックストップ:
     //   到達 = 高度が目標の kTakeoffCaptureBandM 以内まで上昇（片側, altitude>=target-band）を
     //          kTakeoffSettleCycles 持続。backstop = TakeoffClimb で kTakeoffMaxCycles 経過で無条件完了。ToF が床の上にいると「積極的に」示す機体は StateTask が通さず
     //          （decideTakeoff()、takeoff_policy.hpp: そこで TAKEOFF を保ち、kAutoTakeoffNoLiftAbortUs 後に中止する）、この制御器は床の判断をしない。
-    // 旧来の両側バンド+低速整定は実機で成立しなかった: 定常偏差（実保持高度≠setpoint）や鉛直速度
-    // ノイズで窓に入らず、機体が TakeoffClimb に留まりロール/ピッチが0固定された（compute 行~190）。
+    // 不採用の案: 両側バンド+低速整定は実機で成立しない: 定常偏差（実保持高度≠setpoint）や鉛直速度
+    // ノイズで窓に入らず、機体が TakeoffClimb に留まりロール/ピッチが0固定される（compute 行~190）。
     // 片側到達は偏差非依存（上昇途中で成立）、タイムアウトは必ず TakeoffClimb を抜けることを保証し
-    // パイロットが姿勢制御を取り戻す。Airborne ALT_HOLD は alt_setpoint_=target を保持（決定②）し
+    // パイロットが姿勢制御を取り戻す。Airborne ALT_HOLD は alt_setpoint_=target を保持し
     // 行き過ぎを吸収する。
     static constexpr float    kTakeoffCaptureBandM = 0.05f;  // [m] reach within 5 cm below target
     static constexpr uint16_t kTakeoffSettleCycles = 20;     // 20 × 2.5ms = 50 ms sustained
@@ -826,9 +824,9 @@ private:
     // 評価を自ら呼べない。isTakeoffComplete()/isGuidanceActive() が
     // オンデマンド計算でなくキャッシュ済みフラグを読むのと同じ理由。
     bool            flip_ready_  = false;
-    // Master switch cached from param flip.enable (default OFF, first hardware
-    // flip failed 2026-10-02). / param flip.enable のマスタースイッチ（既定OFF、
-    // 実機初回の宙返りが失敗、2026-10-02）。
+    // Master switch cached from param flip.enable (default OFF: the flip is
+    // not yet reliable on hardware). / param flip.enable のマスタースイッチ（既定OFF:
+    // 宙返りは実機でまだ信頼できない）。
     bool            flip_enabled_ = false;
     FlipBlockReason flip_reason_ = FlipBlockReason::NotFlying;
 

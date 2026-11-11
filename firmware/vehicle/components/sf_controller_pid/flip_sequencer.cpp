@@ -464,9 +464,9 @@ FlipSequencer::Output FlipSequencer::updateRecover(const Input& input)
 // thrust_lo_n at 90 deg and stays there while inverted, because inverted thrust
 // points DOWN. The attitude P law (kp = 5 /s) is slow and needs almost no
 // torque, so the low collective does not slow the righting: SILS
-// flip_abort_recover (2026-10-02, stopped at 168 deg tilt) reached the same
+// flip_abort_recover (stopped at 168 deg tilt) reaches the same
 // tilt with 0.03 N as with 0.2 N while falling less fast, and a constant
-// thrust_spin_hi accelerated the 2026-10-02 hardware craft at ~1.9 g.
+// thrust_spin_hi accelerated the hardware craft at ~1.9 g in a hardware flip test.
 // recoverThrustN — 姿勢ループが機体を戻している間の集合推力を傾きで決める:
 // ほぼ水平（<= recover_boost_tilt_deg）は増強。angle_a_deg（スピンの加速窓が
 // 終わるのと同じ角度: 推力ベクトルがまだ概ね上向き）までは回転窓の集合推力
@@ -474,9 +474,9 @@ FlipSequencer::Output FlipSequencer::updateRecover(const Input& input)
 // 上向き成分 cos(tilt)（= R33）に比例して縮め、90° で thrust_lo_n、反転中は
 // それを保つ（反転中の推力は「下向き」のため）。姿勢の P 則（kp = 5 /s）は遅く、
 // ほとんどトルクを要しないので、集合推力を低くしても立て直しは遅くならない:
-// SILS flip_abort_recover（2026-10-02, 傾き 168° で停止）は 0.2 N でも 0.03 N でも
-// 同じ傾きに戻り、0.03 N の方が落下は遅かった。一定の thrust_spin_hi だと
-// 2026-10-02 の実機は約 1.9 g で加速した。
+// SILS flip_abort_recover（傾き 168° で停止）は 0.2 N でも 0.03 N でも
+// 同じ傾きに戻り、0.03 N の方が落下は遅い。一定の thrust_spin_hi だと
+// 実機の宙返り試験で機体は約 1.9 g で加速した。
 // -----------------------------------------------------------------------------
 float FlipSequencer::recoverThrustN(const Input& input) const
 {

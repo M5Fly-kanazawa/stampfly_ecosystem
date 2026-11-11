@@ -8,13 +8,13 @@
 # (imu_task): hold pos/vel at zero on the ground (no valid ToF below min range),
 # reset at the ground→airborne edge for a clean ToF lock. Without the handoff the
 # ground-phase vertical drift exceeds the ToF innovation gate at takeoff and the
-# estimate diverges (ALT_HOLD then chases a bad altitude). See the P8 Phase B fix.
+# estimate diverges (ALT_HOLD then chases a bad altitude). See imu_task's vertical handoff.
 # 目的（Layer 3 判定）: vehicle を ARMED_GROUND→TAKEOFF→FLYING と進め、STABILIZE で
 # 少し上昇後、空中で ALTITUDE_HOLD に渡し、閉ループが高度を保持することを検証する。
 # ALT_HOLD は ESKF 鉛直推定（altitude=-pos_z, vel_up=-vel_z）を追う。ToF のみの鉛直
 # ハンドオフ（imu_task）を検証: 接地中は pos/vel をゼロ保持（最小レンジ未満で ToF 無効）、
 # 接地→空中エッジで reset しクリーンに ToF ロック。ハンドオフが無いと地上の鉛直ドリフトが
-# 離陸時に ToF innovation 判定を超え推定が発散する（P8 Phase B 修正参照）。
+# 離陸時に ToF innovation 判定を超え推定が発散する（imu_task の鉛直ハンドオフ参照）。
 #
 # Sticks are raw 12-bit ADC, centre 2048. STABILIZE thrust = clamp((raw-2048)/2048,0,1)
 # * max_thrust; as of 2026-08-22 (Plant thrust_efficiency=0.7133, firmware static
@@ -36,24 +36,26 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    rc   2048  2048   2048    2048  0     4000      50              # A: disarmed 4 s — boot reaches IDLE_GROUND before ARM edge
    +    rc   2048  2048   2048    2048  1     1000      50              # B: ARM rising edge (IDLE_GROUND → ARMED_GROUND), idle throttle 1 s
-   +    rc   3171  2048   2048    2048  1     1300      50              # C: STABILIZE take-off — throttle up (>0.5) → TAKEOFF, dwell 0.5 s → FLYING; gentle climb off the ground. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%). Dwell ALSO shortened 2500ms→1300ms: at the new plant's stronger thrust margin, holding 3473 for the old 2500ms carries ~1.7 m/s of residual climb into the ALT_HOLD handoff, which pushes truth altitude past the ToF's 4.0 m valid range (plant.cpp) and destabilizes the estimate — verified empirically (sweep of dwell 900–2500ms: <1150ms never leaves the ground / re-touches down, ≥1300ms gives a clean, bounded, DECAYING handoff transient with no ToF range exceedance). 1300ms keeps the craft safely airborne (min alt 0.19 m post-handoff) with margin. UPDATE 2026-08-22: STABILIZE throttle raw further recalibrated (deviation-from-centre ×0.8386) 3473→3243; the 1300ms dwell above was chosen under the 3473 calibration and is unaffected by this later raw-value change. | 2026-10-31 R_out plant: STABILIZE/ACRO throttle 3243->3171 (deviation from 2048 x0.94: open-loop hover raw 3154->3088, SILS sweep at 3.87 V) / R_outプラントでホバーraw 3154->3088、偏差x0.94
+   +    rc   3171  2048   2048    2048  1     1300      50              # C: STABILIZE take-off — throttle up (>0.5) → TAKEOFF, dwell 0.5 s → FLYING; gentle climb off the ground. Throttle raw 3171 is above the open-loop hover raw 3088 (SILS sweep at 3.87 V). Dwell 1300 ms: a longer dwell (2500 ms) carries ~1.7 m/s of residual climb into the ALT_HOLD handoff, which pushes truth altitude past the ToF's 4.0 m valid range (plant.cpp) and destabilizes the estimate. Verified empirically (sweep of dwell 900–2500 ms): <1150 ms never leaves the ground / re-touches down, >=1300 ms gives a clean, bounded, DECAYING handoff transient with no ToF range exceedance. 1300 ms keeps the craft safely airborne (min alt 0.19 m post-handoff) with margin.
    +    rc   2048  2048   2048    2048  1     12000     50        1     # D: switch to ALT_HOLD (alt=1) WHILE AIRBORNE; throttle raw 2048 = climb-rate 0 → captureAltitude + HOLD 12 s. WATCH truth alt for runaway vs hold.
    +      rc    2048 2048 2048 2048  0     200       50              # release ARM button / ボタン離し
    +      rc    2048 2048 2048 2048  1     200       50              # press again → DISARM (toggle) / 再押下=DISARM
    +      rc    2048 2048 2048 2048  0     600       50              # settle disarmed / disarm 後整定
 #
-# Expectation (MEASURED, P8 Phase B fix — tune from the run's flight-log bundle's `truth.csv`/`posvel.csv` altitude):
+# Expectation (MEASURED — tune from the run's flight-log bundle's `truth.csv`/`posvel.csv` altitude):
 #   Ground (t<5.3): ESKF est_alt held at ~0 (no drift) while truth ~0.01 m.
 #   Handoff (t≈6.3, ToF > 0.15 m): resetPositionVelocity → ToF locks, est tracks truth.
 #   ALT_HOLD (t≈6.3–18.3): a bounded, DECAYING oscillation (peak ≈0.62 m, trough ≈0.19 m)
 #     settles to hold ~0.60 m by t≈15; ESKF est tracks truth throughout (rmse ≈0.02 m,
 #     well inside gate); motors settle near the new hover duty ~0.73. Bounded, no runaway.
 #   DISARM (t≈18.5): motors cut, craft lands; est re-anchored to ~0 (no post-landing drift).
-# 2026-07-26 ODEプラント(実測Ct)対応再調整: 上記のとおり新プラント下での離陸マージン増加により
-# ハンドオフ時の残留上昇速度が大きくなり、ALT_HOLD 突入直後に振幅の大きい（が発散しない）減衰
+# The plant's takeoff margin leaves a large residual climb speed at the handoff, so a large (but non-diverging) decaying
+# oscillation follows right after ALT_HOLD engages. It is not a true divergence (ESKF tracks throughout, rmse≈0.02 m), so the numeric
+# gate windows in alt_flight.expect are placed after the transient has settled; the thresholds are strict.
+# プラントの離陸マージンによりハンドオフ時の残留上昇速度が大きく、ALT_HOLD 突入直後に振幅の大きい（が発散しない）減衰
 # 振動が生じる。これは真の発散ではない（ESKF は終始追従、rmse≈0.02m）ため、alt_flight.expect
-# の数値判定の窓を後方（過渡収束後）へシフトして対応し、閾値自体は変更していない。
-# 期待（実測, P8 Phase B 修正 — フライトログ一式の truth.csv/posvel.csv の高度で調整）:
+# の数値判定の窓は過渡収束後に置いており、閾値自体は厳しい値のままである。
+# 期待（実測 — フライトログ一式の truth.csv/posvel.csv の高度で調整）:
 #   地上(t<5.3): ESKF est_alt が ~0 保持（ドリフト無）、真値 ~0.01m。
 #   ハンドオフ(t≈6.3, ToF>0.15m): resetPositionVelocity → ToF ロック、est が真値追従。
 #   ALT_HOLD(t≈6.3–18.3): 有界な減衰振動（peak≈0.62m, trough≈0.19m）を経て t≈15 で ~0.60m に

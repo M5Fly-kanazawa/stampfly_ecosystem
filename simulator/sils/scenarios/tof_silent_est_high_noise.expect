@@ -1,9 +1,9 @@
 # tof_silent_est_high_noise.expect — the hover-thrust estimate 35 % too high (noise n2): the altitude ceiling is effective
 # ホバー推力の見積もりが（ノイズ n2 で）35 % 高い: 高度の天井が実効的
 #
-# The auto-takeoff overshoot stays within the ceiling + margin (1.35 m) + the stopping distance (peak 1.2-1.5 m, before: 1.69 m); the descent without a ToF
+# The auto-takeoff overshoot stays within the ceiling + margin (1.35 m) + the stopping distance (peak 1.2-1.5 m); the descent without a ToF
 # ends on the floor, not by the time limit or an emergency DISARM.
-# 自動離陸の行き過ぎは、天井 + 余裕（1.35 m）+ 停止距離に収まり（最高 1.2〜1.5 m、以前: 1.69 m）、ToF なしの降下は床の上で終わる（時間切れ・非常の DISARM ではない）。
+# 自動離陸の行き過ぎは、天井 + 余裕（1.35 m）+ 停止距離に収まり（最高 1.2〜1.5 m）、ToF なしの降下は床の上で終わる（時間切れ・非常の DISARM ではない）。
 exit 0
 log_contains any "Takeoff complete → FLYING/ALT_HOLD"
 log_contains any "Blind landing: ToF silent, velocity loop"

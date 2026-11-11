@@ -74,7 +74,7 @@ static sf::StateManager g_state_manager;
 // 空中エッジで ImuTask の resetPositionVelocity が別途・正確に処理（クラスB, architecture §4）。
 // バイアスは飛行中も同じ IMU ゆえ地上推定を保持。（CLAUDE.md: 制御変更はシミュレーションで裏付け。）
 //
-// @design detailed_design.md §3 — ARM: ESKF attitude-covariance inflation (was full reset) [OK]
+// @design detailed_design.md §3 — ARM: ESKF attitude-covariance inflation (not a full reset) [OK]
 // @design architecture.md §4 — ground→flight covariance handoff (SILS-validated)            [OK]
 
 /// Register the StateManager transition callbacks (called once at task start, after
@@ -82,13 +82,13 @@ static sf::StateManager g_state_manager;
 /// command topics per the detailed_design §3 transition table; the resource-owning
 /// tasks (ImuTask=estimator, ControlTask=controller, NotifyTask=LED/buzzer) consume them.
 /// This is the single place that encodes the transition table and makes the state
-/// machine the sole owner of transition resets, replacing the ad-hoc edge detection that
-/// used to live in ImuTask/ControlTask.
+/// machine the sole owner of transition resets (ImuTask/ControlTask have no edge detection
+/// of their own).
 /// StateManager の遷移コールバックを登録する（タスク開始時に init() 後1回）。各コールバックは
 /// detailed_design §3 遷移表に従い推定器/制御器/通知の指令トピックにリセット指令を publish し、
 /// リソース所有タスク（ImuTask=推定器, ControlTask=制御器, NotifyTask=LED/ブザー）が消費する。
-/// ここが遷移表を符号化する唯一の場所で、ImuTask/ControlTask に散らばっていたエッジ検出を
-/// 置き換え、遷移リセットの唯一の所有者を状態機械にする。
+/// ここが遷移表を符号化する唯一の場所で、遷移リセットの唯一の所有者は状態機械である
+/// （ImuTask/ControlTask に独自のエッジ検出はない）。
 ///
 /// @design architecture.md §4 — onExit/onEnter callbacks consolidate reset    [OK]
 /// @design detailed_design.md §3 — state transition table                     [OK]
@@ -237,17 +237,17 @@ static void registerStateCallbacks(sf::StateManager& manager)
                 {static_cast<uint8_t>(sf::ControllerCmd::Landing), 0, now, 0});
             break;
         case FlightState::TAKEOFF:
-            // ALT_HOLD/POS_HOLD flight starts with an AUTO-takeoff (2026-06-14 redesign):
+            // ALT_HOLD/POS_HOLD flight starts with an AUTO-takeoff:
             // ARM ITSELF enters TAKEOFF (no throttle input) after the spool dwell — in
             // these modes raw throttle→thrust makes no sense, so the controller climbs
             // the altitude cascade to the target (0.5m) with level attitude (POS: holds
             // the launch point) and reports capture to complete the takeoff. STABILIZE/
             // ACRO keep the manual throttle takeoff (no verb).
-            // ALT_HOLD/POS_HOLD の飛行開始は「自動離陸」（2026-06-14 再設計）: ARM 自体が
+            // ALT_HOLD/POS_HOLD の飛行開始は「自動離陸」: ARM 自体が
             // （スロットル入力なしで）スプールドウェル後 TAKEOFF に入る — これらのモードでは
             // 生スロットル→推力は意味を持たないため、制御器が高度カスケードで目標（0.5m）まで
             // 水平姿勢（POS は発進点保持）で上昇し、捕捉を報告して離陸を完了させる。
-            // STABILIZE/ACRO は従来の手動スロットル離陸（verb なし）。
+            // STABILIZE/ACRO は手動スロットル離陸（verb なし）。
             if (g_state_manager.getMode() >= sf::FlightMode::ALT_HOLD) {
                 sf::controller_command.publish(
                     {static_cast<uint8_t>(sf::ControllerCmd::Takeoff),
@@ -429,7 +429,7 @@ static void rejectFlipButton(const char* why)
 /// condition fact (ControllerStatus.flip_ready, C2-C8). Unlike the API path
 /// there is no reply channel, so every rejection is logged (one line) AND
 /// sounded (error tone). The one transient reason, NotSteady (hover jitter —
-/// hardware 2026-10-02: all bounds held only ~17 % of the time, longest window
+/// on hardware: all bounds held only ~17 % of the time, longest window
 /// 0.38 s), is not rejected at once but latched for flip.button_wait_ms
 /// (serviceFlipButtonLatch starts the flip when a steady window opens).
 /// Every other reason (Disabled, TooLow, BatteryLow, ...) will not clear by
@@ -438,7 +438,7 @@ static void rejectFlipButton(const char* why)
 /// 規範条件（detailed_design.md §3.1 FLIP 行: FLYING で受理、FLIP 自身は
 /// busy、他は拒否）に加え制御器の実行条件の事実（ControllerStatus.flip_ready,
 /// C2-C8）で判定する。API と違い返答先が無いので、不成立は必ずログ1行「と」
-/// エラー音で知らせる。一過性の理由 NotSteady（ホバーの揺れ — 実機 2026-10-02:
+/// エラー音で知らせる。一過性の理由 NotSteady（ホバーの揺れ — 実機では
 /// 全条件が成立したのは約 17 % の時間、最長の窓 0.38 s）は即拒否せず
 /// flip.button_wait_ms の間ラッチする（定常の窓が開けば serviceFlipButtonLatch が
 /// 開始する）。他の理由（Disabled, TooLow, BatteryLow など）は 1 秒で自然に
@@ -579,14 +579,12 @@ static void handleAttitudeMismatch(AttitudeMismatchTracker& tracker)
 /// IS the truth. Without this, the crash-return mode reset (ground →
 /// STABILIZE, a re-fly-safety rule) leaves the actual mode disagreeing
 /// with a switch that never moved — no edge ever comes, the LED shows
-/// STABILIZE while the pilot's switch says ACRO (hardware bug report,
-/// 2026-06-11). Armed/flying states stay edge-only so a parked
+/// STABILIZE while the pilot's switch says ACRO. Armed/flying states stay edge-only so a parked
 /// transmitter can never override the API mid-flight.
 /// IDLE_GROUND では「レベル合わせ」: 設置・非 ARM ならスイッチ位置こそが
 /// 真。これが無いと墜落復帰のモードリセット（接地→STABILIZE、再飛行安全則）
 /// の後、動いていないスイッチと実モードの不一致が固定化する — エッジは
-/// 永遠に来ず、スイッチが ACRO でも LED は STABILIZE のまま（実機バグ報告,
-/// 2026-06-11）。ARM 後・飛行中はエッジのみ＝放置送信機が飛行中の API
+/// 永遠に来ず、スイッチが ACRO でも LED は STABILIZE のまま。ARM 後・飛行中はエッジのみ＝放置送信機が飛行中の API
 /// モードを覆せない性質は不変。
 /// Mode arbitration — implements the NORMATIVE event×state table in
 /// detailed_design.md §3.1 (モード調停表). Two rules:
@@ -920,14 +918,14 @@ void StateTask(void* pvParameters)
                 // controller_status.flip_ready (execution conditions C2-C8, plan
                 // §3.1/§4.4) and replied `error flip: <reason>` if it was false.
                 // Re-checking it here ~20 ms later raced against conditions
-                // sitting on their threshold (SILS 2026-09-17, --motor-delay 10:
+                // sitting on their threshold (SILS --motor-delay 10:
                 // ready at the API, not ready here, API replied "rejected").
                 // StateManager judges C1 (FLYING) in requestFlip(); the controller
                 // re-evaluates C2-C8 in onFlip() without blocking.
                 // 要求元（ApiTask の cmdFlip）が既に controller_status.flip_ready
                 // （実行条件 C2〜C8、plan §3.1/§4.4）を読み、偽なら `error flip: <理由>`
                 // を返している。ここで約 20 ms 後に再判定すると、しきい値上の条件と
-                // 競合した（SILS 2026-09-17、--motor-delay 10: API では成立、ここでは
+                // 競合する（SILS --motor-delay 10: API では成立、ここでは
                 // 不成立で API が「rejected」を返した）。StateManager は requestFlip()
                 // で C1（FLYING）を判断し、制御器が onFlip() で C2〜C8 を非停止で再評価する。
                 requestFlipManeuver(g_state_manager, static_cast<sf::FlipDirection>(api_cmd.arg));
@@ -949,20 +947,20 @@ void StateTask(void* pvParameters)
             } else if (gesture == sf::ButtonGesture::LongPress3s) {
                 // Long-press 3 s = (re-)pair: discard the existing bind and re-enter
                 // Pairing so a new transmitter can take over. requestPairing() is
-                // internally gated to IDLE_GROUND/IDLE_HELD (ground or held in hand,
-                // 2026-09-12) and is idempotent, so this is safe to call regardless of
+                // internally gated to IDLE_GROUND/IDLE_HELD (ground or held in hand)
+                // and is idempotent, so this is safe to call regardless of
                 // the current state.
                 // 長押し3秒 = （再）ペア: 既存バインドを破棄し Pairing に再突入して新しい
                 // 送信機が引き継げるようにする。requestPairing() は内部で IDLE_GROUND/
-                // IDLE_HELD（地上または手持ち、2026-09-12）に限定され冪等なので、現在状態に
+                // IDLE_HELD（地上または手持ち）に限定され冪等なので、現在状態に
                 // 関わらず安全に呼べる。
                 g_state_manager.requestPairing();
             }
         }
 
         // =====================================================================
-        // Takeoff sequencing: ARMED_GROUND → TAKEOFF → FLYING (2026-06-14 redesign).
-        // 離陸シーケンス: ARMED_GROUND → TAKEOFF → FLYING（2026-06-14 再設計）。
+        // Takeoff sequencing: ARMED_GROUND → TAKEOFF → FLYING.
+        // 離陸シーケンス: ARMED_GROUND → TAKEOFF → FLYING。
         //
         // ARMED_GROUND → TAKEOFF — split by mode:
         //   ALT_HOLD/POS_HOLD: ARM ITSELF triggers the auto-takeoff (no throttle input),
@@ -978,7 +976,7 @@ void StateTask(void* pvParameters)
         //     altitude (controller_status.takeoff_reached) — decoupled from the ToF
         //     0.15m airborne edge, which is the ESKF vertical handoff only (ImuTask).
         //   ACRO/STABILIZE manual: completes on the ToF airborne detection
-        //     (system_status.airborne), as before.
+        //     (system_status.airborne).
         // Reaching FLYING unlocks requestModeChange.
         //
         // ARMED_GROUND → TAKEOFF — モード別:
@@ -994,7 +992,7 @@ void StateTask(void* pvParameters)
         //   ALT/POS 自動離陸: 制御器が目標高度を捕捉したとき完了
         //     （controller_status.takeoff_reached）— ToF 0.15m 空中エッジとは分離。後者は
         //     ESKF 鉛直ハンドオフ専用（ImuTask）。
-        //   ACRO/STABILIZE 手動: 従来どおり ToF 空中検知（system_status.airborne）で完了。
+        //   ACRO/STABILIZE 手動: ToF 空中検知（system_status.airborne）で完了。
         // FLYING 到達で requestModeChange が解放される。
         //
         // @design requirements.md §2 — ARMED_GROUND→TAKEOFF→FLYING              [OK]
@@ -1085,7 +1083,7 @@ void StateTask(void* pvParameters)
             if (!bound &&
                 g_state_manager.getPairingState() == sf::PairingState::NotPaired &&
                 (fs_now == sf::FlightState::IDLE_GROUND ||
-                 fs_now == sf::FlightState::IDLE_HELD)) {   // ground or held (2026-09-12)
+                 fs_now == sf::FlightState::IDLE_HELD)) {   // ground or held
                 g_state_manager.requestPairing();          // unpaired, ground/held → Pairing
             }
         }

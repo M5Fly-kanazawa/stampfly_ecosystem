@@ -1,25 +1,23 @@
 # alt_ceiling_stick.scn — holding the ALT_HOLD throttle stick UP stops at the 1.2 m altitude ceiling
 #                         ALT_HOLD でスロットルスティックを上げ続けても 1.2 m の高度上限で止まる
 #
-# The altitude ceiling (sf::limits::kAltitudeCeilingM = 1.2 m) used to bound only the
-# auto-takeoff target and the API: a pilot could climb with the ALT_HOLD stick as high as the ToF sees. The
-# controller now applies the same ceiling to the stick climb (and to the rc velocity guidance): at or above it a
-# climb command becomes 0 and the altitude target is clamped to it. Timeline (s): ARM 7.5 -> auto-takeoff, hold 0.5 m
+# The altitude ceiling (sf::limits::kAltitudeCeilingM = 1.2 m) bounds the auto-takeoff target, the API and the
+# ALT_HOLD stick climb (and the rc velocity guidance); without it a pilot could climb with the stick as high as the ToF sees.
+# At or above the ceiling a climb command becomes 0 and the altitude target is clamped to it. Timeline (s): ARM 7.5 -> auto-takeoff, hold 0.5 m
 # (to 13.0) -> stick UP for 9 s (13.0-22.0) -> stick centre 3 s (hold) -> stick DOWN 1.5 s (descent is allowed, 25.0-26.5)
 # -> stick centre (to 28.5). The run ends in the air: a normal ToF landing is not part of this check.
 #  1. The truth altitude stays at the ceiling: it climbs to about 1.2 m and no higher (the estimate-to-truth
 #     difference of a few cm is the ToF/ESKF error; with noise n2 see alt_ceiling_stick_noise.scn).
 #  2. The climb is TAPERED toward the ceiling (speed = altitude-loop gain x distance), so it does not overshoot and
-#     chatter around it (a plain cut of a full-rate climb gave 1.13-1.44 m).
+#     chatter around it (cutting a full-rate climb abruptly instead gives 1.13-1.44 m).
 #  3. Releasing the stick holds the altitude near the ceiling, and a stick DOWN still descends.
 #
-# 高度上限（sf::limits::kAltitudeCeilingM = 1.2 m）は従来、自動離陸の目標と API だけを縛り、
-# ALT_HOLD のスティックでは ToF が見える高さまで上げられた。制御器はこの上限をスティック上昇（と rc 速度誘導）にも
-# 適用する: 上限以上では上昇指令が 0 になり、高度目標は上限にクランプされる。検証する仕様:
+# 高度上限（sf::limits::kAltitudeCeilingM = 1.2 m）は、自動離陸の目標・API・ALT_HOLD のスティック上昇（と rc 速度誘導）を縛る。
+# 上限がスティックになければ、ToF が見える高さまで上げられてしまう。上限以上では上昇指令が 0 になり、高度目標は上限にクランプされる。検証する仕様:
 #  1. 真値の高度は上限で止まる: 約 1.2 m まで上がり、それ以上は上がらない（推定と真値の数 cm のずれは
 #     ToF・ESKF の誤差。ノイズ n2 は alt_ceiling_stick_noise.scn）。
 #  2. 上昇は上限へ向けて絞られる（速さ = 高度ループのゲイン × 距離）ので、行き過ぎて上限のまわりで揺れない
-#     （全速の上昇を単純に切ると 1.13〜1.44 m だった）。
+#     （全速の上昇を単純に切ると 1.13〜1.44 m になる）。
 #  3. スティックを離すと上限付近の高度を保ち、スティックを下げれば降下はできる。
 #
 # Run: sf sils scenario simulator/sils/scenarios/alt_ceiling_stick.scn --target vehicle --duration 29000000

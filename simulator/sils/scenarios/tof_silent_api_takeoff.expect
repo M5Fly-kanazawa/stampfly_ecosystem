@@ -1,5 +1,5 @@
-# tof_silent_api_takeoff.expect — the accident chain through the Tello-style API
-# Tello 風 API を通した事故の連鎖
+# tof_silent_api_takeoff.expect — ToF output stops during a Tello-style API takeoff (guard against the in-flight failure)
+# Tello 風 API の離陸中に ToF が出力停止（実機飛行で見つかった不具合の再発防止試験）
 #
 # API takeoff -> ARM -> auto-takeoff climb -> ToF output stops -> TAKEOFF -> LANDING (the climb is
 # aborted, FLYING is never reached) -> the API replies "error takeoff aborted" without waiting out
@@ -20,14 +20,14 @@ log_absent any "Transition: TAKEOFF → FLYING"
 order "Auto-takeoff engaged" "in TAKEOFF/POS_HOLD → LANDING"
 order "in TAKEOFF/POS_HOLD → LANDING" "reply: error takeoff aborted"
 order "reply: error takeoff aborted" "reply: error tof silent - check the sensor"
-# The aborted climb stays low: measured alt_max 0.177 m (ToF stops 6.8 s); bound 0.30 m. The craft comes down by the velocity loop at a measured 0.43 m/s (bound
-# 0.6 m/s) and rests on the floor afterwards.
+# The aborted climb stays low: measured alt_max 0.177 m (ToF stops 6.8 s); bound 0.30 m. The craft comes down by the velocity loop
+# and rests on the floor afterwards.
 # 中止した上昇は低く収まる: 実測 alt_max 0.177 m（ToF 停止 6.8 s）、
-# 上限 0.30 m。機体は速度ループで実測 0.43 m/s で降り（上限 0.6 m/s）、その後は床の上で静止する。
+# 上限 0.30 m。機体は速度ループで降り、その後は床の上で静止する。
 metric alt_max < 0.30 in 6.0 9.0
-# 2026-11-09: bound 0.6 -> 1.0 m/s (measured 0.43 -> 0.81 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
-# (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g) instead of by the PI.
-# 2026-11-09: 上限 0.6 → 1.0 m/s（実測 0.43 → 0.81 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
+# Descent speed bound 1.0 m/s (measured 0.81 m/s). The thrust of the descent without a ToF is at most 0.95 x the support thrust
+# (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g), not by the PI.
+# 降下速度の上限 1.0 m/s（実測 0.81 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）で、
 # 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
 metric descent_speed_max < 1.0 in 6.8 12.0
 metric alt_max < 0.05 in 11.0 14.0

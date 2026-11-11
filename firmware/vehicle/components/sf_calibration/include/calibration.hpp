@@ -47,13 +47,13 @@ struct CalibrationData {
 /// DISCARDS the partial accumulation and restarts it, so the result is
 /// deterministic — "the average of N verified-still samples" — no matter when
 /// the human actually sets the craft down. Defaults are the flight-proven
-/// legacy vehicle/ StationaryDetector thresholds; the accel-norm window is
+/// StationaryDetector thresholds of another firmware; the accel-norm window is
 /// widened because the boot path sees RAW (bias-uncorrected) accelerometer
 /// readings (BMI270 offset spec is up to ~±0.5 m/s²).
 /// サンプル蓄積の静止判定。校正は静止時のみ有効: 運搬中・墜落後の拾い上げ中の
 /// 動きを平均するとバイアスも水平基準もゴミになる。動きを検出したら蓄積を破棄して
 /// やり直すため、人間がいつ機体を置いても結果は「静止確認済み N サンプルの平均」で
-/// 決定的になる。既定値は旧 vehicle/ StationaryDetector の実績閾値。加速度ノルム窓は
+/// 決定的になる。既定値は飛行実績のある別ファームの StationaryDetector 閾値。加速度ノルム窓は
 /// 起動時が生（バイアス未補正）の読みのため広げてある（BMI270 のオフセット仕様は
 /// 最大 ±0.5 m/s² 程度）。
 struct StillnessConfig {

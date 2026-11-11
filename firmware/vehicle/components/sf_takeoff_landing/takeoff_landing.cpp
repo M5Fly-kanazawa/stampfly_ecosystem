@@ -101,7 +101,7 @@ void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_ve
 //     ghost flipping airborne is bounded — TAKEOFF needs throttle>0.5 first, and
 //     the on-ground handoff reset (pos/vel ≈ 0 already) is harmless.
 //   - air→ground (false-ground mid-flight / landing): DEBOUNCED. A single near
-//     reflection can no longer assert "on ground"; landing has landing_hold_ms
+//     reflection cannot assert "on ground"; landing has landing_hold_ms
 //     downstream so the ~66ms confirm is negligible.
 // on_ground_ は TAKEOFF→FLYING（state_task、airborne フラグ経由）と ESKF 鉛直
 // ハンドオフ（imu_task、接地↔空中エッジ）を駆動する。2方向を非対称に扱う (M-6):
@@ -323,17 +323,16 @@ BlindTouchdownConfig TakeoffLandingMgr::blindTouchdownConfig() const
 // updateBlindTouchdown — touchdown while the ToF is silent: impact, then stillness
 // ToF なしの接地 — ToF 出力停止中の接地: 衝撃のあとの静止
 //
-// Without ToF samples there is no height and no stalled-descent evidence. An impact alone (the old
-// rule: |accel| over 1.4 g for 4 samples) is not evidence: real flight logs show 1.56 g of vibration
+// Without ToF samples there is no height and no stalled-descent evidence. An impact alone (e.g. |accel| over 1.4 g for 4 samples) is not evidence: real flight logs show 1.56 g of vibration
 // in hover and 2.28 g in aggressive flight. A craft held up by the floor, after an impact, is not
 // accelerating, is not descending, and its commanded thrust cannot hold it: BlindTouchdownDetector
 // latches only when all of them hold for a set time (blind_touchdown.hpp). The latch stays until the
 // blind landing ends. The 3 G crash alert (Failsafe) still cuts the motors for a hard crash.
-// ToF のサンプルが無いと高さも降下停滞の証拠も無い。衝撃だけ（旧規則: |加速度| が 1.4 g を 4 サンプル超過）
+// ToF のサンプルが無いと高さも降下停滞の証拠も無い。衝撃だけ（例: |加速度| が 1.4 g を 4 サンプル超過）
 // では証拠にならない: 実機ログではホバーで 1.56 g、激しい飛行で 2.28 g の振動がある。床に支えられた機体は、
 // 衝撃の後、加速せず、降下せず、指令推力では支えられない。BlindTouchdownDetector はそれらが全部、一定時間
 // 成り立ったときだけラッチする（blind_touchdown.hpp）。ラッチはToF なしの着陸が終わるまで保持する。
-// 3 G の墜落アラート（Failsafe）は、激しい墜落ではこれまでどおりモータを止める。
+// 3 G の墜落アラート（Failsafe）は、激しい墜落ではモータを止める。
 // -----------------------------------------------------------------------------
 void TakeoffLandingMgr::updateBlindTouchdown(const BlindTouchdownInput& input, bool blind_landing)
 {

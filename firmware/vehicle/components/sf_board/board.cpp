@@ -184,8 +184,8 @@ esp_err_t init_event_loop()
 {
     esp_err_t err = esp_event_loop_create_default();
     if (err == ESP_ERR_INVALID_STATE) {
-        // Already created (e.g. by an earlier sf_comm in legacy mode).
-        // 既に生成済み (旧 sf_comm が先に呼んだ場合など)。問題なし。
+        // Already created (e.g. by another component that ran earlier). Benign.
+        // 既に生成済み (先に動いた別コンポーネントが作った場合など)。問題なし。
         ESP_LOGI(TAG, "default event loop already exists");
         return ESP_OK;
     }
@@ -198,9 +198,9 @@ esp_err_t init_event_loop()
 // ---------------------------------------------------------------------------
 //
 // esp_netif_init() initialises the lwIP TCP/IP stack, then we create the default
-// WiFi STA netif here so that sf_board is its single owner (R1). Previously sf_comm
-// called esp_netif_create_default_wifi_sta() itself — exactly the ownership-scatter
-// anti-pattern this BSP was introduced to remove (hardware_init.md §3/§4). sf_comm now
+// WiFi STA netif here so that sf_board is its single owner (R1). sf_comm must not
+// call esp_netif_create_default_wifi_sta() itself — that is the ownership-scatter
+// anti-pattern this BSP exists to remove (hardware_init.md §3/§4). sf_comm
 // borrows the handle via sta_netif() and only does esp_wifi_init/start (which bind to
 // this default STA netif). Creating it needs the default event loop (L0 step 1, already
 // up) and esp_netif_init (above); it does NOT need esp_wifi_init, so doing it here in
@@ -208,9 +208,9 @@ esp_err_t init_event_loop()
 // is benign.
 //
 // esp_netif_init() で lwIP TCP/IP スタックを初期化し、続けてデフォルト WiFi STA netif を
-// ここで生成して sf_board を唯一の所有者にする (R1)。以前は sf_comm が自前で
-// esp_netif_create_default_wifi_sta() を呼んでいた — まさにこの BSP が排除するために
-// 導入された「所有分散アンチパターン」(hardware_init.md §3/§4)。sf_comm は sta_netif() で
+// ここで生成して sf_board を唯一の所有者にする (R1)。sf_comm が自前で
+// esp_netif_create_default_wifi_sta() を呼んではならない — この BSP が排除する
+// 「所有分散アンチパターン」(hardware_init.md §3/§4) になるため。sf_comm は sta_netif() で
 // handle を借用し esp_wifi_init/start のみ行う (このデフォルト STA netif に bind される)。
 // 生成にはデフォルト event loop (L0 step1・起動済) と esp_netif_init (上) が要るが
 // esp_wifi_init は不要なので、Phase 1 のここで行うのが正しい。
@@ -221,7 +221,7 @@ esp_err_t init_netif()
         return err;  // real failure / 真の失敗
     }
     if (err == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "TCP/IP stack already initialized");  // legacy path, benign
+        ESP_LOGI(TAG, "TCP/IP stack already initialized");  // benign (already initialized by an earlier caller) / 無害（先の呼び出しで初期化済み）
     }
 
     g_sta_netif = esp_netif_create_default_wifi_sta();

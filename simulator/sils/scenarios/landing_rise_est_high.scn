@@ -2,14 +2,14 @@
 #                             サポート推力が較正される前に始まる LANDING、ホバー推力の見積もりが 28 % 高い（ノイズ n2）: 機体は再上昇しない
 #
 # With `hover.thrust_corr 1.2` the hover-thrust estimate is about 28 % above the thrust that holds the craft, and the closed-loop landing started from that estimate: before the accelerometer calibration of the support
-# thrust (2 s of near-hover samples) nothing bounded that base, and the craft that was commanded to descend ROSE from 1.19 m to 1.98 m (the ceiling of the ToF range), then fell in the descent without a ToF and touched
+# thrust (2 s of near-hover samples) nothing would bound that base without the bound below, and the craft that was commanded to descend would RISE from 1.19 m to 1.98 m (the ceiling of the ToF range), then fall in the descent without a ToF and touch
 # down at 2.20 m/s (the truth vertical speed at the first contact with the floor, altitude below 3 cm; the descent_speed_max of the metric below is the same quantity). Spec under test (landingBaseThrust(), brakeRiseInLanding(); detailed_design.md §3.1):
 #  1. The base of the landing is bounded by the support reference (kLandingBaseOverSupportMax x the early estimate) also before the calibration.
 #  2. While the craft rises in the LANDING, the thrust is limited to a falling fraction of the support reference (rise brake): the altitude after the LANDING began stays within the take-off overshoot.
 #  3. The ToF stays in range (no descent without a ToF), the touchdown is gentle and the motors stop on the floor.
 #
 # `hover.thrust_corr 1.2` では、ホバー推力の見積もりが機体を支える推力より約 28 % 高く、閉ループの着陸がその見積もりから始まり、支持推力の加速度計による較正（ホバー近傍の 2 s）の前は
-# その基準を抑えるものが無く、降下を指令された機体が 1.19 m から 1.98 m（ToF の測れる上限）まで「上昇」し、その後 ToF なしの降下で落ちて 2.20 m/s（真値の鉛直速度の、床への最初の接触の瞬間 = 高さ 3 cm 未満の値。下の metric の descent_speed_max も同じ量）で接地した。検証する仕様
+# 下の上限が無ければその基準を抑えるものが無く、降下を指令された機体が 1.19 m から 1.98 m（ToF の測れる上限）まで「上昇」し、その後 ToF なしの降下で落ちて 2.20 m/s（真値の鉛直速度の、床への最初の接触の瞬間 = 高さ 3 cm 未満の値。下の metric の descent_speed_max も同じ量）で接地する。検証する仕様
 # （landingBaseThrust()、brakeRiseInLanding()。detailed_design.md §3.1）:
 #  1. 着陸の基準は、較正の前にも、支持推力の基準（kLandingBaseOverSupportMax × 早い推定）で抑えられる。
 #  2. LANDING 中に機体が上昇するあいだ、推力は支持推力の基準の（下がる）割合以下に制限される（上昇ブレーキ）: LANDING が始まった後の高度は、離陸の行き過ぎの範囲に収まる。

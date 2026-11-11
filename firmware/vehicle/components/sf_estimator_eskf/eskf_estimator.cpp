@@ -62,8 +62,8 @@ static EskfConfig loadConfigFromParams()
         cfg.flow_min_squal = static_cast<uint8_t>(squal);
     }
 
-    // Accel-attitude (SSOT — these used to silently take the struct defaults).
-    // 加速度-姿勢（SSOT — 以前は struct 既定値を暗黙使用していた）。
+    // Accel-attitude (SSOT — read from the parameter system, not the struct defaults).
+    // 加速度-姿勢（SSOT — struct 既定値ではなくパラメータシステムから読む）。
     params::get_float("eskf.att.k_adaptive", cfg.k_adaptive);
     params::get_float("eskf.att.chi2_gate",  cfg.accel_chi2_gate);
     params::get_float("eskf.att.corr_clamp", cfg.att_correction_clamp);

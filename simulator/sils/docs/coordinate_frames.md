@@ -3,7 +3,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 >
-> これは `simulator/sils/frames/` 変換モジュールの**仕様**であり、MuJoCo と StampFly の座標系の**唯一の対応表**です。SILS 内で座標変換を行うのはこの `frames` モジュールだけとし、他のどこでも座標変換をしないこと（旧 SILS が座標系不整合4箇所で崩れた反省）。
+> これは `simulator/sils/frames/` 変換モジュールの**仕様**であり、MuJoCo と StampFly の座標系の**唯一の対応表**です。SILS 内で座標変換を行うのはこの `frames` モジュールだけとし、他のどこでも座標変換をしないこと（座標変換が複数の箇所に散らばると座標系の不整合が起きるため）。
 
 ## 1. この文書について
 
@@ -18,9 +18,9 @@
 
 **各センサのチップ軸→機体軸の振り替え・符号合わせは各ドライバ（HAL）の中で行い、ドライバは機体 FRD の正しい物理量を返す。**
 
-- **理由（ユーザー判断）**: StampFly は単一ハードで搭載向きは固定 → 一度正しく決めれば永久に正しい定数。上位（推定器/制御器を書く人）はチップ軸・搭載向き・符号に煩わされず、機体軸の綺麗な物理量だけを見ればよい。例: 加速度計は重力を Z 軸 **−9.8 m/s²** として返す（NED Z 下と整合。旧ファームの生値 +9.8＋`ba_z≈+2g` ハックは新ファームでは不要）。
+- **理由（ユーザー判断）**: StampFly は単一ハードで搭載向きは固定 → 一度正しく決めれば永久に正しい定数。上位（推定器/制御器を書く人）はチップ軸・搭載向き・符号に煩わされず、機体軸の綺麗な物理量だけを見ればよい。例: 加速度計は重力を Z 軸 **−9.8 m/s²** として返す（NED Z 下と整合。ドライバが −9.8 を直接返すので、生値 +9.8 に対する `ba_z≈+2g` の起動時補正は要らない）。
 - **含意**: チップ軸の混乱（右手/左手混在・鏡映・極性/軸性符号）は全部ドライバ内に閉じ込め、各ドライバで一度だけ実機検証。→ **SILS の sim ドライバは機体 FRD の量を直接返す**ので、この `frames` モジュールは**チップ軸の写像を持たず、§3 の世界/機体回転だけ**を担う。
-- **旧ファーム不可侵**: `firmware/vehicle_old`(87飛行) と `firmware/vehicle` は別コードベース（別ドライバコピー・相互参照なし）。変更は vehicle のみ。
+- **対象は vehicle のみ**: SILS が対象とするのは `firmware/vehicle` だけで、別のドライバコピーや他のコードベースとの相互参照を持たない。
 
 ### 対象読者
 
@@ -137,7 +137,7 @@ q_nb = q_we ⊗ q_mj ⊗ q_bf        # ⊗ は Hamilton 積（左が後から作
 - **ドライバ出力（機体 FRD、重力を −9.8 として返す）**: `out_frd = R_bn·(a_world_ned − g_ned)`、`g_ned=[0,0,+9.81]`、`R_bn = inv_rotate(q_nb)`。水平静止で `[0,0,−9.81]`（重力が下軸 −9.8）。
 - a_world_ned は機体 CG の運動加速度（MuJoCo の機体加速度を §3.1 で NED へ）。
 - **MuJoCo `<accelerometer>` と直接一致**: MuJoCo の加速度計は a−g を site(FLU) 系で返す。FLU site・水平静止で `[0,0,+9.81]`、これを §3.2 で FRD にすると `[0,0,−9.81]` ＝ **ドライバ出力と符号まで一致**（新方針は MuJoCo の加速度計規約と整合 → 検算が素直）。
-- 旧ファームの `ba_z≈+2g` 起動ハックは**新ファームでは不要**（ドライバが −9.8 を直接返す）。SILS の sim ドライバも `out_frd` を直接返す。
+- `ba_z≈+2g` の起動時補正は**不要**（ドライバが −9.8 を直接返す）。SILS の sim ドライバも `out_frd` を直接返す。
 
 ### 4.2 ジャイロ
 
@@ -148,7 +148,7 @@ q_nb = q_we ⊗ q_mj ⊗ q_bf        # ⊗ は Hamilton 積（左が後から作
 各センサのチップ軸→機体軸の振り替え（remap）・符号合わせは**各ドライバ（HAL）の中**で行い、ドライバは**機体 FRD の正しい物理量**を返す。
 
 - チップ軸は右手/左手混在しうる → 写像は**鏡映（det=−1）にもなり得る**。極性ベクトル（加速度・速度）はそのまま、**軸性ベクトル（ジャイロ・磁気）は鏡映時に符号が1つ余分**（`a' = det(R)·R·a`）。これらは**ドライバ内で一度だけ正しく実装し、実機で検証**する固定値。
-- 旧ファームは imu_task で remap していた（`body.x=sensor.y` 等）。**新ファームはこれをドライバへ移す**ので imu_task は薄くなる。
+- remap（`body.x=sensor.y` 等）は**ドライバが担う**ので、imu_task（IMU を読むタスク）は軸の振り替えを持たず薄くなる。
 - → **SILS の sim ドライバは機体 FRD の量を直接返す**（チップ系の往復モデルは不要）。この `frames` モジュールはチップ remap を持たない。
 
 ### 4.4 ToF / Baro / Flow / Mag
@@ -163,7 +163,7 @@ q_nb = q_we ⊗ q_mj ⊗ q_bf        # ⊗ は Hamilton 積（左が後から作
 ### 4.5 ミキサー → 物理（モータ力の適用）
 
 - `actuator_motor.duty[4]`（0..1）を読み、per-motor 推力 `T_i = k_thrust·duty_i²`（k_thrust=0.168 N）。
-- 推力は機体を**上に押す** = FRD で `−Z` 方向（上＝−Z）。各モータ位置（FRD: ±0.023m, CG上 −0.005m）に力 `[0,0,−T_i]` を、ヨー反トルク `τ_yaw,i = ±κ·T_i`（κ=4.10e-3, CCW=M1/M3。2026-08-03改定——Cq/Ctのコーストダウン実測・確定値÷Ct暫定採用値。2026-07-17実測反映時の旧値0.00971、2026-07-17〜2026-08-02は撤回済みthrust stand Ct由来の中間値κを採用していた）を与える。
+- 推力は機体を**上に押す** = FRD で `−Z` 方向（上＝−Z）。各モータ位置（FRD: ±0.023m, CG上 −0.005m）に力 `[0,0,−T_i]` を、ヨー反トルク `τ_yaw,i = ±κ·T_i`（κ=4.10e-3, CCW=M1/M3。値の根拠: Cq/Ct のコーストダウン実測の確定値を、Ct の暫定採用値で割ったもの）を与える。
 - 機体 FRD の力・トルクを §3.2 で MuJoCo FLU に直して適用: `F_flu = M_bf·F_frd`（推力 −Z_frd → +Z_flu＝上、整合）。
 
 ---
@@ -192,7 +192,7 @@ q_nb = q_we ⊗ q_mj ⊗ q_bf        # ⊗ は Hamilton 積（左が後から作
 
 ## 1. About This Document
 
-This is the **specification** for the `simulator/sils/frames/` transform module and the **single authoritative mapping** between MuJoCo and StampFly coordinate systems. **Only** this `frames` module performs coordinate transforms in the SILS — nowhere else (the old SILS broke with 4 scattered frame inconsistencies).
+This is the **specification** for the `simulator/sils/frames/` transform module and the **single authoritative mapping** between MuJoCo and StampFly coordinate systems. **Only** this `frames` module performs coordinate transforms in the SILS — nowhere else (scattered transforms cause frame inconsistencies).
 
 ### Decision (2026-05-31)
 
@@ -215,7 +215,7 @@ Both NED and ENU are right-handed, so a proper rotation (det=+1) exists between 
 
 ## 4. Sensors / Actuator
 
-- **Accelerometer (driver-normalized):** the driver returns body-FRD acceleration with gravity as −9.8: `out_frd = R_bn·(a_world − g_ned)`, `[0,0,−9.81]` at rest. MuJoCo's built-in `<accelerometer>` (a−g, FLU) matches directly after FLU→FRD — same sign. The legacy `ba_z≈+2g` startup hack is no longer needed (per the driver-normalization decision, 論点2).
+- **Accelerometer (driver-normalized):** the driver returns body-FRD acceleration with gravity as −9.8: `out_frd = R_bn·(a_world − g_ned)`, `[0,0,−9.81]` at rest. MuJoCo's built-in `<accelerometer>` (a−g, FLU) matches directly after FLU→FRD — same sign. No `ba_z≈+2g` startup compensation is needed (per the driver-normalization decision, 論点2).
 - **Gyro:** MuJoCo `<gyro>` (FLU) → FRD via `M_bf`.
 - **BMI270 sensor frame:** SILS returns sensor-frame data = `(body.y, body.x, −body.z)` so `imu_task`'s fixed remap recovers body FRD (Code Identity).
 - **ToF/Baro/Flow/Mag/Mixer:** see Japanese §4.4–4.5. Motor: duty→thrust `k·duty²` up = −Z_frd, applied at motor positions with yaw reaction κ, then FRD→FLU into MuJoCo.

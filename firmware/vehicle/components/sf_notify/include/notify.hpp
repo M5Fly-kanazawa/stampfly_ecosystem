@@ -113,9 +113,9 @@ public:
 
 private:
     /// System-state channel pattern (MCU LED), by priority overlay (mirrors the
-    /// legacy vehicle's LEDManager priority): low-battery > pairing > calibrating
+    /// LEDManager priority of another flight-proven firmware): low-battery > pairing > calibrating
     /// > flight state.
-    /// システム状態チャネルのパターン（MCU LED）。優先度オーバーレイ（旧 vehicle の
+    /// システム状態チャネルのパターン（MCU LED）。優先度オーバーレイ（飛行実績のある別ファームの
     /// LEDManager 優先度を踏襲）: 低電圧 > ペアリング > 校正中 > 飛行状態。
     LedPattern computeStatePattern() const;
 
@@ -128,8 +128,8 @@ private:
     const LedPattern& getPattern(FlightState state) const;
 
     /// Flight-mode colour (ACRO blue / STABILIZE yellow-green / ALT_HOLD orange /
-    /// POS_HOLD magenta), matching the legacy vehicle's mode colours.
-    /// モード色（ACRO青/STABILIZE黄緑/ALT_HOLD橙/POS_HOLDマゼンタ）、旧 vehicle 準拠。
+    /// POS_HOLD magenta), matching the mode colours of another flight-proven firmware.
+    /// モード色（ACRO青/STABILIZE黄緑/ALT_HOLD橙/POS_HOLDマゼンタ）、飛行実績のある別ファーム準拠。
     LedColor modeColor(FlightMode mode) const;
 
     /// Apply an LED pattern to one channel (toggle on/off based on timing)
@@ -153,14 +153,14 @@ private:
     // Boot mute window: while > 0, EVERY buzzer tone is suppressed and the power-on
     // chime is held. esptool enters download mode ~1-2 s after the reset `sf flash`
     // triggers; ANY LEDC tone active at that instant survives the entry and drones
-    // for the whole write. Faster boot (-O2) moved the calibration-start beep into
-    // that window, so deferring only the power-on chime was no longer enough — this
+    // for the whole write. With -O2 boot speed the calibration-start beep falls inside
+    // that window, so deferring only the power-on chime is not enough — this
     // covers all of them (beep, ready, etc.). 90 cycles ≈ 3 s at 30 Hz. The power-on
     // chime plays as this hits 0; the ready chime (calibration ≈ 4 s) lands after it.
     // 起動ミュート窓: > 0 の間、全ブザー音を抑止し起動音を保留する。esptool は `sf flash`
     // のリセットから約1〜2秒でダウンロードモードに入り、その瞬間に鳴っている LEDC 音は
-    // 突入後も残り書き込み中ずっと鳴り続ける。-O2 で起動が速くなり校正開始 beep がこの窓に
-    // 入ったため、起動音だけの遅延では不十分になった — 本窓で全音（beep/ready 等）を覆う。
+    // 突入後も残り書き込み中ずっと鳴り続ける。-O2 の起動速度では校正開始 beep がこの窓に
+    // 入るため、起動音だけの遅延では不十分 — 本窓で全音（beep/ready 等）を覆う。
     // 30Hz×90周期≈3秒。起動音は 0 で再生、ready 音（校正≈4秒）は窓の後に自然に鳴る。
     uint8_t  boot_mute_countdown_ = 90;
 

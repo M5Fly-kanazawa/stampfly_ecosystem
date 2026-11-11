@@ -2,11 +2,11 @@
 #                         `takeoff` の待機中に届いた他のコマンドは捨てず、順序も変えない
 #
 # Only `emergency` and `stop` are acted on during a wait. Everything else must behave exactly as
-# before the fix: it waits and runs, in arrival order, after the blocking command has answered.
+# for any queued command: it waits and runs, in arrival order, after the blocking command has answered.
 # Here a `height?` and a second `takeoff` arrive while the first `takeoff` waits: `height?` must
 # be answered after FLYING, and the second `takeoff` must then be refused ("not on ground"),
 # i.e. it must not start a second takeoff chain in the middle of the first.
-# 待機中に動くのは `emergency` と `stop` だけ。他はmain（2026-11-08 時点）と全く同じ振る舞い — 待機中のコマンドが
+# 待機中に動くのは `emergency` と `stop` だけ。他は通常のキュー待ちのコマンドと全く同じ振る舞い — 待機中のコマンドが
 # 応答した後に、到着順で実行される。ここでは最初の `takeoff` の待機中に `height?` と二つ目の
 # `takeoff` が届く: `height?` は FLYING の後に応答し、二つ目の `takeoff` は "not on ground" で
 # 拒否される（最初の離陸の途中で 二つ目の離陸の鎖を始めない）。

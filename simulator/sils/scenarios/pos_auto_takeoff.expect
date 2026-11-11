@@ -1,4 +1,4 @@
-# pos_auto_takeoff.expect — POS_HOLD ARM-triggered auto-takeoff gates (redesign 2026-06-14)
+# pos_auto_takeoff.expect — POS_HOLD ARM-triggered auto-takeoff gates
 # POS_HOLD の ARM トリガ自動離陸判定
 #
 # Same chain as alt_auto_takeoff plus the horizontal contract: ARM triggers the auto-
@@ -20,14 +20,15 @@ metric duty_max < 0.05 in 7.55 7.78
 metric alt_mean > 0.42 in 12.0 16.0
 metric alt_mean < 0.62 in 12.0 16.0
 metric alt_rmse < 0.08 in 12.0 16.0
-# 2026-10-31 R_out plant: alt_band 0.20 -> 0.55 (basis (b): 14 real auto-takeoffs in ALT_HOLD/POS_HOLD, window
-# takeoff+4.2..+8.2 s, ESKF altitude: alt_band p50 0.164, p90 0.443, max 0.521 -> real max rounded up; the old
-# 0.20 was tuned to the old plant (value 0.008, below every real takeoff) / 実機14回の離陸（p50 0.164・p90 0.443・最大 0.521）の
-# 最大を切り上げ。旧 0.20 は旧プラントの値 0.008（実機の全離陸より小さい）に合わせたもの
+# alt_band upper bound 0.55: basis is 14 real auto-takeoffs in ALT_HOLD/POS_HOLD (window takeoff+4.2..+8.2 s, ESKF altitude):
+# alt_band p50 0.164, p90 0.443, max 0.521, so the bound is the real max rounded up. A bound of 0.20 is rejected: it fits
+# only a plant whose alt_band is 0.008, below every real takeoff. / alt_band 上限 0.55: 実機 14 回の離陸（ALT_HOLD/POS_HOLD、
+# 離陸後 4.2〜8.2 s の窓、ESKF 高度）の p50 0.164・p90 0.443・最大 0.521 の最大を切り上げた値。0.20 は不採用: 実機の全離陸より
+# 小さい 0.008 のプラントにしか合わない
 metric alt_band < 0.55 in 12.0 16.0
-# 2026-11-01 lower bound 0.05 added by user decision: it sits just below the real minimum 0.062 and catches a plant whose
-# altitude swing becomes far smaller than any real takeoff again (old plant 0.008, R_out plant about 0.267) / ユーザー決定で下限 0.05 を追加。
-# 実機の最小 0.062 のすぐ下に置き、プラントの高度の振れ幅が再び実機より小さくなりすぎる（旧プラント 0.008）のを検出する
+# alt_band lower bound 0.05: it sits just below the real minimum 0.062 and catches a plant whose altitude swing is far smaller
+# than any real takeoff (alt_band 0.008; the R_out plant gives about 0.267). / alt_band 下限 0.05: 実機の最小 0.062 のすぐ下に置き、
+# 高度の振れ幅が実機より小さすぎるプラント（alt_band 0.008。R_out プラントは約 0.267）を検出する
 metric alt_band > 0.05 in 12.0 16.0
 metric horizontal_drift_max < 0.5 in 9.0 16.0
 metric duty_max < 0.92 in 12.0 16.0

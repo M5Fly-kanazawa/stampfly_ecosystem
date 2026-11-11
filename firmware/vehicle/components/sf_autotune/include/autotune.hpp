@@ -48,10 +48,10 @@ struct FreqPoint {
 };
 
 /// Fitted plant G(s) = b·e^{-Ls} / (s(Ts+1)) / フィット済みプラント
-/// Uniform 3-parameter model for ALL axes. (A yaw reaction-torque RHP zero was tried
-/// and refuted: hardware showed tau_z≈0 — see yaw_axis_model.md. The yaw degeneracy is
+/// Uniform 3-parameter model for ALL axes. (A yaw reaction-torque RHP zero is NOT
+/// used: hardware showed tau_z≈0 — see yaw_axis_model.md. The yaw degeneracy is
 /// a structured low-frequency disturbance, handled by coherence weighting, not a zero.)
-/// 全軸共通の3パラモデル。yaw の反トルク RHP 零点は実機で反証(tau_z≈0)。yaw の退化は構造的
+/// 全軸共通の3パラモデル。yaw の反トルク RHP 零点は採用しない（実機で tau_z≈0）。yaw の退化は構造的
 /// 低周波外乱でありコヒーレンス重みで対処する（零点ではない）。
 struct Plant {
     float b;         // [1/(kg m²)] effective inverse inertia / 有効慣性逆数

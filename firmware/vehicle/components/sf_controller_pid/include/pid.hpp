@@ -22,19 +22,19 @@
  * steps — and the rate setpoint comes from a 12-bit stick, so it steps
  * constantly. D-on-M leaves the closed-loop poles unchanged (the derivative
  * path from the measurement is identical) and only removes the setpoint kick.
- * This matches the flight-proven vehicle/ implementation (sf_algo_pid), so its
+ * This matches the structure of a separate firmware with flight records (sf_algo_pid), so its
  * tuned gains transfer 1:1.
  * 微分は誤差ではなく「測定値」に掛ける（D-on-M）: 誤差を微分すると目標値が階段状に
  * 変わるたびにスパイク（微分キック）が乗る — レート目標は 12bit スティック由来で
  * 常に階段状。D-on-M は閉ループ極を変えず（測定値からの微分経路は同一）、目標値
- * キックだけを除去する。飛行実績のある旧ファーム（vehicle/ sf_algo_pid）と同じ
+ * キックだけを除去する。飛行実績のある別ファーム（sf_algo_pid）と同じ
  * 構成であり、その調整済みゲインがそのまま使える。
  *
  * Anti-windup: conditional integration (stop integrating while the output is
- * saturated in the same direction). The legacy firmware used back-calculation
+ * saturated in the same direction). The firmware with flight records (sf_algo_pid) uses back-calculation
  * (Tt = √(Ti·Td)) instead; both act only DURING saturation, so the linear
  * behaviour — and therefore gain equivalence — is identical.
- * アンチワインドアップ: 条件付き積分（出力が同方向に飽和中は積分停止）。旧ファームは
+ * アンチワインドアップ: 条件付き積分（出力が同方向に飽和中は積分停止）。飛行実績のある別ファーム（sf_algo_pid）は
  * back-calculation（Tt = √(Ti·Td)）だが、どちらも飽和中にのみ働くため線形領域の
  * 挙動 — つまりゲインの等価性 — は同一。
  *
@@ -57,7 +57,7 @@ struct PID {
     float output_limit = 1.0f;
 
     // Integration switch / 積分の許可スイッチ
-    // false = HOLD the integrator: the value is kept as-is (NOT reset) and no longer
+    // false = HOLD the integrator: the value is kept as-is (NOT reset) and does not
     // accumulates, while P and D act normally. Unlike reset() this needs no per-cycle
     // clearing and loses nothing, so integration resumes seamlessly when re-enabled.
     // Used to stop floor-constrained windup while the craft cannot respond.

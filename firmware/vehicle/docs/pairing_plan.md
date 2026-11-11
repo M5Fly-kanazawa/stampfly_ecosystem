@@ -2,21 +2,19 @@
 
 最終更新: 2026-06-09（**P1〜P3 実装完了・SILS 検証済み。残=実機検証・P4(per-drone ch)**）
 
-> **【実装完了 2026-06-09】P1（自機宛フィルタ）・P2（ペアリングモード／PairingPacket 送出）・
+> **【実装状況】P1（自機宛フィルタ）・P2（ペアリングモード／PairingPacket 送出）・
 > P3（状態機械統合＋NVS 永続化）を実装し SILS で検証済み。** 旧 vehicle のシーケンスを踏襲し
 > vehicle アーキ（StateManager 単一所有・Pub-Sub）で新規実装。設計文書（requirements §2/§7,
 > architecture §4, detailed_design §3, topic_reference, coding_and_education）に PairingState を追記済み。
-> コミット: 9d97e8a(docs)→e6d20d6(sf_comm)→cb9ba2e(sf_state)→736ea27(notify/CLI)→f6cc3b9(SILS検証)。
 > **SILS 合否判定**: `sf sils scenario simulator/sils/scenarios/pairing.scn --target vehicle --unpaired`
 > = 未ペア起動→自動Pairing→bind（相互MAC学習）＋誤MAC送信機のARM/離陸を破棄（混信拒否, duty=0）。
 > **残**: ①実機検証（電源ON→自動Pairing→コントローラ peering_process で成立→ARM→ホバー）
 > ②P4 per-drone channel（30機運用直前）。下記 P1〜P3 は「実装済み」として読むこと。
 
-> **【2026-09-12】Pairing 突入を IDLE_HELD（手持ち）にも拡大。** ユーザー決定により、
-> `requestPairing()`（`state_manager.cpp`）と自動突入ループ（`state_task.cpp`）のガードを
-> IDLE_GROUND 単独から IDLE_GROUND / IDLE_HELD へ変更した（旧 code_review L-7 の判断を
-> 上書き）。Pairing はモータを回さず、ARM は Pairing 中・IDLE_HELD 中とも従来どおり拒否される
-> ため安全性への影響はない。requirements.md §2・detailed_design.md §3.1 を合わせて更新済み。
+> **Pairing 突入は IDLE_GROUND / IDLE_HELD（手持ち）で可能。**
+> `requestPairing()`（`state_manager.cpp`）と自動突入ループ（`state_task.cpp`）のガードが
+> この 2 状態を許す。Pairing はモータを回さず、ARM は Pairing 中・IDLE_HELD 中とも拒否される
+> ため安全性への影響はない。requirements.md §2・detailed_design.md §3.1 に同じ規定がある。
 
 ---
 
@@ -114,11 +112,11 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 - ペア時に機体ごとに channel を割当（PairingPacket は channel を持つ）。同時飛行時の airtime 分散。
 - 運用ポリシー（手動割当 / 自動空きch探索）は教材設計と合わせて決める。
 
-> **採用方式の決定・実装（2026-09-11）**: 下記「同時実行の取り違え」は
+> **採用方式**: 下記「同時実行の取り違え」は
 > `docs/plans/pairing-methods-plan.md` で正式検討し、**W3（コントローラの画面に受信した機体
 > 候補を一覧表示し、利用者が選んで確定）＋機体側の自機宛受理（ペアリング中に届く操縦電文の
 > うち `drone_mac[0..2]` が自 MAC 下位3バイトと一致するものだけを保留バインド候補にする）**
-> の組合せを採用した。機体側（Phase 1・本ドキュメントの P4 が挙げていた「bind 時に drone_mac
+> の組合せを採用する。機体側（Phase 1・本ドキュメントの P4 が挙げていた「bind 時に drone_mac
 > 一致を要求」案そのもの）は `comm.cpp::handleControlPacket` に実装済み・SILS 検証済み
 > （`pairing_two_controllers.scn`）。コントローラ側（Phase 2・W3 の画面一覧選択 UI）は別途
 > `firmware/controller` で実装する。**見送り（変更なし）: ペアコード（W2、電文拡張が必要で
@@ -127,7 +125,7 @@ ControlPacket(14B): [drone_mac(0-2)] [thr(3-4)][roll(5-6)][pitch(7-8)][yaw(9-10)
 > — 比較は `pairing-methods-plan.md` §3 を参照。per-drone channel 割当（本節の元々の主題）は
 > 今回のスコープ外のまま。
 
-#### ★既知の弱点（2026-06-09 整理・対応は P4 に保留＝ユーザー判断 B）
+#### ★既知の弱点（対応は P4 に保留）
 
 **ペア成立は両側とも「先着＝採用」**で、識別子は署名 `AA5516 88`（=「StampFly かどうか」のみ、
 「“あなたの”機体か」の区別なし）:
@@ -150,7 +148,7 @@ WiFi ハード層が弾く）。
 - **RSSI で最寄りを選ぶ／ボタン同時押し確認**＝取り違えをほぼ排除するが**コントローラ側改修が必要**。
 - SILS に「2台同時ペアリング」シナリオを足して取り違え挙動を合否判定に組み込む（現状 SILS の仮想送信機は1台で未検証）。
 
-> **方針決定（2026-06-09, ユーザー B）**: いま堅牢化はせず**「1ペアずつ運用」で実機ブリングアップを
+> **方針**: 現時点では堅牢化せず**「1ペアずつ運用」で実機ブリングアップを
 > 先行**。同時マスペアリング堅牢化（per-drone channel + RSSI/確認）は **30機ワークショップ運用が
 > 近づいた段階で P4 として再設計**する。
 

@@ -2,16 +2,16 @@
 #                                 自動離陸の上昇の初期に ToF が出力停止、センサノイズ n2、見積もり 17 % 高い
 #
 # tof_silent_takeoff_est_high.scn with `hover.thrust_corr 1.1` and the sensor-noise model n2 (seed 1; the
-# acceptance runs use 3 seeds, see TEST_MATRIX.md): the noisy case (truth peak 4.6 m in main as of 2026-11-08). The velocity estimate integrates a noisy accelerometer; the scenario fixes that the loop is still
+# acceptance runs use 3 seeds, see TEST_MATRIX.md): the noisy case. The velocity estimate integrates a noisy accelerometer; the scenario fixes that the loop is still
 # bounded and gentle. Spec under test:
-#  1. The landing starts from FLYING or TAKEOFF (here: FLYING, still climbing at 1.7 m/s); the truth peak stays below 1.5 m (main as of 2026-11-08, noise n2, seed 1: 4.6 m), the touchdown speed below 0.9 m/s
+#  1. The landing starts from FLYING or TAKEOFF (here: FLYING, still climbing at 1.7 m/s); the truth peak stays below 1.5 m, the descent speed below 0.9 m/s
 #     and the motors stop only on the floor.
 #  2. ARM is refused while the sensor is silent.
 #
 # tof_silent_takeoff_est_high.scn を `hover.thrust_corr 1.1` とセンサノイズモデル n2（seed 1。合否の試験は 3 seed、
-# TEST_MATRIX.md 参照）で行う: ノイズありの場合（main（2026-11-08 時点）で真値の最高 4.6 m）。速度推定はノイズのある
+# TEST_MATRIX.md 参照）で行う: ノイズありの場合。速度推定はノイズのある
 # 加速度計を積分する。ループがそれでも有界で穏やかなことを固定する。検証する仕様:
-#  1. 着陸は FLYING か TAKEOFF から始まる（ここでは FLYING、1.7 m/s で上昇中）。真値の最高は 1.5 m 未満（main（2026-11-08 時点）、ノイズ n2、seed 1: 4.6 m）、接地速度は 0.9 m/s 未満、モータは床の上で
+#  1. 着陸は FLYING か TAKEOFF から始まる（ここでは FLYING、1.7 m/s で上昇中）。真値の最高は 1.5 m 未満、降下速度は 0.9 m/s 未満、モータは床の上で
 #     だけ止まる。
 #  2. センサが出力停止している間、ARM は拒否される。
 #

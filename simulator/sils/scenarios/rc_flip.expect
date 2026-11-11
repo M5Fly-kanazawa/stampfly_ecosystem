@@ -10,13 +10,13 @@
 # auto-land) -> a FRESH ARM/climb cycle -> one more FLIP-button press (pitch
 # FORWARD) -> DISARM auto-land. See rc_flip.scn's header comment for why
 # this is two short cycles instead of one continuous flight with all 4
-# directions (ALT_HOLD-specific findings, not a Phase 3 button-routing bug).
+# directions (ALT_HOLD-specific findings, not a button-routing bug).
 # 連鎖: 中立 RC 起動 -> ALT スイッチ ON（disarmed）-> ALT_HOLD で ARM（自動離陸
 # 0.5m）-> スロットルパルスで約1.1-1.2mへ上昇 -> FLIP ボタン3回（ロール右・
 # ロール左・中立スティック1.5s保持で既定方向Right）各々 FLYING→FLIP→FLYING
 # -> DISARM（ALT_HOLD自動着陸）-> 新規 ARM/上昇サイクル -> FLIP ボタンもう1回
 # （ピッチ前）-> DISARM自動着陸。1本の連続飛行で4方向にしなかった理由は
-# rc_flip.scn 冒頭コメント参照（ALT_HOLD 固有の知見、Phase 3 のボタン経路の
+# rc_flip.scn 冒頭コメント参照（ALT_HOLD 固有の知見、ボタン経路の
 # バグではない）。
 #
 # Held-button single-request check: the .expect DSL has no per-log
@@ -43,15 +43,15 @@
 # （または打ち切られた2回目の宙返り、どちらもこの範囲に収まらない）が
 # 窓の終了より十分前に現れるはずである。
 #
-# Metric values measured on this build (2026-09-18, SILS, noise off):
+# Metric values measured on this build (SILS, noise off):
 #   Right   (16.5-19.5): flip_roll_deg=360.0  alt_drop_max=0.079 alt_rise_max=0.147 settle_time_s=0.64
 #   Left    (19.7-22.9): flip_roll_deg=-360.1 alt_drop_max=0.082 alt_rise_max=0.149 settle_time_s=0.64
 #   default (22.9-27.4): flip_roll_deg=360.3  alt_drop_max=0.093 alt_rise_max=0.145 settle_time_s=0.65
 #   Forward (48.3-53.3): flip_pitch_deg=-360.4 alt_drop_max=0.993 alt_rise_max=0.157 settle_time_s=0.67 alt_min=0.155
-# Roll-window thresholds are aligned with api_flip_roll.expect (plan
-# instruction: keep them the same). The Forward window's alt_drop_max /
+# Roll-window thresholds are the same as api_flip_roll.expect. The Forward window's alt_drop_max /
 # alt_min are NOT aligned with api_flip_pitch.expect (alt_drop_max<0.40).
-# Root cause (traced 2026-09-18, simulation-policy.md backlog #12): the
+# Root cause (simulation-policy.md backlog #12): the
+# residual yaw rate left by the pitch flip's Recover->split motor step
 # residual yaw rate left by the pitch flip's Recover->split motor step
 # starts a 200 Hz (Nyquist) limit cycle between the yaw-rate loop's
 # derivative term (rate.yaw.td=0.01 with eta=0.125 at dt=2.5 ms makes the
@@ -61,15 +61,15 @@
 # clipped collective sinks the craft ~1 m once the settle-window yaw cap
 # (0.3 mNm) lifts. With `--param rate.yaw.td=0` the same window measures
 # alt_drop_max=0.119 alt_min=1.028 (POS_HOLD class); the 3-cycle variant's
-# 3rd takeoff no longer tumbles either. It is NOT an ALT_HOLD velocity-
+# 3rd takeoff does not tumble either. It is NOT an ALT_HOLD velocity-
 # damping gap and NOT the flip-button routing. The default gains are kept
 # here (control-parameter change = separate task), so this bound stays
 # widened and DOCUMENTED; the craft never reaches the ground (alt_min=0.155)
 # and auto-lands cleanly afterwards.
-# 本ビルドでの実測値（2026-09-18, SILS, ノイズ off）は上記コメント参照。
-# ロール窓のしきい値は api_flip_roll.expect と揃える（指示どおり）。Forward
+# 実測値（SILS, ノイズ off）は上記コメント参照。
+# ロール窓のしきい値は api_flip_roll.expect と同じ。Forward
 # 窓の alt_drop_max/alt_min は api_flip_pitch.expect（alt_drop_max<0.40）と
-# 揃えていない。原因（2026-09-18 に追跡、simulation-policy.md バックログ #12）:
+# 揃えていない。原因（simulation-policy.md バックログ #12）:
 # ピッチ宙返りの Recover→分割のモータ段差が残すヨー角速度を起点に、ヨー
 # レートループの微分項（rate.yaw.td=0.01・eta=0.125 は dt=2.5 ms では微分
 # フィルタが素の 1 段差分になる）とプラントのローター慣性反トルク
@@ -104,12 +104,10 @@ order "Auto-takeoff complete — normal mode law engaged" "Flip requested (direc
 order "Flip requested (direction=Right)" "Flip requested (direction=Left)"
 order "Flip requested (direction=Left)" "DISARM accepted (FLYING → IDLE_GROUND)"
 order "DISARM accepted (FLYING → IDLE_GROUND)" "Flip requested (direction=Forward)"
-# Hover near 1.2-1.6 m before each cycle's flip(s) (flip.min_height_m=1.0, SILS ToF model
-# limit 1.63 m). / 各サイクルの宙返り前に約1.2-1.6mでホバー。
-# 2026-10-31 R_out plant: upper bound 1.35 -> 1.75 (reason (a): the pre-flip climb input was extended
-# so the press happens at >=1.2 m; basis (b): real flips started at 1.41 m and 1.70 m, logs/flip_test1/2,
-# so the bound is the real maximum 1.70 rounded up). / 上限 1.35->1.75（押下が1.2 m以上になるよう上昇入力を延長したため。
-# 実機の宙返り開始高度 1.41 m・1.70 m が根拠）。
+# Hover at 1.0-1.75 m before each cycle's flip(s). Upper bound 1.75: real flips started at 1.41 m and 1.70 m
+# (logs/flip_test1/2), so the bound is the real maximum 1.70 rounded up.
+# 各サイクルの宙返り前に 1.0-1.75 m でホバー。上限 1.75: 実機の宙返り開始高度は 1.41 m・1.70 m
+# （logs/flip_test1/2）で、その最大 1.70 を切り上げた値。
 metric alt_mean > 1.00 in 13.5 16.5
 metric alt_mean < 1.75 in 13.5 16.5
 metric alt_mean > 1.00 in 45.3 48.3

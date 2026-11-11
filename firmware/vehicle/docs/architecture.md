@@ -94,7 +94,7 @@
 | R9 | `docs/topic_reference.md` を Topic SSOT 文書とする。Topic 追加時は同時に表を更新する PR 必須 |
 | R10 | 学習者バイパス機構を提供（`params::sim::use_true_*` 等で Estimator/Controller を素朴化、SILS/学習段階で各層を独立検証可能） |
 | R11 | Guidance / Navigation Topic を予約定義（`command_target`, `nav_path`）。実装は将来でも、置き場所と入出力契約を今決める |
-| R12 | `firmware/workshop/` の HAL コピーを廃止し、vehicle の HAL を共有する。Workshop API は L0 ラッパーとして再実装する |
+| R12 | `firmware/workshop/` の HAL をコピーせず、vehicle の HAL を共有する。Workshop API は L0 ラッパーとして再実装する |
 | R17 | モータミキサー（配分＋モータ曲線）は `sf::app::mixer()` を差し替え口とする単一の正典実装を持ち、L0/L1 双方が同じ実装を共有する（独自複製を禁止）。ミキサーへの入力は常に物理量（推力[N]・トルク[Nm]）とし、経験定数でduty直値に丸め込まない（詳細は §2「ミキサー差し替え口」節、実装は将来でも今契約を決める＝R11 と同じ原則）。設計提案・未実装、現状は `ws_internal.hpp` が独自の簡易線形ミキサーを複製している（既知の乖離、詳細は次節参照） |
 
 **Topic 運用**
@@ -110,15 +110,15 @@
 
 横断ルール R が「コンポーネント間の構造規約」であるのに対し、INV は **個々の制御則・状態機械が常に満たすべき設計契約**である。**新機能の追加や要件変更で、ある機能の前提が変わったときは、ここに列挙された INV と、それを参照する `@design` タグを必ず再照合し、古い前提を持つ既存コンポーネントを洗い出して直すこと（リップル確認）。** SILS がたまたま通っても INV 違反は既存動作の破壊とみなす。違反・矛盾を見つけたら設計矛盾として即時報告する。
 
-**なぜこの節があるか（2026-06-14, 実機検証で判明）:** バッチ4で「姿勢は常にパイロット」原則を確立し離陸を統一パイプラインに移したのに、**着陸（`computeLanding`）は古い前提「フェイルセーフ専用・スティック無視」のまま並列経路として残り**、後からパイロット起動の自動着陸を足したときにこの前提が崩れているのを見落とした（着陸中ロール/ピッチが効かない実機バグ）。原則がコメントと作業文脈にしか無く、コンテキスト圧縮を越えて残らなかったことが根本原因。INV を必読文書に明文化し、機械的に照合できる契約として固定するのが対策。
+**なぜこの節があるか:** 「姿勢は常にパイロット」の原則で離陸を統一パイプラインに載せても、着陸（`computeLanding`）が「フェイルセーフ専用・スティック無視」という別の前提の並列経路として残っていると、パイロット起動の自動着陸を足したときに前提の食い違いを見落とし、着陸中にロール/ピッチが効かない不具合になる（実機で確認された不具合）。原則がコメントや作業の文脈にしか無いと、後の変更で失われる。そこで INV を必読文書に明文化し、機械的に照合できる契約として固定する。
 
 | # | 不変条件 | 根拠／参照 |
 |---|---------|-----------|
 | INV-1 | **全鉛直フェーズ（Grounded / TakeoffClimb / Airborne / Landing）は単一の姿勢＋レートパイプラインを共有する。** いかなるフェーズも独自の姿勢則・並列の制御パイプライン（別関数での丸ごと上書き）を持ってはならない。フェーズが変えてよいのは**鉛直チャネル（推力／降下率）と、その鉛直フェーズ特有の遷移条件のみ**。（付記: 制御則そのものは全フェーズ同一のまま、`Grounded` の間だけ姿勢/レート PID の積分器の更新を止める＝保持する。床に拘束された機体が追従できない設定点を積分して巻き上がるのを防ぐため。`detailed_design.md` §3 注11。）| 並列経路は前提のズレを隠す。`pid_controller.cpp::compute()` の `phase_` switch が唯一の鉛直分岐点 |
-| INV-2 | **空中の全フェーズで、姿勢チャネル（roll/pitch/yaw）の設定点の出所は操縦者（Pilot）である。** 出所が Pilot 以外になるのは次の 2 つに限る: (a) リンク途絶 — 設定点の新鮮さ（R16 のタイムアウト）で判定し、単一の判定で水平化する（Zero）。(b) 操縦者が明示的に起動した有限時間（通常 0.6 s 程度。打ち切り経路も全フェーズにタイムアウトがあり有限）のシーケンス状態（Sequence。現状は FLIP のみ。TAKEOFF/LANDING は鉛直チャネルだけを自動化し姿勢は Pilot のまま）。フェーズ名で姿勢を 0 固定しない。シーケンスは規範表の行で自動化する軸を宣言し、終了は単一の判定で通常則に戻る。 | 実機バグ2件（TakeoffClimb 姿勢死・Landing 姿勢死）の再発防止。2026-09-16 FLIP 導入時に一般化。 |
+| INV-2 | **空中の全フェーズで、姿勢チャネル（roll/pitch/yaw）の設定点の出所は操縦者（Pilot）である。** 出所が Pilot 以外になるのは次の 2 つに限る: (a) リンク途絶 — 設定点の新鮮さ（R16 のタイムアウト）で判定し、単一の判定で水平化する（Zero）。(b) 操縦者が明示的に起動した有限時間（通常 0.6 s 程度。打ち切り経路も全フェーズにタイムアウトがあり有限）のシーケンス状態（Sequence。現状は FLIP のみ。TAKEOFF/LANDING は鉛直チャネルだけを自動化し姿勢は Pilot のまま）。フェーズ名で姿勢を 0 固定しない。シーケンスは規範表の行で自動化する軸を宣言し、終了は単一の判定で通常則に戻る。 | 実機で起きた不具合2件（TakeoffClimb 姿勢死・Landing 姿勢死）の再発防止。FLIP のような操縦者起動のシーケンスにも適用できる一般形 |
 | INV-3 | **「検出」と「判断」を分離する。** 接地・離陸・持上げ等の検出ロジックは検出層（`sf_takeoff_landing` 等）に置き、`publish` した事実を `StateManager` が判断する。制御器や状態機械に検出ロジックを散らさない。センサの出力停止・リンク途絶のような「鮮度」の検出は Failsafe（`system_alert` と `failsafe_status`）、応答の判断は `StateManager`（`tof_silence_policy.hpp` の純関数）、実行は `StateManager` が唯一の遷移実行者。ToF 出力停止中は、ToF だけで動く接地フラグ（出力停止中は最後の値のまま固定される）を ImuTask が信用せず（`groundContactTrusted()`）、加速度計による接地（ToF なし接地）を検出層（`TakeoffLandingMgr`）が出す。ToF の「取り込み直し」の事実（推定器が採用したか・イノベーション・無効サンプルの継続）は ImuTask が `tof_health` に出し（`sf::ToFHealthTracker`）、Failsafe が判定を `failsafe_status.tof_silent`・`tof_reason` に出す。ARM 中に出力停止のエピソードが始まったら ImuTask が `TakeoffLandingMgr::markAirborne()` で生の接地フラグを「空中」へ倒し、エピソードの間は `groundContactTrusted()` が「ARM 中＝空中」を返し続ける（エピソードは推定器が ToF を取り込み直すまで続く。サンプルが戻っても生のフラグは信用しない）。 | 設計原則「検出と判断の分離」、§4 |
-| INV-4 | **状態機械の各 (状態 × 入力) セルは規範表（`detailed_design.md` §3.1）で全て規定される。** 表に無い暗黙の振る舞いを作らない。遷移の追加・変更は表を先に更新する。入力に飛行モードが関わるセル（例: ToF 出力停止は ALT_HOLD・POS_HOLD と ACRO・STABILIZE で応答が違う）は、モードごとに行を分けて規定する（`test/test_tof_silence.cpp`・`test/test_tof_health.cpp`・`test/test_takeoff_policy.cpp` が全セルを検査）。TAKEOFF の完了・中止・通信喪失の判断（手動の完了、自動の完了、床の積極的な証拠による中止、TAKEOFF・FLYING からの通信断着陸）は純関数 `takeoff_policy.hpp`（`decideTakeoff()`・`decideCommLossLanding()`）に置き、床の証拠の検出（`TakeoffFloorWatch`）は ImuTask、判断の実行は StateTask・StateManager が行う（INV-3）。**証拠が「無い」ことを、床にいる証拠として扱わない**（加速度計だけの「床を離れた」を、状態機械の安全判断の判定条件にしない）。制御器の内部には「床を離れた」の判定 `SupportThrustFilter::leftFloor()` が 1 つ残るが、これは支持推力の窓を開くための内部の判定で、誰もこれに「床を離れたか」を問わない（`controller_status` にも載せない）。誤っても、窓が早く開けば支持推力が「低く」出るだけ、遅く開けば低くした見積もりが効き続けるだけ（どちらも安全側。`blind_landing.hpp`）。出力停止のエピソード中は、ARM を**全モード（ACRO を含む）**で、ALT_HOLD・POS_HOLD への切り替えを拒否する。拒否したスイッチのエッジは、**飛行中は消費し**（復帰の瞬間にパイロットの操作なしにモードが切り替わらない。パイロットが入れ直す）、地上では持続する。 | モード調停バグ（2026-06-11）の教訓 |
-| INV-5 | **モータミキサーへの入力は常に物理量（推力[N]・機体トルク[Nm]）とし、幾何配分（B⁻¹、線形）とモータ曲線（duty変換、非線形・機体依存）の2段に分離する。** どちらの段も経験定数1個に押し込めて隠さない（例: 旧 `k=0.25/3.7` は幾何・モータ曲線・電圧補償を1定数に丸め込んでいた）。学習者が自作するミキサーも含め、全実装がこの入出力契約を満たす。 | `sf sysid fit`/`rate-fit` がミキサーの中身を知らずに `control_output`（ミキサー手前の物理量）を直接読めるようにするため。2026-09-09、workshop/vehicleミキサー乖離バグの再発防止として策定 |
+| INV-4 | **状態機械の各 (状態 × 入力) セルは規範表（`detailed_design.md` §3.1）で全て規定される。** 表に無い暗黙の振る舞いを作らない。遷移の追加・変更は表を先に更新する。入力に飛行モードが関わるセル（例: ToF 出力停止は ALT_HOLD・POS_HOLD と ACRO・STABILIZE で応答が違う）は、モードごとに行を分けて規定する（`test/test_tof_silence.cpp`・`test/test_tof_health.cpp`・`test/test_takeoff_policy.cpp` が全セルを検査）。TAKEOFF の完了・中止・通信喪失の判断（手動の完了、自動の完了、床の積極的な証拠による中止、TAKEOFF・FLYING からの通信断着陸）は純関数 `takeoff_policy.hpp`（`decideTakeoff()`・`decideCommLossLanding()`）に置き、床の証拠の検出（`TakeoffFloorWatch`）は ImuTask、判断の実行は StateTask・StateManager が行う（INV-3）。**証拠が「無い」ことを、床にいる証拠として扱わない**（加速度計だけの「床を離れた」を、状態機械の安全判断の判定条件にしない）。制御器の内部には「床を離れた」の判定 `SupportThrustFilter::leftFloor()` が 1 つ残るが、これは支持推力の窓を開くための内部の判定で、誰もこれに「床を離れたか」を問わない（`controller_status` にも載せない）。誤っても、窓が早く開けば支持推力が「低く」出るだけ、遅く開けば低くした見積もりが効き続けるだけ（どちらも安全側。`blind_landing.hpp`）。出力停止のエピソード中は、ARM を**全モード（ACRO を含む）**で、ALT_HOLD・POS_HOLD への切り替えを拒否する。拒否したスイッチのエッジは、**飛行中は消費し**（復帰の瞬間にパイロットの操作なしにモードが切り替わらない。パイロットが入れ直す）、地上では持続する。 | モード調停の不具合の再発防止 |
+| INV-5 | **モータミキサーへの入力は常に物理量（推力[N]・機体トルク[Nm]）とし、幾何配分（B⁻¹、線形）とモータ曲線（duty変換、非線形・機体依存）の2段に分離する。** どちらの段も経験定数1個に押し込めて隠さない（例: `k=0.25/3.7` のように幾何・モータ曲線・電圧補償を1定数に丸め込まない）。学習者が自作するミキサーも含め、全実装がこの入出力契約を満たす。 | `sf sysid fit`/`rate-fit` がミキサーの中身を知らずに `control_output`（ミキサー手前の物理量）を直接読めるようにするため。workshop と vehicle でミキサーが乖離すると、同定ツールがどちらのミキサーで飛んだログかを判別できず正しく逆算できないため |
 
 ### 責務 ↔ ESP-IDF コンポーネント対応表
 
@@ -167,7 +167,7 @@ L1 の差し替え口は `sf_app_hooks`（`app_hooks.hpp`）の 3 関数だけ�
 
 | 不変条件 | 照合結果 |
 |---------|---------|
-| INV-1（単一の姿勢＋レートパイプライン） | フックは `IController` **全体**を差し替える。`compute()` の呼び出し位置・回数は変わらず、並列の姿勢則は生じない。**自作コントローラは鉛直フェーズ（Grounded / TakeoffClimb / Airborne / Landing）の扱いを自身の `compute()` 内で引き継ぐ責務を負う**（`onTakeoff()` / `onLanding()` 等の通知は従来どおり届く） |
+| INV-1（単一の姿勢＋レートパイプライン） | フックは `IController` **全体**を差し替える。`compute()` の呼び出し位置・回数は変わらず、並列の姿勢則は生じない。**自作コントローラは鉛直フェーズ（Grounded / TakeoffClimb / Airborne / Landing）の扱いを自身の `compute()` 内で引き継ぐ責務を負う**（`onTakeoff()` / `onLanding()` 等の通知は届く） |
 | INV-2（パイロットの姿勢操縦を奪わない） | フックは制御則の実装を替えるだけで、設定点の経路・リンク途絶判定（R16）には触れない。自作コントローラもこの規則を守ること |
 | INV-3（検出と判断の分離） | 検出層・`StateManager` は無変更。フックは制御器と推定器の「どう計算するか」だけを差し替える |
 | INV-4（状態機械の規範表） | 状態機械に変更なし |
@@ -197,7 +197,7 @@ L0〜L2 は学習者が任意に選択し、隣接層へ階段的に降りられ
 
 #### ミキサー差し替え口（設計提案・未実装、R17/INV-5）
 
-**現状（2026-09-09時点）:** `firmware/vehicle` の `sf_actuator::mixerCompute()` は物理単位（推力[N]・トルク[Nm]）の B⁻¹ 幾何配分＋非線形モータ曲線（`thrustToDuty`: モータ曲線 + バッテリ電圧補償）を実装するが、`firmware/workshop` の `ws_internal.hpp::resolve()` は `vehicle_old` から移植した単純な線形近似（`duty = thrust + k*(±R±P±Y)`、`k=0.25/3.7` の経験定数1個に幾何・モータ曲線・電圧補償を丸め込む）を**独自に複製**している。両者は R12（HAL共有）の精神に反して乖離しており、`sf sysid fit` 等の同定ツールがどちらのミキサーで飛んだログかを事前に判別できないと正しく逆算できない、という不具合を引き起こした（2026-09-08〜09 の一連の修正、`--mixer {legacy,vehicle}` として一時的に吸収）。
+**現状:** `firmware/vehicle` の `sf_actuator::mixerCompute()` は物理単位（推力[N]・トルク[Nm]）の B⁻¹ 幾何配分＋非線形モータ曲線（`thrustToDuty`: モータ曲線 + バッテリ電圧補償）を実装するが、`firmware/workshop` の `ws_internal.hpp::resolve()` は単純な線形近似（`duty = thrust + k*(±R±P±Y)`、`k=0.25/3.7` の経験定数1個に幾何・モータ曲線・電圧補償を丸め込む）を**独自に複製**している。両者は R12（HAL共有）の精神に反して乖離しており、`sf sysid fit` 等の同定ツールがどちらのミキサーで飛んだログかを事前に判別できないと正しく逆算できない、という問題になる（現在は `--mixer {legacy,vehicle}` で吸収している）。
 
 **提案する設計（次回作業で着手、着手前に SILS 再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験）・既存実習ゲインへの影響をシミュレーションで検証すること — CLAUDE.md「制御系パラメータ変更」原則）:**
 
@@ -441,21 +441,21 @@ Paired}` として設計する。FAILSAFE と同様、状態管理（StateManage
 - コールバック内でリセット処理を集約（PIDクリア、ESKFリセット等）
 - 状態管理タスクの動作不具合はフェイルセーフが検知可能な構造とする
 
-### シーケンス状態の設計規則（2026-09-16、FLIP 導入時に制定）
+### シーケンス状態の設計規則
 
-本節に先立ち、状態機械に `FlightState::FLIP`（`FLYING → FLIP → FLYING`。TAKEOFF/LANDING と同型の専用シーケンス状態）を追加した。詳細設計は [`detailed_design.md`](detailed_design.md) §3、要件は [`requirements.md`](requirements.md) §2、検討経緯は `docs/plans/flip-maneuver-plan.md` を参照。
+状態機械には `FlightState::FLIP`（`FLYING → FLIP → FLYING`。TAKEOFF/LANDING と同型の専用シーケンス状態）がある。詳細設計は [`detailed_design.md`](detailed_design.md) §3、要件は [`requirements.md`](requirements.md) §2、検討の詳細は `docs/plans/flip-maneuver-plan.md` を参照。
 
-**なぜこの節があるか:** 旧版ファームの状態遷移管理は `Mode` / `Control_mode` / `Throttle_control_mode` / `Alt_flag` / `Flip_flag` の 5 つが重なり合い、優先順位が暗黙で、フラグが遷移を跨いで残っていた（オリジナル実装の Flip 不具合はすべてこれに由来する。`docs/plans/flip-maneuver-plan.md` §6.1 参照）。vehicle は enum 状態 × 規範表（INV-4）、単一の遷移実行者、onExit/onEnter へのリセット集約で反省を反映済みだが、規則そのものは各所に暗黙のまま存在していたため、FLIP 導入を機に明文化する。
+**なぜこの節があるか:** `Mode` / `Control_mode` / `Throttle_control_mode` / `Alt_flag` / `Flip_flag` の 5 つの状態が重なり合い、優先順位が暗黙で、フラグが遷移を跨いで残る設計では、Flip のような複合動作で不具合が出る（オリジナル実装の Flip 不具合はすべてこれに由来する。`docs/plans/flip-maneuver-plan.md` §6.1 参照）。vehicle は enum 状態 × 規範表（INV-4）、単一の遷移実行者、onExit/onEnter へのリセット集約でこれを避ける。これらを実装者が守れるよう、規則を明文化する。
 
 | # | 規則 | Flip への適用 |
 |---|------|--------------|
 | 1 | **分類規則**: 操縦者のスティックの意味・自動化される軸・フェイルセーフの解釈のどれかが変わるなら FlightState のシーケンス。変わらず設定点を作るだけなら誘導（`GuidanceTarget`）。診断オーバーレイ（同定励振）も `controller_status` で可視化 | 3 つとも変わる → `FlightState::FLIP` |
-| 2 | **チャネル別の設定点出所の宣言**: 各状態／フェーズが 姿勢・鉛直・水平・ヨー の出所（Pilot / Sequence / Zero）を表で宣言する（下表）。制御器は `VerticalPhase` を出所の一般化として持つ（INV-1 は保たれる: 出所が替わるだけで制御則は替えない）。INV-2 は「姿勢の出所が Pilot 以外になれるのはリンク途絶（Zero）と操縦者が起動した有限時間のシーケンス（Sequence）だけ」と一般化した | Boost/Recover: 姿勢 Sequence(水平)・鉛直 Sequence(推力)・ヨー Sequence(保持)。Spin/Brake: 姿勢 Sequence(レート)・鉛直 Sequence(推力)・ヨー Sequence(0) |
+| 2 | **チャネル別の設定点出所の宣言**: 各状態／フェーズが 姿勢・鉛直・水平・ヨー の出所（Pilot / Sequence / Zero）を表で宣言する（下表）。制御器は `VerticalPhase` を出所の一般化として持つ（INV-1 は保たれる: 出所が替わるだけで制御則は替えない）。INV-2 は「姿勢の出所が Pilot 以外になれるのはリンク途絶（Zero）と操縦者が起動した有限時間のシーケンス（Sequence）だけ」と規定する | Boost/Recover: 姿勢 Sequence(水平)・鉛直 Sequence(推力)・ヨー Sequence(保持)。Spin/Brake: 姿勢 Sequence(レート)・鉛直 Sequence(推力)・ヨー Sequence(0) |
 | 3 | **規範表の「シーケンス状態の既定行」**: エッジ保留・API 誘導拒否・DISARM/emergency/IMPACT 即時・接地リセット無し・新規シーケンス要求拒否を 1 行で定義し、各シーケンスは差分だけ書く（[`detailed_design.md`](detailed_design.md) §3.1） | FLIP の差分: GYRO_ANOMALY 無視、LOW_BATTERY とリンク途絶は FLYING 復帰後 |
 | 4 | **統合の時期**: 今は TAKEOFF と同じ形（`ControllerCmd` の動詞 + `controller_status` の完了フラグ + `IController` のフック）で足す。4 個目のシーケンスを足すときに `SequenceStart{kind}` / `sequence_done` / `onSequence(kind)` へ統合する | `ControllerCmd::Flip` / `FlipComplete`、`controller_status.flip_ready` / `flip_done` / `flip_result`、`IController::onFlip()` / `onFlipComplete()` |
 | 5 | **状態追加手順のチェックリスト**: enum → 規範表（既定行 + 差分）→ StateManager 遷移 + onEnter/onExit → state_task 実行 → ControllerCmd/IController → controller_status → failsafe の判断 → notify/telemetry → API の待ち条件 → SILS シナリオ + メトリクス → `@design` タグ（[`detailed_design.md`](detailed_design.md) §3.2 参照） | FLIP の実装作業一覧そのもの |
 
-**チャネル別の設定点出所（規則2、2026-09-16）**
+**チャネル別の設定点出所（規則2）**
 
 | 状態／フェーズ | 姿勢 | 鉛直 | 水平 | ヨー |
 |---|---|---|---|---|
@@ -470,9 +470,9 @@ Paired}` として設計する。FAILSAFE と同様、状態管理（StateManage
 
 ### リセット処理の2層分類（クラスA / クラスB）
 
-reset には性質の異なる **2つの層** がある。当初の「reset は onExit/onEnter に集約」という方針は、暗黙に「reset = 状態遷移に紐づく離散イベント」を仮定していた。しかし推定器の一部の reset は **センサ事象に紐づく連続系の同期点** であり、別のタイミング論理（センサ1サンプル精度）を持つことが実装で判明した。これは方針の誤りではなく、reset に2層あることが当初見えていなかっただけである。
+reset には性質の異なる **2つの層** がある。「reset は onExit/onEnter に集約」という方針が成り立つのは、reset が状態遷移に紐づく離散イベントである場合に限る。推定器の一部の reset は **センサ事象に紐づく連続系の同期点** であり、別のタイミング論理（センサ1サンプル精度）を持つため、この方針の対象外である。
 
-**どちらの層に属するかは下記の境界条件で機械的に決まる。** 実装者の裁量で例外を増やさない（旧 `vehicle/` のスパゲッティ化を防ぐための歯止め）。
+**どちらの層に属するかは下記の境界条件で機械的に決まる。** 実装者の裁量で例外を増やさない（スパゲッティ化を防ぐための歯止め）。
 
 | | クラスA: 遷移リセット | クラスB: センサ同期リセット |
 |---|---|---|
@@ -607,7 +607,7 @@ sensor.power ──→ PowerTask [フェイルセーフ]
 
 `ESP_LOG` の出力先は USB コンソールで、書き込みは呼び出し側を待たせうる（送信バッファは小さく、USB のホストが取り出しを止めると最大 50 ms）。400Hz の ImuTask・ControlTask は周期が 2.5 ms なので、1 行のログで周期を落とす。ARM の遷移では ControlTask が「PID controller reset」「Mode: …」「Actuator armed …」「Motors armed」を、ImuTask が「Calibration re-seeded …」を出す。
 
-そこで **`ESP_LOG` の出力関数を LogTask が差し替える（ログシンク: 出力の待ちを呼び出し側から切り離す受け渡しの仕組み）**。呼び出し側（どのタスクでも）は行を整形して固定長のリング（円環状に使い回すバッファ。`sf::LogRing`、4 KB）へ数 µs でコピーするだけで、コンソールには触れない。リングをコンソールへ書くのは LogTask（優先度 5、締切なし）だけ。メッセージの文言・出る条件は変わらず、`ESP_LOG` どうしの順序も保つ。`printf`（CLI の応答・プロンプト）との前後は変わりうる（ログは最大 10 ms 程度遅れる）。TCP の CLI では `CLITask` が `stdout` をソケットへ差し替えているので、`CLITask` が出す `ESP_LOG` はリングを通さずそのソケットへ直接書く（従来どおり。USB には出ない）。リングが満ちたときは行を捨て、捨てた直後に入った最初の行の前に「log sink full: N lines dropped」を出す。LogTask 自身がコンソールで最大 50 ms 待ちうるため、Blackbox 有効時はその間の記録が抜けうる。LogTask の起動前（起動シーケンス）のログは従来どおり直接コンソールへ出る。`reboot` は直前のログを失わないよう `sf::tasks::flush_log_sink()` で出し切ってから再起動する。
+そこで **`ESP_LOG` の出力関数を LogTask が差し替える（ログシンク: 出力の待ちを呼び出し側から切り離す受け渡しの仕組み）**。呼び出し側（どのタスクでも）は行を整形して固定長のリング（円環状に使い回すバッファ。`sf::LogRing`、4 KB）へ数 µs でコピーするだけで、コンソールには触れない。リングをコンソールへ書くのは LogTask（優先度 5、締切なし）だけ。メッセージの文言・出る条件は変わらず、`ESP_LOG` どうしの順序も保つ。`printf`（CLI の応答・プロンプト）との前後は変わりうる（ログは最大 10 ms 程度遅れる）。TCP の CLI では `CLITask` が `stdout` をソケットへ差し替えているので、`CLITask` が出す `ESP_LOG` はリングを通さずそのソケットへ直接書く（USB には出ない）。リングが満ちたときは行を捨て、捨てた直後に入った最初の行の前に「log sink full: N lines dropped」を出す。LogTask 自身がコンソールで最大 50 ms 待ちうるため、Blackbox 有効時はその間の記録が抜けうる。LogTask の起動前（起動シーケンス）のログは直接コンソールへ出る。`reboot` は直前のログを失わないよう `sf::tasks::flush_log_sink()` で出し切ってから再起動する。
 
 周期が守れているかは `sf::LoopTimingMonitor` が測る（ImuTask は `imu_loop_timing`、ControlTask は `control_loop_timing`、毎秒発行。CLI の `status` が表示する）。詳細は `detailed_design.md` §8。 制御経路の NaN・無限大は `sf::NonFiniteMonitor` が境界ごとに数え（ControlTask が `nonfinite_status` を発行し、CLI の `status` が表示する）、モータ指令の出口で有限でない値のモータを duty 0 にする（`detailed_design.md` §8）。
 
@@ -623,11 +623,11 @@ sensor.power ──→ PowerTask [フェイルセーフ]
 
 ### 設計の背景
 
-旧 `firmware/vehicle/` では、共有 HW 資源（I2C バス、esp_netif、WiFi 等）の所有が複数モジュールに分散していた。例: I2C バスは `init.cpp` の file-scope static、`esp_netif_create_default_wifi_sta()` は `controller_comm.cpp` 内、センサ wrapper 群は `globals.hpp` の extern グローバル。これにより以下の問題が発生した。
+共有 HW 資源（I2C バス、esp_netif、WiFi 等）の所有が複数モジュールに分散した実装では、以下の問題が発生する。例（旧 `firmware/vehicle/`）: I2C バスは `init.cpp` の file-scope static、`esp_netif_create_default_wifi_sta()` は `controller_comm.cpp` 内、センサ wrapper 群は `globals.hpp` の extern グローバル。
 
 - 初期化順序の暗黙依存（順番を間違えると crash）
 - 「このグローバルは誰が所有しているか」がコードを読んで追えない
-- センサ init 失敗時の挙動が WARN + fail-through で、後続の null pointer リスクがあった
+- センサ init 失敗時の挙動が WARN + fail-through で、後続の null pointer リスクがある
 
 vehicle では、これらを **`sf_board` という単一の BSP コンポーネントに集約** する。
 
@@ -900,7 +900,7 @@ Motor output
 
 `ESP_LOG` writes to the USB console, and the write can make the caller wait (small transmit buffer; up to 50 ms when the USB host stops taking data). ImuTask and ControlTask run at 400 Hz (2.5 ms period), so one log line can cost a whole cycle. At the ARM transition ControlTask logs "PID controller reset", "Mode: ...", "Actuator armed ..." and "Motors armed", and ImuTask logs "Calibration re-seeded ...".
 
-So **LogTask replaces the output function of `ESP_LOG` (the log sink)**. A caller (any task) formats the line and copies it into a fixed-size ring (`sf::LogRing`, 4 KB) in a few microseconds without touching the console; only LogTask (priority 5, no deadline) writes the ring to the console. The wording and conditions of every message are unchanged, and `ESP_LOG` lines keep their order among themselves. Their order relative to `printf` (CLI replies and prompts) can change (logs are up to about 10 ms late). In the TCP CLI, `CLITask` redirects `stdout` to the socket, so the `ESP_LOG` lines of `CLITask` bypass the ring and are written straight to that socket, as before (not to USB). When the ring is full the line is dropped, and "log sink full: N lines dropped" is printed before the first line stored after the loss. LogTask itself can wait up to 50 ms on the console, so Blackbox records can be missed during that wait when Blackbox is enabled. Logs before LogTask starts (the boot sequence) still go straight to the console. `reboot` drains the ring with `sf::tasks::flush_log_sink()` before restarting so the last messages are not lost.
+So **LogTask replaces the output function of `ESP_LOG` (the log sink)**. A caller (any task) formats the line and copies it into a fixed-size ring (`sf::LogRing`, 4 KB) in a few microseconds without touching the console; only LogTask (priority 5, no deadline) writes the ring to the console. The wording and conditions of every message are not altered by the sink, and `ESP_LOG` lines keep their order among themselves. Their order relative to `printf` (CLI replies and prompts) can change (logs are up to about 10 ms late). In the TCP CLI, `CLITask` redirects `stdout` to the socket, so the `ESP_LOG` lines of `CLITask` bypass the ring and are written straight to that socket (not to USB). When the ring is full the line is dropped, and "log sink full: N lines dropped" is printed before the first line stored after the loss. LogTask itself can wait up to 50 ms on the console, so Blackbox records can be missed during that wait when Blackbox is enabled. Logs before LogTask starts (the boot sequence) still go straight to the console. `reboot` drains the ring with `sf::tasks::flush_log_sink()` before restarting so the last messages are not lost.
 
 Whether the period is kept is measured by `sf::LoopTimingMonitor` (`imu_loop_timing` from ImuTask, `control_loop_timing` from ControlTask, published every second and shown by the CLI `status`). See `detailed_design.md` §8. NaN and infinity on the control path are counted per boundary by `sf::NonFiniteMonitor` (ControlTask publishes `nonfinite_status`, shown by the CLI `status`), and at the motor command exit a motor whose value is not finite gets duty 0 (`detailed_design.md` §8).
 

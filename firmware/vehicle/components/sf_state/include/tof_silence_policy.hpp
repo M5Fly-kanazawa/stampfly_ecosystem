@@ -22,10 +22,10 @@
  * pass the status through sf::FailsafeStatusGuard: a status nobody refreshes reads as silent.
  *
  * Why this matters: the ground-contact flag (TakeoffLandingMgr::on_ground_) is released by ToF
- * samples only. When the ToF stops, the flag freezes; if it froze "on the ground" the estimator
- * kept pinning position/velocity to zero while the craft climbed, and the auto-takeoff kept
- * integrating thrust (2026-11 accident, craft hit the ceiling). Since then ImuTask no longer
- * trusts the frozen flag while the ToF is silent, the landing descends blind, and the response
+ * samples only. When the ToF stops, the flag stays at its last value; if that value is "on the ground" the estimator
+ * keeps pinning position/velocity to zero while the craft climbs, and the auto-takeoff keeps
+ * integrating thrust (the craft climbs into the ceiling). ImuTask therefore does not
+ * trust the fixed flag while the ToF is silent, the landing descends blind, and the response
  * depends on whether the flight mode needs altitude:
  *  - ALT_HOLD / POS_HOLD / auto-takeoff NEED the altitude  -> land (blind descent).
  *  - ACRO / STABILIZE do not (the pilot owns the vertical axis) -> NEVER force a landing:
@@ -47,7 +47,7 @@
  *
  * なぜ重要か: 接地フラグ（TakeoffLandingMgr::on_ground_）は ToF サンプルだけで解除される。ToF が
  * 止まるとフラグは最後の値のまま固定され、「接地」のまま固定されると、機体が上昇しても推定器が位置・速度を 0 に固定
- * し続け、自動離陸は推力を積分し続けた（2026-11 の事故。天井に衝突）。以後、ToF の出力停止中は
+ * し続け、自動離陸は推力を積分し続ける（機体は天井に衝突する）。そのため ToF の出力停止中は
  * ImuTask が固定されたままのフラグを信用せず、着陸は ToF なしで降り、応答は飛行モードが高度を必要とするか
  * で分かれる:
  *  - ALT_HOLD・POS_HOLD・自動離陸は高度を必要とする → 着陸（ToF なしの降下）。

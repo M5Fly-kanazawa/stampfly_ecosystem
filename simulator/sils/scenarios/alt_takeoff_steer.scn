@@ -1,22 +1,22 @@
 # alt_takeoff_steer.scn — the pilot can ROLL/PITCH DURING the ALT_HOLD auto-takeoff climb
-#                        ALT_HOLD 自動離陸の「上昇中」にロール/ピッチを操縦できる  (new 2026-06-14)
+#                        ALT_HOLD 自動離陸の「上昇中」にロール/ピッチを操縦できる
 #
-# Design (user decision 2026-06-14): the auto-takeoff is auto-VERTICAL ONLY — the controller
+# Design: the auto-takeoff is auto-VERTICAL ONLY — the controller
 # climbs to 0.5 m, but the PILOT keeps full attitude control in every phase, exactly as in
-# flight. Earlier TakeoffClimb forced level attitude (roll/pitch dead), which dead-sticked
-# the sticks if the craft stayed in that phase (flight-test bug). Now attitude is never
+# flight. A level-attitude hold in TakeoffClimb (roll/pitch dead) would dead-stick
+# the sticks if the craft stayed in that phase (a bug found in flight test), so attitude is never
 # locked out: roll the stick DURING the climb and the craft tilts (and still climbs to 0.5 m).
 #   C0: ARM in ALT_HOLD, stick still centred — a short head start so the auto-vertical loop
-#       has begun climbing before the disturbance hits (2026-07-26 ODEプラント(実測Ct)対応
-#       再調整 — see the note above event C below for the physical justification).
+#       has begun climbing before the disturbance hits (see the C0 note below
+#       for the physical justification).
 #   C: roll the stick RIGHT → during the auto-takeoff CLIMB the craft must TILT (tilt_max
 #      > 6° in the TakeoffClimb window), while the auto-vertical still carries it up to
 #      0.5 m and reaches Airborne ("Auto-takeoff complete").
 #   D: centre → self-level + hold.
 #
-# 設計（ユーザー判断 2026-06-14）: 自動離陸は「鉛直のみ自動」— 制御器は 0.5 m へ上昇するが、
-# パイロットは全フェーズで姿勢を完全に操れる（飛行と同じ）。旧来は TakeoffClimb で水平強制し、
-# そのフェーズに留まるとスティックが応答しなくなった。今は姿勢を奪わない: 上昇中にロールを倒せば傾く
+# 設計: 自動離陸は「鉛直のみ自動」— 制御器は 0.5 m へ上昇するが、
+# パイロットは全フェーズで姿勢を完全に操れる（飛行と同じ）。TakeoffClimb で水平強制すると、
+# そのフェーズに留まったときスティックが応答しなくなる（飛行試験で見つかった不具合）ので姿勢を奪わない: 上昇中にロールを倒せば傾く
 # （かつ 0.5 m まで上昇する）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/alt_takeoff_steer.scn --target vehicle
@@ -24,12 +24,16 @@
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
    0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
    +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
-   # C0: 2026-07-26 ODEプラント(実測Ct)対応再調整: ARM直後・climb=0のままロールを当てると、
-   # 新ホバーduty=0.7245(旧0.6976)下では傾き分の垂直推力損失をALT_HOLDが取り戻す前に
-   # 評価窓へ入ってしまい、alt_mean が目標未達のまま沈下し続ける(実測: 0.5m未達の0.43m
-   # 止まりで沈下、[12.5,13.5]でalt_mean=0.296)。ARM後に2.0s centered stickの頭出しを
-   # 入れて上昇に助走を付けてからロールを当てると、同じ傾き外乱でも自動垂直側に余裕が
-   # 生まれ、centre後は0.5mへ回復・整定する(実測: [14.5,15.5]でalt_mean=0.588)。
+   # C0: ARM, then a centred stick for 2.0 s before the roll. Rolling right at ARM (climb=0) lets the tilt's vertical thrust
+   # loss reach the evaluation window before ALT_HOLD recovers it (hover duty 0.7245): alt_mean then keeps sinking short of
+   # the target (measured without the head start: [12.5,13.5] alt_mean=0.296, stuck near 0.43 m). With the 2.0 s head start
+   # the auto-vertical has margin for the same tilt disturbance, and after centring the craft recovers to 0.5 m and
+   # settles (measured: [14.5,15.5] alt_mean=0.588).
+   # C0: ARM 後 2.0 s は中立スティックのままにしてからロールを当てる。ARM 直後(climb=0)にロールを当てると、
+   # 傾き分の垂直推力損失を ALT_HOLD が取り戻す前に評価窓へ入ってしまい（ホバー duty=0.7245）、alt_mean が
+   # 目標未達のまま沈下し続ける(頭出しなしの実測: [12.5,13.5]で alt_mean=0.296、0.43m 止まりで沈下)。
+   # 2.0s の頭出しで上昇に助走を付けると、同じ傾き外乱でも自動垂直側に余裕が生まれ、
+   # centre後は0.5mへ回復・整定する(実測: [14.5,15.5]でalt_mean=0.588)。
    +    rc   2048  2048   2048    2048  1     2000      50        1              # C0: ARM in ALT_HOLD, stick centred — let the climb get a head start
    +    rc   2048  2700   2048    2048  1     3000      50        1              # C: roll RIGHT → tilt DURING the auto-takeoff climb
    +    rc   2048  2048   2048    2048  1     3000      50        1              # D: centre → self-level + hold 0.5 m

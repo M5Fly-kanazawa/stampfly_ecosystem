@@ -12,15 +12,15 @@
 #   ピークは 1926 deg/s（47.372 s、BMI270 のレンジ 2000 deg/s）→ Brake（引き渡し時 flip_phi 213°）
 #   → Recover → 48.03 s に FLYING。
 #
-# This scenario guards against the SILS SUCCEEDING where the hardware FAILED. The earlier SILS plants
-# (the D*V electrical ODE, V0) flew this flip to completion (peak 1577 deg/s, no abort), so every SILS
-# flip test passed while the real vehicle aborted; the bench R_out drive plant (SSOT bench_2026_10_15,
+# This scenario guards against the SILS SUCCEEDING where the hardware FAILED. A plant that spins too
+# slowly (the D*V electrical ODE, V0, flies this flip to completion: peak 1577 deg/s, no abort) lets every SILS
+# flip test pass while the real vehicle aborts; the bench R_out drive plant (SSOT bench_2026_10_15,
 # thrust efficiency 0.976 from the flight hover balance) spins fast enough to reach the limit as the
 # hardware did. If a later plant change makes this scenario fail (no abort), the SILS has lost the
 # hardware's flip dynamics -- do not loosen the .expect to make it pass.
-# 本シナリオは「実機が失敗したのに SILS が成功してしまう」ことへの歯止め。従来の SILS プラント
-# （D×V 電気 ODE、V0）はこの宙返りを打ち切りなしで完走し（ピーク 1577 deg/s）、実機が打ち切られた
-# のに SILS の宙返り試験は全て通っていた。ベンチ R_out 駆動のプラント（SSOT bench_2026_10_15、
+# 本シナリオは「実機が失敗したのに SILS が成功してしまう」ことへの歯止め。回転が遅すぎるプラント
+# （D×V 電気 ODE、V0 は、この宙返りを打ち切りなしで完走する: ピーク 1577 deg/s）では、実機が打ち切られる
+# のに SILS の宙返り試験は全て通ってしまう。ベンチ R_out 駆動のプラント（SSOT bench_2026_10_15、
 # 飛行ホバー釣り合いから決めた推力効率 0.976）は、実機と同様に上限に達する速さまで回る。後の
 # プラント変更で本シナリオが落ちた（打ち切りが起きない）なら、SILS は実機の宙返りの動特性を
 # 失っている ―― 通すために .expect を緩めないこと。

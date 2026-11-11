@@ -14,10 +14,12 @@
 # "up 70" で旋回前に約 1.2 m へ、ホバー/forward/climb 中はモータ健全（旋回中の duty の
 # 扱いは下のメトリクス注記を参照）。
 #
-# 2026-07-26 ODEプラント(実測Ct)対応再調整: "up 30" は元は cw90 の後段だったが、
-# "cw 90" の前段に繰り上げ・増量(30→70cm)した。新ホバーduty=0.7245(旧0.6976)により
-# cw90中は差動ヨートルクを維持するため一時的に平均推力がホバー未満となり実測で
-# 約0.6-0.7m沈下する。0.5m起点のままだと地面に届く(旧: duty_max=1.0固着のまま
+# "up 70" runs before "cw 90". At hover duty 0.7245, holding the differential yaw torque during cw90 makes the
+# mean thrust temporarily fall below hover and the craft sinks about 0.6-0.7 m (measured). From a 0.5 m start it
+# reaches the ground (measured: duty_max stuck at 1.0, 0.5 m -> 0 m crash, "error rotate timeout", then "error not flying").
+# Climbing to 1.2 m before the turn lets the same sink recover without touching down (measured: minimum altitude in the turn window 0.375 m).
+# "up 70" は "cw 90" の前に実行する。ホバーduty=0.7245 では、cw90中は差動ヨートルクを維持するため一時的に平均推力が
+# ホバー未満となり実測で約0.6-0.7m沈下する。0.5m起点のままだと地面に届く(実測: duty_max=1.0固着のまま
 # 0.5m→0m墜落・"error rotate timeout"→以降 "error not flying")。旋回前に1.2mへ
 # 登っておけば同じ沈下量でも着地せず回復できる(実測: 旋回窓内の最小高度0.375m)。
 exit 0
@@ -45,10 +47,11 @@ order "cmd: cw 90" "cmd: land"
 order "cmd: land" "Autonomous landing engaged"
 # Hover at the unified 0.5 m takeoff height before the first move (slight steady-state
 # offset above target). / 最初の移動前に 0.5 m ホバー（目標よりわずかに上の定常偏差）。
-# 2026-10-31 R_out plant: alt_mean lower bound 0.42 -> 0.30 (basis (b): 14 real auto-takeoffs, window takeoff+7.7..+11.2 s,
-# ESKF altitude: min 0.326, p10 0.348, p50 0.473 -> real min rounded down; 4 of 14 real takeoffs were below the old 0.42,
-# which was tuned to the old plant (0.518) / 実機14回の離陸（最小 0.326・p10 0.348・p50 0.473）の最小を切り下げ。
-# 旧 0.42 は旧プラントの値 0.518 に合わせたもので、実機の 4/14 が下回る
+# alt_mean lower bound 0.30 (basis: 14 real auto-takeoffs, window takeoff+7.7..+11.2 s,
+# ESKF altitude: min 0.326, p10 0.348, p50 0.473 -> the real min rounded down). A lower bound of 0.42 is not used:
+# it fits a plant whose value is 0.518, and 4 of 14 real takeoffs fall below it.
+# 実機14回の離陸（最小 0.326・p10 0.348・p50 0.473）の最小を切り下げて下限 0.30 とする。
+# 下限 0.42 は採らない: プラントの値 0.518 に合うだけで、実機の 4/14 が下回る。
 metric alt_mean > 0.30 in 14.0 17.5
 metric alt_mean < 0.70 in 14.0 17.5
 # "forward 50" displaces the craft forward and stays BOUNDED. The true-physics
@@ -61,8 +64,7 @@ metric alt_mean < 0.70 in 14.0 17.5
 # オーバーシュートは実機飛行テストでの誘導/POS ゲイン調整項目。ここでは発散のみ判定。
 metric horizontal_drift_max > 0.35 in 17.5 23.0
 metric horizontal_drift_max < 1.00 in 17.5 23.0
-# 2026-07-26 ODEプラント(実測Ct)対応再調整: "up 70" は cw90 の前に繰り上げ・増量した
-# (旧: "up 30" は cw90 の後、0.5→0.8m)。climb settles ~0.5→~1.1-1.2 m BEFORE the turn.
+# "up 70" runs before cw90: the climb settles ~0.5→~1.1-1.2 m BEFORE the turn.
 # up 70 が 0.5m ホバーを引き上げ、旋回前に約1.0-1.2mへ。
 metric alt_mean > 0.90 in 25.8 26.9
 metric alt_mean < 1.30 in 25.8 26.9
@@ -75,16 +77,20 @@ metric tilt_max < 0.2618 in 8.0 31.0  # 15.0 deg
 # duty stays healthy through hover + forward + the pre-turn climb (no yaw differential
 # active yet). / ホバー+forward+登坂(旋回前)はduty健全（まだヨー差動なし）。
 metric duty_max < 0.92 in 8.0 26.9
-# 2026-07-26 ODEプラント(実測Ct)対応再調整: cw90中は差動ヨートルクを維持するため対角
-# モータ対の一方が duty 上限(1.0)に数秒間張り付く(実測)。新ホバーduty=0.7245(旧0.6976)
-# により、従来から存在していた約±0.30の差動要求(旧プラントでは0.6976+0.30≈0.998で
-# 辛うじて非飽和)が新プラントでは 0.7245+0.30>1.0 となり恒常的にクリップする。旋回中も
-# true tilt(roll/pitch)は3°未満のまま(上の tilt_max 参照) — 発散ではなく新プラントでの
+# Duty is not gated during cw90: holding the differential yaw torque pins one motor of a diagonal pair at the
+# duty limit (1.0) for a few seconds (measured). The differential demand of about ±0.30 on top of hover duty 0.7245
+# exceeds 1.0 (0.7245+0.30>1.0), so it clips steadily. True tilt (roll/pitch) stays under 3° through the
+# turn (see tilt_max above) — not a divergence but the steady behaviour of holding yaw. The margin to the ground is
+# secured by the "up 70" climb above, so this section has no duty gate; instead "not crashed" is gated directly by an
+# altitude floor: during cw90 the mean thrust temporarily falls below hover and the craft sinks (measured minimum
+# altitude 0.375 m), but with the "up 70" margin it recovers without touching down.
+# cw90中の duty は判定しない: 差動ヨートルクを維持するため対角モータ対の一方が duty 上限(1.0)に数秒間
+# 張り付く(実測)。ホバーduty=0.7245 に約±0.30の差動要求を足すと 0.7245+0.30>1.0 となり恒常的に
+# クリップする。旋回中も true tilt(roll/pitch)は3°未満のまま(上の tilt_max 参照) — 発散ではなく
 # ヨー保持時の定常挙動。地面までの余裕は上の "up 70" climb で確保済みなので、この区間の
 # duty 上限判定は外し、代わりに「墜落していないこと」を高度下限で直接判定する。
 # cw90中は差動ヨートルクのため一時的に平均推力がホバー未満になり沈下するが(実測最小
-# 高度0.375m)、"up 70" の余裕により着地せず回復する。duty の代わりに高度下限で
-# 「墜落していないこと」を直接判定する。
+# 高度0.375m)、"up 70" の余裕により着地せず回復する。
 metric alt_min > 0.30 in 27.2 31.0
 # Landed at the end. / 最後は接地。
 metric alt_max < 0.10 in 38.0 39.5

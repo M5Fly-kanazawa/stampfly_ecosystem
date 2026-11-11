@@ -7,7 +7,7 @@
 # 「上昇」になる。ここでの判断は加速度計に基づく上昇量に依らないので、挙動は同じ。
 #
 # Motor health 0.9 and a throttle above the takeoff threshold but below the hover thrust (raw 3100): the craft enters TAKEOFF and stays on the floor for 3.5 s, with the
-# ToF below its minimum range (invalid samples only). An accelerometer-based "has left the floor" evidence that would keep such a craft in TAKEOFF was tried and withdrawn:
+# ToF below its minimum range (invalid samples only). An accelerometer-based "has left the floor" evidence that would keep such a craft in TAKEOFF is not used:
 # it cannot tell a slow lift from a craft the floor holds.
 # Spec under test (detailed_design.md §3.1, TAKEOFF -> FLYING manual row; operation_manual.md):
 #  1. The invalid samples are counted after 2 s + 0.15 s of TAKEOFF (the time limit of the tracker, the ToF-invalid rule): a ToF-silence episode.
@@ -16,7 +16,7 @@
 #  3. STABILIZE never lands by itself: "NO forced landing, fly on". When the pilot raises the throttle the craft lifts.
 #
 # モータの健全度 0.9、スロットルは離陸の閾値より上でホバー推力より下（生値 3100）: 機体は TAKEOFF に入り、床の上に 3.5 s いる。ToF は最小レンジ未満（無効サンプルだけ）。
-# 加速度計に基づく「床を離れた」証拠で、そのような機体を TAKEOFF に留める仕組みは試して取り下げた。その証拠はゆっくり浮く機体と床が支えている機体を
+# 加速度計に基づく「床を離れた」証拠で、そのような機体を TAKEOFF に留める仕組みは採らない。その証拠はゆっくり浮く機体と床が支えている機体を
 # 区別できないため。検証する仕様（detailed_design.md §3.1 の TAKEOFF → FLYING（手動）の行、operation_manual.md）:
 #  1. 無効サンプルは TAKEOFF の 2 s + 0.15 s の後に数えられる（トラッカーの時間の上限。ToF 無効の規則）: ToF 出力停止のエピソード。
 #  2. エピソードは接地フラグを「空中」にし（接地を示す証拠が無いので）、手動の TAKEOFF は床の上で FLYING になる: 許容する。スロットルはパイロットが握っている

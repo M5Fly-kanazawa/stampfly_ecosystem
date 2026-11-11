@@ -3,21 +3,21 @@
 #
 # STABILIZE, ARM at 4.0 s, the ToF stops at
 # 5.0 s (on the ground: the ground-contact flag freezes at "ground"), the pilot climbs blind to ~1.8 m (above the
-# ~1.6 m range), the ToF resumes at 8.6 s but its first samples are out of range (invalid). Before the fix the
-# frozen "ground" flag was trusted again, the estimator pinned position/velocity to 0 while the craft climbed to
-# 10 m under ALT_HOLD, and the auto-landing completed at altitude (motors off at 10 m). Spec under test:
+# ~1.6 m range), the ToF resumes at 8.6 s but its first samples are out of range (invalid). If the
+# frozen "ground" flag were trusted again, the estimator would pin position/velocity to 0 while the craft climbed to
+# 10 m under ALT_HOLD, and the auto-landing would complete at altitude (motors off at 10 m). Spec under test:
 #  1. The silence flips the raw ground flag to "airborne" and the silence EPISODE lasts until the estimator has
 #     re-acquired the ToF (not until a sample arrives): log "estimator has not re-acquired the ToF yet".
 #  2. The estimator re-acquires the ToF (vertical covariance inflated, innovation gate lifted for one sample, the
 #     same mechanism as the end of a flip): log "ToF re-acquired", innovation 1.5 m.
-#  3. The craft never climbs away (truth alt_max 2.5 m, was 10.9 m) and no landing is declared at altitude.
+#  3. The craft never climbs away (truth alt_max 2.5 m; it would reach 10.9 m with the flag frozen) and no landing is declared at altitude.
 #  4. The pilot's later crash (throttle stick to the bottom in STABILIZE, 10.3 s) is the pilot's, and the next
 #     flight (ARM in ALT_HOLD at 17 s) is normal: auto-takeoff to 0.8 m, estimate within 0.1 m of the truth.
 #
 # STABILIZE、4.0 s に ARM、5.0 s に ToF が
 # 出力停止（地上で。接地フラグは「接地」のまま固定）、パイロットがレンジ（約 1.6 m）を超える約 1.8 m まで ToF
-# なしで上昇、8.6 s に ToF が復帰するが最初のサンプルは範囲外（無効）。main（2026-11-08 時点）は固定されたままの「接地」フラグが再び信用され、
-# 推定器は機体が上昇する間ずっと位置・速度を 0 に固定し、ALT_HOLD で 10 m まで上昇して、自動着陸が高所で完了した
+# なしで上昇、8.6 s に ToF が復帰するが最初のサンプルは範囲外（無効）。固定されたままの「接地」フラグが再び信用されると、
+# 推定器は機体が上昇する間ずっと位置・速度を 0 に固定し、ALT_HOLD で 10 m まで上昇して、自動着陸が高所で完了する
 # （10 m でモータ停止）。検証する仕様: (1) 出力停止が生の接地フラグを「空中」に倒し、エピソードはサンプルが届いた
 # ときでなく推定器が ToF を取り込み直すまで続く、(2) 推定器が ToF を取り込み直す（鉛直共分散を広げ、1 サンプルだけ
 # イノベーション判定を外す。宙返りの終わりと同じ仕組み。イノベーション 1.5 m）、(3) 機体は上昇し続けず（真値の

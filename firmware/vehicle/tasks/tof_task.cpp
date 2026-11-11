@@ -36,7 +36,7 @@
  *   - VL53L3CX init failure for **front** sensor → Optional. Logged as
  *     a warning, XSHUT is held low, bottom sensing continues unchanged.
  *     前方センサの初期化失敗は Optional 扱い: 警告のみ、XSHUT を Low に保ち
- *     底面の測距は従来どおり継続する。
+ *     底面の測距は継続する。
  *   - Front sensor fails kFrontDisableFailCycles reads in a row (seen with USB
  *     power only) → disabled at run time the same way (reset + presence cleared).
  *     前方が kFrontDisableFailCycles 回連続で読み出しに失敗（USB 給電のみで発生）

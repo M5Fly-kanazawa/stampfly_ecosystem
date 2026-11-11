@@ -1,11 +1,11 @@
 # tof_silent_est_high.scn — downward ToF silent while climbing, with the hover-thrust estimate 19 % TOO HIGH
 #                           ホバー推力の見積もりが 19 % 高いまま、上昇中に下向き ToF が出力停止する
 #
-# The blind landing used to start from min(low-passed thrust, 0.95 x the hover-thrust estimate): an
-# estimate too high, together with a high thrust history (a climb), left the thrust floor above the true
-# hover and the craft kept rising until the time limit cut the motors in the air. The start thrust is now
-# the commanded thrust calibrated by the accelerometer (thrust / mass), which does not depend on the
-# estimate, and the thrust keeps falling after 3 s (blind_landing.hpp). Here the estimate is set 20 %
+# The start thrust of the blind landing is the commanded thrust calibrated by the accelerometer
+# (thrust / mass), which does not depend on the hover-thrust estimate, and the thrust keeps falling after 3 s
+# (blind_landing.hpp). A start thrust of min(low-passed thrust, 0.95 x the hover-thrust estimate) is not used: an
+# estimate too high, together with a high thrust history (a climb), leaves the thrust floor above the true
+# hover, and the craft keeps rising until the time limit cuts the motors in the air. Here the estimate is set 20 %
 # above the true hover from boot (`param` events at t = 0: hover.thrust_corr 1.12, the default = 0.406 N against the
 # true 0.34 N, learning off so it stays wrong), then as tof_silent_alt_climb.scn: auto-takeoff, stick
 # climb, ToF output stops at ~1.75 m while rising. Spec under test:
@@ -15,10 +15,10 @@
 #     absent), with a bounded peak height and touchdown speed (the numbers are the measured worst case).
 #  3. ARM is refused while the sensor is silent.
 #
-# ホバー推力の見積もりが高すぎる（＋上昇で推力の履歴が高い）と、旧設計の開始推力 min(ろ波した推力,
-# 0.95 × 見積もり) では推力の床が真のホバーより上に残り、時間切れで空中でモータを止めるまで上昇し続けた。
-# 開始推力は、加速度計（推力 ÷ 質量）で較正した指令推力になり、見積もりに依らない。さらに 3 s 後は推力が
-# 下がり続ける（blind_landing.hpp）。ここでは見積もりを起動時から真のホバー（0.34 N）より 19 % 高く設定し
+# ToF なしの着陸の開始推力は、加速度計（推力 ÷ 質量）で較正した指令推力で、ホバー推力の見積もりに依らない。
+# さらに 3 s 後は推力が下がり続ける（blind_landing.hpp）。開始推力を min(ろ波した推力, 0.95 × 見積もり) とする案は
+# 採らない: ホバー推力の見積もりが高すぎる（＋上昇で推力の履歴が高い）と、推力の床が真のホバーより上に残り、
+# 時間切れで空中でモータを止めるまで上昇し続けるため。ここでは見積もりを起動時から真のホバー（0.34 N）より 19 % 高く設定し
 # （t = 0 の `param` 事象: hover.thrust_corr 1.12（既定値）= 0.406 N、真値は 0.34 N。学習は切って誤ったまま）、以後は
 # tof_silent_alt_climb.scn と同じ: 自動離陸、スティック上昇、上昇中の約 1.75 m で ToF 出力停止。検証する仕様:
 #  1. ランプは較正した推力（0.33〜0.35 N）から始まり、0.95 × 見積もり（0.39 N）からではない

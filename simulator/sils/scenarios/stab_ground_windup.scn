@@ -1,5 +1,5 @@
-# stab_ground_windup.scn — STABILIZE ARMED_GROUND integrator windup regression (vehicle, Layer 2)
-# STABILIZE 地上 ARM 中の積分巻き上がり回帰（vehicle, Layer 2）
+# stab_ground_windup.scn — STABILIZE ARMED_GROUND integrator windup re-check test (vehicle, Layer 2)
+# STABILIZE 地上 ARM 中の積分巻き上がりの再確認試験（vehicle, Layer 2）
 #
 # Reproduces the real-log finding (ground_spin_stab.sflog.zip): STABILIZE, ARMED on the
 # floor for 34 s at low throttle. A small residual tilt-estimate error is integrated by the
@@ -20,9 +20,9 @@
 # 結果として機体は床の上で残差の傾き推定誤差を持つ。
 #
 # Sticks are raw 12-bit ADC, centre 2048, throttle_norm = (raw-2048)/2048.
-# raw 2314 -> 0.13 (below the 0.5 takeoff threshold, ~ the real log), raw 3243 -> 0.58 (takeoff).
+# raw 2314 -> 0.13 (below the 0.5 takeoff threshold, ~ the real log), raw 3171 -> 0.55 (takeoff).
 # スティックは raw 12bit ADC（中央2048）。raw 2314 -> 0.13（離陸閾値 0.5 未満、実ログ相当）、
-# raw 3243 -> 0.58（離陸）。
+# raw 3171 -> 0.55（離陸）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/stab_ground_windup.scn --target vehicle --duration 40000000
 #
@@ -36,8 +36,8 @@
    +    rc   2048  2048   2048    2048  1     1000      50       # B: ARM rising edge → ARMED_GROUND, idle throttle 1 s
    +    bias 0.0   0.07   0.0     0.0   0.0   0.0                # C: residual accel bias AFTER calibration (tilt-estimate error on the floor)
    +    rc   2314  2048   2048    2048  1     25000     50       # D: low throttle 0.13 on the floor 25 s (no takeoff)
-   +    rc   3171  2048   2048    2048  1     2000      50       # E: throttle up (>0.5) → TAKEOFF → FLYING, liftoff | 2026-10-31 R_out plant: STABILIZE/ACRO throttle 3243->3171 (deviation from 2048 x0.94: open-loop hover raw 3154->3088, SILS sweep at 3.87 V) / R_outプラントでホバーraw 3154->3088、偏差x0.94
-   +    rc   3108  2048   2048    2048  1     1500      50       # F: near-hover, sticks centred | 2026-10-31 R_out plant: STABILIZE/ACRO throttle 3176->3108 (deviation from 2048 x0.94: open-loop hover raw 3154->3088, SILS sweep at 3.87 V) / R_outプラントでホバーraw 3154->3088、偏差x0.94
+   +    rc   3171  2048   2048    2048  1     2000      50       # E: throttle up (>0.5) → TAKEOFF → FLYING, liftoff (raw 3171: a little above the open-loop hover raw 3088, SILS sweep at 3.87 V) / raw 3171 は開ループのホバー raw 3088（SILS 掃引、3.87 V）より少し上
+   +    rc   3108  2048   2048    2048  1     1500      50       # F: near-hover, sticks centred (raw 3108, same basis as E) / raw 3108（根拠は E と同じ）
    +    rc   2048  2048   2048    2048  0     200       50       # release ARM button / ボタン離し
    +    rc   2048  2048   2048    2048  1     200       50       # press again → DISARM (toggle) / 再押下=DISARM
    +    rc   2048  2048   2048    2048  0     600       50       # settle disarmed / disarm 後整定

@@ -42,12 +42,11 @@ namespace sf::app::stock {
 
 /// The vehicle's standard controller, selected by param controller.type
 /// (0 = PID [default], 1 = SNN — Stage 1 wiring skeleton, UNTRAINED),
-/// initialized on first call. Same instance/lifetime as the former
-/// app_default.cpp body — a function-local static constructed once, init()
-/// called exactly once per selected implementation.
+/// initialized on first call. A function-local static is constructed once,
+/// and init() is called exactly once per selected implementation.
 /// 標準コントローラ（controller.type で PID[既定]／SNN[Stage1配線骨格・
-/// 未学習]を選択）。初回呼び出しで初期化。旧 app_default.cpp と同じ寿命 —
-/// 選んだ実装ごとに関数内 static を1回だけ構築し、init() も1回だけ呼ぶ。
+/// 未学習]を選択）。初回呼び出しで初期化。関数内 static を1回だけ構築し、
+/// 選んだ実装ごとに init() も1回だけ呼ぶ。
 sf::IController& controller();
 
 /// The vehicle's standard estimator, selected by param estimator.type

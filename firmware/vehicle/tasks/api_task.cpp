@@ -88,13 +88,13 @@ constexpr uint16_t kApiPort        = 8889;    // Tello SDK port / Tello SDK ポ�
 constexpr int      kPollMs         = 20;      // main loop poll / 主ループ周期
 // Poll period inside waitUntil [ms]: how often the predicate is evaluated AND the command
 // sources are read, so an `emergency` / `stop` that arrives while a command blocks waits at
-// most this long plus the processing time. Kept at the pre-existing 50 ms predicate period:
+// most this long plus the processing time. The predicate period is 50 ms:
 // 2.5 times the idle-loop latency (kPollMs = 20 ms), 1/240 of the 12 s takeoff timeout.
 // (SILS only: its socket shim yields one tick per recvfrom, so the period reads 51 ms there.
 // With 49 ms all 51 older scenarios were bit-identical to before; with 50 ms 11 API scenarios
 // move by that 1 ms per poll and still pass.)
 // waitUntil 内のポーリング周期 [ms]: 述語の評価とコマンド源の読み取りの周期。待機中に届いた
-// `emergency` / `stop` の待ち時間は最大でこれ＋処理時間。従来の述語周期 50 ms を維持:
+// `emergency` / `stop` の待ち時間は最大でこれ＋処理時間。述語周期は 50 ms:
 // 待機していないときの遅れ（kPollMs = 20 ms）の 2.5 倍、離陸タイムアウト 12 s の 1/240。
 // （SILS のみ: ソケットシムは recvfrom ごとに 1 tick 譲るので周期は 51 ms に見える。49 ms なら
 // 既存 51 シナリオが変更前と完全一致、50 ms だと API 系 11 本が 1 回あたり 1 ms ずれる。全て PASS。）
@@ -105,14 +105,14 @@ constexpr int      kWaitPollMs     = 50;
 // (default 6) the same commands would otherwise have queued in. CANDIDATE value.
 // 後回しコマンド待ち行列の容量: 別のコマンドが待機中に届いた `emergency` / `stop` 以外の
 // コマンドをここで待たせ、後で到着順に実行する。8 = 注入リングのサイズ（kInjectSlots）で、
-// 従来これらが溜まっていた lwIP の UDP 受信メールボックス（既定 6）より大きい。候補値。
+// 同じコマンドが他に溜まりうる lwIP の UDP 受信メールボックス（既定 6）より大きい。候補値。
 constexpr int      kDeferredSlots  = 8;
 constexpr float    kMoveMinCm      = 10.0f;   // Tello: 20; we allow finer indoor moves
 constexpr float    kMoveMaxCm      = 300.0f;  // single-move clamp [cm] / 1回の移動上限
 constexpr float    kAltMinM        = 0.2f;    // target altitude floor / 目標高度下限
 // Target altitude ceiling [m] — shared with the controller's auto-takeoff target through
-// sf::limits (was 2.0 m here). CANDIDATE value, basis in flight_limits.hpp.
-// 目標高度の上限 [m] — 制御器の自動離陸目標と sf::limits で共有（ここでは従来 2.0 m）。
+// sf::limits. CANDIDATE value, basis in flight_limits.hpp.
+// 目標高度の上限 [m] — 制御器の自動離陸目標と sf::limits で共有。
 // 候補値、根拠は flight_limits.hpp。
 constexpr float    kAltMaxM        = sf::limits::kAltitudeCeilingM;
 constexpr float    kDefaultSpeed   = 0.3f;    // [m/s] guidance approach / 既定接近速度
@@ -195,11 +195,11 @@ bool popInjected(char* out, size_t out_len)
 // While a command blocks (takeoff / land / move ...), waitUntil keeps reading the command
 // sources so `emergency` and `stop` act at once. Every other line is parked here, in
 // arrival order, and the main loop runs it after the blocking command has replied — the
-// same order as before, when such lines waited in the socket / injection ring instead.
+// same order in which they would have waited in the socket / injection ring.
 // Single task only (ApiTask), so plain indices suffice.
 // コマンドが待機中（takeoff / land / move ...）も waitUntil はコマンド源を読み続け、
 // `emergency` と `stop` を即座に実行する。それ以外の行は到着順にここへ置き、待機中だった
-// コマンドの応答後に主ループが実行する — 従来ソケット/注入リングで待っていたときと同じ順序。
+// コマンドの応答後に主ループが実行する — ソケット/注入リングで待たせた場合と同じ順序。
 // ApiTask 単独で使うので素の添字でよい。
 struct DeferredLine {
     char        text[kInjectLen];
@@ -562,9 +562,9 @@ void cmdTakeoff()
 }
 
 // True when `mode` (one reading of system_mode) says the craft is in ARMED_GROUND in an altitude mode (ALT_HOLD / POS_HOLD): the motors have begun to spool on the floor and StateManager answers a land request with an immediate DISARM
-// (detailed_design.md §3 note 13). In a manual mode it does not: the craft may already be lifting off (the request is refused, as before). Takes ONE reading, so the state and the mode come from the same instant.
+// (detailed_design.md §3 note 13). In a manual mode it does not: the craft may already be lifting off (the request is refused). Takes ONE reading, so the state and the mode come from the same instant.
 // `mode`（system_mode の 1 回の読み）が、ARMED_GROUND にいて高度モード（ALT_HOLD / POS_HOLD）であることを示すとき true: モータは床の上でスプールを始めており、StateManager は着陸要求に即時 DISARM で応える
-// （detailed_design.md §3 注13）。手動モードでは違う: 機体はもう浮き始めているかもしれない（要求は従来どおり拒否する）。状態とモードが同じ瞬間のものになるよう、読みは 1 回だけ受け取る。
+// （detailed_design.md §3 注13）。手動モードでは違う: 機体はもう浮き始めているかもしれない（要求は拒否する）。状態とモードが同じ瞬間のものになるよう、読みは 1 回だけ受け取る。
 bool isSpoolingInAltitudeMode(const sf::SystemMode& mode)
 {
     return static_cast<sf::FlightState>(mode.state) == sf::FlightState::ARMED_GROUND &&
@@ -1401,17 +1401,17 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
                      static_cast<double>(gph * 57.29578f),
                      static_cast<double>(coh));
         }
-        // NOTE: do NOT re-cue here. An earlier version re-published AutotuneStart after
-        // every point to keep the buzzer audible; but each cue plays a ~0.9 s BLOCKING
-        // warble in NotifyTask, and the high-freq points (~0.8 s) out-paced it, FILLING
+        // NOTE: do NOT re-cue here. Re-publishing AutotuneStart after
+        // every point would keep the buzzer audible; but each cue plays a ~0.9 s BLOCKING
+        // warble in NotifyTask, and the high-freq points (~0.8 s) would out-pace it, FILLING
         // the depth-8 notify_command queue (which drops on overflow) — so the final
-        // AutotuneOk/Fail cue was silently dropped and yaw showed white-then-nothing.
+        // AutotuneOk/Fail cue would be silently dropped and yaw would show white-then-nothing.
         // The white LED already persists for the whole sweep via its 30 s safety
         // timeout, so the end cue (green/red) just needs the queue clear here.
-        // ここで再合図しない。旧版は各点で AutotuneStart を再発行したが、各合図は NotifyTask で
+        // ここで再合図しない。各点で AutotuneStart を再発行すると、各合図は NotifyTask で
         // 約0.9秒のブロッキング・ワーブルを鳴らし、高周波点(約0.8秒)が追い越して深さ8の
         // notify_command キューを満杯化(満杯時ドロップ)→ 最後の Ok/Fail 合図が落ち、yaw が
-        // 「白→無」になっていた。白LEDは開始時の30秒タイマで掃引中ずっと維持されるため、
+        // 「白→無」になる。白LEDは開始時の30秒タイマで掃引中ずっと維持されるため、
         // 終了の緑/赤はキューを空けておけば確実に出る。
     }
 
@@ -1516,11 +1516,11 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
         return;
     }
     // Accept the achieved PM if it MEETS-OR-EXCEEDS the target (a higher PM is more damped =
-    // SAFER). Reject only an UNDER-margin design (PM below target). This was an equality gate
-    // |PM-target|>5, which wrongly rejected an over-damped design — yaw at wc=18 lands at
+    // SAFER). Reject only an UNDER-margin design (PM below target). An equality gate
+    // |PM-target|>5 would wrongly reject an over-damped design — yaw at wc=18 lands at
     // PM~80 (PI-only already exceeds 60, so td clips to 0), which is safe, not a failure.
     // 達成PMが目標以上なら採用（高PM=より減衰=安全）。目標未満だけ棄却。等値判定は過減衰設計を
-    // 誤棄却していた（yaw wc=18 は PM~80 で安全）。
+    // 誤棄却してしまう（yaw wc=18 は PM~80 で安全）。
     if (tune.pm_deg < pm_deg - 5.0f) {
         sf::params::set_float(rk_rej, 6.0f);
         reply("error phase margin below target - gains unchanged");
@@ -1538,11 +1538,11 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // torque effectiveness then drives oscillation. Reject thin-GM designs
     // before LIVE apply (H-1). gm_valid=false means no −180° crossing in the
     // sweep → GM effectively infinite → SAFE, so do not reject that (L-15).
-    // ALL axes use 6 dB. (Yaw once used 8 dB to hedge a hypothesised reaction-torque RHP
+    // ALL axes use 6 dB. (Yaw needs no larger floor for a hypothesised reaction-torque RHP
     // zero — refuted on hardware, tau_z≈0; the yaw plant is the same uniform 3-param model
-    // and its GM is trustworthy, so it needs no special floor.)
-    // 全軸 6dB。（yaw は以前、反トルク RHP 零点を見込んで 8dB にしていたが実機で反証(tau_z≈0)。
-    // yaw も同じ3パラモデルで GM は信頼でき、特別な下限は不要。）
+    // and its GM is trustworthy.)
+    // 全軸 6dB。（yaw に反トルク RHP 零点を見込んだ大きめの下限（8dB 等）は不要: 実機で反証済み(tau_z≈0)。
+    // yaw も同じ3パラモデルで GM は信頼できる。）
     static const float kMinGmDb[3] = {6.0f, 6.0f, 6.0f};   // roll, pitch, yaw [dB]
     if (tune.gm_valid && tune.gm_db < kMinGmDb[axis]) {
         sf::params::set_float(rk_rej, 7.0f);
@@ -1849,14 +1849,12 @@ bool handleFixedVerbLine(const char* line)
         return true;
     }
     // flip <l/r/f/b> — Tello-compatible single-axis 360-degree flip
-    // (flip-maneuver-plan.md §4.4, decision reversed 2026-09-16 from the
-    // 2026-06-23 refusal). Any malformed "flip ..." line still lands here
-    // (same prefix match as the old refusal block) so it reports "bad
-    // direction" rather than falling through to "unknown command".
-    // flip <l/r/f/b> — Tello 互換の単軸360度宙返り（plan §4.4、2026-06-23の
-    // 拒否判断を2026-09-16に撤回）。不正な "flip ..." 行も（旧・拒否ブロックと
-    // 同じ前方一致で）ここに来るため "unknown command" でなく "bad direction"
-    // を返す。
+    // (flip-maneuver-plan.md §4.4). Any malformed "flip ..." line also lands here
+    // (prefix match) so it reports "bad direction" rather than falling
+    // through to "unknown command".
+    // flip <l/r/f/b> — Tello 互換の単軸360度宙返り（plan §4.4）。
+    // 不正な "flip ..." 行も（前方一致で）ここに来るため "unknown command" でなく
+    // "bad direction" を返す。
     if (std::strncmp(line, "flip", 4) == 0) {
         char dir_tok[8] = {};
         std::sscanf(line, "flip %7s", dir_tok);

@@ -691,7 +691,7 @@ struct ControllerStatus {
 // by the StateManager (architecture.md §4). Two topics carry the split of duties:
 //   - pairing_state    (StateManager → comm/notify): the decided PairingState.
 //   - pairing_complete (comm → StateManager): comm's current bind status fact.
-// The handshake follows the legacy vehicle: the vehicle broadcasts a PairingPacket
+// The handshake: the vehicle broadcasts a PairingPacket
 // advertising its own MAC; the controller learns it and unicasts ControlPackets to
 // that MAC; the vehicle fixes the received src MAC as its peer (mutual MAC learning).
 //
@@ -699,7 +699,7 @@ struct ControllerStatus {
 // （architecture.md §4）。責務分担を2トピックで運ぶ:
 //   - pairing_state    (StateManager → comm/notify): 決定された PairingState。
 //   - pairing_complete (comm → StateManager): comm の現在のバインド状態という事実。
-// ハンドシェイクは旧 vehicle 踏襲: 機体が自 MAC を広告する PairingPacket を broadcast し、
+// ハンドシェイク: 機体が自 MAC を広告する PairingPacket を broadcast し、
 // コントローラがそれを学習して機体 MAC へ ControlPacket をユニキャスト送信、機体は受信した
 // src MAC を相手局として確定する（相互 MAC 学習）。
 //
@@ -769,12 +769,12 @@ struct PairingDiag {
 // communication go through Pub-Sub topics only. So a transition callback does
 // not reach into the estimator/controller directly; it publishes a command and
 // the owning task (ImuTask owns the estimator, ControlTask owns the controller)
-// consumes it. This replaces the previous ad-hoc edge detection inside those tasks.
+// consumes it (the tasks do no edge detection of their own).
 //
 // architecture.md §4 は「リセット処理を状態機械の onExit/onEnter コールバックに集約」、
 // R5 は「コンポーネント間通信は Pub-Sub トピックのみ」を要求する。よって遷移コールバックは
 // 推定器/制御器を直接操作せず、コマンドを publish し、所有タスク（ImuTask=推定器、
-// ControlTask=制御器）が消費して実行する。これが旧来のタスク内エッジ検出を置き換える。
+// ControlTask=制御器）が消費して実行する（タスクが自前でエッジ検出をすることはない）。
 // =============================================================================
 
 /// Estimator command verbs — issued by StateManager transition callbacks
@@ -895,7 +895,7 @@ enum class FlipBlockReason : uint8_t {
     Cooldown           = 6,   // C7: less than t_gap since previous flip/ 前回からの間隔不足
     Busy               = 7,   // already FLIP / previous flip unsettled / 実行中
     SourceConflict     = 8,   // C8: sysid/autotune/guidance move active/ 他の励振・誘導と競合
-    Disabled           = 9,   // param flip.enable == 0 (default; first hardware flip failed 2026-10-02) / flip.enable が 0（既定。実機初回の宙返りが失敗）
+    Disabled           = 9,   // param flip.enable == 0 (default; the first hardware flip attempt failed) / flip.enable が 0（既定。実機での最初の宙返りが失敗）
 };
 
 /// Get human-readable flip-block-reason name
@@ -1168,14 +1168,13 @@ enum class ApiCmd : uint8_t {
     Takeoff   = 3,   // mode→POS_HOLD + arm + auto-takeoff      / モード設定+ARM+自動離陸
     Land      = 4,   // autonomous landing                      / 自動着陸
     Emergency = 5,   // immediate motor cut (any state)         / 即時モータ停止
-    // NOTE: flip-maneuver-plan.md §4.4 assigns "ApiCmd::Flip = 5", but by the time
-    // this task landed, Emergency already occupied 5 in this codebase (added after
-    // that plan text was drafted). Used 6 instead of duplicating an enumerator value
-    // — flagged here per coding_and_education.md's "report design contradictions"
-    // rule rather than silently reusing 5.
-    // 注: plan §4.4 は「ApiCmd::Flip = 5」とするが、本タスク着手時点で 5 は既に
-    // Emergency が使用中（plan 執筆後に追加）。値の重複を避けるため 6 を採用 —
-    // coding_and_education.md の「設計矛盾は報告する」規則に従いここに明記する。
+    // NOTE: flip-maneuver-plan.md §4.4 assigns "ApiCmd::Flip = 5", but Emergency
+    // already occupies 5 in this codebase. 6 is used instead of duplicating an
+    // enumerator value — flagged here per coding_and_education.md's "report design
+    // contradictions" rule rather than silently reusing 5.
+    // 注: plan §4.4 は「ApiCmd::Flip = 5」とするが、5 は既に Emergency が使用中。
+    // 値の重複を避けるため 6 を採用 — coding_and_education.md の「設計矛盾は報告する」
+    // 規則に従いここに明記する。
     Flip      = 6,   // Tello-compatible flip l/r/f/b (flip-maneuver-plan.md §4.4)
                      // Tello 互換 flip l/r/f/b（plan §4.4）
 };

@@ -1,27 +1,27 @@
 # tof_silent_takeoff.scn — downward ToF goes silent DURING the auto-takeoff climb (POS_HOLD)
 #                          自動離陸の上昇中に下向き ToF が出力停止する（POS_HOLD）
 #
-# Replays the 2026-11 accident shape: the auto-takeoff has just started climbing when the
+# Guards against an in-flight failure: the auto-takeoff has just started climbing when the
 # downward ToF delivers its last sample and then nothing (no bus error). The ground-contact
-# flag was never released by a ToF sample, so the estimator kept pinning position/velocity
+# flag is not released by a ToF sample, so an estimator that trusted it would keep pinning position/velocity
 # to zero and the climb loop would integrate thrust forever. Spec under test:
 #  1. The state machine notices the silence by itself (Failsafe: no new ToF sample for 0.3 s) and
 #     leaves TAKEOFF for LANDING (abort the climb, POS_HOLD needs the altitude).
 #  2. ImuTask does NOT trust the frozen ground-contact flag any more: the position/velocity pin is
-#     released, so the blind descent is a real descent (before: LANDING ended 20 ms after it began, by
-#     the frozen "touchdown" flag, and the craft fell from the climb at 1.86 m/s).
+#     released, so the blind descent is a real descent (a frozen "touchdown" flag would end LANDING 20 ms after it began,
+#     and the craft would fall from the climb at 1.86 m/s).
 #  3. The blind descent is a velocity loop and ends by the touchdown detector (impact, then stillness) / the
 #     impact cut; the climb stays bounded (peak 0.53 m, nowhere near the ceiling) and the touchdown
 #     speed is bounded.
 #  4. While the sensor is still silent, ARM is REFUSED with the reason shown (prearm).
 #
-# 2026-11 の事故の形を再現: 自動離陸が上昇を始めた直後に下向き ToF が最後のサンプルを出し、
-# 以後は何も来ない（バスエラー無し）。接地フラグが ToF サンプルで一度も解除されないため、
-# 推定器は位置・速度を 0 に固定し続け、上昇ループは推力を積分し続けた。検証する仕様:
+# 実機飛行で見つかった不具合の再発防止試験: 自動離陸が上昇を始めた直後に下向き ToF が最後のサンプルを出し、
+# 以後は何も来ない（バスエラー無し）。接地フラグは ToF サンプルで解除されないため、それを信用する
+# 推定器は位置・速度を 0 に固定し続け、上昇ループは推力を積分し続ける。検証する仕様:
 #  1. 状態機械が出力停止を自力で検知（Failsafe: 0.3 s 新 ToF サンプル無し）し、TAKEOFF から LANDING へ抜ける
 #     （上昇を中止。POS_HOLD は高度を必要とする）。
 #  2. ImuTask は固定されたままの接地フラグを信用しない: 位置・速度の固定が解除され、ToF なしの降下が本当の降下になる
-#     （以前は LANDING が始まって 20 ms で固定されたままの「接地」フラグにより終わり、機体は上昇中から 1.86 m/s で落ちた）。
+#     （固定されたままの「接地」フラグを信用すると、LANDING は始まって 20 ms で終わり、機体は上昇中から 1.86 m/s で落ちる）。
 #  3. ToF なしの降下は速度ループの降下で、加速度計による接地・衝撃カットで終わる。上昇は有界（最大 0.53 m、
 #     天井にはほど遠い）で、接地速度も有界。
 #  4. センサが出力停止している間、ARM は理由つきで拒否される（prearm）。

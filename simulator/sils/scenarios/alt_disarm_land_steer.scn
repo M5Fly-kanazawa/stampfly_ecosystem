@@ -1,19 +1,19 @@
 # alt_disarm_land_steer.scn — pilot keeps ROLL/PITCH during the auto-landing descent
-#                            自動着陸の降下中もパイロットがロール/ピッチを操縦できる  (new 2026-06-14)
+#                            自動着陸の降下中もパイロットがロール/ピッチを操縦できる
 #
-# Regression guard for the landing-law UNIFICATION (INV-1/INV-2, refactor A 2026-06-14):
+# Guard for the landing-law UNIFICATION (INV-1/INV-2, one landing law for all landings):
 # a pilot-commanded auto-landing (DISARM in ALT_HOLD) is STEERABLE — the pilot keeps
 # roll/pitch/yaw while the command link is LIVE; the vertical channel descends
-# automatically. The OLD computeLanding() forced level attitude (roll_sp=pitch_sp=0),
-# DEAD-STICKING the pilot during landing (hardware bug 2026-06-14). With Landing now a
-# VerticalPhase in the one pipeline, a roll stick held through the descent TILTS the
+# automatically. A landing law that forced level attitude (roll_sp=pitch_sp=0) would
+# DEAD-STICK the pilot during landing (a bug found in hardware flight). Landing is a
+# VerticalPhase in the one pipeline, so a roll stick held through the descent TILTS the
 # craft (tilt_max > 6°) — the centered-stick twin alt_disarm_land holds tilt ≈ 0.
 # A failsafe (comm-loss) landing instead stays LEVEL — see commloss_land_level.scn.
 #
-# 着陸則の統一（INV-1/INV-2, リファクタA）の既存動作の破壊を防ぐ試験: パイロット指令の自動着陸（ALT_HOLD
+# 着陸則の統一（INV-1/INV-2）の既存動作の破壊を防ぐ試験: パイロット指令の自動着陸（ALT_HOLD
 # での DISARM）は操縦可 — リンク生存中はパイロットが roll/pitch/yaw を保ち、鉛直チャネルだけ
-# 自動降下。旧 computeLanding() は水平強制（roll_sp=pitch_sp=0）で着陸中スティックが応答しなくなった
-# （実機バグ）。Landing を単一パイプラインの VerticalPhase にしたので、降下中にロールを保持
+# 自動降下。水平強制（roll_sp=pitch_sp=0）の着陸則では着陸中スティックが応答しなくなる
+# （実機飛行で見つかった不具合）。Landing は単一パイプラインの VerticalPhase なので、降下中にロールを保持
 # すると機体が傾く（tilt_max>6°）。中立版 alt_disarm_land は tilt≈0。フェイルセーフ着陸は水平
 # （commloss_land_level.scn）。
 #

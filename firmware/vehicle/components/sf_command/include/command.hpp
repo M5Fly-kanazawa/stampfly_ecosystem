@@ -85,17 +85,18 @@ private:
     void publishPilotRequest(const RawControlInput& raw);
 
     // Deadband width for roll/pitch/yaw (never applied to throttle). 0.05 = a 5% centre
-    // deadzone so small stick noise near centre does not drift the craft. This was held at
-    // 0 while the accel-attitude χ² latch-up made the per-axis POSITION_HOLD/STABILIZE
-    // scenarios marginally stable (a non-zero deadband shrinks the command and tipped them
-    // over the χ² cliff). With the latch-up root-caused and fixed (accel_att_noise 0.06→0.8,
+    // deadzone so small stick noise near centre does not drift the craft. A non-zero
+    // deadband shrinks the command, which was enough to push the per-axis POSITION_HOLD/
+    // STABILIZE scenarios over the χ² threshold while the accel-attitude χ² latch-up was
+    // present. With the latch-up root-caused and fixed (accel_att_noise 0.8,
     // chi2_latchup_finding §8) those scenarios hold with large margin, so the deadband is
-    // now enabled. Settable via setDeadband().
+    // enabled. Settable via setDeadband().
     // ロール/ピッチ/ヨーのデッドバンド幅（スロットルには適用しない）。0.05 = 中央5%の不感帯で、
     // 中央付近の微小なスティックノイズで機体がドリフトしないようにする。accel-attitude χ²
-    // ラッチアップで毎軸 POSITION_HOLD/STABILIZE が限界安定だった間は0に固定していた（非ゼロは
-    // 指令を縮め χ² のしきい値を越えさせた）。ラッチアップを根治した今（accel_att_noise 0.06→0.8、
-    // chi2_latchup_finding §8）これらは大きな余裕で保持するので、デッドバンドを有効化する。
+    // ラッチアップがあると毎軸 POSITION_HOLD/STABILIZE が限界安定になり、非ゼロの
+    // デッドバンドは指令を縮めて χ² のしきい値を越えさせる。ラッチアップは根治済み
+    // （accel_att_noise 0.8、chi2_latchup_finding §8）で、これらは大きな余裕で保持するので、
+    // デッドバンドを有効化する。
     float deadband_ = 0.05f;
 };
 

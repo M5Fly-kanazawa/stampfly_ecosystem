@@ -2,26 +2,31 @@
 # ALT_HOLD 自動離陸の上昇中のパイロット姿勢制御
 #
 # The roll stick goes RIGHT after a short (2.0 s) centred head start from ARM (event C0
-# in the .scn — 2026-07-26 ODEプラント(実測Ct)対応再調整, see the justification below).
-# [9.8,10.6] is the (shifted) TakeoffClimb window (altitude still climbing, ~0.20→0.39 m).
+# in the .scn — see the justification below).
+# [9.8,10.6] is the TakeoffClimb window (altitude still climbing, ~0.20→0.39 m).
 # The craft MUST tilt there (tilt_max > 6°) — proving attitude is never locked out during
-# auto-takeoff (the old level-attitude hold gave tilt ≈ 0). The auto-vertical still carries
+# auto-takeoff (a level-attitude hold would give tilt ≈ 0). The auto-vertical still carries
 # it to 0.5 m and reaches Airborne, then centering self-levels.
-# ロールは ARM から 2.0 秒の中立頭出し(C0)の後に右へ。[9.8,10.6] は(繰り下げた)TakeoffClimb
+# ロールは ARM から 2.0 秒の中立頭出し(C0)の後に右へ。[9.8,10.6] は TakeoffClimb
 # 窓（高度 約0.20→0.39 m 上昇中）。そこで機体は傾く必要（tilt_max > 6°）— 自動離陸中も
-# 姿勢を奪わない証明（旧水平保持では tilt≈0）。鉛直は自動で 0.5 m へ到達し Airborne、
+# 姿勢を奪わない証明（水平保持なら tilt≈0）。鉛直は自動で 0.5 m へ到達し Airborne、
 # 中央復帰で水平化。
 #
-# 2026-07-26 ODEプラント(実測Ct)対応再調整: 全メトリクス窓を C0(2.0s頭出し)分だけ
-# 後ろへシフトした。新ホバーduty=0.7245(旧0.6976)下では、ARM直後(climb=0)にロール
+# All metric windows sit after C0 (the 2.0 s head start). At hover duty 0.7245, a roll
+# disturbance right after ARM (climb=0) leaves too little auto-vertical margin: alt_mean keeps
+# sinking short of the 0.5 m target even after centring (measured without the head start: [12.5,13.5] alt_mean=0.296).
+# With the 2.0 s centred-stick head start the climb gets a run-up; the tilt amount
+# and duty health are unchanged by it (tilt_max, duty_max), and after centring the craft recovers to 0.5 m and
+# settles (measured: [14.5,15.5] alt_mean=0.588).
+# 全メトリクス窓は C0(2.0s頭出し)の後ろに置く。ホバーduty=0.7245 では、ARM直後(climb=0)にロール
 # 外乱を当てると自動垂直側の余裕が足りず、centre後もalt_mean が目標(0.5m)未達のまま
-# 沈下し続ける(実測: 旧スケジュールで [12.5,13.5] alt_mean=0.296)。ARM後に2.0s
-# centered stick の頭出し(C0)を入れて上昇に助走を付けてからロールを当てると、傾き量
-# ・duty健全性は変わらず(tilt_max・duty_maxとも旧同等)、centre後は0.5mへ回復・整定する
+# 沈下し続ける(頭出しなしの実測: [12.5,13.5] alt_mean=0.296)。2.0s
+# centered stick の頭出し(C0)で上昇に助走を付けると、傾き量
+# ・duty健全性は頭出しで変わらず(tilt_max・duty_max)、centre後は0.5mへ回復・整定する
 # (実測: [14.5,15.5] alt_mean=0.588)。
 exit 0
 log_contains any "Auto-takeoff complete — normal mode law engaged"
-# Roll RESPONDS during the takeoff climb (the key behaviour — old code held it level).
+# Roll RESPONDS during the takeoff climb (the key behaviour — a level hold would give tilt ≈ 0).
 metric tilt_max > 0.1047  in 9.8 10.6  # 6.0 deg
 metric tilt_max < 0.4363 in 9.5 12.6  # 25.0 deg
 # Auto-vertical recovers to hold ~0.5 m after self-leveling (D's settled tail).

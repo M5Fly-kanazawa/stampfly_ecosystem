@@ -163,11 +163,11 @@ public:
     /// Whether the ALT/POS auto-takeoff has captured its target altitude. The task
     /// layer publishes this on controller_status; the state machine uses it to drive
     /// TAKEOFF → FLYING for auto-takeoff (decoupled from the ToF 0.15m airborne edge,
-    /// which is the ESKF vertical handoff only — 2026-06-14 redesign). Default false
+    /// which is the ESKF vertical handoff only). Default false
     /// (controllers without an altitude loop fall back to ToF airborne detection).
     /// ALT/POS 自動離陸が目標高度を捕捉したか。タスク層が controller_status で publish し、
     /// 状態機械が自動離陸の TAKEOFF→FLYING を駆動する（ToF 0.15m 空中エッジ＝ESKF 鉛直
-    /// ハンドオフ専用とは分離 — 2026-06-14 再設計）。既定 false（高度ループを持たない制御器は
+    /// ハンドオフ専用とは分離）。既定 false（高度ループを持たない制御器は
     /// ToF 空中検知にフォールバック）。
     virtual bool isTakeoffComplete() const { return false; }
 

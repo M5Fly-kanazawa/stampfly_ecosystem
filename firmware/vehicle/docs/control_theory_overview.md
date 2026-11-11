@@ -75,7 +75,7 @@ $$
 - `A_{δv,δθ} = −R[a×]`：**姿勢が傾いていると加速度計の測定値が誤った方向にNEDへ投影され速度を汚す** ←§2.5 の加速度計の測定値の罠の線形化版
 - `A_{δθ,δb_g} = −I`：ジャイロバイアスがそのまま姿勢ドリフトになる
 
-離散化は `F = I + A·dt`。共分散伝搬 `P' = F P Fᵀ + Q` を、`A` が **225要素中24要素しか非ゼロでない疎構造**を使って2パスのインプレース演算に落とす（密な 2×15³≈6750 積和 → ~720 積和）。これは飾りではなく **400Hz でコアを飽和させないための必須最適化**であり、実機の「INIT で停止」バグの根治策だった（密ループ × `-Og` で StateTask が飢餓）。
+離散化は `F = I + A·dt`。共分散伝搬 `P' = F P Fᵀ + Q` を、`A` が **225要素中24要素しか非ゼロでない疎構造**を使って2パスのインプレース演算に落とす（密な 2×15³≈6750 積和 → ~720 積和）。これは飾りではなく **400Hz でコアを飽和させないための必須最適化**である（密ループを `-Og` でビルドすると StateTask が CPU 時間を使い切り、実機が「INIT で停止」する）。
 
 ### 2.3 観測モデル（更新） — 各センサの `h(x)` と `H`
 
@@ -100,7 +100,7 @@ $$
 |------|-----------|-----------|
 | **χ² 外れ値判定（カイ二乗判定）** | 3次元観測で正規化イノベーション二乗 `rᵀS⁻¹r` が χ²(3,0.95)=7.81 を超えたら**棄却** | 衝撃・外れ値・一時的な不整合が状態に急変を与えるのを防ぐ |
 | **適応 R** | accel 姿勢更新で `R ← R·(1 + k·|a−g|²)`（k=10）。**運動加速度が大きいほど信用を下げる** | ホバー中は信用し、マニューバ中は弱める（急な遮断でなく連続減重） |
-| **active_mask による P 隔離** | off のセンサ群が触る状態は P 行列で**隔離**し、観測のたびに復活しないようにする | 観測 ON/OFF が共分散構造を壊さない（旧 ESKF の構造的欠陥の根治） |
+| **active_mask による P 隔離** | off のセンサ群が触る状態は P 行列で**隔離**し、観測のたびに復活しないようにする | 観測 ON/OFF が共分散構造を壊さない |
 | **ジャイロバイアス偏差クランプ** | `b_g` を起動校正値の **±0.03 rad/s** 内にのみ更新許可（PX4流） | 磁気外乱・悪い床のフローがレートループに使うバイアスを引きずるのを有界化。予算: BMI270 温度ドリフト ~0.01rad/s に対し3倍の余裕 |
 
 **設計思想**：可観測性のために全観測をバイアスへ結合させる（クロス共分散）が、その結合が同時に汚染経路にもなる。だから**結合は保ちつつ被害を有界化する**（クランプ・減重・隔離）。これが「弱めるのでなく直す／有界化する」という本プロジェクト一貫の方針。
@@ -240,7 +240,7 @@ NED で計算した目標加速度をヨーで機体座標へ回し、`÷g` で�
 
 ### 5.3 ループ整形 ── PM/ωc 仕様を PID 形で解く
 
-同定した `G(jω)` に対し、**目標の交差周波数 ωc と位相余裕 PM** を満たす PID ゲインを解く（`tunePid`）。PID 位相は Td に対し非単調になりうるため、二分法でなく**ピーク走査**で安定に解く（過去のバグ：二分法が上端で誤解）。設計後、`evalMargins` で実際のゲイン余裕 GM・位相余裕 PM を評価し、**安全判定**を通してからライブ適用（NVS 非保存）：
+同定した `G(jω)` に対し、**目標の交差周波数 ωc と位相余裕 PM** を満たす PID ゲインを解く（`tunePid`）。PID 位相は Td に対し非単調になりうるため、二分法でなく**ピーク走査**で安定に解く（二分法は上端を誤って解く）。設計後、`evalMargins` で実際のゲイン余裕 GM・位相余裕 PM を評価し、**安全判定**を通してからライブ適用（NVS 非保存）：
 
 | 判定項目 | 基準 | 意図 |
 |--------|------|------|
@@ -252,7 +252,7 @@ NED で計算した目標加速度をヨーで機体座標へ回し、`÷g` で�
 
 最大の教訓は **「SILS で最適化したゲインが実機で発振する」**こと。SILS のプラントは理想（むだ時間小・トルク効き1.0）で、SILS 乱流ベンチを直接最適化すると**実機で位相余裕が負になるゲイン**（例: Td=0.08 で実機 PM −375°）に収束する。
 
-→ **必ず実機同定したプラント上でループ整形する**。ACRO レート発振の解決（実遅れ12-16ms・トルク効き0.36-0.71倍を同定→再設計で実機の振動峰消失、roll PM57°/pitch59° を飛行ログで裏付け）、POS_HOLD の実機再設計（実効ゲイン K≈0.4g を3手法で同定→`vel.kp 0.8→3.0`/`pos.kp 1.0→0.4` で発散停止）は、いずれも**同定がゲイン決定を駆動した**。
+→ **必ず実機同定したプラント上でループ整形する**。ACRO レート発振の解決（実遅れ12-16ms・トルク効き0.36-0.71倍を同定→再設計で実機の振動峰消失、roll PM57°/pitch59° を飛行ログで裏付け）、POS_HOLD の実機再設計（実効ゲイン K≈0.4g を3手法で同定→`vel.kp`=3.0・`pos.kp`=0.4 で発散停止）は、いずれも**同定がゲイン決定を駆動した**。
 
 ### 5.5 制御パラメータ変更の鉄則
 
@@ -310,7 +310,7 @@ $$
 $$
 
 The error-state dynamics `δẋ=Aδx+w` have only four nonzero blocks:
-$A_{\delta p,\delta v}=I$, $A_{\delta v,\delta\theta}=-R[a\times]$, $A_{\delta v,\delta b_a}=-R$, $A_{\delta\theta,\delta b_g}=-I$ — where `-R[a×]` is the linearised "a tilt mis-projects the specific force into NED and corrupts velocity" (the linearised form of the §2.5 specific-force trap). Discretised as `F=I+A·dt`, the covariance propagation `P'=FPFᵀ+Q` exploits `A`'s sparsity (24 of 225 entries) to become two in-place passes (~720 vs the dense ~6750 multiply-adds) — not cosmetic but **required to not saturate a core at 400 Hz**, and the fix for the real "stuck at INIT" bug (a dense loop at `-Og` starved StateTask).
+$A_{\delta p,\delta v}=I$, $A_{\delta v,\delta\theta}=-R[a\times]$, $A_{\delta v,\delta b_a}=-R$, $A_{\delta\theta,\delta b_g}=-I$ — where `-R[a×]` is the linearised "a tilt mis-projects the specific force into NED and corrupts velocity" (the linearised form of the §2.5 specific-force trap). Discretised as `F=I+A·dt`, the covariance propagation `P'=FPFᵀ+Q` exploits `A`'s sparsity (24 of 225 entries) to become two in-place passes (~720 vs the dense ~6750 multiply-adds) — not cosmetic but **required to not saturate a core at 400 Hz**, because a dense loop built at `-Og` lets StateTask use up the CPU time and the vehicle gets stuck at INIT.
 
 ### 2.3 Measurement models (update)
 
@@ -434,11 +434,11 @@ Real flight is full of disturbance/noise, so autotune adds a **coherence/SNR gat
 
 ### 5.3 Loop shaping to PM/ωc specs
 
-Given `G(jω)`, solve the PID gains meeting a target crossover ωc and phase margin PM (`tunePid`). Since the PID phase can be non-monotonic in Td, solve by a peak scan, not bisection (a past bug: bisection misread the upper end). Then `evalMargins` evaluates the achieved GM/PM and a **safety gate** must pass before live (non-persisted) application: PM ≥ spec; GM ≥ 6 dB (unified across axes; yaw's old 8 dB was a conservative pad for the unmodelled zero); yaw ωc cap `0.3/τ_z` to stay clear of the bandwidth limit.
+Given `G(jω)`, solve the PID gains meeting a target crossover ωc and phase margin PM (`tunePid`). Since the PID phase can be non-monotonic in Td, solve by a peak scan, not bisection (bisection misreads the upper end). Then `evalMargins` evaluates the achieved GM/PM and a **safety gate** must pass before live (non-persisted) application: PM ≥ spec; GM ≥ 6 dB (unified across axes; yaw's old 8 dB was a conservative pad for the unmodelled zero); yaw ωc cap `0.3/τ_z` to stay clear of the bandwidth limit.
 
 ### 5.4 SILS vs hardware — identification is decisive
 
-The biggest lesson: **gains optimised in SILS oscillate on hardware.** The SILS plant is ideal (small delay, torque 1.0), so directly optimising a SILS turbulence bench converges to gains with NEGATIVE phase margin on hardware (e.g. Td=0.08 → real PM −375°). So **always loop-shape on the hardware-identified plant.** Both the ACRO rate-oscillation fix (identified 12–16 ms delay, 0.36–0.71× torque → redesign removed the vibration peak, roll PM 57°/pitch 59° confirmed from flight logs) and the POS_HOLD hardware redesign (K≈0.4 g identified by 3 methods → `vel.kp 0.8→3.0`/`pos.kp 1.0→0.4` stopped the divergence) were **driven by identification.**
+The biggest lesson: **gains optimised in SILS oscillate on hardware.** The SILS plant is ideal (small delay, torque 1.0), so directly optimising a SILS turbulence bench converges to gains with NEGATIVE phase margin on hardware (e.g. Td=0.08 → real PM −375°). So **always loop-shape on the hardware-identified plant.** Both the ACRO rate-oscillation fix (identified 12–16 ms delay, 0.36–0.71× torque → redesign removed the vibration peak, roll PM 57°/pitch 59° confirmed from flight logs) and the POS_HOLD hardware redesign (K≈0.4 g identified by 3 methods → `vel.kp`=3.0 / `pos.kp`=0.4 stopped the divergence) were **driven by identification.**
 
 ### 5.5 The rule for control-parameter changes
 

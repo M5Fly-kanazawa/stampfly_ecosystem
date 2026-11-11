@@ -1,8 +1,8 @@
 # ceiling_brake_stale_velocity_alt.expect — ALT_HOLD at the ceiling right after a long ToF-silence episode holds the height
 # 長い ToF 出力停止のエピソードの直後、天井で入れた ALT_HOLD は高さを保つ
 #
-# ALT_HOLD at 13.0 s, 1.24 m: the height stays within +-0.15 m of the ceiling until the DISARM at 21 s (before the change it fell to 0.59 m).
-# 13.0 s、1.24 m で ALT_HOLD: 21 s の DISARM まで、高さは天井の ±0.15 m 以内に保たれる（改修前は 0.59 m まで落ちた）。
+# ALT_HOLD at 13.0 s, 1.24 m: the height stays within +-0.15 m of the ceiling until the DISARM at 21 s. A brake that trusts the stale integral would let it fall to 0.59 m.
+# 13.0 s、1.24 m で ALT_HOLD: 21 s の DISARM まで、高さは天井の ±0.15 m 以内に保たれる。古い積分を信用するブレーキなら 0.59 m まで落ちる。
 exit 0
 log_contains any "Mode change: STABILIZE → ALT_HOLD"
 metric descent_speed_max < 1.0 in 13.0 20.5

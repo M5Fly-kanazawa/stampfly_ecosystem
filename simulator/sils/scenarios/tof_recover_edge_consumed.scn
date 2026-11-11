@@ -2,8 +2,8 @@
 #                                 ToF 出力停止中に飛行中に拒否したモード切替が、復帰の瞬間にパイロットの操作なしに適用されてはならない
 #
 # STABILIZE flight, the ToF stops at 7.5 s, the
-# pilot flips the POS_HOLD switch at 9.0 s (refused: no usable altitude), the ToF resumes at 11.0 s. Before the fix the
-# refused switch EDGE persisted and was retried every cycle, so the instant the ToF came back the craft entered
+# pilot flips the POS_HOLD switch at 9.0 s (refused: no usable altitude), the ToF resumes at 11.0 s. If the
+# refused switch EDGE persisted, it would be retried every cycle, so the instant the ToF came back the craft would enter
 # POS_HOLD by itself while flying ("Mode change: STABILIZE -> POS_HOLD" before anything else), with the pilot's
 # switch flipped 2 s earlier. Spec under test (detailed_design.md §3.1, note 12):
 #  1. In flight the refusal CONSUMES the edge and says so (log "IN FLIGHT the switch request is CONSUMED"; CLI
@@ -13,9 +13,9 @@
 # The crash is the pilot's (throttle stick to the bottom in STABILIZE); it is not part of the verdict.
 #
 # STABILIZE 飛行、7.5 s に ToF が出力停止、
-# 9.0 s にパイロットが POS_HOLD スイッチを入れる（拒否: 使える高度が無い）、11.0 s に ToF が復帰。main（2026-11-08 時点）は拒否した
-# スイッチの「エッジ」が持続して毎周期再試行され、ToF が戻った瞬間に、2 s 前にスイッチを入れたきりの機体がパイロットの操作なしに
-# POS_HOLD に入った。検証する仕様: (1) 飛行中の拒否はエッジを「消費」し、そう記録する（ログ "IN FLIGHT the switch
+# 9.0 s にパイロットが POS_HOLD スイッチを入れる（拒否: 使える高度が無い）、11.0 s に ToF が復帰。拒否した
+# スイッチの「エッジ」が持続すると毎周期再試行され、ToF が戻った瞬間に、2 s 前にスイッチを入れたきりの機体がパイロットの操作なしに
+# POS_HOLD に入ってしまう。検証する仕様: (1) 飛行中の拒否はエッジを「消費」し、そう記録する（ログ "IN FLIGHT the switch
 # request is CONSUMED"、CLI `status` は modeblock TofSwitchConsumed）。モードはパイロットの操作なしに切り替わらず、パイロットが
 # スイッチを入れ直す。(2) 地上（約 11.1 s のパイロットの墜落の後）では同じ拒否は先送りにすぎず、スイッチのエッジは
 # 持続し、エピソードが終わるとモードがスイッチに追従する（モード変更が最も安全な時）。墜落はパイロット（STABILIZE で

@@ -1,15 +1,15 @@
-# alt_auto_takeoff.expect — ALT_HOLD ARM-triggered auto-takeoff gates (redesign 2026-06-14)
+# alt_auto_takeoff.expect — ALT_HOLD ARM-triggered auto-takeoff gates
 # ALT_HOLD の ARM トリガ自動離陸判定
 #
 # Chain: mode change accepted while DISARMED on the ground (BEFORE "ARM accepted")
 # → ARM in ALT_HOLD: props STOPPED through the spool dwell (duty ≈ 0 in [7.55,7.78])
 # → ARM triggers the auto-takeoff (NO throttle) → climb to the 0.5 m TARGET → controller
-# CAPTURES the target (Auto-takeoff complete) → holds ~0.5 m (decision ②: the target
+# CAPTURES the target (Auto-takeoff complete) → holds ~0.5 m (the target
 # value, not the climb-overshoot peak). The ToF 0.15 m airborne edge is the ESKF handoff.
 # 連鎖: 地上 DISARM 中のモード変更受理（"ARM accepted" 前）→ ALT_HOLD で ARM: スプール
 # ドウェル中プロペラ停止（[7.55,7.78] で duty ≈ 0）→ ARM が自動離陸をトリガ（スロットルなし）
-# → 0.5 m 目標へ上昇 → 制御器が目標を捕捉（Auto-takeoff complete）→ ~0.5 m 保持（確定②:
-# 行き過ぎピークでなく目標値）。ToF 0.15 m 空中エッジは ESKF ハンドオフ。
+# → 0.5 m 目標へ上昇 → 制御器が目標を捕捉（Auto-takeoff complete）→ ~0.5 m 保持（行き過ぎ
+# ピークでなく目標値）。ToF 0.15 m 空中エッジは ESKF ハンドオフ。
 exit 0
 log_contains any "Mode change: STABILIZE → ALT_HOLD"
 log_contains any "ARM accepted"
@@ -24,14 +24,16 @@ metric duty_max < 0.05 in 7.55 7.78
 metric alt_mean > 0.42 in 12.0 16.0
 metric alt_mean < 0.62 in 12.0 16.0
 metric alt_rmse < 0.08 in 12.0 16.0
-# 2026-10-31 R_out plant: alt_band 0.20 -> 0.55 (basis (b): 14 real auto-takeoffs in ALT_HOLD/POS_HOLD, window
-# takeoff+4.2..+8.2 s, ESKF altitude: alt_band p50 0.164, p90 0.443, max 0.521 -> real max rounded up; the old
-# 0.20 was tuned to the old plant (value 0.008, below every real takeoff) / 実機14回の離陸（p50 0.164・p90 0.443・最大 0.521）の
-# 最大を切り上げ。旧 0.20 は旧プラントの値 0.008（実機の全離陸より小さい）に合わせたもの
+# alt_band upper bound 0.55 (basis: 14 real auto-takeoffs in ALT_HOLD/POS_HOLD, window takeoff+4.2..+8.2 s, ESKF altitude:
+# alt_band p50 0.164, p90 0.443, max 0.521 -> the real max rounded up). An upper bound near 0.20 is not used: it fits a
+# plant whose swing is only 0.008, smaller than every real takeoff.
+# 実機14回の離陸（p50 0.164・p90 0.443・最大 0.521）の最大を切り上げて上限 0.55 とする。0.20 付近の上限は採らない:
+# 振れ幅が 0.008 しかないプラントに合うだけで、実機の全離陸より小さい。
 metric alt_band < 0.55 in 12.0 16.0
-# 2026-11-01 lower bound 0.05 added by user decision: it sits just below the real minimum 0.062 and catches a plant whose
-# altitude swing becomes far smaller than any real takeoff again (old plant 0.008, R_out plant about 0.267) / ユーザー決定で下限 0.05 を追加。
-# 実機の最小 0.062 のすぐ下に置き、プラントの高度の振れ幅が再び実機より小さくなりすぎる（旧プラント 0.008）のを検出する
+# alt_band lower bound 0.05: it sits just below the real minimum 0.062 and catches a plant whose altitude swing is far smaller
+# than any real takeoff (a swing of 0.008 trips it; the R_out plant gives about 0.267).
+# 下限 0.05 は実機の最小 0.062 のすぐ下に置き、高度の振れ幅が実機より小さくなりすぎるプラント（振れ幅 0.008 など）を
+# 検出する（R_out プラントは約 0.267）。
 metric alt_band > 0.05 in 12.0 16.0
 metric duty_max < 0.92 in 12.0 16.0
 metric tilt_max < 0.1745 in 9.0 16.0  # 10.0 deg

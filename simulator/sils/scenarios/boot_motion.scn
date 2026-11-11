@@ -2,16 +2,16 @@
 #                   起動校正は運搬に耐えること（静止判定検証）
 #
 # Real-hardware failure this locks in: plug the battery, then CARRY the craft to
-# the bench. The boot gyro/accel calibration used to average straight through the
-# carry motion — a garbage bias and a wrong level reference made the craft flip
+# the bench. A boot gyro/accel calibration that averages straight through the
+# carry motion gives a garbage bias and a wrong level reference, so the craft flips
 # right after takeoff ("sometimes flies, sometimes flips" = whatever the human
-# happened to be doing in the first 4 s). With the stillness gate the partial
-# window is discarded on motion and ARM stays rejected until a verified-still
+# happens to be doing in the first 4 s). The stillness gate discards the partial
+# window on motion and keeps ARM rejected until a verified-still
 # average exists, no matter when the craft is set down.
 #
 # 実機で起きた故障の固定化: 電池を挿してから機体を机へ「運ぶ」。起動ジャイロ/加速度
-# 校正は運搬の動きをそのまま平均していた — ゴミバイアスと誤った水平基準で離陸直後に
-# 反転（「飛べたり反転したり」= 最初の4秒間に人間が何をしていたか次第）。静止判定は
+# 校正が運搬の動きをそのまま平均すると、ゴミバイアスと誤った水平基準で離陸直後に
+# 反転する（「飛べたり反転したり」= 最初の4秒間に人間が何をしているか次第）。静止判定は
 # 動き検出で部分蓄積を破棄し、静止確認済みの平均ができるまで ARM を拒否し続けるため、
 # いつ置いても結果は決定的になる。
 #
@@ -31,7 +31,7 @@
    +    rc     2048  2048   2048    2048  1     1000      50              # C: ARM attempt in the hand → REJECTED (calibration incomplete)
    +    rc     2048  2048   2048    2048  0     10000     50              # D: released; placed at 6.0 s — recalibration (settle 1 s + 2.5 s avg + margin)
    +    rc     2048  2048   2048    2048  1     1000      50              # E: ARM (now accepted — still calibration done)
-   +    rc     3171  2048   2048    2048  1     2500      50              # F: STABILIZE take-off climb 2.5 s. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (TAKEOFF trigger, +4.3%; new plant hover duty +3.86% vs old) | 2026-10-31 R_out plant: STABILIZE/ACRO throttle 3243->3171 (deviation from 2048 x0.94: open-loop hover raw 3154->3088, SILS sweep at 3.87 V) / R_outプラントでホバーraw 3154->3088、偏差x0.94
+   +    rc     3171  2048   2048    2048  1     2500      50              # F: STABILIZE take-off climb 2.5 s. throttle raw 3171 = deviation from 2048 x0.94, a little above the open-loop hover raw 3088 (SILS sweep at 3.87 V) / スロットル raw 3171 = 中央 2048 からの偏差 x0.94、開ループのホバー raw 3088（SILS 掃引、3.87 V）より少し上
    +    rc     2048  2048   2048    2048  1     3000      50        1     # G: ALT_HOLD hover 3 s
    +    rc     2048  2048   2048    2048  0     200       50              # H: release ARM button
    +    rc     2048  2048   2048    2048  1     200       50              # I: press again → DISARM (toggle)

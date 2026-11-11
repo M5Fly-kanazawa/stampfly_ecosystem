@@ -350,11 +350,10 @@ void ImuAnomalyDetector::feedSample(const float accel[3], const float gyro[3],
     }
 
     // --- Gyro anomaly: any axis over threshold for consecutive_count samples.
-    // Re-raise while the anomaly persists, but at most once per second (the old
-    // 10 Hz version re-raised every 200 ms; at 400 Hz an unsuppressed re-raise
-    // would flood the alert queue and the log).
+    // Re-raise while the anomaly persists, but at most once per second (at 400 Hz
+    // an unsuppressed re-raise would flood the alert queue and the log).
     // --- ジャイロ異常: いずれかの軸が連続 consecutive_count サンプル閾値超。
-    // 異常継続中は再発報するが最大毎秒1回（旧 10Hz 版は 200ms 毎。400Hz で
+    // 異常継続中は再発報するが最大毎秒1回（400Hz で
     // 無抑制に再発報するとアラートキューとログが氾濫する）。
     static constexpr float    kRadToDeg          = 57.2957795f;
     static constexpr uint16_t kReraiseSuppressSamples = 400;   // 1 s at 400 Hz

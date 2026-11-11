@@ -1,7 +1,7 @@
 # pos_gain_deficit_reposition_hold40.scn — POS_HOLD stick reposition, LONG hold (vehicle)
 # POS_HOLD スティック再配置・長時間保持（vehicle）
 #
-# hikoki64 §3.3 SILS gain-deficit injection study (2026-08-02): a copy of
+# hikoki64 §3.3 SILS gain-deficit injection study: a copy of
 # pos_reposition.scn with the settled-hold segment (F) extended from 6 s to 40 s.
 # The real in-flight divergence identified a ~9.4 s period (ω≈0.68 rad/s, growth rate
 # σ≈+0.057/s) — 6 s covers well under 1 cycle, far too short to show clearly GROWING
@@ -16,7 +16,7 @@
 # avoiding. The closed-loop auto-takeoff and the roll-stick REPOSITION velocity command
 # both route through the position/velocity cascade, so they adapt automatically.
 #
-# hikoki64 §3.3 SILSゲイン欠損注入実験（2026-08-02）: pos_reposition.scn の複製で、整定後
+# hikoki64 §3.3 SILSゲイン欠損注入実験: pos_reposition.scn の複製で、整定後
 # 保持区間（F）を6s→40sへ延長。実飛行同定の発散周期は約9.4s（ω≈0.68rad/s,
 # 成長率σ≈+0.057/s）——6sでは1周期未満しか入らず、「成長している振動」と「単に
 # 減衰不足」の区別ができない。40sなら~4周期入り、振幅の成長（発散）か整定（安定）かを

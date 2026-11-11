@@ -19,7 +19,7 @@
  * If the timer ran at, say, 10 bits (max 1023) while duty were computed for 8
  * bits (max 255), every motor would output ~1/4 of the intended duty → no
  * take-off / loss of control. Deriving both from this single header makes that
- * divergence structurally impossible (code-review_2026-06-13.md, finding M-5).
+ * divergence structurally impossible.
  *
  * モータ PWM の周波数と duty 分解能は、一致していないと推力が静かに誤スケール
  * される 2 箇所で独立に消費される:
@@ -28,7 +28,7 @@
  *     duty = (1 << bits) - 1 を計算する。
  * 例えばタイマが 10bit(max 1023) で動くのに duty を 8bit(max 255) で計算すると、
  * 全モータが意図の約 1/4 duty しか出さず離陸不能/制御喪失になる。両者をこの
- * 単一ヘッダから導出することで、その乖離を構造的に不可能にする（M-5）。
+ * 単一ヘッダから導出することで、その乖離を構造的に不可能にする。
  *
  * Plain ints (no driver/ledc.h dependency) so sf_core stays buildable in the
  * partial SILS test programs that do not link the ESP-IDF LEDC driver.

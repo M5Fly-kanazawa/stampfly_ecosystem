@@ -48,11 +48,11 @@ static const char* TAG = "ControlTask";
 
 /// ControlTask handle, registered by the task itself at startup and exposed via
 /// sf::tasks::control_handle(). ImuTask reads it through that accessor to wake us
-/// after each estimate. Replaces the old extern global set from main.cpp
+/// after each estimate. Exposed through an accessor, not an extern global
 /// (R3: no extern task handles).
 /// ControlTask のハンドル。タスク自身が起動時に登録し sf::tasks::control_handle()
 /// で公開する。ImuTask が推定後に起こすために accessor 経由で読む。main.cpp から
-/// 設定していた旧 extern グローバルを置き換える（R3: extern 排除）。
+/// extern グローバルでなくアクセサで公開する（R3: extern 排除）。
 static TaskHandle_t s_control_handle = nullptr;
 
 namespace sf {
@@ -157,12 +157,12 @@ static void checkControllerOutputs(sf::NonFiniteMonitor& monitor, const sf::Cont
 /// (architecture §4): full reset (ARM), altitude/position reset (mode exit / soft
 /// landing), and flight-mode change (FLYING sub-mode switch). This is the controller-side
 /// endpoint of the reset consolidation — the state machine decides WHEN, ControlTask
-/// (which owns the controller) decides HOW. Replaces the ad-hoc prev_armed edge and the
-/// per-cycle onModeChange poll that used to live in the loop.
+/// (which owns the controller) decides HOW. The loop itself has no prev_armed edge detection
+/// and no per-cycle onModeChange poll.
 /// StateManager の遷移コールバックが発行した制御器コマンドを消費する（architecture §4）:
 /// full reset（ARM）、高度/位置リセット（モード退出/soft landing）、フライトモード変更（FLYING
 /// サブモード切替）。reset 集約の制御器側エンドポイント — いつは状態機械、どうは制御器を所有する
-/// ControlTask が決める。ループ内にあった旧来の prev_armed エッジと毎周期 onModeChange を置き換える。
+/// ControlTask が決める。ループ内には prev_armed のエッジ検出も毎周期の onModeChange 確認もない。
 ///
 /// @design architecture.md §4 — reset consolidation (controller side)    [OK]
 /// @design detailed_design.md §3 — FLYING sub-mode switch → onModeChange  [OK]
@@ -344,7 +344,7 @@ void ControlTask(void* pvParameters)
     // 「最初の」IMU 通知が来たら true。起動時は BMI270 init に約200msかかり、
     // 400Hz パイプラインが存在する前に下のウォッチドッグが作動する — これは想定で
     // エラーではない。モータ強制ゼロは実行したまま（disarmed 中は無害）、ERROR
-    // ログだけを判定する。飛行中の本物の IMU 停止は従来どおり大きく報告される。
+    // ログだけを判定する。飛行中の本物の IMU 停止は大きく報告される。
     bool imu_pipeline_seen = false;
 
     sf::FailsafeStatusGuard failsafe_guard;   // this task's guard: a stale status reads as ToF silent / このタスクのガード: 古い状態は ToF 出力停止と読む
@@ -493,13 +493,13 @@ void ControlTask(void* pvParameters)
         }
 
         // Arm the actuator so the motor HAL accepts duty writes. The PID integrator reset
-        // on the ARM transition is now done by the onEnter(ARMED_GROUND) callback via
+        // on the ARM transition is done by the onEnter(ARMED_GROUND) callback via
         // controller_command(Reset), consumed in processControllerCommands() above
-        // (architecture §4) — no more prev_armed edge detection here.
+        // (architecture §4) — there is no prev_armed edge detection here.
         // アクチュエータを arm し、モータ HAL が duty 書き込みを受理するようにする。ARM 遷移での
         // PID 積分器リセットは onEnter(ARMED_GROUND) コールバックが controller_command(Reset)
         // 経由で行い、上の processControllerCommands() が消費する（architecture §4）— ここでの
-        // prev_armed エッジ検出は廃止。
+        // prev_armed エッジ検出はここにはない。
         actuator.arm();
         checkControllerInputs(nonfinite.monitor(), state, setpoint);
 

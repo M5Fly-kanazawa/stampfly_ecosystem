@@ -128,9 +128,9 @@ public:
         uint8_t i2c_addr = INA3221_I2C_ADDR_GND;
         uint8_t battery_channel = 0;       // Channel for battery monitoring (0-2)
         // Shunt resistor value. Default 0.01 ohm = R12 of the StampFly board
-        // (INA3221 CH2, battery path); 0.1 ohm here under-reported current 10x.
+        // (INA3221 CH2, battery path); a 0.1 ohm setting would under-report current 10x.
         // シャント抵抗値。既定 0.01 Ω は StampFly 基板の R12（INA3221 CH2、電池経路）。
-        // 以前の 0.1 Ω では電流が 1/10 に表示されていた。
+        // 0.1 Ω にすると電流が 1/10 に表示される。
         float shunt_resistor_ohm = 0.01f;
         INA3221Averaging averaging = INA3221Averaging::AVG_64;
         INA3221ConvTime conv_time = INA3221ConvTime::US_1100;

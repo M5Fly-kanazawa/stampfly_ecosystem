@@ -2,13 +2,13 @@
 #                        完了しない TAKEOFF の間にリンクが途絶える: ホバーの猶予の後、状態は LANDING になる
 #
 # STABILIZE, weak motors (health 0.9), the throttle above the takeoff threshold but below the hover thrust (raw 3100), and the ToF dead zone OFF (`tof_deadzone 0`: the sensor reads the
-# floor validly, so the ToF-based airborne verdict stays false): the manual TAKEOFF does not complete. The link is lost 0.5 s into the TAKEOFF (the 8 s gap below). Before this rule
-# the comm-loss landing fired in FLYING only, so such a craft stayed in TAKEOFF for ever on the stale command (a STABILIZE takeoff whose ToF output stopped, with the link lost, climbed to 2.76 m in SILS and the motors stopped in the air). Spec under test
+# floor validly, so the ToF-based airborne verdict stays false): the manual TAKEOFF does not complete. The link is lost 0.5 s into the TAKEOFF (the 8 s gap below). If the
+# comm-loss landing fired in FLYING only, such a craft would stay in TAKEOFF for ever on the stale command (a STABILIZE takeoff whose ToF output stopped, with the link lost, climbed to 2.76 m in SILS and the motors stopped in the air). Spec under test
 # (detailed_design.md §3.1, comm-loss row; takeoff_policy.hpp decideCommLossLanding()): COMM_LOST arms the 3 s hover grace; once it has elapsed, TAKEOFF -> LANDING (the same as FLYING).
 #
 # STABILIZE、弱いモータ（健全度 0.9）、スロットルは離陸の閾値より上でホバー推力より下（生値 3100）、ToF の不感帯は切る（`tof_deadzone 0`: センサが床を有効に読むので、ToF による
-# 空中の判定は偽のまま）: 手動の TAKEOFF は完了しない。リンクは TAKEOFF の 0.5 s 後に途絶える（下の 8 s の空白）。以前は、通信断の着陸は FLYING でしか働かなかったので、そのような
-# 機体は古い指令のまま TAKEOFF に永久に留まった（ToF 出力停止の STABILIZE 離陸に通信断を足すと、SILS で 2.76 m まで上昇し、空中でモータが止まった）。検証する仕様（detailed_design.md §3.1 の通信断の行。takeoff_policy.hpp の
+# 空中の判定は偽のまま）: 手動の TAKEOFF は完了しない。リンクは TAKEOFF の 0.5 s 後に途絶える（下の 8 s の空白）。通信断の着陸が FLYING でしか働かないなら、そのような
+# 機体は古い指令のまま TAKEOFF に永久に留まる（ToF 出力停止の STABILIZE 離陸に通信断を足すと、SILS で 2.76 m まで上昇し、空中でモータが止まった）。検証する仕様（detailed_design.md §3.1 の通信断の行。takeoff_policy.hpp の
 # decideCommLossLanding()）: COMM_LOST が 3 s のホバー猶予を起動し、経過したら TAKEOFF → LANDING（FLYING と同じ）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/commloss_takeoff.scn --target vehicle --duration 22000000

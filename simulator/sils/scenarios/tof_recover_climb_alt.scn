@@ -3,9 +3,9 @@
 #
 # The pure form of the re-acquisition case (the first sample after the silence is VALID, at 0.75 m, in range).
 # STABILIZE, the ToF stops at 5.0 s on the ground, the craft climbs blind at 0.17 m/s; the estimator's blind
-# integration drifts to 1.52 m (truth 0.75 m) by the return at 9.5 s: 0.77 m, beyond the 0.5 m innovation gate. Before
-# the fix the gate rejected every sample for good (estimated altitude stuck 1-2 m off, 1.19 m RMS), and ALT_HOLD
-# flew on it. Spec under test:
+# 1.52 m (truth 0.75 m) by the return at 9.5 s: 0.77 m, beyond the 0.5 m innovation gate. Without
+# the re-acquisition the gate rejects every sample for good (estimated altitude stuck 1-2 m off, 1.19 m RMS), and ALT_HOLD
+# flies on it. Spec under test:
 #  1. The estimator re-acquires the ToF (log "ToF re-acquired", innovation 0.77 m) and the estimate agrees with the
 #     truth again (RMS 0.02 m).
 #  2. ARM / altitude modes are allowed again only after the episode ended (samples back for >= 1 s AND 10 agreeing
@@ -13,8 +13,8 @@
 #
 # 再取り込みの純粋な形（出力停止の後の最初のサンプルは「有効」で、0.75 m、レンジ内）。STABILIZE、
 # 5.0 s に地上で ToF が停止、機体は 0.17 m/s でゆっくり ToF なしの上昇、推定器の ToF なしの積分は 9.5 s の復帰時に
-# 1.52 m（真値 0.75 m）までずれる: 0.77 m で、イノベーション判定 0.5 m を超える。main（2026-11-08 時点）は判定がサンプルを永久に
-# 棄却し（推定高度が 1〜2 m ずれたまま、RMS 1.19 m）、ALT_HOLD はそれで飛んだ。検証する仕様: (1) 推定器が ToF を
+# 1.52 m（真値 0.75 m）までずれる: 0.77 m で、イノベーション判定 0.5 m を超える。再取り込みが無いと判定がサンプルを永久に
+# 棄却し（推定高度が 1〜2 m ずれたまま、RMS 1.19 m）、ALT_HOLD はそれで飛ぶ。検証する仕様: (1) 推定器が ToF を
 # 取り込み直し（ログ "ToF re-acquired"、イノベーション 0.77 m）、推定が真値と一致する（RMS 0.02 m）。
 # (2) ARM・高度モードはエピソードが終わってから（サンプルが 1 s 以上戻り、かつ一致するサンプルが 10 個、復帰の
 # 約 1 s 後）に再び許される: 11.0 s の ALT スイッチは受理され、高度が保持される。

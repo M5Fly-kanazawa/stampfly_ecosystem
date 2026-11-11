@@ -48,7 +48,7 @@
  * numeric values; no neuron is marked fixed by default.
  * 固定積分ニューロン（将来用）: 論文は一部ニューロンを tau_mem=1.0/theta=1.0
  * （純積分器）に固定し学習対象から外す。setFixedIntegrator() は「将来の学習器」
- * 向けのメタデータとしてその意図を記録する — 今回のプレースホルダーは何も学習
+ * 向けのメタデータとしてその意図を記録する — 現在のプレースホルダーは何も学習
  * しないため、2つの数値を強制するだけで、既定では固定ニューロンは無い。
  *
  * Sizing: runtime-configurable (constructor args), backed by fixed-capacity

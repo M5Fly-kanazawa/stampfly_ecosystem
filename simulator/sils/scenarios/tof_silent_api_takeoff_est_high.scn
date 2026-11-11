@@ -1,17 +1,15 @@
 # tof_silent_api_takeoff_est_high.scn — API takeoff, ToF silent during the climb, hover-thrust estimate 28 % TOO HIGH
 #                                       API 離陸の上昇中に ToF が出力停止、ホバー推力の見積もりが 28 % 高い
 #
-# Same chain as tof_silent_api_takeoff.scn (the 2026-11 accident through the Tello-style API) with
-# `hover.thrust_corr 1.2` set at t = 0: the second failing case (main as of 2026-11-08: the craft keeps
-# climbing, truth peak 120 m). Spec under test:
-#  1. The climb is aborted and the blind descent is the velocity loop: truth peak below 1.0 m, touchdown
-#     speed below 0.6 m/s, the motors stop on the floor.
+# Same chain as tof_silent_api_takeoff.scn (the in-flight failure through the Tello-style API) with
+# `hover.thrust_corr 1.2` set at t = 0: the second failing case (the estimate is too high, so the climb is fast). Spec under test:
+#  1. The climb is aborted and the blind descent is the velocity loop: truth peak below 1.0 m, descent
+#     speed below 1.25 m/s, the motors stop on the floor.
 #  2. The API answers "error takeoff aborted" and a second `takeoff` is refused up front.
 #
-# tof_silent_api_takeoff.scn（Tello 風 API を通した 2026-11 の事故）と同じ連鎖で、t = 0 に
-# `hover.thrust_corr 1.2` を設定: 2 つ目の失敗例（main（2026-11-08 時点）では
-# 上昇し続け、真値の最高 120 m）。検証する仕様:
-#  1. 上昇は中止され、ToF なしの降下は速度ループ: 真値の最高は 1.0 m 未満、接地速度は 0.6 m/s 未満、モータは
+# tof_silent_api_takeoff.scn（Tello 風 API を通した実機飛行での不具合）と同じ連鎖で、t = 0 に
+# `hover.thrust_corr 1.2` を設定: 2 つ目の失敗例（見積もりが高く、上昇が速い）。検証する仕様:
+#  1. 上昇は中止され、ToF なしの降下は速度ループ: 真値の最高は 1.0 m 未満、降下速度は 1.25 m/s 未満、モータは
 #     床の上で止まる。
 #  2. API は "error takeoff aborted" を返し、二つ目の `takeoff` は最初に拒否される。
 #

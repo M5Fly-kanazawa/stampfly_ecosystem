@@ -28,14 +28,14 @@ namespace sf {
 // -----------------------------------------------------------------------------
 // ADC / stick constants — the single source of the stick→command mapping.
 // Spring-centred 12-bit ADC: 2048 = centre/zero, half-span 2048. This matches
-// the FIXED transmitter (firmware/controller) and the flight-proven legacy
-// vehicle firmware. The earlier dead CommandProcessor used 2047.5 and a
-// throttle/4095 mapping, both wrong (off-centre, and throttle would over-drive
-// 1.5x); unified here to the on-air contract.
+// the FIXED transmitter (firmware/controller) and the flight-proven
+// firmware of another vehicle. A centre of 2047.5 or a throttle/4095 mapping is
+// wrong (off-centre, and throttle would over-drive 1.5x), so the mapping follows
+// the on-air contract.
 // ADC/スティック定数 — スティック→指令 変換の唯一の出どころ。バネ中央 12bit ADC:
-// 2048=中央/ゼロ、半幅 2048。固定送信機(firmware/controller)・飛行実績のある旧 vehicle
-// と一致。以前の死蔵 CommandProcessor は 2047.5 と throttle/4095 を使っており双方とも
-// 誤り（中央ずれ、スロットルが 1.5 倍過大）だった。on-air 規約に統一する。
+// 2048=中央/ゼロ、半幅 2048。固定送信機(firmware/controller)・飛行実績のある別 vehicle
+// ファームと一致。中央を 2047.5 や throttle/4095 とするのは誤り
+// （中央ずれ、スロットルが 1.5 倍過大）なので、on-air 規約に従う。
 // -----------------------------------------------------------------------------
 static constexpr float kAdcCenter   = 2048.0f;
 static constexpr float kAdcHalfSpan = 2048.0f;

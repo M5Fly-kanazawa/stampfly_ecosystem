@@ -101,9 +101,9 @@ void Buzzer::playTone(uint16_t frequency, uint32_t duration_ms)
     } else {
         // Set frequency. Capture the return so an LEDC failure (e.g. suspected clock
         // contention while motors drive LEDC at 400Hz armed) is OBSERVABLE instead of
-        // silent — historically discarded, which would hide any in-flight buzzer fault.
+        // silent — a discarded return value would hide any in-flight buzzer fault.
         // 周波数設定。戻り値を捕捉し、LEDC 失敗（armed 中にモータが 400Hz で LEDC を直接操作するクロック
-        // 競合疑い等）を無音でなくログ化する — 従来は破棄され飛行中の不具合を隠していた。
+        // 競合疑い等）を無音でなくログ化する — 戻り値を破棄すると飛行中の不具合を隠してしまう。
         const esp_err_t fe = ledc_set_freq(BUZZER_LEDC_MODE,
                                            static_cast<ledc_timer_t>(config_.ledc_timer), frequency);
         if (fe != ESP_OK) {
@@ -197,8 +197,8 @@ void Buzzer::schoolChimeTone()
 void Buzzer::readyTone()
 {
     // 3 short beeps with a brief rest between — "system ready to arm" (matches the
-    // legacy vehicle's boot-complete chime). frequency 0 = rest (silence).
-    // 3連の短いビープ（間に休符）— 「ARM 可能（起動完了）」。旧 vehicle の起動完了音に合わせる。
+    // boot-complete chime of another flight-proven firmware). frequency 0 = rest (silence).
+    // 3連の短いビープ（間に休符）— 「ARM 可能（起動完了）」。飛行実績のある別ファームの起動完了音に合わせる。
     for (int i = 0; i < 3; ++i) {
         playTone(NOTE_C5, 100);
         if (i < 2) {

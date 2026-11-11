@@ -1,7 +1,7 @@
 # alt_inflight_switch.scn — in-flight switch INTO ALT_HOLD + re-center gate (Case B)
-#                          飛行中の ALT_HOLD 進入＋スロットル再センターロック（Case B）  (new 2026-06-14)
+#                          飛行中の ALT_HOLD 進入＋スロットル再センターロック（Case B）
 #
-# Spec under test (2026-06-14 redesign — Case B of the re-center gate):
+# Spec under test (Case B of the re-center gate):
 #   The craft auto-takes-off in ALT_HOLD to 0.5 m (deterministic start), drops to
 #   STABILIZE briefly (manual throttle ≈ hover, holding ~0.5 m), then flips BACK to
 #   ALT_HOLD with the throttle OFF-CENTER. On that STABILIZE→ALT_HOLD switch the
@@ -10,19 +10,18 @@
 #   opens the gate; pushing up (4095) then climbs.
 #     F [14.7,18.7]: gate CLOSED by the switch → throttle 3330 (norm 0.63) is IGNORED,
 #                    altitude settles into a bounded, decaying transient (~0.88 m peak
-#                    within the window; see 2026-07-26 note below). Without the gate it
+#                    within the window; see the window note below). Without the gate it
 #                    would climb further still.
 #     H [22.2,23.2]: after re-centering at G the gate OPENS, so 4095 (full up) climbs.
 #
-# 2026-07-26 ODEプラント(実測Ct)対応再調整: the E/F/G/H windows above are shifted -0.3s
-# from the original design (15.0/17.0/20.5/21.5) because E's dwell was trimmed 1500ms→
-# 1200ms (see row E below) — all downstream absolute times move with it.
+# The F/H windows above follow from E's dwell of 1200 ms (see row E): all downstream absolute times depend on it.
 #
-# 検証する仕様（2026-06-14 再設計 — スロットル再センターロックの Case B）:
+# 検証する仕様（スロットル再センターロックの Case B）:
 #   ALT_HOLD で 0.5 m へ自動離陸（決定論的な起点）→ 一瞬 STABILIZE（手動スロットル≈ホバーで
 #   ~0.5 m 保持）→ スロットルを中央から外したまま ALT_HOLD へ戻す。その STABILIZE→ALT_HOLD
 #   切替で制御器が現在高度を捕捉しスロットル再センターロックを掛けるため、中央外スロットルは高度を
 #   ジャンプさせず保持する。中央復帰(2048)でロックが解除され、上げ(4095)で上昇する。
+# 上記の F/H の窓は E の滞留 1200 ms（E 行を参照）から決まる。以降の絶対時刻はすべてこれに依存する。
 #
 # ALT_HOLD throttle is the SYMMETRIC axis (raw-2048)/2048 ∈ [-1,+1]: 2048=0=HOLD,
 # up(>2048)=climb, down(<2048)=descend. STABILIZE throttle is [0,1] (2048=0=off).
@@ -34,7 +33,7 @@
    +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
    +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD — props stop, spool, AUTO-takeoff fires
    +    rc   2048  2048   2048    2048  1     3500      50        1              # D: throttle CENTER → climb to 0.5 m and settle
-   +    rc   3171  2048   2048    2048  1     1200      50        0              # E: switch to STABILIZE, throttle UP → brief manual climb. 2026-07-26 ODEプラント(実測Ct)対応再調整: raw 3330→3473 (+4.3%; new plant hover duty +3.86% vs old) — the OLD raw3330 no longer clears new-plant hover in STABILIZE, so the craft fell and crashed here instead of climbing. Dwell ALSO trimmed 1500ms→1200ms: at the stronger new-plant margin, 1500ms carries more climb into the F gate-test than the old plant did (alt_max ~1.5m vs the design's ~0.9m); 1200ms keeps a genuine "still climbing when the switch happens" disturbance (alt~1.15m peak) without excess margin. See alt_inflight_switch.expect for the resulting window shift. | 2026-10-31 R_out plant: STABILIZE/ACRO throttle 3243->3171 (deviation from 2048 x0.94: open-loop hover raw 3154->3088, SILS sweep at 3.87 V) / R_outプラントでホバーraw 3154->3088、偏差x0.94
+   +    rc   3171  2048   2048    2048  1     1200      50        0              # E: switch to STABILIZE, throttle UP → brief manual climb. Throttle raw 3171 is above the STABILIZE open-loop hover raw 3088 (SILS sweep at 3.87 V), so the craft climbs instead of falling. Dwell 1200 ms keeps a genuine "still climbing when the switch happens" disturbance (alt peak ~1.15 m) without excess margin; a 1500 ms dwell is not used: it carries more climb into the F gate test (alt_max ~1.5 m against the designed ~0.9 m). The F/H windows in alt_inflight_switch.expect follow from this dwell.
    +    rc   3330  2048   2048    2048  1     5500      50        1              # F: flip BACK to ALT_HOLD, throttle OFF-CENTER → gate CLOSED → capture+HOLD (no re-climb)
    +    rc   2048  2048   2048    2048  1     1500      50        1              # G: throttle to CENTER (2048 = spring rest) → gate OPENS
    +    rc   4095  2048   2048    2048  1     3000      50        1              # H: throttle FULL UP → gate OPEN → climb

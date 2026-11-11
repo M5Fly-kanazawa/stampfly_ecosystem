@@ -118,12 +118,12 @@ void Telemetry::init()
 // WiFi待機 — sf_comm の WiFi 準備完了 EventGroup を待つ
 // -----------------------------------------------------------------------------
 //
-// Previously this polled esp_netif_get_ip_info() in a loop. Now it
+// This does not poll esp_netif_get_ip_info() in a loop. It
 // delegates to sf::waitForWifiReady() which sleeps efficiently on an
 // EventGroup bit set by sf_comm's IP_EVENT_STA_GOT_IP handler (R16).
 //
-// 旧実装は esp_netif_get_ip_info() を polling ループで呼んでいた。
-// 現在は sf::waitForWifiReady() に委譲し、sf_comm の
+// esp_netif_get_ip_info() を polling ループで呼ぶことはしない。
+// sf::waitForWifiReady() に委譲し、sf_comm の
 // IP_EVENT_STA_GOT_IP ハンドラがセットする EventGroup ビットで効率的に
 // スリープする (R16)。
 //

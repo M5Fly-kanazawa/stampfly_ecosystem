@@ -4,10 +4,10 @@
 # At yaw=0 the craft's forward (FRD body X) points to ENU east = the trajectory px
 # axis = NED east = wind component fy. So a wind along fy is a HEAD/TAIL wind that
 # pitch trim is the correct axis to cancel. (A north wind fx hits the body Y axis,
-# which pitch trim cannot cancel — that was the earlier mistake.)
+# which pitch trim cannot cancel.)
 # yaw=0 で機体前方(FRD body X)は ENU east=軌跡 px 軸=NED east=風成分 fy を向く。よって
 # fy 方向の風は pitch トリムが打ち消すべき正面/背面風（north 風 fx は body Y に当たり
-# pitch では打ち消せない — これが前回の誤り）。
+# pitch では打ち消せない）。
 #
 # The wind is applied from t=0 (sustained) so trim and wind balance from the moment
 # of takeoff. Injecting a boot-time pitch trim while there is NO wind tips the craft

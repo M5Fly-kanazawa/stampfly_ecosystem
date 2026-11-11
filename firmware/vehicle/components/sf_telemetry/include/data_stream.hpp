@@ -13,11 +13,11 @@
  *        Data Stream サーバ — 制御周期（400Hz）の解析用ログを UDP 配信。
  *        実証済み firmware/vehicle のプロトコルと電文互換。
  *
- * Client workflow (identical to the old vehicle):
+ * Client workflow (identical to another flight-proven firmware):
  *   `sf log wifi --ip <vehicle>` sends CMD_START_LOG to UDP 8890; the vehicle
  *   streams unified packets (8 × 400Hz samples per packet, 50 packets/s,
  *   ≈48 KB/s) back to the sender until CMD_STOP_LOG or 5 s without a heartbeat.
- * クライアント手順（旧 vehicle と同一）:
+ * クライアント手順（飛行実績のある別ファームと同一）:
  *   `sf log wifi --ip <機体>` が UDP 8890 へ CMD_START_LOG を送ると、機体は
  *   統合パケット（1 パケット 8 サンプル × 400Hz、50 パケット/s ≈ 48KB/s）を
  *   送信元へ配信する。CMD_STOP_LOG かハートビート 5 秒断で停止。

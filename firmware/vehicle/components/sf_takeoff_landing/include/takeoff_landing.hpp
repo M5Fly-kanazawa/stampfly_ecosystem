@@ -40,27 +40,27 @@ struct TakeoffLandingConfig {
     float ground_tof_m       = limits::kTakeoffGroundBandM;   // Ground threshold [m]    / 地上閾値
     float airborne_tof_m     = limits::kTakeoffAirborneBandM;   // Airborne threshold [m]  / 空中閾値
     float landing_vel_mps    = 0.05f;   // Landing velocity [m/s]  / 着陸速度
-    uint32_t landing_hold_ms = 700;     // Firm-ground confirm [ms] (was 1000: faster disarm once settled) / 接地確認時間
+    uint32_t landing_hold_ms = 700;     // Firm-ground confirm [ms] / 接地確認時間
     // Stalled-descent touchdown ("ground-effect float"). During a commanded landing
     // descent, near the ground the rotors make MORE lift (ground effect), so the craft
     // holds altitude on reduced thrust and the constant-velocity descent STALLS above the
     // 5cm ground threshold — a ToF-only detector never triggers and the craft floats
-    // (pilot report 2026-06-14). Touchdown is then declared from KINEMATICS: while a
+    // (seen in flight tests). Touchdown is then declared from KINEMATICS: while a
     // landing descent is commanded AND the ToF reads within near_ground_tof_m AND the
     // vertical velocity has stalled (< landing_vel_mps) — we are trying to descend but the
     // ground has stopped us. No thrust threshold (a fragile, hover-sensitive signal) is
     // needed; the stalled descent IS the weight-on-ground evidence.
     // 降下停滞による接地（「地面効果フロート」）。着陸降下の指令中、接地近傍ではローター揚力が
     // 増す（地面効果）ため機体は低推力で高度を保ち、一定速度降下が 5cm 地上閾値の上で停滞する
-    // — ToF のみの検出器は作動せず機体は浮く（パイロット報告 2026-06-14）。そこで接地を
+    // — ToF のみの検出器は作動せず機体は浮く（飛行試験で確認）。そこで接地を
     // キネマティクスから宣言: 着陸降下が指令されており ∧ ToF が near_ground_tof_m 以内 ∧
     // 鉛直速度が停滞（< landing_vel_mps）＝降下しようとしているのに地面に止められている。脆い
     // （ホバー感度の高い）推力閾値は不要で、降下停滞そのものが地面支持の証拠。
-    float near_ground_tof_m  = 0.15f;   // Near-ground band for stalled-descent touchdown [m] (was 0.12: engage the settle a touch earlier) / 停滞接地の近傍帯
-    uint32_t stall_hold_ms   = 400;     // Stalled-descent confirm [ms] (was 600: with the settle assist the descent reaches rest quickly) / 停滞確認時間
+    float near_ground_tof_m  = 0.15f;   // Near-ground band for stalled-descent touchdown [m] / 停滞接地の近傍帯
+    uint32_t stall_hold_ms   = 400;     // Stalled-descent confirm [ms] / 停滞確認時間
     // Consecutive ground-side ToF samples required to flip on_ground_ false→true
-    // (air→ground debounce). A single near-reflection ghost mid-flight can no
-    // longer assert "on ground"; landing already needs landing_hold_ms downstream
+    // (air→ground debounce). A single near-reflection ghost mid-flight cannot
+    // assert "on ground"; landing already needs landing_hold_ms downstream
     // so the 2-sample (~66ms at 30Hz) delay is negligible (M-6).
     // NOTE: the ground→air flip (takeoff) is INTENTIONALLY immediate — the ESKF
     // vertical handoff keys off that edge and is a sample-precision class-B reset
@@ -150,11 +150,11 @@ public:
 
     /// Tell the manager, EVERY control cycle, whether the autonomous landing descent is commanded (FlightState::LANDING). On the rising edge the landing verdict is judged AFRESH: the level flag
     /// and the hold timers of the paths (1) and (2) are cleared, so only samples that arrive after LANDING began can end it. Without this a verdict left over from before (the hysteresis band between
-    /// kTakeoffGroundBandM and kTakeoffAirborneBandM keeps the ground flag true at 0.05-0.15 m: a weak craft that rested there, or a hover held low) ended the LANDING in the cycle it began, and the motors
-    /// stopped about 0.1 m above the floor (SILS, a low hover or a weak craft at 0.05-0.15 m, then a lost link). It is called every cycle rather than only from update() (a ToF sample every ~33 ms) so that the stale flag is gone before StateTask can read it.
+    /// kTakeoffGroundBandM and kTakeoffAirborneBandM keeps the ground flag true at 0.05-0.15 m: a weak craft that rested there, or a hover held low) would end the LANDING in the cycle it begins, and the motors
+    /// would stop about 0.1 m above the floor (SILS, a low hover or a weak craft at 0.05-0.15 m, then a lost link). It is called every cycle rather than only from update() (a ToF sample every ~33 ms) so that the stale flag is gone before StateTask can read it.
     /// 自動着陸の降下が指令されているか（FlightState::LANDING）を、「毎制御周期」教える。立ち上がりで着陸の判定を「新たに」行う: 経路 (1) (2) のレベルフラグと保持タイマーを消し、
     /// LANDING が始まった後に届いたサンプルだけがそれを終わらせられる。これが無いと、以前から残った判定（kTakeoffGroundBandM と kTakeoffAirborneBandM の間のヒステリシス帯では接地フラグが
-    /// 0.05〜0.15 m で true のまま: そこに居た弱い機体、低く保ったホバー）が、LANDING が始まった周期にそれを終わらせ、モータが床の約 0.1 m 上で止まった（SILS の、低いホバーや 0.05〜0.15 m にいる弱い機体の後のリンク途絶）。update()（約 33 ms ごとの
+    /// 0.05〜0.15 m で true のまま: そこに居た弱い機体、低く保ったホバー）が、LANDING が始まった周期にそれを終わらせ、モータが床の約 0.1 m 上で止まってしまう（SILS の、低いホバーや 0.05〜0.15 m にいる弱い機体の後のリンク途絶）。update()（約 33 ms ごとの
     /// ToF サンプル）からだけでなく毎周期呼ぶのは、古いフラグが StateTask に読まれる前に消えているようにするため。
     void noteLandingDescent(bool in_landing_descent);
 
@@ -176,15 +176,15 @@ public:
     bool isHeld() const { return held_; }
 
     /// Force the RAW ground-contact flag to "airborne". Called by ImuTask when a ToF-silence
-    /// episode starts while ARMED: the flag is released by ToF samples only, so it froze at its
-    /// last value, and a flag frozen "on the ground" kept the estimator pinning position/velocity
-    /// to zero while the craft climbed (2026-11 accident). Nothing proves ground
+    /// episode starts while ARMED: the flag is released by ToF samples only, so it stays at its
+    /// last value, and a flag fixed "on the ground" keeps the estimator pinning position/velocity
+    /// to zero while the craft climbs. Nothing proves ground
     /// contact during the episode, so the flag is flipped to the safe side; it returns to "ground"
     /// only by the existing air->ground debounce (flip_confirm_samples consecutive VALID ground
     /// readings), never by an invalid or missing sample.
     /// 生の接地フラグを強制的に「空中」にする。ARM 中に ToF 出力停止のエピソードが始まったとき
     /// ImuTask が呼ぶ。フラグは ToF サンプルだけで解除されるため最後の値のまま固定され、「接地」のまま
-    /// 固定されると機体が上昇しても推定器が位置・速度を 0 に固定し続けた（2026-11 の事故）。
+    /// 固定されると機体が上昇しても推定器が位置・速度を 0 に固定し続ける。
     /// エピソード中は接地を示す証拠が無いので、フラグを安全側に倒す。「接地」へ
     /// 戻るのは既存の空中→接地デバウンス（有効な地上読み flip_confirm_samples 回連続）だけで、
     /// 無効なサンプルや欠測では戻らない。

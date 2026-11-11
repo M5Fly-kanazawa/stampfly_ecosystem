@@ -75,7 +75,7 @@ float wrapAngle(float a)
 /// Pintelon-Schoukens). With coh=1 for every point this is the plain unweighted cost, so
 /// clean axes (roll/pitch) are unaffected.
 /// フィットコスト: コヒーレンス重み coh² 付き。外乱で汚れた周波数を軽視（offline ETFE の移植）。
-/// 全点 coh=1 なら従来と同一 — clean な roll/pitch は不変。
+/// 全点 coh=1 なら重みなしの単純なコストと同一 — clean な roll/pitch は影響を受けない。
 float fitCost(const float p[3], const FreqPoint* pts, const Cplx* G_hat, int n)
 {
     const float b = p[0], T = p[1], L = p[2];
@@ -203,15 +203,15 @@ bool fitPlant(const FreqPoint* points, int count, float b0, Plant& out)
     // residual magnitude (a coh²-weighted cost → 0 as all coh → 0 would FALSE-PASS the
     // <0.3 residual gate on all-noise data). Require enough EFFECTIVE coherent points.
     //
-    // (A "worst trusted-tone error > 0.9" gate was tried and REMOVED: it rejected the
+    // (A "worst trusted-tone error > 0.9" gate is NOT used: it would reject the
     // DELIBERATE yaw integrator+delay simplification. Yaw's unmodeled minimum-phase LHP
     // reaction zero gives a large per-tone PHASE LEAD at the low tones (e.g. 2 Hz at -41°
-    // vs the model's -95°), so a TRUSTED low tone hit ~1.0 > 0.9 and the fit was rejected
-    // — even though that mismatch is the SAFE lead that only ADDS phase margin (designing
+    // vs the model's -95°), so a TRUSTED low tone reaches ~1.0 > 0.9 and the fit would be
+    // rejected — even though that mismatch is the SAFE lead that only ADDS phase margin (designing
     // as integrator+delay is conservative). The residual<0.3 + GM-floor + physical-bounds
-    // gates carry the real safety. See the gate audit / yaw_axis_model.md.)
-    // 残差非依存のデータ充足判定。「最悪信頼周波数点」判定は削除: ヨーの意図的な簡略化(積分器+遅れ)の
-    // 安全な LHP リード不一致(低域で大きな位相リード)を棄却していたため。残差<0.3＋GM下限＋物理境界が安全を担保。
+    // gates carry the real safety. See yaw_axis_model.md.)
+    // 残差非依存のデータ充足判定。「最悪信頼周波数点」判定は採用しない: ヨーの意図的な簡略化(積分器+遅れ)の
+    // 安全な LHP リード不一致(低域で大きな位相リード)を棄却してしまうため。残差<0.3＋GM下限＋物理境界が安全を担保。
     float wsum = 0.0f;
     int   n_eff = 0;          // points with coh>0.5 (TRUSTED) / 信頼できる点数
     for (int i = 0; i < n; i++) {
@@ -261,12 +261,12 @@ bool tunePid(const Plant& plant, float wc, float pm_deg, float ti_factor,
     // Use phi_needed directly (do NOT wrap): the realizable PID lead is < 90°
     // (capped by eta), so phase_max gates the feasible range and an out-of-range
     // requirement returns false here — same as the host rate_sysid.py, which the
-    // header pledges to mirror. Wrapping diverged from the host and could fold a
-    // >180° requirement into a spurious td=0 "success" (code_review M-8).
+    // header pledges to mirror. Wrapping would diverge from the host and could fold a
+    // >180° requirement into a spurious td=0 "success".
     // phi_needed をそのまま使う（wrap しない）: 実現可能な PID リードは < 90°（eta で
     // 上限）ゆえ phase_max が可否を仕切り、範囲外は false を返す — ヘッダが「同一」と
     // 約束するホスト rate_sysid.py と一致。wrap はホストと乖離し、>180° の要求を誤って
-    // td=0 の偽「成功」に畳み込みうる (M-8)。
+    // td=0 の偽「成功」に畳み込みうる。
     float td;
     const float needed = phi_needed;
     if (needed <= cPhase(0.0f)) {
@@ -293,7 +293,7 @@ bool tunePid(const Plant& plant, float wc, float pm_deg, float ti_factor,
 // tunePid so the SAME verification scores either the designed gains or the current
 // (e.g. rejected/unchanged) gains against the identified plant. See header.
 // evalMargins — L=kp·C(jω)·G(jω) の開ループ余裕を ω 掃引で求める。tunePid から切り出し、
-// 設計ゲインでも現（棄却/据置）ゲインでも同一計算で採点できるようにした。
+// 設計ゲインでも現（棄却/据置）ゲインでも同一計算で採点できる。
 bool evalMargins(const Plant& plant, float kp, float ti, float td, TuneResult& out)
 {
     out.kp = kp; out.ti = ti; out.td = td;

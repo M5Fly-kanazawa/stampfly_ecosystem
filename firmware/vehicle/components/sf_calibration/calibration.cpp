@@ -325,11 +325,11 @@ void CalibrationMgr::computeAverages()
 
     // Remove gravity from the Z-axis accel bias. At level rest the accelerometer
     // reads −G on body Z (gravity −9.8 on body-down, NED-consistent), so the true
-    // bias is the mean PLUS G. (The old "-= G" yielded −2G — a latent sign bug:
-    // the accelerometer is in the −g convention, not +g.)
+    // bias is the mean PLUS G. (Subtracting G would yield −2G: the accelerometer
+    // is in the −g convention, not +g.)
     // Z軸加速度バイアスから重力を除去。水平静止で加速度計は機体 Z に −G を返す
     // （機体下方に重力 −9.8、NED 整合）ので、真のバイアスは平均＋G。
-    // （旧 "-= G" は −2G を生む潜在符号バグ＝加速度計は −g 規約で +g ではない。）
+    // （G を引くと −2G になる＝加速度計は −g 規約で +g ではない。）
     data_.accel_bias[2] += G;
 }
 
@@ -341,11 +341,11 @@ void CalibrationMgr::computeLevelOffset()
 {
     // Rest SPECIFIC FORCE vector [ax, ay, az]: the raw rest mean, i.e. the bias
     // with the G that computeAverages added removed again (az ≈ −G·cosφ·cosθ).
-    // The old "+ G" double-added gravity and produced az ≈ +G — the gravity
+    // Adding G again would double-count gravity and give az ≈ +G — the gravity
     // vector upside down, flipping both offset signs.
     // 静止時の「加速度計の測定値」ベクトル [ax, ay, az]: 生の静止平均、すなわち computeAverages が
-    // 足した G を再び引いたもの（az ≈ −G·cosφ·cosθ）。旧 "+ G" は重力を二重加算して
-    // az ≈ +G（重力ベクトルが上下逆）となり、両オフセットの符号が反転していた。
+    // 足した G を再び引いたもの（az ≈ −G·cosφ·cosθ）。G をさらに足すと重力を二重加算して
+    // az ≈ +G（重力ベクトルが上下逆）となり、両オフセットの符号が反転する。
     float ax = data_.accel_bias[0];
     float ay = data_.accel_bias[1];
     float az = data_.accel_bias[2] - G;  // back to the raw rest mean / 生の静止平均へ戻す

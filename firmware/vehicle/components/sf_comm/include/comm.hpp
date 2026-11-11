@@ -112,14 +112,14 @@ private:
     // Pairing (transmitter↔vehicle binding, crosstalk prevention)
     // ペアリング（送信機↔機体のバインド、混信対策）
     //
-    // Mutual MAC learning handshake, following the legacy vehicle. While the
+    // Mutual MAC learning handshake, following another flight-proven firmware. While the
     // StateManager has us in PairingState::Pairing (read each update() from the
     // pairing_state topic), we broadcast a PairingPacket advertising our own MAC
     // every kPairingBroadcastMs. The controller learns it and unicasts a
     // ControlPacket back; the first one fixes the controller's src MAC as our peer
     // (saved to NVS). When paired, ControlPackets from any other MAC are dropped.
     //
-    // 相互 MAC 学習ハンドシェイク（旧 vehicle 踏襲）。StateManager が PairingState::Pairing
+    // 相互 MAC 学習ハンドシェイク（飛行実績のある別ファームを踏襲）。StateManager が PairingState::Pairing
     // にしている間（pairing_state トピックを update() ごとに読む）、自 MAC を広告する
     // PairingPacket を kPairingBroadcastMs ごとに broadcast する。コントローラがそれを学習し
     // ControlPacket をユニキャストで返す。最初の1通の src MAC を相手局として確定（NVS保存）。
@@ -232,16 +232,16 @@ private:
     /// ESP-NOW を初期化し、受信コールバックを登録する。
     void initEspNow();
 
-    /// Timeout that demarcates "connected" from "stale". 500ms matches the
-    /// existing vehicle's link-loss threshold and is well above the 50Hz
+    /// Timeout that demarcates "connected" from "stale". 500ms matches another
+    /// flight-proven firmware's link-loss threshold and is well above the 50Hz
     /// transmitter cadence.
-    /// "接続中" と "古い" を分けるタイムアウト。既存 vehicle のリンク喪失
+    /// "接続中" と "古い" を分けるタイムアウト。飛行実績のある別ファームのリンク喪失
     /// 閾値と一致しており、50Hz 送信周期に対して十分余裕がある。
     static constexpr uint32_t kLinkTimeoutMs = 500;
 
-    /// PairingPacket broadcast period while searching. 500ms matches the legacy
-    /// vehicle (controller_comm.cpp tick) and the controller's channel-scan dwell.
-    /// 探索中の PairingPacket 送出周期。500ms は旧 vehicle と一致し、コントローラの
+    /// PairingPacket broadcast period while searching. 500ms matches another flight-proven
+    /// firmware (controller_comm.cpp tick) and the controller's channel-scan dwell.
+    /// 探索中の PairingPacket 送出周期。500ms は飛行実績のある別ファームと一致し、コントローラの
     /// チャンネルスキャン滞留と整合する。
     static constexpr uint32_t kPairingBroadcastMs = 500;
 

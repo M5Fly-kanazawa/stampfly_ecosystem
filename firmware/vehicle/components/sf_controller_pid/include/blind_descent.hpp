@@ -138,13 +138,13 @@ private:
     /// that acts in the SAME cycle: when the bounded thrust is clamped, the integral step of THIS cycle is
     /// undone only if it pushed further into the clamp (above the ceiling and the integral rose, or below the
     /// floor and it fell). A step back toward the allowed range is kept, so the integrator can unwind while the
-    /// thrust is still clamped. (The earlier rule switched integration off for the NEXT cycle from the previous
-    /// thrust, in both directions: one cycle late, and unable to unwind while clamped.)
+    /// thrust is still clamped. (Rejected alternative: switching integration off for the NEXT cycle from the previous
+    /// thrust, in both directions: that acts one cycle late and cannot unwind while clamped.)
     /// support 推力のまわりの PI の推力を [下限, 上限] に制限する。同じ周期で効く「片側」のアンチワインドアップ:
     /// 制限にかかったとき、「この周期」の積分の増分を、制限の奥へ押す向きの場合だけ取り消す（上限の上で積分が
     /// 増えた、または下限の下で減った）。許す範囲へ戻る向きの増分は残すので、推力が制限にかかったままでも積分器は
-    /// 戻れる。（以前の規則は、前の周期の推力で「次の周期」の積分を両方向とも止めた: 1 周期遅れで、制限にかかった間は
-    /// 戻れなかった。）
+    /// 戻れる。（不採用の案: 前の周期の推力で「次の周期」の積分を両方向とも止める: 1 周期遅れで、制限にかかった間は
+    /// 戻れない。）
     float piThrust(float vertical_velocity_up, float dt_s, float floor, float ceiling)
     {
         const float integral_before = pid_.integral;

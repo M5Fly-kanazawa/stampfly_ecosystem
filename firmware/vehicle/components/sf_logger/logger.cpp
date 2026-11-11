@@ -50,10 +50,10 @@ static constexpr const char* kSessionFmt = "/spiffs/log_%03u.bin";
 
 // Maximum records before forcibly rotating to a new session file.
 // LogTask runs at 100Hz (log_task.cpp): 100Hz × 76 bytes ≈ 7.6 KB/s, so
-// 8000 records ≈ 80 s ≈ 1.3 minutes per session (code_review L-12). The byte
-// capacity below is rate-independent and unchanged.
+// 8000 records ≈ 80 s ≈ 1.3 minutes per session. The byte
+// capacity below is rate-independent.
 // セッション当たり最大レコード数。LogTask は 100Hz（log_task.cpp）: 100Hz で
-// 8000 件 ≈ 80 s ≈ 約 1.3 分/セッション (L-12)。下のバイト容量はレート非依存で不変。
+// 8000 件 ≈ 80 s ≈ 約 1.3 分/セッション。下のバイト容量はレート非依存。
 static constexpr uint32_t kMaxRecordsPerSession = 8000;
 
 // Number of rotating log_NNN.bin slots. One session ≈ 608 KB max

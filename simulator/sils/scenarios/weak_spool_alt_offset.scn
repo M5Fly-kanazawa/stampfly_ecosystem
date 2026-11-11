@@ -10,7 +10,7 @@
 # integral). The ToF reads invalid on the floor (the SILS dead zone, as the real sensor does). Spec under test (detailed_design.md §3.1):
 #  1. The invalid samples are counted after 2 s + 0.15 s of TAKEOFF (the time limit of the tracker): a ToF-silence episode, TAKEOFF -> LANDING (ALT_HOLD needs the altitude).
 #     The craft is still on the floor: ACCEPTED, because the thrust of the descent without a ToF is at most 0.95 x the support thrust (kNoTofThrustCapRatio) and cannot lift the
-#     craft. (An accelerometer-based evidence was tried against this and withdrawn: it cannot tell a slow lift from a craft the floor holds.)
+#     craft. (An accelerometer-based abort is not used: it cannot tell a slow lift from a craft the floor holds.)
 #  2. The floor holds the craft: "Touchdown detected (the floor holds the craft up ...)" -> LANDING -> IDLE_GROUND, the motors stop. No takeoff completion, no abort (the abort
 #     needs the POSITIVE evidence of a healthy ToF; see weak_spool_alt_floor).
 #
@@ -18,7 +18,7 @@
 # （SILS の不感帯。実センサと同じ）。検証する仕様（detailed_design.md §3.1）:
 #  1. 無効サンプルは TAKEOFF の 2 s + 0.15 s の後に数えられる（トラッカーの時間の上限）: ToF 出力停止のエピソードで、TAKEOFF → LANDING（ALT_HOLD は高度を必要とする）。
 #     機体はまだ床の上: 許容する。ToF なしの降下の推力は高々 支持推力の 0.95 倍（kNoTofThrustCapRatio）で、機体を持ち上げられないため。
-#     （加速度計に基づく証拠でこれを防ぐ仕組みは試して取り下げた: ゆっくり浮く機体と床が支える機体を区別できない。）
+#     （加速度計に基づく中止は採らない: ゆっくり浮く機体と床が支える機体を区別できない。）
 #  2. 床が機体を支える: "Touchdown detected (the floor holds the craft up ...)" → LANDING → IDLE_GROUND、モータは止まる。離陸の完了も中止も無い（中止には健全な ToF の
 #     「積極的な」証拠が要る。weak_spool_alt_floor 参照）。
 #

@@ -393,12 +393,12 @@ TEST(flip_gyro_abort_ignores_single_sample_and_normal_overshoot)
 }
 
 // =============================================================================
-// (4b) Brake ALWAYS terminates (INV-2). Hardware 2026-10-02: a gyro abort at
-//      phi = 79 deg left the rotation stopped at ~207 deg; the old exit needed
-//      phi >= 290 deg (or 350 deg) and Brake never ended.
-// (4b) Brake は「必ず」終了する（INV-2）。実機 2026-10-02: phi = 79° のジャイロ
-//      打ち切りで回転が約 207° で止まり、旧い出口は phi >= 290°（または 350°）を
-//      要求したため Brake が終わらなかった。
+// (4b) Brake ALWAYS terminates (INV-2). On hardware a gyro abort at
+//      phi = 79 deg leaves the rotation stopped at ~207 deg; an exit that needed
+//      phi >= 290 deg (or 350 deg) would never end Brake.
+// (4b) Brake は「必ず」終了する（INV-2）。実機では phi = 79° のジャイロ
+//      打ち切りで回転が約 207° で止まる。出口が phi >= 290°（または 350°）を
+//      要求すると Brake は終わらない。
 // =============================================================================
 static void enterBrakeByGyroAbort(FlipSequencer& seq, FlipSequencer::Input& in)
 {

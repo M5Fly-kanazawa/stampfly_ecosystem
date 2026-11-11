@@ -1,17 +1,17 @@
 # acro_crash_relevel.scn — mode switch re-levels after a crash-return reset
 #                          墜落復帰リセット後のモードスイッチ再適用
 #
-# Hardware bug (2026-06-11): crash → ground reset forces the mode to STABILIZE
-# (re-fly safety), but the ACRO switch never moved — with edge-only switch
-# semantics no edge ever comes, so the mode (and the body LED) stayed STABILIZE
-# while the pilot's switch said ACRO. The fix RE-LEVELS the switch in
+# Guards a bug found in hardware flight: crash → ground reset forces the mode to
+# STABILIZE (re-fly safety), but the ACRO switch never moved — with edge-only switch
+# semantics no edge ever comes, so the mode (and the body LED) would stay STABILIZE
+# while the pilot's switch says ACRO. The mode logic therefore RE-LEVELS the switch in
 # IDLE_GROUND (parked & disarmed = the switch is the truth); armed/flying
 # states remain edge-only (a parked transmitter must not override the API).
-# 実機バグ（2026-06-11）: 墜落 → 接地リセットがモードを STABILIZE に強制（再飛行
-# 安全則）。しかし ACRO スイッチは動いていない — エッジ適用のみだとエッジが永遠に
-# 来ず、スイッチが ACRO のままなのにモード（と本体 LED）は STABILIZE に固定される。
-# 修正は IDLE_GROUND での「レベル合わせ」（設置・非 ARM ならスイッチが真）。
-# ARM 後・飛行中はエッジのみ＝放置送信機が API を覆せない性質は不変。
+# 実機飛行で見つかった不具合の再発防止試験: 墜落 → 接地リセットがモードを STABILIZE に強制
+# （再飛行安全則）するが、ACRO スイッチは動いていない — エッジ適用のみだとエッジが永遠に
+# 来ず、スイッチが ACRO のままなのにモード（と本体 LED）は STABILIZE に固定されてしまう。
+# そこで IDLE_GROUND では「レベル合わせ」を行う（設置・非 ARM ならスイッチが真）。
+# ARM 後・飛行中はエッジのみ＝放置送信機が API を覆せない性質は変わらない。
 #
 # Run: sf sils scenario simulator/sils/scenarios/acro_crash_relevel.scn --target vehicle
 #

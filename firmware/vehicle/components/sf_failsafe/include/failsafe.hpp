@@ -58,7 +58,7 @@ FailsafeConfig loadFailsafeConfigFromParams();
 /// フェイルセーフモニター: 通信タイムアウトと電池の監視（10Hz, PowerTask）。
 /// IMU レートの監視（衝撃/ジャイロ異常）は下の ImuAnomalyDetector が担い、
 /// ImuTask が 400Hz でサンプル毎に与える — 10Hz の latest() 覗き見では
-/// ミリ秒オーダーの墜落スパイクをほぼ確実に取りこぼしていた。
+/// ミリ秒オーダーの墜落スパイクをほぼ確実に取りこぼす。
 class Failsafe {
 public:
     /// Initialize failsafe with default thresholds

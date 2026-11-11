@@ -77,59 +77,43 @@ static constexpr float MIN_DUTY = 0.0f;
 static constexpr float MAX_DUTY = 1.0f;
 
 // X-quad geometry + motor curve for the B^-1 control allocation. Mirrors the
-// flight-proven legacy `vehicle/` allocator (control_allocation.hpp) and the
+// flight-proven allocator of another firmware (control_allocation.hpp) and the
 // documented motor model (docs/architecture/stampfly-parameters.md §3). The
 // control inputs are PHYSICAL — thrust [N] and torques [Nm] — and the mixer
 // inverts the allocation, then converts each motor thrust to a PWM duty through
 // the motor curve (the exact inverse of the SILS plant's duty→thrust).
-// X-quad 幾何＋モータ曲線（B^-1 制御配分用）。飛行実績のあるレガシー配分器と文書の
+// X-quad 幾何＋モータ曲線（B^-1 制御配分用）。飛行実績のある別ファームの配分器と文書の
 // モータモデルに準拠。制御入力は物理量（推力 [N]・トルク [Nm]）で、ミキサーは配分を
 // 逆算し各モータ推力をモータ曲線で PWM duty に変換する（SILS プラントの duty→推力 の逆）。
 static constexpr float ARM_D    = 0.023f;    // moment arm (x/y offset) [m]
-// Torque/thrust ratio κ = Cq/Ct. Cq=4.10e-11 is coast-down MEASURED
-// 2026-07-15 (open-circuit, confirmed by the user's own measurement --
-// SSOT control/models/stampfly_physical.yaml measured_2026_07.Cq). Ct is a
-// PROVISIONAL value as of 2026-08-03 (see below) -- the 2026-07-15
-// thrust-stand Ct was retracted for lack of a valid simultaneous
-// voltage/RPM/thrust measurement on the new propeller. κ = Cq/Ct = 4.10e-3
-// (was 9.71e-3 before 2026-07-17, then 6.12e-3 from 2026-07-17 through
-// 2026-08-02 while Ct was the now-retracted thrust-stand value). The
-// 2026-07-17 fix (9.71e-3 -> 6.12e-3) corrected a mixer under-drive: at the
-// old κ, τψ/κ delivered only 0.63× the commanded yaw torque. The 2026-08-03
-// change (6.12e-3 -> 4.10e-3) is a PURE RESCALE tied to the Ct retraction
-// above, not a new physical finding -- rate.yaw.kp and rate.yaw.max_torque
-// were rescaled by the same ratio (params.cpp) so the physical yaw-torque
-// output is UNCHANGED (closed-loop behavior identity), following the same
-// pattern as the 2026-07-17 rescale.
-// トルク/推力比 κ = Cq/Ct。Cq=4.10e-11 はコーストダウン法による 2026-07-15
-// 実測（開回路、ユーザー自身の計測で信頼確定 — 正典
-// control/models/stampfly_physical.yaml measured_2026_07.Cq）。Ct は
-// 2026-08-03 時点で暫定値（下記参照）——2026-07-15 の thrust stand Ct は、
-// 新プロペラでの電圧/回転数/推力の有効な同時計測を欠くため撤回。
-// κ = Cq/Ct = 4.10e-3（2026-07-17 以前は 9.71e-3、2026-07-17〜2026-08-02は
-// 撤回済みthrust stand Ct由来の 6.12e-3）。2026-07-17 の修正（9.71e-3→
-// 6.12e-3）はミキサーの過小駆動を是正するもの（旧κではτψ/κが指令ヨー
-// トルクの0.63倍しか出せていなかった）。2026-08-03 の変更（6.12e-3→
-// 4.10e-3）は上記 Ct 撤回に伴う純粋な再スケールであり新たな物理的知見
-// ではない——rate.yaw.kp と rate.yaw.max_torque を同率で再スケール
-// （params.cpp）し、物理ヨートルク出力は不変（閉ループ挙動の恒等性）。
-// 2026-07-17 の再スケールと同じパターンを踏襲。
-static constexpr float KAPPA    = 4.10e-3f;  // torque/thrust ratio Cq/Ct [m], rescaled 2026-08-03 (Cq measured 2026-07-15, Ct provisional)
+// Torque/thrust ratio κ = Cq/Ct = 4.10e-3. Cq=4.10e-11 is MEASURED by the
+// coast-down method (open-circuit; SSOT control/models/stampfly_physical.yaml
+// measured_2026_07.Cq). Ct is PROVISIONAL (see below): a thrust-stand Ct was
+// rejected because there was no valid simultaneous voltage/RPM/thrust
+// measurement on the current propeller. κ must be the true Cq/Ct because the
+// mixer yaw term is τψ/κ: with a too-large κ (9.71e-3) τψ/κ delivered only
+// 0.63× the commanded yaw torque. rate.yaw.kp and rate.yaw.max_torque
+// (params.cpp) are scaled with κ so that the physical yaw-torque output stays
+// the same when κ is rescaled.
+// トルク/推力比 κ = Cq/Ct = 4.10e-3。Cq=4.10e-11 はコーストダウン法による実測
+// （開回路。基準 control/models/stampfly_physical.yaml measured_2026_07.Cq）。
+// Ct は暫定値（下記参照）。thrust stand の Ct は、現行プロペラでの電圧/回転数/推力の
+// 有効な同時計測を欠くため採用しない。ミキサーのヨー項が τψ/κ なので κ は真の
+// Cq/Ct でなければならない。κ が大きすぎる値（9.71e-3）では τψ/κ が指令ヨートルクの
+// 0.63倍しか出せない。κ を再スケールしても物理ヨートルク出力が変わらないよう、
+// rate.yaw.kp と rate.yaw.max_torque（params.cpp）は κ と同率で設定する。
+static constexpr float KAPPA    = 4.10e-3f;  // torque/thrust ratio Cq/Ct [m] (Cq measured, Ct provisional)
 static constexpr float MOTOR_AM = 6.0368e-8f;  // V = Am·ω² + Bm·ω + Cm
 static constexpr float MOTOR_BM = 6.699042e-4f;
 static constexpr float MOTOR_CM = 1.53e-2f;
-// thrust T = Ct·ω² [N]. PROVISIONAL as of 2026-08-03 (numerically unchanged
-// from before: the retracted 2026-07-15 thrust-stand Ct never reached
-// firmware, so this literal was and remains the pre-2026-07-15 legacy
-// value). Provenance: (1) past same-diameter-propeller measurement,
-// (2) theoretical-simulation consistency. Pending a bench V-ω-T
+// thrust T = Ct·ω² [N]. PROVISIONAL: the value is not backed by a measurement on
+// the current propeller. Provenance: (1) past same-diameter-propeller
+// measurement, (2) theoretical-simulation consistency. Pending a bench V-ω-T
 // co-measurement on the current propeller to confirm/replace. SSOT:
 // control/models/stampfly_physical.yaml measured_2026_07.Ct.
-// 推力 T = Ct·ω² [N]。2026-08-03 時点で暫定値（数値は不変——撤回された
-// 2026-07-15 thrust stand Ct はそもそも firmware に反映されていなかった
-// ため、この値は2026-07-15以前の旧値のまま）。拠り所: (1) 同径プロペラ
-// での過去の確からしい実測、(2) 理論シミュレーションとの整合。現行
-// プロペラでのベンチ V-ω-T 同時計測で確定・置換予定。正典:
+// 推力 T = Ct·ω² [N]。暫定値（現行プロペラでの実測の裏付けはない）。
+// 拠り所: (1) 同径プロペラでの過去の確からしい実測、(2) 理論シミュレーションとの整合。
+// 現行プロペラでのベンチ V-ω-T 同時計測で確定・置換予定。基準:
 // control/models/stampfly_physical.yaml measured_2026_07.Ct。
 static constexpr float MOTOR_CT = 1.00e-8f;
 
@@ -237,20 +221,20 @@ static float thrustToDuty(float thrust, float vbat)
 //
 // Inputs are PHYSICAL (matching ControlOutput's declared units): u.thrust = total
 // thrust [N], u.torque = body torques [Nm] (roll φ, pitch θ, yaw ψ). The mixing
-// matrix B^-1 (from the flight-proven legacy allocator, control_allocation.hpp)
+// matrix B^-1 (from the flight-proven allocator of another firmware, control_allocation.hpp)
 // gives each motor's thrust, then thrustToDuty gives the PWM duty. Rotor layout
 // M1=FR, M2=RR, M3=RL, M4=FL; NED body frame (+X fwd, +Y right, +Z down);
 // CCW props M1/M3, CW props M2/M4.
 //
 // 入力は物理量（ControlOutput の宣言単位どおり）: u.thrust = 総推力 [N]、u.torque =
-// 機体トルク [Nm]（ロール/ピッチ/ヨー）。飛行実績のあるレガシー配分器の B^-1 で各モータ
+// 機体トルク [Nm]（ロール/ピッチ/ヨー）。飛行実績のある別ファームの配分器の B^-1 で各モータ
 // 推力を求め、thrustToDuty で PWM duty にする。
 //
 //   T_i = ¼( u_t  ±  u_φ/d  ±  u_θ/d  ±  u_ψ/κ )
 //
-// NOTE: yaw uses 1/κ (NOT ·κ). The old simplified mixer multiplied by κ and so
-// under-drove yaw by ~1/κ² (a 1 rad/s yaw command tracked at 0.05 rad/s).
-// 注意: ヨーは 1/κ（·κ ではない）。旧簡易ミキサーは ·κ でヨーを約 1/κ² も弱めていた。
+// NOTE: yaw uses 1/κ (NOT ·κ). Multiplying by κ would under-drive yaw by ~1/κ²
+// (a 1 rad/s yaw command would track at 0.05 rad/s).
+// 注意: ヨーは 1/κ（·κ ではない）。·κ にするとヨーが約 1/κ² も弱まる。
 //
 static void mixerCompute(const ControlOutput& u, float vbat, float duties[4])
 {

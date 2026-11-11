@@ -21,8 +21,8 @@ order "Transition: TAKEOFF → FLYING" "in FLYING/POS_HOLD → LANDING"
 order "in FLYING/POS_HOLD → LANDING" "Blind landing: ToF silent"
 order "Blind landing: ToF silent" "Transition: LANDING → IDLE_GROUND"
 order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silent"
-# Truth peak: measured 1.23 m (noise n2, seed 1; the three seeds of the acceptance run: 1.11, 1.16, 1.23 m) (main as of 2026-11-08, noise n2, seed 1: 4.6 m). Bound 1.5 m.
-# 真値の最高: measured 1.23 m (noise n2, seed 1; the three seeds of the acceptance run: 1.11, 1.16, 1.23 m)（main（2026-11-08 時点）、ノイズ n2、seed 1: 4.6 m）。上限 1.5 m。
+# Truth peak: measured 1.23 m (noise n2, seed 1; the three seeds of the acceptance run: 1.11, 1.16, 1.23 m). Bound 1.5 m.
+# 真値の最高: measured 1.23 m (noise n2, seed 1; the three seeds of the acceptance run: 1.11, 1.16, 1.23 m)。上限 1.5 m。
 metric alt_max < 1.5 in 7.5 21.0
 # Touchdown speed (truth): measured 1.99 m/s. Bound 2.4 m/s. The thrust of the descent without a ToF is at most 0.95 x the support thrust
 # (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g), not by the PI.

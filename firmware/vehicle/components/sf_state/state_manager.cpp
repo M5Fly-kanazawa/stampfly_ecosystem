@@ -303,15 +303,15 @@ bool StateManager::requestDisarm()
 
     // ALT_HOLD/POS_HOLD while FLYING: a pilot DISARM starts an AUTO-LANDING (gradual
     // descent) instead of an immediate motor cut — these altitude-controlled modes can
-    // land themselves, and cutting motors mid-air would just drop the craft (user
-    // request, 2026-06-14). Touchdown then disarms (LANDING → IDLE_GROUND via the ToF
+    // land themselves, and cutting motors mid-air would just drop the craft.
+    // Touchdown then disarms (LANDING → IDLE_GROUND via the ToF
     // landing detector). A DISARM AGAIN while already LANDING falls through to the
     // immediate cut below (state_ != FLYING) — pressing twice is the abort/emergency.
     // FLIP falls through the same way (state_ == FLIP, not FLYING): a DISARM mid-
     // maneuver is an immediate cut, same as ACRO/STABILIZE — plan §4.3 FLIP row.
     // ALT_HOLD/POS_HOLD の FLYING 中: パイロット DISARM は即モータ停止でなく自動着陸
     // （緩降下）を開始する — 高度制御モードは自力で着陸でき、空中でモータを切ると機体が
-    // 落ちるだけ（ユーザー要望 2026-06-14）。接地で DISARM（LANDING→IDLE_GROUND, ToF 着陸
+    // 落ちるだけ。接地で DISARM（LANDING→IDLE_GROUND, ToF 着陸
     // 検出）。LANDING 中の再 DISARM は下の即カットに落ちる（state_ != FLYING）— 2回押しが中断/緊急。
     // FLIP も同様に下へ落ちる（state_ == FLIP であり FLYING でない）: マニューバ中の
     // DISARM は ACRO/STABILIZE と同じ即カット — plan §4.3 FLIP 行。
@@ -368,9 +368,9 @@ void StateManager::notifyLandingRequest()
 {
     // ARMED_GROUND in an altitude mode (ALT_HOLD / POS_HOLD): the motors have only begun to spool on the floor and the auto-takeoff has not started, so the immediate cut is the safe answer (a landing from
     // the floor has nothing to land from). In a manual mode (ACRO / STABILIZE) the pilot holds the throttle and the craft can lift off from ARMED_GROUND (a throttle of 0.499 is enough), so it is not known to be on
-    // the floor: the request is refused, as it was before.
+    // the floor: the request is refused.
     // 高度モード（ALT_HOLD / POS_HOLD）の ARMED_GROUND: モータは床の上でスプールを始めただけで、自動離陸も始まっていないので、即時のモータ停止が安全（床の上には、そこから降りる高さが無い）。
-    // 手動モード（ACRO / STABILIZE）ではスロットルをパイロットが操作し、ARMED_GROUND からでも浮ける（スロットル 0.499 で足りる）ので、床の上とは限らない: 要求は従来どおり拒否する。
+    // 手動モード（ACRO / STABILIZE）ではスロットルをパイロットが操作し、ARMED_GROUND からでも浮ける（スロットル 0.499 で足りる）ので、床の上とは限らない: 要求は拒否する。
     if (state_ == FlightState::ARMED_GROUND) {
         if (!flightModeNeedsAltitude(mode_)) {
             return;
@@ -542,8 +542,8 @@ bool StateManager::refuseModeForToFSilence(FlightMode new_mode)
 bool StateManager::modeChangeAllowedInState() const
 {
     // Mode changes are accepted on the GROUND (disarmed or armed) and in FLYING.
-    // Changing the mode while parked is the SAFEST time to do it (user spec,
-    // 2026-06-11) — the controller stays gated (zero thrust in ALT/POS until the
+    // Changing the mode while parked is the SAFEST time to do it
+    // — the controller stays gated (zero thrust in ALT/POS until the
     // auto-takeoff verb), and the body LEDs show the selected mode. Rejected
     // only mid-transition (INIT/TAKEOFF/LANDING — a switch flip mid-sequence
     // is applied on reaching FLYING/IDLE by the state task's per-cycle check)
@@ -552,7 +552,7 @@ bool StateManager::modeChangeAllowedInState() const
     // the list below): a switch flip during the maneuver persists
     // and applies once FLIP → FLYING (detailed_design.md §3.1 FLIP row).
     // モード変更は「地上」（DISARM/ARM とも）と FLYING で受理する。設置時の変更が
-    // 最も安全（ユーザー仕様, 2026-06-11）— 制御器は判定され（ALT/POS は自動離陸
+    // 最も安全 — 制御器は判定され（ALT/POS は自動離陸
     // verb まで推力ゼロ）、本体 LED が選択モードを表示する。拒否は遷移中のみ
     // （INIT/TAKEOFF/LANDING — シーケンス途中のスイッチは FLYING/IDLE 到達時に
     // state task の周期チェックが適用する）と手持ち中（IDLE_HELD）。FLIP も
@@ -674,14 +674,14 @@ void StateManager::handleImpactAlert(AlertType type)
     // FLIP window exception (plan §3.5/§3.7, detailed_design.md §3.1 FLIP
     // row): a commanded flip legitimately spins past the 800 deg/s crash
     // threshold, so the alert is IGNORED (logged only) while state_ ==
-    // FLIP. The detector (ImuAnomalyDetector) is unchanged — only the
+    // FLIP. The detector (ImuAnomalyDetector) does not depend on FLIP — only the
     // judgment here differs (INV-3: detection vs. judgment separation,
     // architecture.md §4). Falls through to the same handling as IMPACT
     // in every other state.
     // FLIP 窓の例外（plan §3.5/§3.7、detailed_design.md §3.1 FLIP 行）:
     // 指令された宙返りは正当に 800 deg/s の墜落しきい値を超えて回転するため、
     // state_ == FLIP の間はアラートを無視する（ログのみ）。検出器
-    // （ImuAnomalyDetector）は変更せず、判断側のみが異なる（INV-3: 検出と
+    // （ImuAnomalyDetector）は FLIP に依存せず、判断側のみが異なる（INV-3: 検出と
     // 判断の分離、architecture.md §4）。それ以外の状態では IMPACT と同じ扱いに
     // フォールスルーする。
     if (type == AlertType::GYRO_ANOMALY && state_ == FlightState::FLIP) {
@@ -722,8 +722,8 @@ void StateManager::handleCommLostAlert(const SystemAlert& alert)
     // arm a timer (idempotent — only the first loss while airborne arms it) and
     // let update() command FLYING → LANDING once kCommLossHoverUs elapses.
     // Gate on isAirborne (TAKEOFF/FLYING/LANDING/FLIP), NOT on FLYING only: a
-    // link lost during TAKEOFF used to be consumed here and never re-evaluated,
-    // so the craft kept climbing on the stale setpoint with no failsafe at all.
+    // link lost during TAKEOFF would otherwise be consumed here and never re-evaluated,
+    // so the craft would keep climbing on the stale setpoint with no failsafe at all.
     // The failsafe also re-raises COMM_LOST periodically while the link stays
     // lost (level, not edge), so a missed alert is not fatal either way. FLIP is
     // included in isAirborne (flight_state.hpp), so a loss during FLIP arms the
@@ -733,9 +733,9 @@ void StateManager::handleCommLostAlert(const SystemAlert& alert)
     // 通信途絶 → ホバーを維持し、猶予経過後に自動着陸（要件§9: ホバー維持3秒→
     // 自動着陸）。ここでは着陸しない: タイマを起動し（冪等 — 空中での最初の喪失
     // のみ起動）、kCommLossHoverUs 経過で update() が FLYING → LANDING を指令する。
-    // 判定条件は FLYING 限定でなく isAirborne（TAKEOFF/FLYING/LANDING/FLIP）: 従来は
+    // 判定条件は FLYING 限定でなく isAirborne（TAKEOFF/FLYING/LANDING/FLIP）: FLYING だけだと
     // TAKEOFF 中の喪失がここで消費されて二度と再評価されず、機体は stale な
-    // setpoint のままフェイルセーフなしで上昇し続けた。failsafe 側もリンク喪失中は
+    // setpoint のままフェイルセーフなしで上昇し続ける。failsafe 側もリンク喪失中は
     // COMM_LOST を周期的に再発報する（エッジでなくレベル）ので、取りこぼしても致命傷
     // にならない。FLIP は isAirborne に含まれる（flight_state.hpp）ため、FLIP 中の
     // 喪失もここでタイマは起動するが、update() は state_ == FLYING のときだけ遷移を
@@ -822,18 +822,18 @@ void StateManager::requestPairing()
     // transmitter can bind, but never spins the motors. Reject from INIT / armed /
     // airborne (we never re-pair in flight). Idempotent: if already searching, do
     // nothing (avoids re-publish churn).
-    // IDLE_GROUND or IDLE_HELD (2026-09-12): pairing must also be reachable while the
+    // IDLE_GROUND or IDLE_HELD: pairing must also be reachable while the
     // vehicle is held in hand — pressing the button in hand is the common way users
-    // start pairing (requirements.md §2 / detailed_design.md §3.1 updated to match).
+    // start pairing (requirements.md §2 / detailed_design.md §3.1 state this).
     // This does NOT weaken the ARM guard: requestArm() still only accepts IDLE_GROUND,
     // and ARM is separately rejected while Pairing, so a held vehicle can never spin
     // its motors just because it can now start advertising.
     // ペアリングは disarmed の機体限定の活動: 自分自身を広告して送信機がバインドできるように
     // するだけで、モータは回さない。INIT/武装/空中からは拒否（飛行中に再ペアしない）。
     // 冪等: 既に探索中なら何もしない。
-    // IDLE_GROUND または IDLE_HELD（2026-09-12）: 手に持った状態でもペアリングに入れる
+    // IDLE_GROUND または IDLE_HELD: 手に持った状態でもペアリングに入れる
     // 必要がある — ボタンを手持ちのまま押すのは利用者にとって一般的な操作（requirements.md
-    // §2 / detailed_design.md §3.1 を合わせて更新済み）。ARM のガードはそのまま変えない:
+    // §2 / detailed_design.md §3.1 に同じ規定がある）。ARM のガードはそのまま変えない:
     // requestArm() は引き続き IDLE_GROUND のみ受理し、Pairing 中は ARM を別途拒否するため、
     // 広告を開始できるようになっても手持ちの機体のモータが回ることはない。
     if (state_ != FlightState::IDLE_GROUND && state_ != FlightState::IDLE_HELD) {
@@ -1039,11 +1039,11 @@ void StateManager::handleCommLossGrace(uint32_t now_us)
     }
 
     // Grace period elapsed in TAKEOFF or FLYING → land (decideCommLossLanding(), takeoff_policy.hpp). TAKEOFF
-    // too: a TAKEOFF that does not complete (a craft the floor still holds, a ToF that shows the floor) used to
+    // too: a TAKEOFF that does not complete (a craft the floor still holds, a ToF that shows the floor) would
     // keep the craft on the stale setpoint with no failsafe at all. During LANDING the flag stays pending
     // (LANDING is already what we want); during FLIP it waits for FLYING.
     // 猶予経過が TAKEOFF または FLYING なら着陸（decideCommLossLanding()、takeoff_policy.hpp）。TAKEOFF も: 完了しない
-    // TAKEOFF（床がまだ支えている機体、ToF が床を示している機体）では、機体が古い目標のままフェイルセーフなしで続いた。
+    // TAKEOFF（床がまだ支えている機体、ToF が床を示している機体）では、機体が古い目標のままフェイルセーフなしで続いてしまう。
     // LANDING 中はフラグを保留のまま維持（LANDING は既に目的の状態）、FLIP 中は FLYING まで待つ。
     if (decideCommLossLanding(state_, comm_lost_watch_.isSilent(kCommLossHoverUs))) {
         ESP_LOGW(TAG, "Comm lost → LANDING (hover grace elapsed)");
@@ -1103,7 +1103,7 @@ void StateManager::resetModeOnGround()
     // takeoff always starts in the direct-throttle mode that lifts off. Without this a
     // mode selected in flight (e.g. ALT_HOLD) PERSISTS across DISARM/emergency-IDLE, and
     // a re-takeoff in that mode never produces takeoff thrust from the ground — a real
-    // crash→re-fly robustness bug found by crash_refly.scn. The controller learns its mode
+    // crash→re-fly failure (covered by crash_refly.scn). The controller learns its mode
     // ONLY via ControllerCmd::ModeChange (ControlTask does NOT read system_mode.sub_mode),
     // so we must FIRE the onModeChange callbacks here — not just set mode_. They publish the
     // mode change, which reconfigures the controller to STABILIZE and clears the stale
@@ -1112,7 +1112,7 @@ void StateManager::resetModeOnGround()
     // 接地に戻ったら飛行モードを STABILIZE にリセットし、次の離陸が必ず離陸スラストを出す直接
     // スロットルモードで始まるようにする。これが無いと飛行中に選んだモード（例 ALT_HOLD）が
     // DISARM/緊急IDLE を跨いで残り、そのモードでの再離陸は地上から離陸スラストを出せない
-    // ——crash_refly.scn が見つけた実 crash→再飛行バグ。制御器はモードを ControllerCmd::
+    // ——crash→再飛行の実際の不具合（crash_refly.scn で確認）。制御器はモードを ControllerCmd::
     // ModeChange 経由でのみ把握する（ControlTask は system_mode.sub_mode を読まない）ため、ここで
     // onModeChange コールバックを呼び出す必要がある（mode_ を変えるだけでは不十分）。呼び出しで
     // モード変更が発行され、制御器が STABILIZE へ再構成され古い ALT/POS カスケード＋ホバー推力

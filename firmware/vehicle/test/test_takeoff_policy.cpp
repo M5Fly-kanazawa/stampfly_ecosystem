@@ -185,9 +185,9 @@ TEST(a_landing_is_decided_only_by_a_latch_without_the_evidence_now_after_the_abo
 TEST(a_latched_takeoff_is_not_landed_while_the_craft_is_lifting_off)
 {
     // floor_leaving (valid readings above the ground band NOW, the run in progress): a slow lift is on its way to releasing the latch (after the hold time above the band), so even from the abort time on the
-    // TAKEOFF is held, not landed. Without the latch or with the evidence NOW the other cells apply as before (leaving cannot hold an abort back: the evidence NOW and a run above the band exclude each other).
+    // TAKEOFF is held, not landed. Without the latch or with the evidence NOW the other cells apply unchanged (leaving cannot hold an abort back: the evidence NOW and a run above the band exclude each other).
     // floor_leaving（接地の帯より上の有効な読みが「今」あり、その区間が進行中）: ゆっくり浮く機体は、ラッチを解く途中（帯より上の保持時間の後）なので、中止の時刻からでも TAKEOFF は保持し、着陸させない。
-    // ラッチが無い、または「今」の証拠があるときは、他のセルが従来どおり働く（leaving は中止を止めない: 「今」の証拠と帯より上の区間は両立しない）。
+    // ラッチが無い、または「今」の証拠があるときは、他のセルがそのまま働く（leaving は中止を止めない: 「今」の証拠と帯より上の区間は両立しない）。
     for (bool airborne : {false, true}) {
         for (bool reached : {false, true}) {
             for (uint32_t elapsed_us : {0u, kAbortUs - 1u, kAbortUs, kAbortUs * 4u}) {
@@ -609,7 +609,7 @@ TEST(armed_ground_takeoff_in_a_manual_mode_is_the_throttle_or_the_liftoff_eviden
     // ACRO / STABILIZE: the spool dwell is not read; the cells, written out. ACRO / STABILIZE: スプールの待ちは読まない。セルを書き出す。
     for (bool spool : {false, true}) {
         ASSERT_TRUE(!armedGroundTakeoff(false, spool, false, false));   // on the floor, throttle at or below the threshold, no evidence: stays / 床の上、閾値以下、証拠なし: 留まる
-        ASSERT_TRUE( armedGroundTakeoff(false, spool, true,  false));   // the throttle, as before / 従来どおりスロットル
+        ASSERT_TRUE( armedGroundTakeoff(false, spool, true,  false));   // the throttle decides / スロットルで決まる
         ASSERT_TRUE( armedGroundTakeoff(false, spool, false, true));    // rising at or below the threshold: in the air / 閾値以下で浮いている: 空中
         ASSERT_TRUE( armedGroundTakeoff(false, spool, true,  true));
     }

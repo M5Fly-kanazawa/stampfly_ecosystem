@@ -32,7 +32,7 @@ vehicle の **開発の進め方**（=どの順番で何を作り、何を持っ
 | **判定 G1〜G4** | SILS の合格基準（起動・状態遷移／推定の追従／閉ループ安定／アクチュエータ健全） | RESET_PLAN §4 |
 | **Noise Model Stage N0〜N4** | センサノイズモデルの複雑度段階（教材） | `noise_and_vibration_model.md` §4 |
 
-> **旧「SILS Control Level L1〜L4」は廃止した。** これは旧 SILS（`sim/flight_scenario_test.cpp` 等）の制御テストレベルを指す概念だったが、旧 SILS の完全削除（RESET_PLAN §12）に伴い消滅した。新 SILS は合否を**物理真値の判定 G1〜G4**（RESET_PLAN §4）で判定する。
+> **「SILS Control Level L1〜L4」の番号体系は使わない。** SILS は合否を**物理真値の判定 G1〜G4**（RESET_PLAN §4）で判定する。
 
 ---
 
@@ -44,7 +44,7 @@ vehicle の SILS → 実機ワークフローは次の3原則に基づく。RESE
 
 **SILS は vehicle の本体ソースを書き換えず、そのままコンパイルして動かす。**
 
-旧 SILS の失敗は、制御ループを自前で組み直し、推定器に物理の真値姿勢を渡していたことだった。新しい SILS は、**実際の Pub-Sub ループ（`imu_task → estimate_state → control_task → actuator_motor`）を丸ごとホストで動かす**。一致するのは ESKF の数式だけではなく、**ループ全体**である。
+SILS が実機と乖離する典型的な原因は、制御ループを自前で組み直し、推定器に物理の真値姿勢を渡すことである。本 SILS は、**実際の Pub-Sub ループ（`imu_task → estimate_state → control_task → actuator_motor`）を丸ごとホストで動かす**。一致するのは ESKF の数式だけではなく、**ループ全体**である。
 
 | 共有するもの | 方法 |
 |------------|------|
@@ -57,7 +57,7 @@ vehicle の SILS → 実機ワークフローは次の3原則に基づく。RESE
 
 **SILS も実機も `params.cpp`（`param_vars` + `table[]`）を Single Source of Truth として読む。**
 
-> 注（Phase 5b, 2026-06-07）: 当初は `params.def` の X-macro コード生成を SSOT とする設計だったが、実体は `params.cpp` の手書き `param_vars` + 明示 `table[]` に収束していた。`params.def` は非機能で値もずれていたため撤去し、`params.cpp` を正式な SSOT とした（[[reference_params_ssot]]）。Parameter Identity の本質（SILS と実機が同一スキーマの同一値を読む）は不変 — `params.cpp` は両ビルドが参照コンパイルする。
+> 注: Parameter の SSOT は `params.cpp` の手書き `param_vars` + 明示 `table[]` である（`params.def` による X-macro コード生成は使わない。[[reference_params_ssot]]）。Parameter Identity の本質は、SILS と実機が同一スキーマの同一値を読むことである — `params.cpp` は両ビルドが参照コンパイルする。
 
 - 実機: `params.cpp` の `table[]` → 既定値 → NVS 永続化 → ランタイム読み取り
 - SILS: `params.cpp` の `table[]` → 既定値（SILS NVS は空ゆえ既定が残る）
@@ -72,7 +72,7 @@ vehicle の SILS → 実機ワークフローは次の3原則に基づく。RESE
 
 Model Fidelity（物理モデルが現実とどれだけ合っているか）を上げる作業は、**実機で初めて飛ばした後**に始まる、後追いの精度向上である（RESET_PLAN §3 の流れ [5]→[2]）。実機ログを使うのはこの場面**だけ**で、SILS の前提ではない。SILS モデルの信頼できる範囲が広がるほど「SILS で詰めた → 実機で飛ぶ」確実性が上がる。
 
-> **【2026-07-22 更新】** vehicle は実機飛行済みで実ログが蓄積したため、本原則の「後追い」フェーズ（Phase 5）が**現在進行中**である。SILS プラントの忠実度目標・モデル一致の合否判定・改修バックログは `docs/architecture/simulation-policy.md`（シミュレーション方針の正）に定める。
+> vehicle は実機飛行済みで実ログが蓄積したため、本原則の「後追い」フェーズ（Phase 5）が**現在進行中**である。SILS プラントの忠実度目標・モデル一致の合否判定・改修バックログは `docs/architecture/simulation-policy.md`（シミュレーション方針の正）に定める。
 
 ---
 
@@ -108,7 +108,7 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 
 ### 各層を SILS の判定で検証する
 
-各層は、まず**物理真値の SILS**（RESET_PLAN）で検証し、合格基準（G1〜G4、RESET_PLAN §4）を満たしてから実機に進む。L1〜L4 のような旧 SILS の制御テストレベルの番号体系には依存しない。
+各層は、まず**物理真値の SILS**（RESET_PLAN）で検証し、合格基準（G1〜G4、RESET_PLAN §4）を満たしてから実機に進む。L1〜L4 のような制御テストレベルの番号体系には依存しない。
 
 | 層 | SILS で確認すること（物理真値で機械判定） | 実機での確認 |
 |----|----------------------------------------|-------------|
@@ -129,7 +129,7 @@ Layer 4: POSITION_HOLD                 ← + Flow + 位置PID
 
 - 設計6文書完成（requirements / architecture / detailed_design / coding_and_education / hardware_init / 本書）
 - vehicle スケルトン + 全14タスク + 全コンポーネントの代替実装 + ESKF/PID 新規実装
-- **旧 SILS を完全削除（RESET_PLAN §12 / P0）。** M1〜M11 で肥大化した旧 SILS（`quad_physics`／`sils_main.cpp`／`flight_scenario_test.cpp` 等）と、それに紐づく旧実績（L1〜L4 検証、姿勢2.27°／高度44mm など）は、削除した旧 SILS のものなので**現在の実績からは外す**。経緯は git 履歴と `implementation_log.md` に保存。
+- **旧 SILS の実績は含めない（RESET_PLAN §12 / P0）。** 旧 SILS（`quad_physics`／`sils_main.cpp`／`flight_scenario_test.cpp` 等）に紐づく実績（L1〜L4 検証、姿勢2.27°／高度44mm など）は、現在の SILS のものではないので**現在の実績には含めない**。旧 SILS の記録は git 履歴と `implementation_log.md` にある。
 
 **合格基準:** 達成済み（更地・workshop 無傷・sf CLI 健全・ビルド可）。
 
@@ -331,7 +331,7 @@ Multiple numbered concepts coexist in this project. Keep them distinct.
 | **Gates G1–G4** | SILS acceptance criteria (boot/state transitions / estimator tracking / closed-loop stability / actuator health) | RESET_PLAN §4 |
 | **Noise Model Stage N0–N4** | Sensor-noise complexity stages (educational) | `noise_and_vibration_model.md` §4 |
 
-> **The old "SILS Control Level L1–L4" has been retired.** It referred to the control-test levels of the old SILS (`sim/flight_scenario_test.cpp` etc.); it disappeared when the old SILS was fully removed (RESET_PLAN §12). The new SILS judges pass/fail with the physics-truth gates **G1–G4** (RESET_PLAN §4).
+> **The "SILS Control Level L1–L4" numbering is not used.** The SILS judges pass/fail with the physics-truth gates **G1–G4** (RESET_PLAN §4).
 
 ---
 
@@ -343,7 +343,7 @@ The SILS → real-flight workflow rests on three principles — the same ideas a
 
 **SILS compiles and runs the unmodified vehicle source as-is.**
 
-The old SILS's failure was rebuilding the control loop by hand and feeding the estimator the physics-truth attitude. The new SILS runs the **entire real Pub-Sub loop** (`imu_task → estimate_state → control_task → actuator_motor`) on the host. What matches is not just the ESKF math — it is the **whole loop**.
+A SILS typically diverges from the real vehicle when it rebuilds the control loop by hand and feeds the estimator the physics-truth attitude. This SILS runs the **entire real Pub-Sub loop** (`imu_task → estimate_state → control_task → actuator_motor`) on the host. What matches is not just the ESKF math — it is the **whole loop**.
 
 | Shared | Method |
 |--------|--------|
@@ -354,7 +354,7 @@ So "passes in SILS" **means the same behavior on hardware** (loop-level Code Ide
 
 ### Principle 2: Parameter Identity
 
-**SILS and real hardware both read `params.cpp` (`param_vars` + `table[]`) as the single source of truth.** (The original `params.def` X-macro codegen was removed in Phase 5b — it had drifted out of use; `params.cpp`'s explicit table is the SSOT. Parameter Identity is unchanged: both builds reference-compile `params.cpp`.) Tuning values flow between SILS and real-hardware NVS through the same schema.
+**SILS and real hardware both read `params.cpp` (`param_vars` + `table[]`) as the single source of truth.** (`params.cpp`'s explicit table is the SSOT; there is no `params.def` X-macro codegen. Parameter Identity holds: both builds reference-compile `params.cpp`.) Tuning values flow between SILS and real-hardware NVS through the same schema.
 
 ### Principle 3: Model Fidelity (post-flight, after-the-fact)
 
@@ -362,7 +362,7 @@ So "passes in SILS" **means the same behavior on hardware** (loop-level Code Ide
 
 Raising Model Fidelity (how well the physics matches reality) begins **only after the first real flight** — an after-the-fact refinement (the `[5]→[2]` path in RESET_PLAN §3). Real logs are used **only** there, never as a prerequisite for SILS. The wider the SILS model's trustworthy envelope, the higher the certainty of "tuned in SILS → flies on hardware."
 
-> **[Updated 2026-07-22]** vehicle has flown and real flight logs have accumulated, so the "post-flight" phase of this principle (Phase 5) is **now in progress**. SILS plant fidelity targets, the model-identity gate, and the retrofit backlog are defined in `docs/architecture/simulation-policy.md` (the authoritative simulation policy).
+> vehicle has flown and real flight logs have accumulated, so the "post-flight" phase of this principle (Phase 5) is **now in progress**. SILS plant fidelity targets, the model-identity gate, and the retrofit backlog are defined in `docs/architecture/simulation-policy.md` (the authoritative simulation policy).
 
 ---
 
@@ -398,7 +398,7 @@ Layer 4: POSITION_HOLD           ← + Flow + position PID
 
 ### Validating Each Layer via SILS Gates
 
-Each layer is first validated against the **physics-truth SILS** (RESET_PLAN) and must clear gates G1–G4 (RESET_PLAN §4) before going to hardware. There is no dependence on the old SILS's control-test-level numbering like L1–L4.
+Each layer is first validated against the **physics-truth SILS** (RESET_PLAN) and must clear gates G1–G4 (RESET_PLAN §4) before going to hardware. There is no dependence on a control-test-level numbering like L1–L4.
 
 **SILS Layer 1 ≡ real ACRO structurally.** A rate PID that passes the SILS gates should pass real ACRO; if it does not, the plant model or the synthetic-sensor noise model has diverged from reality (RESET_PLAN §3 differential diagnosis).
 
@@ -410,7 +410,7 @@ Each layer is first validated against the **physics-truth SILS** (RESET_PLAN) an
 
 Overall order: **① build the SILS → ② resume vehicle development → ③ fly in SILS → ④ real flight.**
 
-- **Phase 0**: Clean slate (achieved) — design docs + skeleton + ESKF/PID done; **old SILS fully removed**. The old SILS's recorded results (L1–L4, 2.27°/44 mm) belonged to the deleted SILS and are dropped from current results.
+- **Phase 0**: Clean slate (achieved) — design docs + skeleton + ESKF/PID done; results of the old SILS (L1–L4, 2.27°/44 mm) are not part of the current results.
 - **Phase 1**: Rebuild the physics-based SILS (highest priority) — per RESET_PLAN P1–P4: integrate MuJoCo, rebuild the ESP-IDF shim, run the real loop on the host, finish the firmware last mile (mixer, motor output, estimator/controller factory, `@design` → `[OK]`). Gate: current ESKF+PID hovers in SILS + a complementary filter swaps in with no bench change.
 - **Phase 2**: HAL connection (hardware comes alive)
 - **Phase 3**: First real flight — ACRO identification (key milestone)

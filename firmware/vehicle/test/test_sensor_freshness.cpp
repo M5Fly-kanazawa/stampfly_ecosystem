@@ -380,7 +380,7 @@ TEST(zero_stamp_after_nonzero_is_a_new_sample)
     watch.observe(kStaleWindowUs + 100u, 0u);         // unchanged 0 now ages normally / 変化なしの 0 は通常どおり経過
     ASSERT_TRUE(watch.isSilent(kStaleWindowUs));
     // Before any non-zero stamp, 0 is still "never published".
-    // 0 以外を一度も見ていなければ、0 は従来どおり「未発行」。
+    // 0 以外を一度も見ていなければ、0 は引き続き「未発行」。
     sf::SilenceWatch fresh_boot;
     fresh_boot.observe(100u, 0u);
     ASSERT_TRUE(fresh_boot.isSilent(kStaleWindowUs));

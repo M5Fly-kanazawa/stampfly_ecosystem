@@ -135,150 +135,92 @@ void topics_init()
 namespace param_vars {
     // Rate control
     // Rate gains are PHYSICAL [Nm/(rad/s)] (the mixer is a B^-1 allocation,
-    // actuator.cpp). Values are the FLIGHT-PROVEN legacy vehicle/ gains
-    // (config.hpp rate_control, physical-units mode) — directly transferable
-    // because both firmwares share the same loop structure (Tustin PID with
-    // D-on-M, η=0.125), the same B^-1 mixer geometry (d=0.023 m, and the mixer's
-    // then-assumed κ=0.00971 — see the 2026-07-17 κ-correction note below) and the
-    // same motor curve, so the plant seen by the rate loop is identical.
-    // Earlier SILS-derived near-P values (kp = I/τ_resp, ti=20) are superseded.
-    // レートゲインは物理 [Nm/(rad/s)]（ミキサーは B^-1 配分）。値は旧 vehicle/ の
-    // 「飛行実績ゲイン」（config.hpp rate_control 物理単位モード）— 両ファームは
-    // ループ構造（Tustin PID・測定値微分・η=0.125）、ミキサー幾何（d=0.023m と
-    // 当時のミキサー仮定 κ=0.00971 — 下の 2026-07-17 κ補正ノート参照）、
-    // モータ曲線が同一で、レートループから見たプラントが同じため
-    // そのまま移植できる。以前の SILS 由来 near-P 値（kp=I/τ_resp, ti=20）は置換。
-    // Values are the original M5StampFly (M5Fly-kanazawa) hand-tuned ACRO rate gains,
-    // CONVERTED into this firmware's torque[Nm] form, then VALIDATED in real flight
-    // (2026-06-27, converted gains flew well → adopted as default). Conversion bridges
-    // the two firmwares' output representations: original output is a motor "voltage"
-    // (linear duty = V/V_batt mixer); here the PID output is body torque [Nm] (B^-1 +
-    // omega^2 motor curve). Same rate-error input (rad/s), same loop form (Tustin PID,
-    // D-on-M, eta=0.125, 400Hz), so Ti/Td transfer 1:1 and only Kp is rescaled by
-    // d*g_VT (roll/pitch) or kappa*g_VT (yaw), g_VT=dT/dV@hover=0.0653 N/V. Supersedes
-    // the 2026-06-19 on-board autotune values (roll 3.40e-4/ti0.4, pitch 5.16e-4/ti0.4,
-    // yaw 5.31e-3/ti1.6): vs those, roll/pitch P is ~2.8x with a longer Ti (more low-freq
-    // phase margin in the ~0.9 Hz band), yaw is gentler. See analysis/scripts/
-    // acro_gain_conversion.py + the SILS/linear-margin validation report.
-    // 値はオリジナル M5StampFly（M5Fly-kanazawa）のハンドチューン ACRO レートゲインを本ファームの
-    // トルク[Nm]形へ換算し、実機飛行で検証（2026-06-27 良好→既定採用）。換算は両ファームの出力
-    // 表現の橋渡し（オリジナル＝モータ「電圧」線形ミキサ、本機＝トルク[Nm] の B^-1＋ω²曲線）。
-    // レート誤差入力（rad/s）・ループ形式（Tustin PID・測定値微分・η=0.125・400Hz）が同一ゆえ
-    // Ti/Td はそのまま、Kp のみ d*g_VT（roll/pitch）/ κ*g_VT（yaw）で再尺度（g_VT=0.0653 N/V）。
-    // 2026-06-19 autotune 値を置換: roll/pitch は P が約2.8倍＋Ti 長め（~0.9Hz帯の低周波余裕増）、yaw は穏やか。
-    // 2026-07-18 roll MANUAL retune (pilot, in-flight hand tuning after the
-    // wall-crash session): kp=1.0e-3, td=0.001 — "extremely stable" by pilot
-    // assessment. This SUPERSEDES the 2026-07-17 study retune (kp 1.268773e-3,
-    // td 0.02) which had shown a 3-8 Hz roughness reduction at the time but
-    // whose flights later measured 2.4-2.7x the adoption-time reference even
-    // with identical gains (session-to-session drift — craft condition and/or
-    // environment; see the 2026-07-18 wall-crash diagnosis). td=0.001 at 400 Hz
-    // is effectively D-off (incomplete-derivative alpha≈0.1), i.e. the pilot's
-    // stable point is a near-PI roll rate loop. History: study retune 07-17 ←
-    // M5StampFly-converted 9.759795e-4 (real-flight validated 2026-06-27) ←
-    // autotune 3.40e-4.
-    // 2026-07-18 ロール手動再調整（パイロット、壁衝突セッション後の飛行中ハンド
-    // チューニング）: kp=1.0e-3, td=0.001 —「極めて安定」（パイロット評価）。
-    // 2026-07-17 のスタディ再調整（kp 1.268773e-3, td 0.02）を置換する。同再調整は
-    // 当時 3-8Hz ざらつき低減を示したが、その後同一ゲインのまま採用時参照の
-    // 2.4-2.7倍へ悪化（セッション間ドリフト=機体コンディション/環境差。2026-07-18
-    // 壁衝突診断参照）。td=0.001 は 400Hz では実質 D オフ（不完全微分 α≈0.1）＝
-    // パイロットの安定点はほぼ PI のレートループ。履歴: スタディ再調整 07-17 ←
-    // M5StampFly 換算 9.759795e-4（2026-06-27 実機検証）← autotune 3.40e-4。
-    // 2026-07-20 pilot direction for the v2026.07.2 release default:
-    // td 0.001 -> 0.002 (kp/ti unchanged). Still near-D-off at 400 Hz,
-    // with twice the derivative time of the 07-18 hand-tune.
-    // 2026-07-20 パイロット指示（v2026.07.2 リリース既定値）: td 0.001→0.002
-    // （kp/ti は変更なし）。400Hz では依然ほぼ D オフだが、07-18 ハンド
-    // チューニングの2倍の微分時間。
-    float rate_roll_kp    = 1.0e-3f;   // pilot manual retune 2026-07-18
+    // actuator.cpp). Values are the original M5StampFly (M5Fly-kanazawa) hand-tuned
+    // ACRO rate gains, CONVERTED into this firmware's torque [Nm] form and VALIDATED
+    // in real flight (roll kp/td excepted: the pilot tunes them in flight, see below).
+    // The conversion bridges the two firmwares' output representations: the original
+    // output is a motor "voltage" (linear duty = V/V_batt mixer); here the PID output
+    // is body torque [Nm] (B^-1 + omega^2 motor curve). The rate-error input (rad/s),
+    // the loop form (Tustin PID, D-on-M, eta=0.125, 400Hz), the mixer geometry
+    // (d=0.023 m) and the motor curve are the same, so the plant seen by the rate loop
+    // is identical: Ti/Td transfer 1:1 and only Kp is rescaled by d*g_VT (roll/pitch)
+    // or kappa*g_VT (yaw), g_VT=dT/dV@hover=0.0653 N/V. Compared with the on-board
+    // autotune values (roll 3.40e-4/ti0.4, pitch 5.16e-4/ti0.4, yaw 5.31e-3/ti1.6),
+    // roll/pitch P is ~2.8x with a longer Ti (more low-freq phase margin in the
+    // ~0.9 Hz band), yaw is gentler. See analysis/scripts/acro_gain_conversion.py +
+    // the SILS/linear-margin validation report.
+    // Roll kp=1.0e-3 and td=0.002 are the pilot's in-flight hand tuning ("extremely
+    // stable" by pilot assessment). A study retune (kp 1.268773e-3, td 0.02) showed a
+    // 3-8 Hz roughness reduction at adoption time, but its later flights measured
+    // 2.4-2.7x the adoption-time reference even with identical gains (session-to-
+    // session drift — craft condition and/or environment), so it is not used.
+    // td=0.002 at 400 Hz is near-D-off, i.e. the pilot's stable point is a near-PI
+    // roll rate loop.
+    // レートゲインは物理 [Nm/(rad/s)]（ミキサーは B^-1 配分）。値はオリジナル M5StampFly
+    // （M5Fly-kanazawa）のハンドチューン ACRO レートゲインを本ファームのトルク[Nm]形へ換算し、
+    // 実機飛行で検証したもの（ロールの kp/td のみ、パイロットが飛行中に調整した値。下記）。
+    // 換算は両ファームの出力表現の橋渡し（オリジナル＝モータ「電圧」線形ミキサ、本機＝
+    // トルク[Nm] の B^-1＋ω²曲線）。レート誤差入力（rad/s）・ループ形式（Tustin PID・測定値
+    // 微分・η=0.125・400Hz）・ミキサー幾何（d=0.023m）・モータ曲線が同一で、レートループから
+    // 見たプラントが同じため、Ti/Td はそのまま、Kp のみ d*g_VT（roll/pitch）/ κ*g_VT（yaw）で
+    // 再尺度（g_VT=0.0653 N/V）。オンボード autotune 値（roll 3.40e-4/ti0.4、pitch 5.16e-4/
+    // ti0.4、yaw 5.31e-3/ti1.6）と比べ、roll/pitch は P が約2.8倍＋Ti 長め（~0.9Hz帯の低周波
+    // 余裕増）、yaw は穏やか。
+    // ロールの kp=1.0e-3・td=0.002 は、パイロットが飛行中に手で調整した値（パイロット評価で
+    // 「極めて安定」）。スタディ再調整（kp 1.268773e-3, td 0.02）は採用時に 3-8Hz ざらつき
+    // 低減を示したが、その後の飛行では同一ゲインのまま採用時参照の 2.4-2.7倍へ悪化した
+    // （セッション間ドリフト=機体コンディション/環境差）ため使わない。td=0.002 は 400Hz では
+    // ほぼ D オフで、パイロットの安定点はほぼ PI のロールレートループ。
+    float rate_roll_kp    = 1.0e-3f;   // pilot in-flight hand tuning
     float rate_roll_ti    = 0.7f;
-    float rate_roll_td    = 0.002f;    // pilot direction 2026-07-20 (release default)
-    float rate_pitch_kp   = 1.426432e-3f;  // M5StampFly-converted, real-flight validated 2026-06-27 (was autotune 5.16e-4)
+    float rate_roll_td    = 0.002f;    // pilot-chosen release default
+    float rate_pitch_kp   = 1.426432e-3f;  // M5StampFly-converted, real-flight validated
     float rate_pitch_ti   = 0.7f;
     float rate_pitch_td   = 0.025f;
-    // 2026-07-17 κ correction: the mixer's torque/thrust ratio was fixed to the
-    // MEASURED κ=6.12e-3 m (was 9.71e-3; actuator.cpp KAPPA). With the old κ the
-    // mixer delivered only κ_true/κ_mixer = 0.6303 of the commanded yaw torque, so
-    // the flight-proven PHYSICAL yaw loop gain was 1.901691e-3 × 0.6303. To keep
-    // that exact loop gain with the corrected mixer, kp is rescaled by κ_new/κ_old:
-    //   1.901691e-3 × (6.12e-3 / 9.71e-3) = 1.198594e-3  [Nm/(rad/s)]
-    // Ti/Td are time constants — unaffected by the κ scale. Roll/pitch use the arm
-    // d (unchanged), so only yaw is rescaled. On REAL hardware `param reset` (or
-    // re-setting rate.yaw.* explicitly) is REQUIRED after flashing this change: an
-    // NVS-saved old kp would run 1.59× the proven loop gain on the corrected mixer.
-    //
-    // 2026-08-03 κ rescale (PURE rescale, not a new physical finding): Ct's
-    // 2026-07-15 thrust-stand value was retracted (no valid simultaneous
-    // voltage/RPM/thrust measurement exists for the new propeller), and the
-    // provisional Ct restores κ=Cq/Ct to 4.10e-3 (actuator.cpp KAPPA; see its
-    // comment for the full provenance chain). Following the SAME
-    // physical-gain-preserving pattern as 2026-07-17, kp is rescaled by the
-    // exact ratio scale = 4.10/6.12 = 0.6699346:
-    //   1.198594e-3 × 0.6699346 = 8.029796e-4  [Nm/(rad/s)]
-    // This keeps the closed-loop duty output IDENTICAL to before 2026-08-03 —
-    // the mixer's KAPPA and this kp move together, so physical yaw torque per
-    // commanded rate error is unchanged. `param reset` (or explicit
-    // rate.yaw.* re-set) is REQUIRED again after flashing this change, for the
-    // same reason as 2026-07-17.
-    // 2026-07-17 κ補正: ミキサーのトルク/推力比を実測 κ=6.12e-3 m へ修正（旧 9.71e-3、
-    // actuator.cpp KAPPA）。旧 κ ではミキサーは指令ヨートルクの 0.6303 倍しか物理トルクを
-    // 出せておらず、飛行実績の「物理」ヨーループゲインは 1.901691e-3 × 0.6303 だった。
-    // 修正後も同一ループゲインを保つため kp を κ_new/κ_old 倍へ再スケール。Ti/Td は
-    // 時定数なので不変、ロール/ピッチはアーム長 d（不変）基準なので対象外。実機は書き込み後
-    // `param reset`（または rate.yaw.* の明示再設定）必須 — NVS の旧 kp のままだと実績の
-    // 1.59 倍のループゲインで飛ぶことになる。
-    //
-    // 2026-08-03 κ再スケール（純粋な再スケールであり新たな物理的知見ではない）:
-    // Ct の2026-07-15 thrust stand値は撤回（新プロペラでの電圧/回転数/推力の有効な
-    // 同時計測が存在しないため）、暫定 Ct により κ=Cq/Ct は 4.10e-3 に戻る
-    // （actuator.cpp KAPPA、詳細な出所は同ファイルのコメント参照）。2026-07-17 と
-    // 同じ「物理ゲイン保存」パターンに従い、kp を厳密な比 scale = 4.10/6.12 =
-    // 0.6699346 で再スケール:
-    //   1.198594e-3 × 0.6699346 = 8.029796e-4  [Nm/(rad/s)]
-    // これにより閉ループの duty 出力は 2026-08-03 以前と完全に恒等——ミキサーの
-    // KAPPA と本 kp が連動して動くため、指令レート誤差あたりの物理ヨートルクは
-    // 不変。2026-07-17 と同じ理由で、書き込み後の `param reset`（または rate.yaw.*
-    // の明示再設定）が再度必須。
-    float rate_yaw_kp     = 8.029796e-4f;  // = 1.198594e-3 (2026-07-17 κ-corrected) × 4.10/6.12 (2026-08-03 κ rescale)
+    // Yaw kp = 8.029796e-4 [Nm/(rad/s)] is proportional to the mixer's torque/thrust
+    // ratio κ=Cq/Ct = 4.10e-3 m (actuator.cpp KAPPA; Cq is measured, Ct is
+    // PROVISIONAL because no valid simultaneous voltage/RPM/thrust measurement exists
+    // for the current propeller — see the KAPPA comment for the provenance). The
+    // flight-proven yaw loop has kp = 1.901691e-3 with the mixer assuming κ=9.71e-3 m;
+    // the mixer divides the commanded torque by κ, so holding kp/κ at that value keeps
+    // the closed-loop duty output per rate error identical to the flight-proven loop:
+    //   1.901691e-3 × (4.10e-3 / 9.71e-3) ≈ 8.029796e-4  [Nm/(rad/s)]
+    // KAPPA and this kp therefore move together: whenever KAPPA changes, kp is
+    // rescaled by the exact κ ratio. Ti/Td are time constants — unaffected by the κ
+    // scale. Roll/pitch use the arm d, so only yaw is rescaled. An NVS-saved kp is not
+    // rescaled: on REAL hardware `param reset` (or re-setting rate.yaw.* explicitly)
+    // is REQUIRED after flashing a changed KAPPA.
+    // ヨー kp = 8.029796e-4 [Nm/(rad/s)] は、ミキサーのトルク/推力比 κ=Cq/Ct = 4.10e-3 m
+    // （actuator.cpp KAPPA。Cq は実測、Ct は現行プロペラで電圧/回転数/推力の有効な同時計測が
+    // ないため暫定値。出所は KAPPA のコメント参照）に比例する。飛行実績のあるヨーループは
+    // κ=9.71e-3 m 仮定のミキサーで kp = 1.901691e-3。ミキサーは指令トルクを κ で割るので、
+    // kp/κ をその値に保てば、レート誤差あたりの閉ループ duty 出力は飛行実績ループと同一:
+    //   1.901691e-3 × (4.10e-3 / 9.71e-3) ≈ 8.029796e-4  [Nm/(rad/s)]
+    // よって KAPPA と本 kp は連動する: KAPPA を変えるときは kp を厳密な κ 比で再スケール
+    // する。Ti/Td は時定数なので κ に依らない。ロール/ピッチはアーム長 d 基準なので対象外。
+    // NVS に保存済みの kp は再スケールされない: 実機では KAPPA を変えて書き込んだ後に
+    // `param reset`（または rate.yaw.* の明示再設定）が必須。
+    float rate_yaw_kp     = 8.029796e-4f;  // = 1.901691e-3 × 4.10/9.71 (kp/κ held at the flight-proven value)
     float rate_yaw_ti     = 0.8f;
     float rate_yaw_td     = 0.01f;
 
     // Yaw torque cap [Nm] for the rate-PID output clamp / anti-windup (loaded by
-    // pid_controller loadParams). Runtime-tunable after the NT-Kanazawa yaw-
-    // saturation diagnosis (2026-06-27 logs): a constant CW/CCW trim asymmetry
-    // plus a few-second aerodynamic disturbance saturated the old cap and the
-    // craft was spun ~180° in yaw. 1.83e-3 was the treatment value = the
-    // old-unit relaxed cap 2.9e-3 × κ_new/κ_old (closed-loop replay of measured
-    // disturbances; see analysis/scripts/yaw_nt_kanazawa/) under the
-    // 2026-07-17..2026-08-02 κ=6.12e-3. The flight-proven-equivalent cap under
-    // that same κ was 1.387e-3 (= old 2.2e-3 × 0.6303) if a fallback is needed.
-    //
-    // 2026-08-03 κ rescale (PURE rescale, same reason as rate_yaw_kp above —
-    // see actuator.cpp KAPPA comment for the Ct-retraction provenance): default
-    // rescaled by 4.10/6.12 = 0.6699346, table max rescaled the same way:
-    //   1.83e-3 × 0.6699346 = 1.226e-3   (default)
-    //   2.1e-3  × 0.6699346 = 1.41e-3    (table max; was ≈ geometric full-scale
-    //                                     2·0.168 N·κ_old = 2.06e-3, now
-    //                                     2·0.168 N·κ_new ≈ 1.38e-3)
-    // This keeps the physical torque cap IDENTICAL to before 2026-08-03 — the
-    // mixer's KAPPA moved together with this cap, so no flight behavior change.
+    // pid_controller loadParams). Runtime-tunable because a constant CW/CCW trim
+    // asymmetry plus a few-second aerodynamic disturbance (NT-Kanazawa yaw-saturation
+    // logs) saturates a tight cap and the craft is spun ~180° in yaw. The default
+    // 1.226e-3 is the relaxed cap for that case: 2.9e-3 in the units of the κ=9.71e-3
+    // mixer × κ/9.71e-3 with κ=4.10e-3 (closed-loop replay of measured disturbances;
+    // see analysis/scripts/yaw_nt_kanazawa/). Like rate_yaw_kp, the cap is
+    // proportional to KAPPA (the mixer's KAPPA and this cap move together), so the
+    // duty-equivalent limit stays the same. The table max 1.41e-3 is about the
+    // geometric full scale 2·0.168 N·κ ≈ 1.38e-3.
     // ヨートルク上限 [Nm]（レートPID出力クランプ/アンチワインドアップ、pid_controller が
-    // 読む）。NT金沢のヨー飽和診断（2026-06-27 ログ）を受けてランタイム調整可能化:
-    // CW/CCW トリム非対称＋数秒持続の空力外乱で旧上限が飽和しヨーが約180°回された。
-    // 1.83e-3 は治療値＝旧単位の緩和上限 2.9e-3 × κ_new/κ_old（実測外乱の閉ループ
-    // 再生シム: analysis/scripts/yaw_nt_kanazawa/）、2026-07-17〜2026-08-02の
-    // κ=6.12e-3 下での値。同κ下での飛行実績等価は 1.387e-3（旧 2.2e-3 × 0.6303）。
-    //
-    // 2026-08-03 κ再スケール（純粋な再スケール、理由は上の rate_yaw_kp と同じ——
-    // Ct撤回の経緯は actuator.cpp KAPPA コメント参照）: 既定値・テーブル最大値とも
-    // 4.10/6.12 = 0.6699346 で再スケール:
-    //   1.83e-3 × 0.6699346 = 1.226e-3   （既定値）
-    //   2.1e-3  × 0.6699346 = 1.41e-3    （テーブル最大値。旧κでの幾何フルスケール
-    //                                      2·0.168N·κ_old≈2.06e-3 相当だったが、
-    //                                      新κでは 2·0.168N·κ_new≈1.38e-3）
-    // 物理トルク上限は2026-08-03以前と完全に恒等——ミキサーのKAPPAと本上限が連動して
-    // 動くため、飛行挙動の変化はない。
+    // 読む）。ランタイム調整可能: CW/CCW トリム非対称＋数秒持続の空力外乱（NT金沢のヨー
+    // 飽和ログ）が厳しい上限を飽和させ、ヨーが約180°回されるため。既定 1.226e-3 はその
+    // 場合の緩和上限で、κ=9.71e-3 ミキサーの単位での 2.9e-3 × κ/9.71e-3（κ=4.10e-3）
+    // （実測外乱の閉ループ再生シム: analysis/scripts/yaw_nt_kanazawa/）。rate_yaw_kp と
+    // 同様に上限も KAPPA に比例し（ミキサーの KAPPA と本上限は連動）、duty 換算の上限は
+    // 不変。テーブル最大値 1.41e-3 は幾何フルスケール 2·0.168N·κ ≈ 1.38e-3 程度。
     float rate_yaw_max_torque = 1.226e-3f;
 
     // Scheduled autotune (solo pilot, hands-free): a single operator cannot type
@@ -333,21 +275,20 @@ namespace param_vars {
     // Estimator selection (RESET_PLAN P2: replaceable estimation). The IMU task's
     // factory reads this: 0 = ESKF (15-state), 1 = complementary filter,
     // 2 = SNN (CUBA-LIF, UNTRAINED Stage 1 wiring skeleton — Stroobants et al.
-    // 2025 port, arXiv:2411.13945, added 2026-09-17). The SILS bench swaps
-    // estimators via this parameter alone — no code change.
+    // 2025 port, arXiv:2411.13945). The SILS bench swaps estimators via this
+    // parameter alone — no code change.
     // 推定器の選択（P2: 差し替え可能）。IMU タスクのファクトリが読む: 0=ESKF, 1=相補,
     // 2=SNN（CUBA-LIF、未学習のStage1配線骨格 — Stroobants et al. 2025 移植,
-    // arXiv:2411.13945、2026-09-17追加）。
+    // arXiv:2411.13945）。
     int32_t estimator_type = 0;
 
     // Controller selection (0 = PID [default], 1 = SNN — CUBA-LIF, UNTRAINED
-    // Stage 1 wiring skeleton, added 2026-09-17 alongside estimator.type==2,
-    // same port). The control task's factory (sf::app::stock::controller())
-    // reads this every call, same pattern as estimator.type.
+    // Stage 1 wiring skeleton, same port as estimator.type==2). The control task's
+    // factory (sf::app::stock::controller()) reads this every call, same pattern as
+    // estimator.type.
     // コントローラの選択（0=PID[既定], 1=SNN — CUBA-LIF、未学習のStage1配線
-    // 骨格。estimator.type==2 と同時に2026-09-17追加、同じ移植元）。制御
-    // タスクのファクトリ（sf::app::stock::controller()）が呼び出し毎に読む
-    // （estimator.type と同じ流儀）。
+    // 骨格。estimator.type==2 と同じ移植元）。制御タスクのファクトリ
+    // （sf::app::stock::controller()）が呼び出し毎に読む（estimator.type と同じ流儀）。
     int32_t controller_type = 0;
 
     // Telemetry WiFi mode (boot-time, sf_comm initWifi): 0 = STA — join the
@@ -385,17 +326,18 @@ namespace param_vars {
     // 本当に必要かつ周期ストールを許容できる時のみ ON。恒久対策(将来)=RAM 緩衝し DISARM で書込。
     int32_t log_blackbox_enable = 0;
 
-    // Attitude control. att.ti 4.0->2.0 (2026-06-22): pilot-preferred on hardware — a
-    // faster attitude integral firms up the tilt-hold feel. (A wobble-flight ID showed
-    // the loop-relevant tilt achievement is ~0.58 at the POS_HOLD band, capped by the
-    // real motor torque effectiveness ~0.4-0.7x; ti=2 lifts the low-frequency end. The
-    // measured POS_HOLD drift RMS was marginally looser (16->20 mm, within flight-to-
-    // flight scatter) but the pilot prefers the firmer ti=2 response.) Keep initializer
-    // == table default below.
-    // 姿勢制御。att.ti 4.0→2.0（2026-06-22）: 実機でパイロットが好む — 速い姿勢積分で傾き保持の
+    // Attitude control. att.ti = 2.0 (rather than 4.0): pilot-preferred on hardware —
+    // a faster attitude integral firms up the tilt-hold feel. (A wobble-flight ID
+    // showed the loop-relevant tilt achievement is ~0.58 at the POS_HOLD band, capped
+    // by the real motor torque effectiveness ~0.4-0.7x; ti=2 lifts the low-frequency
+    // end. The measured POS_HOLD drift RMS with ti=2 was marginally looser than with
+    // ti=4 (16->20 mm, within flight-to-flight scatter) but the pilot prefers the
+    // firmer ti=2 response.) Keep initializer == table default below.
+    // 姿勢制御。att.ti = 2.0（4.0 ではなく）: 実機でパイロットが好む — 速い姿勢積分で傾き保持の
     // 手応えが締まる。（ウォブル同定で POS_HOLD 帯の傾き達成度 ~0.58、実機トルク効き ~0.4-0.7倍で
-    // 頭打ち。ti=2 は低域を持ち上げる。POS_HOLD ドリフト RMS は僅かに緩む計測（16→20mm、飛行間
-    // ばらつき内）だが、締まった ti=2 の応答をパイロットが好む。）下の table 既定と一致させる。
+    // 頭打ち。ti=2 は低域を持ち上げる。ti=2 の POS_HOLD ドリフト RMS は ti=4 より僅かに緩い計測
+    // （16→20mm、飛行間ばらつき内）だが、締まった ti=2 の応答をパイロットが好む。）下の table
+    // 既定と一致させる。
     float att_roll_kp     = 5.0f;
     float att_roll_ti     = 2.0f;
     float att_roll_td     = 0.04f;
@@ -431,24 +373,20 @@ namespace param_vars {
 
     // Heading hold (STABILIZE+, yaw stick neutral): P gain [1/s] on the estimator
     // yaw and the correction turn-rate limit [rad/s]. kp=0 disables the hold.
-    // Defaults from the 2026-06-11 flight-log replay (excursion 12.3°→5.7° mean).
+    // Defaults from flight-log replay (mean excursion 12.3°→5.7°).
     // ヘディングホールド（STABILIZE 以上・ヨースティック中立時）: 推定ヨー角への
-    // P ゲイン [1/s] と補正回頭率上限 [rad/s]。kp=0 で無効。既定値は 2026-06-11 の
-    // フライトログ再生で決定（方位ずれ平均 12.3°→5.7°）。
+    // P ゲイン [1/s] と補正回頭率上限 [rad/s]。kp=0 で無効。既定値はフライトログ再生で
+    // 決定（方位ずれ平均 12.3°→5.7°）。
     float att_yawhold_kp       = 3.0f;
     float att_yawhold_rate_max = 2.0f;
 
     // Altitude control — cascade alt → vertical-velocity → thrust [N].
-    // Values are the FLIGHT-PROVEN legacy vehicle/ gains (config.hpp
-    // altitude_control, "PI-v1": alt 0.6/7.0 → vel 0.1/2.5). The legacy velocity
-    // loop also output physical thrust [N] (VEL_OUTPUT_MAX 0.15 N), so the units
-    // match and the gains transfer 1:1. The earlier, stronger SILS-tuned values
-    // (1.5/8 → 0.3/2) are superseded by the hardware-proven set.
-    // 高度制御 — カスケード 高度→鉛直速度→推力[N]。値は旧 vehicle/ の飛行実績ゲイン
-    // （config.hpp altitude_control「PI-v1」: alt 0.6/7.0 → vel 0.1/2.5）。旧の速度
-    // ループも物理推力[N]出力（VEL_OUTPUT_MAX 0.15N）で単位が一致し、そのまま移植
-    // できる。以前の強めの SILS 調整値（1.5/8 → 0.3/2）は実機実績値で置換。
-    // alt.kp 0.6->0.45 (2026-06-22): real-flight tuned to damp a slow altitude bob.
+    // Values are the flight-proven gains of the original firmware (config.hpp
+    // altitude_control, "PI-v1": alt 0.6/7.0 → vel 0.1/2.5). Its velocity loop also
+    // output physical thrust [N] (VEL_OUTPUT_MAX 0.15 N), so the units match and the
+    // gains transfer 1:1. They are used instead of the stronger SILS-tuned values
+    // (1.5/8 → 0.3/2) because they are hardware-proven.
+    // alt.kp = 0.45 (the proven set has 0.6): real-flight tuned to damp a slow altitude bob.
     // The bob is the altitude loop being marginally under-damped against the ~110 ms
     // MOTOR/PROP ACTUATION lag (thrust cmd -> actual vertical accel, MEASURED from a
     // hover log; the ToF at 30 Hz and the ESKF vertical velocity are both clean/un-lagged,
@@ -456,98 +394,93 @@ namespace param_vars {
     // crossover -> more phase margin against the lag -> the bob damps. Sweet spot: a sim
     // sweep + flight both put the best damping at 0.45 (0.4/0.35 are worse; raising
     // alt.vel.kp HURTS because the damping path sees the same actuation lag). Real flight:
-    // altitude RMS 53->33 mm (-38%), period 5->11.5 s. Residual ~±6 cm long-period bob is
-    // the actuation-lag limit (hardware). KEEP EQUAL to the table default. See
-    // poshold_accel_compensation.md remaining issue #7.
-    // alt.kp 0.6→0.45（2026-06-22）: 遅い高度上下動を減衰させる実機調整。上下動は高度ループが
+    // altitude RMS 53 mm at 0.6 vs 33 mm at 0.45 (-38%), period 5 vs 11.5 s. Residual
+    // ~±6 cm long-period bob is the actuation-lag limit (hardware). KEEP EQUAL to the
+    // table default. See poshold_accel_compensation.md remaining issue #7.
+    // 高度制御 — カスケード 高度→鉛直速度→推力[N]。値はオリジナルファームの飛行実績ゲイン
+    // （config.hpp altitude_control「PI-v1」: alt 0.6/7.0 → vel 0.1/2.5）。その速度ループも
+    // 物理推力[N]出力（VEL_OUTPUT_MAX 0.15N）で単位が一致し、そのまま移植できる。強めの SILS
+    // 調整値（1.5/8 → 0.3/2）ではなく、実機実績のあるこの値を使う。
+    // alt.kp = 0.45（実績値は 0.6）: 遅い高度上下動を減衰させる実機調整。上下動は高度ループが
     // モータ/プロペラの応答遅れ ~110ms（推力指令→実鉛直加速度、ホバーログで実測。ToF 30Hz も
     // ESKF 鉛直速度も健全・無遅れゆえ遅れは推力経路）に対し減衰不足なため。alt.kp を下げると
     // ループのクロスオーバーが下がり位相余裕が増えて上下動が減衰。最適点は sim+実機とも 0.45
     // （0.4/0.35 は悪化、alt.vel.kp を上げるのは逆効果＝減衰経路が同じ遅れを見るため）。実機:
-    // 高度 RMS 53→33mm(−38%)、周期 5→11.5s。残る±6cm 長周期はアクチュエーション遅れの限界（ハード）。
+    // 高度 RMS は 0.6 で 53mm、0.45 で 33mm(−38%)、周期 5s→11.5s。残る±6cm 長周期はアクチュエーション
+    // 遅れの限界（ハード）。table 既定と必ず一致させる。poshold_accel_compensation.md 残課題 #7 参照。
     float alt_alt_kp      = 0.45f;
     float alt_alt_ti      = 7.0f;
     float alt_vel_kp      = 0.1f;
     float alt_vel_ti      = 2.5f;
     // Phase-scheduled hover-only vel-loop Ti (VerticalPhase::Airborne).
-    // DEFAULT 2.5 = no-op (reverted 2026-07-18 by pilot operational decision,
-    // same day as the brief default-1.5 promotion; 1.5 remains the
-    // flight-validated opt-in, especially in combination with the DOB).
-    // 既定2.5=no-op（2026-07-18 パイロット運用判断で同日中の既定1.5昇格を取り消し。
-    // 1.5は実飛行検証済みのopt-in値のまま、特にDOB併用時に有効）。Rationale: real
-    // hover shows low-freq battery-sag thrust disturbance that a shorter Ti
-    // rejects, but a uniformly shorter alt_vel_ti worsens auto-takeoff
+    // DEFAULT 2.5 = no-op (same as alt_vel_ti); 1.5 is the flight-validated opt-in,
+    // especially in combination with the DOB.
+    // Rationale: real hover shows low-freq battery-sag thrust disturbance that a
+    // shorter Ti rejects, but a uniformly shorter alt_vel_ti worsens auto-takeoff
     // capture overshoot (integrator windup, +60% in sim/flight). Splitting
     // Ti by phase (climb=alt_vel_ti, hover=alt_vel_ti_hover) keeps
     // TakeoffClimb unchanged (SILS isolation proof: takeoff overshoot
-    // unchanged 9.96→9.22 cm with ti_hover=1.5). Flight A/B 2026-07-17
+    // 9.96 cm vs 9.22 cm with ti_hover=1.5). Flight A/B
     // (logs 224906/231940): standalone effect is band reshaping (~neutral
-    // total std) — but WITH the altitude DOB (altitude.dob.fc, default-on
-    // since 2026-07-18) the 1.5/2.5 choice matters: same-log replay gives
+    // total std) — but WITH the altitude DOB (altitude.dob.fc=1.5) the 1.5/2.5
+    // choice matters: same-log replay gives
     // DOB+ti1.5 = 94.2 mm vs DOB+ti2.5 = 107.1 mm, and the -67% flight
-    // validation (log 022929) flew the 1.5 combination. Promoted so a
-    // `param reset` lands on the flight-validated combo.
+    // validation (log 022929) flew the 1.5 combination.
     // See PidController::applyAltVelTiForPhase() (architecture.md INV-1).
     // フェーズ別 hover 専用の速度ループ Ti（VerticalPhase::Airborne）。
-    // 既定1.5（2026-07-18 昇格。旧2.5=no-op）。根拠: 実ホバーの低周波電池電圧低下
+    // 既定2.5=no-op（alt_vel_ti と同じ）。1.5は実飛行検証済みのopt-in値で、特にDOB併用時に有効。
+    // 根拠: 実ホバーの低周波電池電圧低下
     // 外乱は短いTiで除去できるが、alt_vel_ti の一律短縮は自動離陸の捕捉オーバー
     // シュートを悪化させる（積分巻き上がり、シム/実機+60%）。フェーズ分離
     // （climb=alt_vel_ti, hover=alt_vel_ti_hover）で TakeoffClimb は不変
-    // （SILS分離実証: ti_hover=1.5 で離陸OS不変 9.96→9.22cm）。実飛行A/B
-    // 2026-07-17（ログ224906/231940）: 単独では帯域再配分（合計stdほぼ中立）
-    // だが、高度DOB（altitude.dob.fc、2026-07-18から既定有効）併用では 1.5/2.5
+    // （SILS分離実証: 離陸OS 9.96cm に対し ti_hover=1.5 で 9.22cm）。実飛行A/B
+    // （ログ224906/231940）: 単独では帯域再配分（合計stdほぼ中立）
+    // だが、高度DOB（altitude.dob.fc=1.5）併用では 1.5/2.5
     // の差が効く: 同一ログ再生で DOB+ti1.5=94.2mm vs DOB+ti2.5=107.1mm。
-    // −67%の実飛行検証（ログ022929）も 1.5 の組合せで飛行。`param reset` が
-    // 実飛行検証済みの組合せに戻るよう既定へ昇格。
+    // −67%の実飛行検証（ログ022929）も 1.5 の組合せで飛行。
     // PidController::applyAltVelTiForPhase() 参照（architecture.md INV-1）。
     float alt_vel_ti_hover = 2.5f;
     // ALT_HOLD manual stick rates (separately tunable). The throttle stick is
     // spring-centred (centre = hold); push up → climb at climb_rate, push down →
-    // descend at descent_rate. Mirrors the flight-proven legacy vehicle's
-    // MAX_CLIMB_RATE / MAX_DESCENT_RATE (separate constants).
+    // descend at descent_rate. Mirrors the separate MAX_CLIMB_RATE / MAX_DESCENT_RATE
+    // constants of the flight-proven original firmware.
     // ALT_HOLD の手動スティック速度（別々にチューニング可）。スロットルはバネ中央
-    // （中央=ホールド）、上=climb_rate で上昇・下=descent_rate で降下。旧 vehicle の
-    // MAX_CLIMB_RATE / MAX_DESCENT_RATE（別定数）を踏襲。
+    // （中央=ホールド）、上=climb_rate で上昇・下=descent_rate で降下。飛行実績のある
+    // オリジナルファームの MAX_CLIMB_RATE / MAX_DESCENT_RATE（別定数）を踏襲。
     float alt_climb_rate   = 0.5f;   // [m/s]
     float alt_descent_rate = 0.5f;   // [m/s]
 
     // Acceleration-based disturbance observer (DOB) cutoff for the Airborne
-    // altitude vel loop. DEFAULT 0 = DISABLED (reverted 2026-07-18 by pilot
-    // operational decision, same day as the brief default-1.5 promotion —
-    // back to the pre-DOB vertical behavior; opt in per craft with
-    // `param set altitude.dob.fc 1.5`, in-flight over WiFi works too).
-    // 既定0=無効（2026-07-18 パイロット運用判断で同日中の既定1.5昇格を取り消し、
-    // DOB導入前の鉛直挙動へ復帰。機体ごとに `param set altitude.dob.fc 1.5` で
-    // opt-in、飛行中のWiFi設定も可）。
-    // Design: 2026-07-18 sim study (flight-log-driven closed-loop replay,
+    // altitude vel loop. DEFAULT 0 = DISABLED (the vertical behavior without a DOB);
+    // opt in per craft with `param set altitude.dob.fc 1.5`, in-flight over WiFi
+    // works too (0 disables without landing).
+    // Design: sim study (flight-log-driven closed-loop replay,
     // analysis/scripts/alt_dob_design/README.md §5) — clean-hover altitude
     // std -37..-56% predicted; cost is a 0.5-5Hz thrust-command RMS increase
     // (~8% of hover thrust, audible as motor-tone modulation; the flight
     // path itself is SMOOTHER than without DOB). Range [0.2, 5.0] when
     // enabled is enforced by PidController::loadParams() (WARN + clamp).
-    // FLIGHT-VALIDATED 2026-07-18 (log 022929, hands-off POS_HOLD, fc=1.5):
+    // FLIGHT-VALIDATED (log 022929, hands-off POS_HOLD, fc=1.5):
     // alt std 55.2 mm under the same aircon disturbance the no-DOB baseline
     // held at 167.2 mm (-67%, beats the prediction); d_hat clamp saturation
-    // 0%; fc/clamp detune sweep found no better point. Promoted to the
-    // compiled default 2026-07-18 (pilot decision; precedent: roll retune /
-    // yaw kappa defaults after single-craft A/B): SILS passes ALL flight
+    // 0%; fc/clamp detune sweep found no better point. SILS passes ALL flight
     // gates with the DOB enabled, and the inner-loop margins (thrust gain
     // +/-30%, mass +/-10%, delay +50 ms) cover craft-to-craft variation.
-    // Venue-class environments not yet flight-validated — if misbehavior is
-    // seen there (0.5-3 Hz thrust oscillation, alt excursions), set 0.
+    // Venue-class environments are not yet flight-validated with the DOB — if
+    // misbehavior is seen there (0.5-3 Hz thrust oscillation, alt excursions), set 0.
     // 高度速度ループ(Airborne)用の加速度ベース外乱オブザーバ(DOB)カットオフ。
-    // 既定1.5Hz=有効（0で無効。飛行中でもWiFi経由 `param set altitude.dob.fc 0`
-    // で着陸不要の無効化可）。設計: 2026-07-18シム設計スタディ（フライトログ駆動
+    // 既定0=無効（DOBなしの鉛直挙動）。機体ごとに `param set altitude.dob.fc 1.5` で
+    // opt-in、飛行中のWiFi設定も可（0で着陸不要の無効化）。
+    // 設計: シム設計スタディ（フライトログ駆動
     // 閉ループ再生、analysis/scripts/alt_dob_design/README.md §5）— 清浄ホバーで
     // 高度std -37〜-56%予測、代償は0.5-5Hz帯の推力指令RMS増加（ホバー推力の約8%、
     // モータ音の変調として聞こえる。飛行経路自体はDOBなしより滑らか）。有効時の
     // 範囲[0.2,5.0]はPidController::loadParams()が強制（範囲外WARN+クランプ）。
-    // 実飛行検証 2026-07-18（ログ022929、手放しPOS_HOLD、fc=1.5）: 同一エアコン
+    // 実飛行検証（ログ022929、手放しPOS_HOLD、fc=1.5）: 同一エアコン
     // 外乱下で alt std 55.2mm（DOBなし基準167.2mm、−67%＝予測超え）、d̂クランプ
-    // 飽和0%、fc/クランプ掃引に現行超えなし。同日コンパイル既定へ昇格（パイロット
-    // 判断。前例: ロール再調整・ヨーκ修正も単機A/B後に既定値化）: SILSはDOB有効で
+    // 飽和0%、fc/クランプ掃引に現行超えなし。SILSはDOB有効で
     // 全飛行判定PASS、内部ループ余裕（推力ゲイン±30%・質量±10%・遅れ+50ms）が
-    // 個体差をカバー。会場級環境は実飛行未検証 — 異常（0.5-3Hz推力振動・高度逸脱）
+    // 個体差をカバー。会場級環境は DOB での実飛行未検証 — 異常（0.5-3Hz推力振動・高度逸脱）
     // が出たら0にすること。
     float alt_dob_fc = 0.0f;
 
@@ -573,11 +506,11 @@ namespace param_vars {
 
     // Position control. Runtime defaults (these initializers are the boot value
     // when NVS has no saved entry; keep them EQUAL to the table[] default below).
-    // Re-tuned from the first real POS_HOLD flight (2026-06-22): the loop-relevant
+    // Tuned from real POS_HOLD flights: the loop-relevant
     // tilt->measured-velocity gain on hardware is only ~0.4 g, which collapses the
-    // inner velocity loop below the outer position loop and the closed loop slowly
-    // diverges into the wall. vel.kp 0.8->3.0 restores the inner velocity loop's
-    // authority (it had collapsed below the outer loop); pos.kp 1.0->0.4 slows the
+    // inner velocity loop below the outer position loop (with vel.kp 0.8 / pos.kp 1.0
+    // the closed loop slowly diverges into the wall). vel.kp = 3.0 restores the inner
+    // velocity loop's authority; pos.kp = 0.4 slows the
     // outer loop -> cascade separation restored. Robust over K in [2.8,7] / tau in
     // [50,300] ms; SILS pos_* still pass. Tuned over TWO real flights: 0.3/2.0 first
     // stopped the divergence (held ~13 cm), then 0.4/3.0 tightened it (steady-hold
@@ -585,9 +518,10 @@ namespace param_vars {
     // wander is set by the ~0.4 g effective tilt->velocity gain (root cause, separate
     // task: attitude-loop tilt achievement / flow scale). See poshold_loop_design.py.
     // 位置制御。実行時の既定（NVS に保存がなければこの初期化子が起動値。下の table[] 既定と
-    // 必ず一致させる）。初の実機 POS_HOLD 飛行（2026-06-22）から再調整: 実機の実効
-    // 「傾き→速度」ゲインが約 0.4 g しかなく内/外ループの分離が崩れ閉ループが緩やかに発散
-    // して壁へ。vel.kp 0.8→3.0 で内側(速度)ループの権限を回復、pos.kp 1.0→0.4 で外ループを
+    // 必ず一致させる）。実機 POS_HOLD 飛行から調整: 実機の実効
+    // 「傾き→速度」ゲインが約 0.4 g しかなく内/外ループの分離が崩れる（vel.kp 0.8 / pos.kp 1.0
+    // では閉ループが緩やかに発散して壁へ）。vel.kp = 3.0 で内側(速度)ループの権限を回復、
+    // pos.kp = 0.4 で外ループを
     // 遅く → カスケード分離を回復。K∈[2.8,7]/τ∈[50,300]ms でロバスト、SILS pos_* 全 PASS。
     // 実機2飛行で調整: 0.3/2.0 でまず発散を止め（~13cm 保持）、0.4/3.0 で締めた（定常保持の
     // ドリフト RMS 31→16mm・最大 126→83mm、傾きのビビり増なし）。残る揺らぎは ~0.4 g の
@@ -604,12 +538,12 @@ namespace param_vars {
     float pos_stick_vel   = 0.4f;
 
     // Flip maneuver (docs/plans/flip-maneuver-plan.md §3.4 — final defaults
-    // from §5.3's v3 planar-model sweep, 2026-09-16). Read into
+    // from §5.3's v3 planar-model sweep). Read into
     // FlipSequencer::Config by PidController::loadParams(); FlipSequencer
     // itself never touches this param system. Ranges below follow the plan's
     // §3.4/§5.3 sweep windows where one is given.
-    // 宙返りマニューバ（plan §3.4 — §5.3 v3平面モデル掃引の最終既定値、
-    // 2026-09-16）。PidController::loadParams() が FlipSequencer::Config へ
+    // 宙返りマニューバ（plan §3.4 — §5.3 v3平面モデル掃引の最終既定値）。
+    // PidController::loadParams() が FlipSequencer::Config へ
     // 読み込む。FlipSequencer 自身はこの param システムに一切触れない。
     // 下の範囲は plan §3.4/§5.3 の掃引窓がある場合はそれに従う。
     float flip_rate_roll_dps    = 1500.0f;  // [deg/s] peak limit of the planned profile (measured ~+8 %) / 計画プロファイルのピーク上限（計測は約 +8 %）
@@ -641,14 +575,14 @@ namespace param_vars {
     float flip_max_vvel_mps     = 0.2f;     // [m/s] C4 / 実行条件C4
     float flip_cooldown_ms      = 2000.0f;  // [ms] C7, between flips / 実行条件C7、連続起動間隔
 
-    // FLIP master switch. OFF by default: the first hardware flip (Phase 4,
-    // 2026-10-02) failed — the craft went inverted and crashed — and the root
-    // cause analysis is still open. While 0, the controller's flip preflight
+    // FLIP master switch. OFF by default: the flip is not yet validated on hardware
+    // (the first hardware attempt went inverted and crashed, and its root cause is
+    // not yet identified). While 0, the controller's flip preflight
     // reports FlipBlockReason::Disabled, so BOTH the FLIP button and the API
     // `flip` command are rejected. Set 1 (`param set flip.enable 1`, takes
     // effect immediately) only for supervised tests over a safety net.
-    // FLIP のマスタースイッチ。既定は OFF: 実機初回の宙返り（Phase 4、2026-10-02）
-    // は機体が反転して墜落し、原因解析は未了。0 の間は制御器の flip 事前判定が
+    // FLIP のマスタースイッチ。既定は OFF: 宙返りは実機で未検証（実機初回は機体が反転して
+    // 墜落し、原因は未特定）。0 の間は制御器の flip 事前判定が
     // FlipBlockReason::Disabled を返し、FLIP ボタンと API `flip` の「両方」を拒否する。
     // 1 にする（`param set flip.enable 1`、即時反映）のは、ネットを張った監督下の
     // 試験に限る。
@@ -689,32 +623,33 @@ namespace param_vars {
     float eskf_bg_dev_max   = 0.03f;
 
     // ESKF observation noise
-    // tof_noise lowered 0.03→0.01: the flight-log offline replay showed the ToF innovation
+    // tof_noise = 0.01 (not 0.03): the flight-log offline replay showed the ToF innovation
     // NIS ≪ 1 at 0.03 (over-conservative — ToF tracks within <1 cm), so 0.01 trusts ToF more
     // for tighter vertical tracking (altlog REPORT §4).
-    // tof_noise を 0.03→0.01: 実機ログ再生で ToF イノベ NIS≪1（0.03 は保守的すぎ、ToF は
-    // <1cm で追従）→ 0.01 で ToF を信用し鉛直追従を締める。
+    // tof_noise = 0.01（0.03 ではない）: 実機ログ再生で 0.03 では ToF イノベ NIS≪1（保守的すぎ、
+    // ToF は <1cm で追従）→ 0.01 で ToF を信用し鉛直追従を締める。
     float eskf_tof_noise      = 0.01f;
     float eskf_flow_noise     = 0.30f;
     float eskf_baro_noise     = 0.1f;
     float eskf_mag_noise      = 1.0f;
-    // Accel-attitude observation noise σ [m/s²]. History: 0.06→0.8 cured the χ² latch-up
-    // (chi2_latchup_finding). Then 0.8→1.2 from the flight-log offline replay: at 0.8 the
-    // χ² REJECTION on real data is ~10 % (over-rejecting the x-axis 11.9 Hz airframe
-    // vibration), it hits the ideal ~5 % at 1.2, and over-rejects-the-other-way (1.3 %, more
-    // accel-bias drift) at 2.0. 1.2 is the data-optimum; pair it with eskf_accel_att_lpf
-    // (the SILS n2 vibration is isotropic and could not show this — the real x-axis mode is
-    // the driver; see altlog REPORT §3–4).
-    // 0.06→0.8 で χ² ラッチアップ解消、さらに 0.8→1.2 を実機ログ再生で確定: 0.8 は実データで
-    // χ² 棄却 ~10%（x軸 11.9Hz 機体振動を過剰棄却）、1.2 で理想 ~5%、2.0 で過小棄却＋バイアス
-    // ドリフト増。1.2 がデータ最適。eskf_accel_att_lpf と併用（SILS の n2 振動は等方的で実機の
+    // Accel-attitude observation noise σ [m/s²]. 1.2 is the data-optimum from the
+    // flight-log offline replay: at 0.8 the χ² REJECTION on real data is ~10 %
+    // (over-rejecting the x-axis 11.9 Hz airframe vibration), it hits the ideal ~5 % at
+    // 1.2, and over-rejects-the-other-way (1.3 %, more accel-bias drift) at 2.0. Values
+    // as low as 0.06 cause the χ² latch-up (chi2_latchup_finding). Pair it with
+    // eskf_accel_att_lpf (the SILS n2 vibration is isotropic and could not show this —
+    // the real x-axis mode is the driver; see altlog REPORT §3–4).
+    // accel 姿勢観測ノイズ σ [m/s²]。1.2 が実機ログ再生でのデータ最適: 0.8 は実データで
+    // χ² 棄却 ~10%（x軸 11.9Hz 機体振動を過剰棄却）、1.2 で理想 ~5%、2.0 で過小棄却（1.3%）＋
+    // バイアスドリフト増。0.06 のような小さい値は χ² ラッチアップを起こす（chi2_latchup_finding）。
+    // eskf_accel_att_lpf と併用（SILS の n2 振動は等方的で実機の
     // x軸モードを欠くため SILS では出ない）。
     float eskf_accel_att      = 1.2f;
     // Accel-attitude LPF cutoff [Hz] (0 = off). 30 Hz cleans the airframe vibration from the
-    // gravity reference; the offline sweep cut accel-bias drift 0.28→0.18 (12 Hz notch did
-    // NOT help — broadband). Applied to the attitude update only, NOT predict.
+    // gravity reference; in the offline sweep accel-bias drift is 0.18 with it vs 0.28 without
+    // (12 Hz notch did NOT help — broadband). Applied to the attitude update only, NOT predict.
     // accel 姿勢 LPF カットオフ[Hz]（0=無効）。30Hz で重力基準から機体振動を清浄化、掃引で
-    // バイアスドリフト 0.28→0.18（12Hz ノッチは広帯域ゆえ無効）。姿勢更新のみ、predict には不適用。
+    // バイアスドリフトは LPF なし 0.28 に対し 0.18（12Hz ノッチは広帯域ゆえ無効）。姿勢更新のみ、predict には不適用。
     float eskf_accel_att_lpf  = 30.0f;
 
     // ESKF sensor enable
@@ -750,7 +685,7 @@ namespace param_vars {
     // POS_HOLD が飛び去る。フロー速度の α-β トラッカで a_kin を推定（状態=速度+加速度、β 小で
     // 持続ドリフト加速度を単純微分のように washout せず捕捉）、accel-attitude が R^T·a_kin を
     // 差し引き残差を真の姿勢誤差にする。
-    bool  eskf_accel_comp_enable = true;  // on (adopted; SILS clean+N0 all 4 axes hold)
+    bool  eskf_accel_comp_enable = true;  // on (SILS clean+N0 all 4 axes hold)
     float eskf_accel_comp_alpha  = 0.2f;  // α-β velocity gain
     float eskf_accel_comp_beta   = 0.02f; // α-β acceleration gain (small = capture DC drift)
     float eskf_accel_comp_max    = 5.0f;  // [m/s²] physical clamp on a_kin
@@ -839,9 +774,8 @@ static void notifyEstimatorAndControllerReload()
 /// 既定/最小/最大/コールバック付きで結ぶ。追加は param_vars に変数を、ここに行を。
 static const ParamEntry table[] = {
     // Rate control — PHYSICAL gains [Nm/(rad/s)] for the B^-1 mixer (actuator.cpp).
-    // kp = I/τ_resp (τ_resp=0.05s); ti large = near-P inner loop. See the variable
-    // declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
-    // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。kp = 慣性/τ_resp。
+    // See the variable declarations above for the rationale. Max 0.01 = ~25× headroom over kp.
+    // レート制御 — B^-1 ミキサー用の物理ゲイン [Nm/(rad/s)]。根拠は上の変数宣言を参照。
     {"rate.roll.kp",    ParamType::FLOAT, &rate_roll_kp,   1.0e-3f,   0.0f,  0.01f,  &notifyControllerReload},
     {"rate.roll.ti",    ParamType::FLOAT, &rate_roll_ti,   0.7f,      0.01f, 100.0f, &notifyControllerReload},
     {"rate.roll.td",    ParamType::FLOAT, &rate_roll_td,   0.002f,    0.0f,  1.0f,   &notifyControllerReload},
@@ -884,11 +818,11 @@ static const ParamEntry table[] = {
     {"autotune.yaw.reject",  ParamType::FLOAT, &autotune_yaw_reject,  0.0f, 0.0f, 10.0f, nullptr},
 
     // Estimator selection (0 = ESKF, 1 = complementary, 2 = SNN placeholder) —
-    // RESET_PLAN P2 + SNN Stage 1 port (arXiv:2411.13945, 2026-09-17).
+    // RESET_PLAN P2 + SNN Stage 1 port (arXiv:2411.13945).
     {"estimator.type",  ParamType::INT,   &estimator_type, 0.0f,      0.0f,  2.0f,   nullptr},
 
     // Controller selection (0 = PID, 1 = SNN placeholder) — SNN Stage 1 port
-    // (arXiv:2411.13945, 2026-09-17), same pattern as estimator.type.
+    // (arXiv:2411.13945), same pattern as estimator.type.
     {"controller.type", ParamType::INT,   &controller_type,0.0f,      0.0f,  1.0f,   nullptr},
 
     // Telemetry WiFi mode (0 = STA, 1 = SoftAP) — boot-time, no live reload
@@ -930,28 +864,28 @@ static const ParamEntry table[] = {
     {"hover.thrust_corr",     ParamType::FLOAT, &hover_thrust_corr, 1.00f, 0.5f, 2.0f, &notifyControllerReload},
     {"hover.thrust.learn",    ParamType::INT,   &hover_thrust_learn, 1.0f, 0.0f, 1.0f, &notifyControllerReload},
 
-    // Position control. Gains re-tuned from the first real POS_HOLD flight
-    // (2026-06-22, log 20260622T161055): on hardware the loop-relevant
+    // Position control. Gains tuned from real POS_HOLD flights
+    // (log 20260622T161055): on hardware the loop-relevant
     // tilt->measured-velocity gain is only ~0.4 g (vs the g the cascade assumes),
     // because the commanded tilt is not fully achieved/measured and the optical
     // flow under-reads velocity. That collapses the inner (velocity) loop bandwidth
     // below the outer (position) loop and the closed loop slowly diverges
-    // (observed: growing ~0.1 Hz oscillation, +/-0.37->0.62 m, wall strike). Fix
-    // restores cascade timescale separation on the IDENTIFIED plant: raise vel.kp
-    // (0.8->3.0, recovering the inner velocity loop's authority) and lower pos.kp
-    // (1.0->0.4, slowing the outer loop). Robustly stable over K in [2.8,7],
-    // tau in [50,300] ms; SILS pos_* still pass. Real-flight tuned over 2 flights:
+    // (observed with vel.kp 0.8 / pos.kp 1.0: growing ~0.1 Hz oscillation,
+    // +/-0.37->0.62 m, wall strike). The gains restore cascade timescale separation
+    // on the IDENTIFIED plant: a high vel.kp = 3.0 (the inner velocity loop's
+    // authority) and a low pos.kp = 0.4 (slow outer loop). Robustly stable over K in
+    // [2.8,7], tau in [50,300] ms; SILS pos_* pass. Real-flight tuned over 2 flights:
     // 0.3/2.0 first stopped the divergence (~13 cm hold), 0.4/3.0 tightened it
     // (steady-hold drift RMS 31->16 mm, max 126->83 mm). KEEP EQUAL to the
     // initializers above. See analysis/scripts/poshold_loop_design.py + the doc.
-    // 位置制御。初の実機 POS_HOLD 飛行（2026-06-22）から再調整: 実機の「指令傾き→実測
+    // 位置制御。実機 POS_HOLD 飛行から調整したゲイン: 実機の「指令傾き→実測
     // 水平速度」の実効ゲインは約 0.4 g しかなく（傾き未達＋フロー速度の過小読み）、内側
     // (速度) ループ帯域が外側 (位置) ループより下がってカスケードの時間スケール分離が崩れ、
-    // 閉ループが緩やかに発散（~0.1Hz 振動が ±0.37→0.62m に成長し壁に激突）。修正は同定
-    // プラント上で分離を回復: vel.kp を上げ（0.8→3.0、内側ループの権限回復）、pos.kp を下げ
-    // （1.0→0.4、外ループを遅く）。K∈[2.8,7]・τ∈[50,300]ms でロバスト、SILS pos_* 全 PASS。
-    // 実機2飛行で調整: 0.3/2.0 で発散停止（~13cm）、0.4/3.0 で締め（ドリフト RMS 31→16mm・
-    // 最大 126→83mm）。上の初期化子と必ず一致させる。
+    // 閉ループが緩やかに発散（vel.kp 0.8 / pos.kp 1.0 では ~0.1Hz 振動が ±0.37→0.62m に
+    // 成長し壁に激突）。このゲインは同定プラント上で分離を回復する: 高い vel.kp = 3.0
+    // （内側ループの権限）と低い pos.kp = 0.4（外ループを遅く）。K∈[2.8,7]・τ∈[50,300]ms で
+    // ロバスト、SILS pos_* 全 PASS。実機2飛行で調整: 0.3/2.0 で発散停止（~13cm）、0.4/3.0 で
+    // 締め（ドリフト RMS 31→16mm・最大 126→83mm）。上の初期化子と必ず一致させる。
     {"position.pos.kp",   ParamType::FLOAT, &pos_pos_kp,  0.4f,  0.0f, 10.0f,  &notifyControllerReload},
     {"position.pos.ti",   ParamType::FLOAT, &pos_pos_ti,  5.0f,  0.1f, 100.0f, &notifyControllerReload},
     {"position.vel.kp",   ParamType::FLOAT, &pos_vel_kp,  3.0f,  0.0f, 10.0f,  &notifyControllerReload},
@@ -998,11 +932,11 @@ static const ParamEntry table[] = {
     {"eskf.process.accel_noise", ParamType::FLOAT, &eskf_accel_noise, 0.3f,      0.01f,  10.0f, &notifyEstimatorReload},
     {"eskf.process.gyro_bias",   ParamType::FLOAT, &eskf_gyro_bias,   0.000013f, 1e-7f,  0.01f, &notifyEstimatorReload},
     {"eskf.process.accel_bias",  ParamType::FLOAT, &eskf_accel_bias,  0.0001f,   1e-7f,  0.01f, &notifyEstimatorReload},
-    // Min lowered to 0 so eskf.bias.gyro_dev_max=0 FREEZES the gyro bias at the boot
+    // Min is 0 so eskf.bias.gyro_dev_max=0 FREEZES the gyro bias at the boot
     // still-calibration nominal (no in-flight ESKF update reaches the rate loop) — a
-    // diagnostic toggle. Restore 0.03 for normal random-walk tracking.
-    // 最小を0に下げ、=0 で起動静止校正値にジャイロバイアスを凍結（飛行中ESKF更新を
-    // レートループへ反映しない）。診断用トグル。通常は0.03へ戻す。
+    // diagnostic toggle. Use 0.03 for normal random-walk tracking.
+    // 最小が0なので、=0 で起動静止校正値にジャイロバイアスを凍結（飛行中ESKF更新を
+    // レートループへ反映しない）。診断用トグル。通常は0.03で使う。
     {"eskf.bias.gyro_dev_max",   ParamType::FLOAT, &eskf_bg_dev_max,  0.03f,     0.0f, 1.0f,  &notifyEstimatorReload},
 
     // ESKF observation noise
@@ -1285,10 +1219,10 @@ void save()
         const ParamEntry& e = table[i];
         esp_err_t set_err = saveEntryToNvs(handle, e);
 
-        // Count failures instead of silently claiming success — the old code
-        // ignored every nvs_set_* error and logged a bogus "Saved N parameters".
-        // 失敗を数える（黙って成功を装わない）— 旧実装は nvs_set_* のエラーを全て
-        // 無視し、偽の「Saved N parameters」を出していた。
+        // Count failures instead of silently claiming success: an ignored
+        // nvs_set_* error would log a bogus "Saved N parameters".
+        // 失敗を数える（黙って成功を装わない）: nvs_set_* のエラーを無視すると
+        // 偽の「Saved N parameters」を出してしまう。
         if (set_err == ESP_OK) {
             saved++;
         } else {

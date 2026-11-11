@@ -29,7 +29,7 @@
 # は ~0.676 なので、norm 0.54-0.58 は離陸に必要な duty より約35%少ない
 # （simulator/sils/README.md「エミュレータターゲット」節の調査で判明）。
 #
-# Hover-duty derivation (2026-09-04 investigation): alt_flight.scn (vehicle,
+# Hover-duty derivation: alt_flight.scn (vehicle,
 # ALTITUDE_HOLD) settles to a steady per-motor duty of 0.6745-0.6784 (mean 0.6763)
 # while holding altitude flat (alt_band=0.093 m) in [11.0,17.8]s — see
 # the run's flight-log bundle's `motor.csv` columns duty_FR/RR/RL/FL under
@@ -37,7 +37,7 @@
 # IS the SILS Plant's actual hover-equilibrium PWM duty (thrust == weight), so it
 # is the right value to feed directly as workshop's T (unlike vehicle's own
 # throttle-stick convention, which is a THRUST fraction, not a duty).
-# ホバー duty の導出（2026-09-04 調査）: alt_flight.scn（vehicle, ALTITUDE_HOLD）は
+# ホバー duty の導出: alt_flight.scn（vehicle, ALTITUDE_HOLD）は
 # 高度を平坦に保ちながら（alt_band=0.093m, [11.0,17.8]s）モータ duty 0.6745-0.6784
 # （平均0.6763）に収束する — 上記フライトログ一式の `motor.csv` の duty_FR/RR/RL/FL 列参照。この duty こそが
 # SILS Plant の実際のホバー均衡 PWM duty（推力=重量）であり、workshop の T へ
@@ -53,26 +53,25 @@
 # → まだ空中にいる状態で直接 DISARM（モータ停止）し沈降・接地させる。
 #
 # NOTE on landing: an explicit scripted throttle-DOWN descent (duty below hover,
-# held for O(second)s to fly the craft back to the ground) was tried during the
-# investigation and is NOT used here — at this craft's mass (~37 g) even a modest
+# held for O(second)s to fly the craft back to the ground) is NOT used here — at this craft's mass (~37 g) even a modest
 # duty deficit compounds into meters/second of descent rate within under a second
 # (this is why STABILIZE/ACRO have no altitude hold: the pilot corrects
 # continuously in real time, which a static scripted profile cannot replicate) and
-# reliably tripped the IMU impact failsafe (measured 7.6-8.0 G, threshold 3.0 G —
+# reliably trips the IMU impact failsafe (measured 7.6-8.0 G, threshold 3.0 G —
 # sf_failsafe/include/failsafe.hpp's impact_accel_g) on ground contact. Cutting
 # power directly (this scenario's approach) matches the pattern already proven
 # safe by acro_flight.scn (vehicle target) — free-fall from a similar height/
 # velocity regime settles cleanly with no impact alert.
 # 着陸についての注記: スロットルを明示的に下げて着陸させる台本（duty をホバー未満に
-# 数百ms〜1秒程度保持）も調査中に試したが、本機体の質量（~37g）ではわずかな duty
+# 数百ms〜1秒程度保持）は採らない。本機体の質量（~37g）ではわずかな duty
 # 不足でも1秒未満で降下速度が m/s オーダーまで積み上がり（STABILIZE/ACRO に高度
 # ホールドが無い理由そのもの — 実パイロットは常時補正するが静的台本には不可能）、
 # 接地時に IMU 衝撃フェイルセーフ（実測7.6-8.0G、閾値3.0G — sf_failsafe/include/
-# failsafe.hpp の impact_accel_g）を確実に踏んだ。そのため本シナリオでは（電源を
+# failsafe.hpp の impact_accel_g）を確実に踏むため。そのため本シナリオでは（電源を
 # 直接切る＝）DISARM 直行を採用した — acro_flight.scn（vehicle）で既に安全と実証
 # 済みのパターン（近い高度・速度域からの自由落下は衝撃アラート無く収束）と同じ。
 #
-# SKIPPED BY DEFAULT IN `sf sils regression` (2026-09-04): this scenario needs
+# SKIPPED BY DEFAULT IN `sf sils regression`: this scenario needs
 # firmware/workshop/main/user_code.cpp to actually be a rate-control solution
 # (Lesson 5/8) — that file is gitignored and owned by `sf lesson switch`, so a
 # fresh checkout's CMake bootstrap seeds it with the Lesson 0 template (drives no
@@ -89,7 +88,7 @@
 #   sf sils scenario simulator/sils/scenarios/workshop_acro.scn --target workshop
 #   # or: sf sils regression --include-workshop
 #
-# `sf sils regression` での既定スキップ（2026-09-04）: 本シナリオが検証するのは
+# `sf sils regression` での既定スキップ: 本シナリオが検証するのは
 # firmware/workshop/main/user_code.cpp が実際にレート制御の解答（Lesson 5/8）で
 # あることが前提 — このファイルは gitignore 対象で `sf lesson switch` が所有する
 # ため、新規チェックアウトの CMake ブートストラップは Lesson 0 テンプレート

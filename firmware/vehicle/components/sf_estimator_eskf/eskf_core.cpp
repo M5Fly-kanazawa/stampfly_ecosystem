@@ -425,14 +425,14 @@ void EskfCore::scalarUpdate(const float H[N], float innovation, float R_val)
     // vector, (I−Khᵀ)P(I−Khᵀ)ᵀ + R·KKᵀ expands (using hᵀP = wᵀ by symmetry and
     // hᵀPh + R = S) to exactly:
     //   P' = P − K wᵀ − w Kᵀ + S·K Kᵀ
-    // — three rank-1 terms, ~4·N²/2 multiply-adds. The previous literal
-    // (I−KH)P(I−KH)ᵀ double-contraction was O(N⁴) ≈ 54 000 multiply-adds per
+    // — three rank-1 terms, ~4·N²/2 multiply-adds. A literal
+    // (I−KH)P(I−KH)ᵀ double-contraction would be O(N⁴) ≈ 54 000 multiply-adds per
     // scalar observation (flow alone calls this 200×/s).
     // Joseph 共分散更新の「ランク1」展開形。h が行ベクトルのとき
     // (I−Khᵀ)P(I−Khᵀ)ᵀ + R·KKᵀ は（対称性より hᵀP = wᵀ、hᵀPh + R = S を使い）
     // 厳密に P' = P − K wᵀ − w Kᵀ + S·K Kᵀ の3つのランク1項に展開できる
-    // （~4·N²/2 積和）。従来の (I−KH)P(I−KH)ᵀ の逐語的二重縮約は O(N⁴) ≈
-    // 1観測あたり5.4万積和だった（フローだけで毎秒200回呼ぶ）。
+    // （~4·N²/2 積和）。(I−KH)P(I−KH)ᵀ を逐語的に二重縮約すると O(N⁴) ≈
+    // 1観測あたり5.4万積和になる（フローだけで毎秒200回呼ぶ）。
     for (int i = 0; i < N; i++) {
         for (int j = i; j < N; j++) {
             const float val = P_(i, j)
@@ -559,13 +559,13 @@ void EskfCore::vectorUpdate3(const float H[3][N], const float innov[3], float R_
     // sparsity twice: M = K·H is nonzero ONLY in the support columns, so
     // (M·P)(i,j) needs only the support ROWS of P. Those rows are snapshotted
     // first because the in-place update overwrites them. Cost: N·M·3 (build M)
-    // + N·N·M (apply) ≈ 1 600 multiply-adds for M = 6 — the previous literal
-    // expansion of (I−KH) was ~14 000 per call, at 400Hz.
+    // + N·N·M (apply) ≈ 1 600 multiply-adds for M = 6 — a literal
+    // expansion of (I−KH) would be ~14 000 per call, at 400Hz.
     // 共分散更新 P' = (I − K·H)·P = P − (K·H)·P。H の列疎性を二重に利用する:
     // M = K·H の非ゼロはサポート列のみ → (M·P)(i,j) は P のサポート「行」しか
     // 要らない。その行はインプレース更新で上書きされるため先にスナップショット
-    // する。コスト: N·M·3（M 構築）+ N·N·M（適用）≈ M=6 で 1,600 積和 — 従来の
-    // (I−KH) の逐語展開は 1 回あたり ~14,000 積和を 400Hz で回していた。
+    // する。コスト: N·M·3（M 構築）+ N·N·M（適用）≈ M=6 で 1,600 積和 — (I−KH) を
+    // 逐語展開すると 1 回あたり ~14,000 積和（400Hz で呼ぶ）になる。
     // Sized for the worst case n_cols = N (~900B each on the 16KB ImuTask
     // stack); the practical Jacobians here use 3–6 columns.
     // 最悪 n_cols = N でも収まるサイズ（各 ~900B、ImuTask スタックは 16KB）。
@@ -953,13 +953,13 @@ void EskfCore::setSensorEnabled(int group, bool enabled)
     // group: 0=TOF, 1=BARO, 2=MAG calibration gate, 3=FLOW.
     // Group 2 drives the calibration gate (mag_calib_gate_), NOT cfg_.use_mag:
     // the param enable comes from setConfig()/reloadParams(), and writing
-    // cfg_.use_mag here would be undone by the next reload — exactly the bug L-5
-    // fixes. The mag's param enable and calibration gate are separate; mag fuses
+    // cfg_.use_mag here would be undone by the next reload.
+    // The mag's param enable and calibration gate are separate; mag fuses
     // only when both hold. (TOF/BARO/FLOW have a single gate, so they map to cfg_.)
     // group: 0=TOF, 1=BARO, 2=MAG 校正判定, 3=FLOW。group 2 は校正判定
     // (mag_calib_gate_) を駆動し cfg_.use_mag は触らない: param 有効化は
     // setConfig()/reloadParams() 由来で、ここで cfg_.use_mag を書くと次の reload で
-    // 取り消される（L-5 が直すバグそのもの）。mag の param 有効化と校正判定は別物で、
+    // 取り消される。mag の param 有効化と校正判定は別物で、
     // 両方成立時のみ融合する。（TOF/BARO/FLOW は単一判定ゆえ cfg_ に対応。）
     switch (group) {
         case 0: cfg_.use_tof   = enabled; break;
@@ -1023,13 +1023,13 @@ void EskfCore::setAttitudeFromGravity(const Vec3& accel_avg)
     // f = [+g·sinθ, 0, −g·cosθ]. Hence:
     //   roll  = atan2(−ay, −az)   (= φ)
     //   pitch = atan2(+ax, sqrt(ay² + az²))   (= θ)
-    // (The previous atan2(ay, −az) / atan2(−ax, …) returned −φ/−θ — the sign
+    // (atan2(ay, −az) / atan2(−ax, …) would return −φ/−θ — the sign
     // confusion between specific force f and gravity g.)
     // 「加速度計の測定値」の方向から roll/pitch を計算（静止時 f = −重力(機体)）。水平静止で
     // accel_avg ≈ [0,0,−g]。真のロール +φ では f = [0, −g·sinφ, −g·cosφ]、
     // 真のピッチ +θ では f = [+g·sinθ, 0, −g·cosθ]。よって:
     //   roll  = atan2(−ay, −az)（= φ）、pitch = atan2(+ax, √(ay²+az²))（= θ）。
-    // （従来の atan2(ay,−az)/atan2(−ax,…) は −φ/−θ を返していた — 加速度計の測定値 f と重力 g の
+    // （atan2(ay,−az)/atan2(−ax,…) は −φ/−θ を返してしまう — 加速度計の測定値 f と重力 g の
     // 符号取り違え。）
     float roll  = atan2f(-accel_avg.y, -accel_avg.z);
     float pitch = atan2f(accel_avg.x,

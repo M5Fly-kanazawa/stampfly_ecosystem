@@ -1,5 +1,5 @@
-# battery_emergency_flying.scn — the battery EMERGENCY while FLYING in ALT_HOLD: LANDING (the rule that no scenario ran before)
-#                                ALT_HOLD の FLYING 中の電池の EMERGENCY: LANDING（これまでシナリオでは確かめられていなかった規則）
+# battery_emergency_flying.scn — the battery EMERGENCY while FLYING in ALT_HOLD: LANDING
+#                                ALT_HOLD の FLYING 中の電池の EMERGENCY: LANDING
 #
 # ALT_HOLD auto-takeoff, the TAKEOFF completes at about 9.2 s (FLYING at 0.5 m), 3 s of hover, then the pack voltage is held at 2.99 V (event `battery`). Spec under test (detailed_design.md §3.1,
 # "電池の EMERGENCY" rows):

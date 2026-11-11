@@ -19,10 +19,10 @@ order "NO forced landing, fly on" "Mode change to POS_HOLD refused"
 order "Mode change to POS_HOLD refused" "ARM rejected: downward ToF is silent"
 # The pilot keeps the craft in the air after the silence is judged (7.8 s): the hover holds ~0.5 m
 # (measured alt_min 0.47 m in 8.0-10.0 s) and no forced descent happens until the pilot lowers the
-# throttle at 10.0 s. Without the fix of this stage a LANDING would have cut the pilot out.
+# throttle at 10.0 s. A forced LANDING would cut the pilot out.
 # 出力停止の判定（7.8 s）の後もパイロットは機体を空中に保つ: ホバーは約 0.5 m を保ち
 # （8.0〜10.0 s の alt_min 実測 0.47 m）、パイロットが 10.0 s にスロットルを下げるまで強制降下は
-# 起きない。この段階の修正が無ければ LANDING がパイロットを締め出す。
+# 起きない。強制の LANDING はパイロットを締め出す。
 metric alt_min > 0.35 in 8.0 10.0
 # On the floor after the pilot's landing (truth 0.021 m resting).
 # パイロットの着陸の後は床の上（真値 0.021 m で静止）。

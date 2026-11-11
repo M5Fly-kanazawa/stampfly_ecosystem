@@ -374,8 +374,8 @@ void DataStream::appendFlightFlagsEntry(datastream::UnifiedPacketBuilder& builde
 // -----------------------------------------------------------------------------
 void DataStream::appendPilotAndReferenceEntries(datastream::UnifiedPacketBuilder& builder)
 {
-    // Pilot input (50Hz cadence — one per packet, like the old vehicle).
-    // パイロット入力（50Hz — 旧 vehicle と同じくパケットあたり 1 件）。
+    // Pilot input (50Hz cadence — one per packet, like another flight-proven firmware).
+    // パイロット入力（50Hz — 飛行実績のある別ファームと同じくパケットあたり 1 件）。
     const CommandSetpoint setpoint = command_setpoint.latest();
     datastream::WireControl control = {};
     control.timestamp_us = setpoint.timestamp;

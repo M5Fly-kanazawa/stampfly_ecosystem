@@ -1,9 +1,9 @@
 # alt_recenter_gate.scn — throttle re-center gate + symmetric climb/descend (Case A)
-#                         スロットル再センターロック＋対称な上昇/降下（Case A）  (redesign 2026-06-14)
+#                         スロットル再センターロック＋対称な上昇/降下（Case A）
 #
-# Spec under test (2026-06-14 redesign — symmetric ALT_HOLD throttle):
+# Spec under test (symmetric ALT_HOLD throttle):
 #   The throttle stick is spring-centred: CENTER (raw 2048) = HOLD, UP (>2048) = climb,
-#   DOWN (<2048) = descend — the stick moves the TARGET altitude (legacy-vehicle scheme).
+#   DOWN (<2048) = descend — the stick moves the TARGET altitude.
 #   After the ARM-triggered auto-takeoff captures 0.5 m, a re-center gate keeps the stick
 #   from commanding altitude until it first returns to the center deadzone (= the spring
 #   rest), so an off-center stick at takeoff cannot jump the altitude.
@@ -14,9 +14,9 @@
 #     H: throttle CENTER (2048) → HOLD the new (lower) altitude.
 #   (Throttle for ALT_HOLD is the SYMMETRIC axis (raw-2048)/2048 ∈ [-1,+1]; center 2048=0.)
 #
-# 検証する仕様（2026-06-14 再設計 — ALT_HOLD の対称スロットル）:
+# 検証する仕様（ALT_HOLD の対称スロットル）:
 #   スロットルはバネ中央: 中央(raw 2048)=ホールド、上(>2048)=上昇、下(<2048)=降下 —
-#   スティックで目標高度を動かす（旧 vehicle 方式）。ARM トリガ自動離陸が 0.5 m を捕捉した後、
+#   スティックで目標高度を動かす。ARM トリガ自動離陸が 0.5 m を捕捉した後、
 #   スロットル再センターロックがスティックを「中央デッドゾーン（=バネ静止）に戻るまで」無効化し、離陸時に
 #   中央外のスティックが高度をジャンプさせないようにする。
 #     D: 離陸の全行程でスロットルを上げたまま(4095) → ロック中 → 0.5 m 保持（無ジャンプ）。

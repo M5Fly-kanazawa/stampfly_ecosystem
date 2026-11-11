@@ -101,36 +101,31 @@ inline constexpr uint8_t kPktUnified   = 0x50;  // 50Hz batched packet
 /// 帯域設計。
 inline constexpr int    kSamplesPerPacket = 8;
 
-/// Datagram size cap. The legacy firmware used 1024, but delivering EVERY flow
-/// sample (2 entries/packet at 100Hz) pushed the typical payload to ~1040B and
-/// the LAST entry (mag, 18B) was silently rejected on every packet — measured
-/// on hardware as "Mag: 0 samples". 1200 left ~160B of entry headroom.
-/// Raised to 1300 when the 400Hz duty entry (kPktDuty400) was added: fixed
-/// part 916B (header+ImuEskf+PosVel+RateRef blocks) + entry_count 1B + duty
-/// entry 66B (2B [id][size] + 64B payload) = 983B, leaving ~130B for the
-/// other sensor entries (control 22B, ctrl_ref 32B, flow/tof/baro/mag ~70B
-/// combined) that used to fit in the old 1200B cap — and still ~170B of
+/// Datagram size cap: 1400B. Delivering EVERY flow sample (2 entries/packet at
+/// 100Hz) alone pushes the typical payload to ~1040B, so a 1024B cap silently
+/// rejects the LAST entry (mag, 18B) on every packet ("Mag: 0 samples" on
+/// hardware). The cap must cover the fixed part 916B (header+ImuEskf+PosVel+
+/// RateRef blocks) + entry_count 1B + duty entry 66B (2B [id][size] + 64B
+/// payload) + control_output entry 130B (2B [id][size] + 128B payload = float4
+/// x 8 samples) + the other sensor entries (control 22B, ctrl_ref 32B,
+/// flow/tof/baro/mag ~70B combined) = 1237B typical, and 1400B leaves ~163B of
 /// headroom under the WiFi MTU (1472) and the PC capture buffer (2048).
-/// データグラム上限。旧ファームは 1024 だったが、フロー全量配送（100Hz で 1 パケット
-/// 2 エントリ）で典型ペイロードが ~1040B となり、最後に積む mag（18B）が毎パケット
-/// 黙って弾かれた — 実機計測で「Mag: 0 サンプル」。1200 でエントリ余白 ~160B。
-/// 400Hz duty エントリ（kPktDuty400）追加に伴い 1300 へ引き上げ: 固定部 916B
-/// （ヘッダ+ImuEskf+PosVel+RateRefブロック）+ entry_count 1B + duty エントリ
-/// 66B（[id][size] 2B + payload 64B）= 983B、旧 1200B 上限に収まっていた
-/// 他のセンサエントリ（control 22B、ctrl_ref 32B、flow/tof/baro/mag 計 ~70B）用に
-/// ~130B、さらに WiFi MTU（1472）・PC 受信バッファ（2048）に対して ~170B の
-/// 余白を残す。
-/// 400Hz control_output エントリ（kPktCtrlOutput400）追加に伴い 1400 へ再度
-/// 引き上げ: 前回の典型合計 1107B + 新エントリ 130B（[id][size] 2B + payload
-/// 128B = float4 × 8サンプル）= 1237B、旧 1300B 上限に対して ~63B しか余白が
-/// 無かったため、WiFi MTU（1472）・PC 受信バッファ（2048）に対する余白を
-/// ~163B に戻す。
-/// The 50Hz ToF-silence entry (kPktToFSilence, 2B + 19B = 21B) raised the worst case from 1296B to 1317B,
-/// which still leaves 83B under this cap (test_main.cpp, wire_unified_worst_case_fits builds that worst
-/// case through the real builder and asserts that every entry is accepted).
-/// 50Hz の ToF 出力停止エントリ（kPktToFSilence、2B + 19B = 21B）で最悪ケースは 1296B から 1317B に
-/// 増えたが、この上限まで 83B の余裕が残る（test_main.cpp の wire_unified_worst_case_fits が、実際の
-/// ビルダでこの最悪ケースを組み、全エントリが受理されることを検査する）。
+/// The 50Hz ToF-silence entry (kPktToFSilence, 2B + 19B = 21B) brings the worst
+/// case to 1317B, which still leaves 83B under this cap (test_main.cpp,
+/// wire_unified_worst_case_fits builds that worst case through the real builder
+/// and asserts that every entry is accepted).
+/// データグラム上限は 1400B。フロー全量配送（100Hz で 1 パケット 2 エントリ）だけで
+/// 典型ペイロードが ~1040B となるため、上限 1024B では最後に積む mag（18B）が毎パケット
+/// 黙って弾かれる（実機で「Mag: 0 サンプル」）。上限は、固定部 916B（ヘッダ+ImuEskf+
+/// PosVel+RateRef ブロック）+ entry_count 1B + duty エントリ 66B（[id][size] 2B +
+/// payload 64B）+ control_output エントリ 130B（[id][size] 2B + payload 128B =
+/// float4 × 8サンプル）+ 他のセンサエントリ（control 22B、ctrl_ref 32B、
+/// flow/tof/baro/mag 計 ~70B）= 典型 1237B を収める必要があり、1400B なら WiFi MTU
+/// （1472）・PC 受信バッファ（2048）に対して ~163B の余白が残る。
+/// 50Hz の ToF 出力停止エントリ（kPktToFSilence、2B + 19B = 21B）を含めた最悪ケースは
+/// 1317B で、この上限まで 83B の余裕が残る（test_main.cpp の
+/// wire_unified_worst_case_fits が、実際のビルダでこの最悪ケースを組み、全エントリが
+/// 受理されることを検査する）。
 inline constexpr size_t kUnifiedMaxSize   = 1400;
 
 // Quantization scales (PC side divides by these to restore physical units)
@@ -212,7 +207,7 @@ static_assert(sizeof(WireRateRef) == 6, "wire drift");
 /// the same-cycle ImuEskf/RateRef samples above — exactly like WireRateRef,
 /// but appended via UnifiedPacketBuilder::addEntry() (variable, [id][size]
 /// framed) rather than written unconditionally by begin(), because unlike
-/// rate_ref this entry did not exist on older firmware. Recording the real
+/// rate_ref this entry is not present in older firmware images. Recording the real
 /// duty means `sf sysid fit` no longer has to reconstruct the plant input as
 /// Kp*(rate_ref-gyro) from an assumed/typed-in Kp — it reads what the mixer
 /// actually sent, correct even if Kp was mistyped, changed mid-flight
@@ -222,8 +217,8 @@ static_assert(sizeof(WireRateRef) == 6, "wire drift");
 /// 400Hz モータduty サンプル — レートループ同定（`sf sysid fit`）の「実際の
 /// プラント入力」。kPktDuty400 の1エントリに kSamplesPerPacket（8）個分
 /// （payload計64B）を積み、上の ImuEskf/RateRef と同じ index で対応させる
-/// （WireRateRef と同じ考え方）。ただし rate_ref と違い旧ファームには存在し
-/// なかったため、begin() が無条件で書く固定ブロックではなく
+/// （WireRateRef と同じ考え方）。ただし rate_ref と違い旧版ファームのイメージには存在し
+/// ないため、begin() が無条件で書く固定ブロックではなく
 /// UnifiedPacketBuilder::addEntry()（[id][size] 可変枠）で追加する。実際の
 /// duty を記録すれば、`sf sysid fit` は Kp*(rate_ref−gyro) という「仮定した
 /// Kp からの再構成」に頼らずに済む — Kp の入力ミス・飛行中のゲイン変更
@@ -237,7 +232,7 @@ static_assert(sizeof(WireDuty400) == 8, "wire drift");
 
 /// 400Hz commanded thrust+torque sample — the PRE-MIXER control command
 /// (`control_output` topic: `ControlOutput.thrust`/`.torque`), i.e. what the
-/// controller asked for before the mixer (legacy linear on firmware/workshop,
+/// controller asked for before the mixer (simple linear on firmware/workshop,
 /// physical B^-1 + nonlinear motor curve on firmware/vehicle) turned it into
 /// per-motor duty. One kPktCtrlOutput400 ENTRY carries kSamplesPerPacket (8)
 /// of these (128B total payload), paired by INDEX with the same-cycle
@@ -245,7 +240,7 @@ static_assert(sizeof(WireDuty400) == 8, "wire drift");
 /// Reading this directly lets `sf sysid fit`/`rate-fit` identify G_p(s)
 /// without knowing which mixer flew (no --mixer selection, no nonlinear
 /// duty->thrust inversion) -- see docs/events/sci_tutorial_2026 rate-sysid
-/// design memo, 2026-09-09. Comparing this against the duty-reconstructed
+/// design memo. Comparing this against the duty-reconstructed
 /// actual torque (WireDuty400 + the real motor curve) also gives the mixer's
 /// static gain error `c` as a diagnostic, entirely from logged data. Floats,
 /// not quantized (unlike duty's fixed [0,1] range, thrust/torque have no
@@ -258,7 +253,7 @@ static_assert(sizeof(WireDuty400) == 8, "wire drift");
 /// 128B）を積み、上の ImuEskf/RateRef/Duty400 と同じ index で対応させる
 /// （WireDuty400 と同じ考え方）。これを直接読めば `sf sysid fit`/`rate-fit`
 /// はどのミキサーで飛んだかを判別せずに（--mixer選択も非線形duty->thrust逆算も
-/// 不要に）G_p(s) を同定できる — 2026-09-09 のレート同定設計メモ参照。
+/// 不要に）G_p(s) を同定できる — レート同定設計メモ参照。
 /// duty から逆算した実トルク（WireDuty400 ＋ 実モータ曲線）と突き合わせれば、
 /// ログだけからミキサーの静的ゲイン誤差 `c` を診断値として求められる。duty の
 /// ような固定 [0,1] レンジが無く量子化すると黙ってクリップする恐れがあるため
@@ -382,13 +377,13 @@ static_assert(sizeof(WireMag) == 16, "wire drift");
 
 /// Standalone 1Hz status packet — 57B total (header 4B + payload 52B + checksum 1B).
 /// The 9 rate-PID gains let the PC-side tools reconstruct motor commands.
-/// current_ma was appended AFTER pid_gains (not inserted) so udp_capture.py can
+/// current_ma follows pid_gains (it is not inserted before them) so udp_capture.py can
 /// keep decoding older firmware images by TOTAL packet length alone: v1=17B
 /// (12B payload, no gains, no current), v2=53B (48B payload, +9 gains), v3=57B
 /// (52B payload, +current_ma) — see udp_capture.py's PKT_STATUS length dispatch.
 /// 単独 1Hz ステータスパケット（計 57B = header 4B + payload 52B + checksum 1B）。
 /// レート PID ゲイン 9 個は PC 側ツールのモータ指令再構成用。current_ma は pid_gains
-/// の後ろに追記した（挿入ではない）ので、udp_capture.py はパケット全長だけで旧ファーム
+/// の後ろに置く（前に挿入しない）ので、udp_capture.py はパケット全長だけで旧ファーム
 /// も読み続けられる: v1=17B（payload12B, ゲイン無し・電流無し）、v2=53B（payload48B,
 /// +ゲイン9個）、v3=57B（payload52B, +current_ma）— udp_capture.py の PKT_STATUS
 /// 長分岐を参照。
@@ -399,8 +394,8 @@ struct WireStatusPayload {
     uint8_t  sensor_health;    // healthy_mask bits
     uint8_t  eskf_status;      // bit0 = estimator initialized
     uint8_t  reset_reason;     // esp_reset_reason() at boot: 1=POWERON, 3=SW, 4=PANIC,
-                               // 5=INT_WDT, 6=TASK_WDT, 9=BROWNOUT (was `padding`, so
-                               // the 48B wire size is unchanged). Lets a crash cause be
+                               // 5=INT_WDT, 6=TASK_WDT, 9=BROWNOUT (placed in a padding slot, so
+                               // the 48B wire size is not increased). Lets a crash cause be
                                // read over WiFi (no serial); it is constant per boot.
                                // 起動時リセット理由。墜落→再起動後に無線で原因を読める。
     float    pid_gains[9];     // roll kp/ti/td, pitch kp/ti/td, yaw kp/ti/td
@@ -437,8 +432,8 @@ inline int16_t quantize(float value, float scale)
 /// would carry a low-clamp branch this caller can never hit.
 /// duty(0..1) を uint16 へ量子化: 四捨五入、[0, kDutyScale] にクランプ。
 /// duty は負にならないため quantize()（バイアス/レート用の符号付き対称
-/// 飽和）とは別関数にした — 共用すると絶対に作動しない下側クランプ分岐を
-/// 抱えることになる。
+/// 飽和）とは別関数にした — 別関数なので絶対に作動しない下側クランプ分岐を
+/// 持たずに済む。
 inline uint16_t quantizeDuty(float duty)
 {
     const float scaled = duty * kDutyScale;

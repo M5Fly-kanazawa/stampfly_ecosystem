@@ -269,12 +269,12 @@ inline constexpr int BUZZER_LEDC_TIMER   = 1;
 // so 0.5 means the pilot has advanced the stick toward/above hover — a deliberate
 // intent to lift off. ALT_HOLD/POS_HOLD do NOT use this: there ARM itself triggers
 // the auto-takeoff (see ARMED_GROUND_SPOOL_US below), so the pilot need not time
-// the stick (Tello-like). 2026-06-14 redesign.
+// the stick (Tello-like).
 // 手動離陸スロットル閾値（ACRO/STABILIZE 専用, mode < ALT_HOLD）。正規化スロットル
 // (0=中央/アイドル..1=全上げ)。ARMED_GROUND でこれを超えると離陸開始。ホバーは≈0.54
 // ゆえ 0.5 は意図的な上げ＝離陸意思。ALT_HOLD/POS_HOLD はこれを使わない: そこでは ARM
 // 自体が自動離陸をトリガする（下の ARMED_GROUND_SPOOL_US 参照）ため、パイロットは
-// スティックのタイミングを計る必要がない（Tello 風）。2026-06-14 再設計。
+// スティックのタイミングを計る必要がない（Tello 風）。
 inline constexpr float TAKEOFF_THROTTLE_THRESH = 0.5f;
 
 // Auto-takeoff spool/settle dwell for ALT_HOLD/POS_HOLD [us]. On ARM the craft
@@ -314,23 +314,23 @@ inline constexpr uint32_t SENSOR_HEALTH_STALE_US = 500000;  // 0.5 s
 
 // The StampFly board wires the 1S LiPo to INA3221 channel index 1 (= chip
 // channel 2). The driver default (index 0) is an UNCONNECTED rail and reads
-// 0.00 V — this exact porting omission disabled the battery failsafe and the
-// thrust→duty sag compensation on every flight until 2026-06-11. Value is the
-// legacy vehicle/'s flight-proven POWER_BATTERY_CHANNEL.
+// 0.00 V, which would disable the battery failsafe and the
+// thrust→duty sag compensation. Value is the legacy vehicle/'s flight-proven
+// POWER_BATTERY_CHANNEL.
 // StampFly 基板は 1S LiPo を INA3221 のチャネル index 1（=チップのチャネル 2）に
-// 配線している。ドライバ既定値（index 0）は未接続レールで 0.00 V を読む — この
-// 移植漏れにより 2026-06-11 まで全フライトで電池フェイルセーフと電圧低下の補償が無効
-// だった。値は旧 vehicle/ の飛行実績 POWER_BATTERY_CHANNEL。
+// 配線している。ドライバ既定値（index 0）は未接続レールで 0.00 V を読み、
+// 電池フェイルセーフと電圧低下の補償が無効になってしまう。値は旧 vehicle/ の
+// 飛行実績 POWER_BATTERY_CHANNEL。
 inline constexpr uint8_t POWER_BATTERY_CHANNEL = 1;
 
 // Battery-path shunt resistor on INA3221 channel 2 (R12 in the StampFly v1.0
 // schematic): 0.01 ohm. Current resolution is 40 uV / 0.01 ohm = 4 mA per count,
-// full scale about +/-16.4 A. Until 2026-10-30 the firmware assumed 0.1 ohm and
-// therefore reported 1/10 of the true battery current.
+// full scale about +/-16.4 A. Assuming 0.1 ohm would report 1/10 of the true
+// battery current.
 // INA3221 チャネル 2 の電池経路シャント抵抗（StampFly v1.0 回路図の R12）:
 // 0.01 Ω。電流分解能は 40 µV / 0.01 Ω = 1 カウントあたり 4 mA、フルスケールは
-// 約 ±16.4 A。2026-10-30 までファームは 0.1 Ω と仮定しており、電池電流を真値の
-// 1/10 で報告していた。
+// 約 ±16.4 A。0.1 Ω と仮定すると、電池電流を真値の
+// 1/10 で報告してしまう。
 inline constexpr float POWER_BATTERY_SHUNT_OHM = 0.01f;
 
 // =============================================================================
@@ -383,7 +383,7 @@ inline constexpr int MOTOR_SWEEP_MAX_DUTY_PCT = 80;
 // sampling time after the transient-skip half-window to average a handful of
 // 10Hz power samples; ceiling bounds the CLI command's total blocking time.
 // Worst case = MOTOR_SWEEP_BASELINE_US (1s) + 4 x (ceiling + MOTOR_SWEEP_REST_US
-// (1s)) = 1 + 4 x (10 + 1) = 45 s. That worst case is now abortable mid-run
+// (1s)) = 1 + 4 x (10 + 1) = 45 s. That worst case is abortable mid-run
 // (see collectPower()/tcpAbortRequested() in cli_task.cpp — any input on the
 // TCP session that issued the sweep stops it immediately), so this bound is a
 // hard cap, not a wait every operator eats in full.
@@ -392,7 +392,7 @@ inline constexpr int MOTOR_SWEEP_MAX_DUTY_PCT = 80;
 // 合計ブロック時間を抑える。最悪ケース = MOTOR_SWEEP_BASELINE_US（1秒）+
 // 4×（上限 + MOTOR_SWEEP_REST_US（1秒））= 1 + 4×(10+1) = 45秒。この最悪ケースは
 // 実行中に中断可能（cli_task.cpp の collectPower()/tcpAbortRequested() 参照 —
-// スイープを発行した TCP セッションへの入力で即座に停止）になったので、この値は
+// スイープを発行した TCP セッションへの入力で即座に停止）なので、この値は
 // 上限であって操縦者が毎回丸ごと待つ時間ではない。
 inline constexpr float MOTOR_SWEEP_MIN_SEC = 1.0f;
 inline constexpr float MOTOR_SWEEP_MAX_SEC = 10.0f;

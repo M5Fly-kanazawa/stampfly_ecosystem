@@ -114,8 +114,8 @@ static constexpr const char* kHostname = "stampfly-vehicle";
 static constexpr uint8_t kCommandSourceEspNow = 0;
 
 // -----------------------------------------------------------------------------
-// WiFi readiness EventGroup (R16 — replaces sf_telemetry polling)
-// WiFi 準備完了 EventGroup (R16 — sf_telemetry polling を廃止)
+// WiFi readiness EventGroup (R16 — no sf_telemetry polling)
+// WiFi 準備完了 EventGroup (R16 — sf_telemetry の polling 不要)
 // -----------------------------------------------------------------------------
 //
 // Event handler registered in initWifi() sets WIFI_GOT_IP_BIT when the
@@ -229,10 +229,10 @@ void Comm::init()
              own_mac_[0], own_mac_[1], own_mac_[2], own_mac_[3], own_mac_[4], own_mac_[5],
              own_mac_[4], own_mac_[5]);
 
-    // Restore a previously paired controller MAC from NVS. If present we are
+    // Restore the previously paired controller MAC from NVS. If present we are
     // immediately Paired (register it as a unicast peer); otherwise we stay
     // NotPaired and the StateManager will auto-enter Pairing on the ground.
-    // 以前ペアした相手局の MAC を NVS から復元する。あれば即 Paired（ユニキャスト peer 登録）、
+    // 前回ペアした相手局の MAC を NVS から復元する。あれば即 Paired（ユニキャスト peer 登録）、
     // 無ければ NotPaired のままで、StateManager が地上で自動的に Pairing へ入る。
     loadPairingFromNvs();
     if (paired_.load(std::memory_order_acquire)) {
@@ -399,11 +399,11 @@ void Comm::forwardRawInput(const ControlPacket& pkt)
 // Pairing — handshake, crosstalk filter, and NVS persistence
 // ペアリング — ハンドシェイク、混信フィルタ、NVS 永続化
 //
-// Follows the legacy vehicle's mutual MAC learning (controller_comm.cpp). The
+// Follows the mutual MAC learning of another flight-proven firmware (controller_comm.cpp). The
 // StateManager owns PairingState and publishes it on pairing_state; this radio
 // layer only EXECUTES (broadcast while Pairing, learn/save the peer MAC, filter
 // crosstalk) and reports the bind status fact on pairing_complete.
-// 旧 vehicle の相互 MAC 学習を踏襲（controller_comm.cpp）。PairingState は StateManager が
+// 飛行実績のある別ファームの相互 MAC 学習を踏襲（controller_comm.cpp）。PairingState は StateManager が
 // 所有し pairing_state で発行する。本無線層は実行のみ（Pairing 中の送出、相手局 MAC の学習/保存、
 // 混信フィルタ）を行い、バインド状態の事実を pairing_complete で報告する。
 // =============================================================================
@@ -792,11 +792,11 @@ void Comm::initWifi()
 
     // Borrow the default STA netif from the BSP (R1: sf_board owns esp_netif and
     // created it in board::init()). We only set the application-level hostname here;
-    // we do NOT create the netif — that was the old ownership-scatter anti-pattern
+    // we do NOT create the netif — that is the ownership-scatter anti-pattern
     // (hardware_init.md §3/§4). esp_wifi_init/start below bind to this default STA netif.
     // BSP からデフォルト STA netif を借用する (R1: sf_board が esp_netif を所有し
     // board::init() で生成済み)。ここではアプリ層の hostname のみ設定し、netif は生成しない
-    // — それが旧来の所有分散アンチパターン (hardware_init.md §3/§4)。下の esp_wifi_init/start
+    // — それは所有分散アンチパターン (hardware_init.md §3/§4)。下の esp_wifi_init/start
     // はこのデフォルト STA netif に bind される。
     esp_netif_t* sta_netif = sf::internal::board::sta_netif();
     if (sta_netif != nullptr) {
@@ -994,12 +994,12 @@ void Comm::startSoftAp()
 // WiFi 準備完了待機 — STA が IP を取得するまでブロック (タイムアウト付き)
 // -----------------------------------------------------------------------------
 //
-// Replaces the polling loop previously used by sf_telemetry::waitForWifi().
+// Lets sf_telemetry wait for WiFi readiness without a polling loop.
 // xEventGroupWaitBits is used so that the calling task sleeps efficiently
 // rather than spinning. clearOnExit=false leaves the bit set so subsequent
 // callers (or reconnects) can also detect readiness.
 //
-// 旧 sf_telemetry::waitForWifi() の polling ループを置換する。
+// sf_telemetry が WiFi 準備を polling ループで待つ必要をなくす。
 // xEventGroupWaitBits を使うため呼び出しタスクは効率的にスリープする。
 // clearOnExit=false でビットを保持し、再呼び出しや再接続でも検出可能。
 bool waitForWifiReady(uint32_t timeout_ms)

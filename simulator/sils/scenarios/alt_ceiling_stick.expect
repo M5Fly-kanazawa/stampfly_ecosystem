@@ -2,13 +2,13 @@
 # ALT_HOLD でスロットルスティックを上げ続けても 1.2 m の高度上限で止まる
 #
 # Measured (truth, noise off): the climb is tapered toward the ceiling and settles at 1.17 m (it does not exceed 1.2 m);
-# releasing the stick holds 1.13-1.17 m; a stick DOWN descends to 0.19 m. Without the ceiling the stick climb ran past
-# 1.5 m (tof_silent_alt_climb.scn climbed to 1.55 m with the same stick), and a plain cut of the full-rate climb at the
-# ceiling gave 1.13-1.44 m (overshoot and chatter).
+# releasing the stick holds 1.13-1.17 m; a stick DOWN descends to 0.19 m. Without the ceiling the stick climb runs past
+# 1.5 m (tof_silent_alt_climb.scn climbs to 1.55 m with the same stick), and a plain cut of the full-rate climb at the
+# ceiling gives 1.13-1.44 m (overshoot and chatter).
 # 実測（真値、ノイズなし）: 上昇は上限へ向けて絞られ、1.17 m で落ち着く（1.2 m を超えない）。スティックを離すと
 # 1.13〜1.17 m を保つ。スティックを下げると 0.19 m まで降下する。上限が無いと、スティック上昇は 1.5 m を超えて
-# 走った（tof_silent_alt_climb.scn は同じスティックで 1.55 m まで上昇した）。全速の上昇を上限で単純に切ると
-# 1.13〜1.44 m（行き過ぎと揺れ）だった。
+# 上がる（tof_silent_alt_climb.scn は同じスティックで 1.55 m まで上昇する）。全速の上昇を上限で単純に切ると
+# 1.13〜1.44 m（行き過ぎと揺れ）になる。
 exit 0
 log_contains any "ARM accepted"
 log_contains any "Takeoff complete → FLYING/ALT_HOLD"

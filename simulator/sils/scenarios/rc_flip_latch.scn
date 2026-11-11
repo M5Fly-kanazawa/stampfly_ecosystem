@@ -1,27 +1,27 @@
 # rc_flip_latch.scn — FLIP button pressed while the craft is still moving: wait, then fly
 #                  FLIP ボタンを機体がまだ動いている間に押す: 待って、それから飛ぶ
 #
-# Hardware 2026-10-02 (logs/flip_test1.sflog.zip): the pilot's presses were refused SILENTLY
+# Real flight (logs/flip_test1.sflog.zip): the pilot's presses were refused SILENTLY
 # because the steady-hover bounds (flip.max_vvel_mps 0.2 m/s, flip.max_hvel_mps 0.3 m/s, ...)
-# held only ~17 % of the time and the longest window was 0.38 s. A press now (1) is held for up
+# held only ~17 % of the time and the longest window was 0.38 s. A press (1) is held for up
 # to flip.button_wait_ms when the only blocker is the transient NotSteady, and starts the flip
 # when the craft settles; (2) beeps when it is finally refused (any reason, or the wait expires).
 # This scenario presses the button while the craft is still DESCENDING at the end of a short stick-down pulse, at
 # 1.1 m (|vz| well above 0.2 m/s -> NotSteady), within the default 1 s wait (flip.button_wait_ms), and checks that
 # the flip then runs once ("Flip button: waiting ..." -> "Flip requested").
-# 2026-11-09: the climb that used to end the run-up (a throttle pulse to 1.2 m and above) is gone: the altitude ceiling
-# (1.2 m) now also bounds the ALT_HOLD stick climb, and it tapers the climb toward the ceiling (speed = 0.45 1/s x the
+# The run-up does not end in a climb (a throttle pulse to 1.2 m and above): the altitude ceiling
+# (1.2 m) also bounds the ALT_HOLD stick climb, and it tapers the climb toward the ceiling (speed = 0.45 1/s x the
 # distance), so a climb is never fast (>0.2 m/s) at 1.0 m or higher (the flip needs flip.min_height_m = 1.0 m).
 # A descent is not limited by the ceiling, so the NotSteady moment is made by a stick-down pulse from the ceiling.
 #
-# 実機 2026-10-02: 操縦者の押下が「黙って」拒否された。定常ホバーの条件（flip.max_vvel_mps
+# 実機（logs/flip_test1.sflog.zip）: 操縦者の押下が「黙って」拒否された。定常ホバーの条件（flip.max_vvel_mps
 # 0.2 m/s、flip.max_hvel_mps 0.3 m/s など）が成立するのは約 17 % の時間で、最長の窓は 0.38 s
 # だった。押下は (1) 阻害理由が一過性の NotSteady だけなら flip.button_wait_ms まで保持し、
 # 落ち着いたら宙返りを開始する、(2) 最終的に拒否されたら（どの理由でも、待ち時間切れでも）
 # エラー音を鳴らす。本シナリオは、短いスティック下げのパルスの終わりに機体がまだ「降下」中の 1.1 m
 # （|vz| が 0.2 m/s を大きく超える → NotSteady）でボタンを押し、既定の待ち時間 1 s（flip.button_wait_ms）の
 # 中で、宙返りが 1 回だけ実行される（"Flip button: waiting ..." → "Flip requested"）ことを確認する。
-# 2026-11-09: 助走の終わりだった上昇（1.2 m 以上へのスロットルパルス）は無くなった: 高度上限（1.2 m）が
+# 助走は上昇で終わらない（1.2 m 以上へのスロットルパルスは使わない）: 高度上限（1.2 m）が
 # ALT_HOLD のスティック上昇も縛り、上限へ向けて上昇を絞る（速さ = 0.45 1/s × 距離）ので、1.0 m 以上で上昇が
 # 速い（0.2 m/s 超）ことはない（宙返りは flip.min_height_m = 1.0 m が要る）。降下は上限に縛られないので、
 # NotSteady の瞬間は上限からのスティック下げのパルスで作る。
@@ -37,7 +37,7 @@
    0    rc   2048  2048   2048    2048  0     4000      50        0                        # A: boot at rest — IDLE_GROUND before ARM edge
    +    rc   2048  2048   2048    2048  0     1500      50        1                        # B: ALT switch ON while DISARMED (t=4-5.5)
    +    rc   2048  2048   2048    2048  1     1000      50        1                        # C: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=5.5-6.5)
-   +    rc   2048  2048   2048    2048  1     4300      50        1                        # D: neutral -> climb to 0.5 m target, settle (t=6.5-10.8). 2026-10-31 R_out plant: 5000->4300 ms (shifted into E, timeline unchanged) / 5000->4300 ms（E へ振替、時刻は不変）
+   +    rc   2048  2048   2048    2048  1     4300      50        1                        # D: neutral -> climb to 0.5 m target, settle (t=6.5-10.8)
    +    rc   4095  2048   2048    2048  1     5000      50        1                        # stick UP -> climbs, tapered toward the 1.2 m ceiling (t=10.8-15.8; ~1.15 m)
    +    rc   0     2048   2048    2048  1     600       50        1                        # stick DOWN pulse -> descending at the press (t=15.8-16.4)
    +    rc   2048  2048   2048    2048  1     200       50        1     0    0    1        # F: FLIP pressed while descending: |vz| > 0.2 -> latched (t=16.4-16.6)

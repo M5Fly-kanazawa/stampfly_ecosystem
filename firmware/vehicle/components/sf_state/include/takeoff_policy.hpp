@@ -36,8 +36,8 @@
  *         lifted for kAutoTakeoffNoLiftAbortUs is not lifted by the landing thrust, which starts from the hover estimate and descends (SILS, detailed_design.md §3 note 8 (3)). A ToF that is silent or invalid is not
  *         that evidence: the ToF-invalid rule (tof_health_tracker.hpp) ends such a takeoff by a LANDING instead. The DISARM of the pilot in TAKEOFF is the motor cut, and an API `land`
  *         that arrives in TAKEOFF is held by ApiTask until the TAKEOFF has been left (StateManager::notifyLandingRequest ignores TAKEOFF).
- *  2. decideCommLossLanding(): once the grace after COMM_LOST has elapsed, TAKEOFF and FLYING both go to LANDING (it used to be FLYING only, so a loss during a
- *     TAKEOFF that never completed kept the craft climbing for ever).
+ *  2. decideCommLossLanding(): once the grace after COMM_LOST has elapsed, TAKEOFF and FLYING both go to LANDING (covering FLYING alone would let a loss during a
+ *     TAKEOFF that never completes keep the craft climbing for ever).
  *  3. TakeoffFloorWatch: the detection of the positive evidence.
  *  4. landingVerdictCounts(): whether a touchdown verdict of ImuTask ends the LANDING in force (only a verdict judged in that very LANDING does).
  *  5. decideArmedGroundTakeoff() and LiftoffWatch: how ARMED_GROUND ends in TAKEOFF. ALT_HOLD / POS_HOLD: the spool dwell has elapsed. ACRO / STABILIZE: the throttle is past the
@@ -65,8 +65,8 @@
  *         ホバー推力の見積もりから始まって降りる着陸の推力でも浮かない（SILS。detailed_design.md §3 注8 (3)）。出力停止の ToF や無効サンプルはその証拠ではない:
  *         そういう離陸は ToF 無効の規則（tof_health_tracker.hpp）が LANDING で終わらせる。TAKEOFF でのパイロットの DISARM はモータ停止で、
  *         TAKEOFF に届いた API の `land` は、TAKEOFF を抜けるまで ApiTask が保留する（StateManager::notifyLandingRequest は TAKEOFF を無視する）。
- *  2. decideCommLossLanding(): COMM_LOST の猶予が過ぎたら、TAKEOFF も FLYING も LANDING にする（以前は FLYING だけで、完了しない TAKEOFF の間に通信が途絶えると
- *     機体は上昇し続けた）。
+ *  2. decideCommLossLanding(): COMM_LOST の猶予が過ぎたら、TAKEOFF も FLYING も LANDING にする（FLYING だけを対象にすると、完了しない TAKEOFF の間に通信が途絶えたとき
+ *     機体が上昇し続ける）。
  *  3. TakeoffFloorWatch: 積極的な証拠の検出。
  *  4. landingVerdictCounts(): ImuTask の接地の判定が、有効な LANDING を終わらせるか（その LANDING の中で出された判定だけが終わらせる）。
  *  5. decideArmedGroundTakeoff() と LiftoffWatch: ARMED_GROUND がどう TAKEOFF に至るか。ALT_HOLD / POS_HOLD: スプールの待ちが過ぎた。ACRO / STABILIZE: スロットルが離陸の閾値を超えた、

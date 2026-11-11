@@ -299,12 +299,12 @@ public:
     // =========================================================================
 
     /// Request entering Pairing (search). Valid in IDLE_GROUND or IDLE_HELD (on the
-    /// ground or held in hand, 2026-09-12) — used for auto-enter when unpaired and for
+    /// ground or held in hand) — used for auto-enter when unpaired and for
     /// button re-pairing. Rejected while INIT / armed / airborne. Idempotent if already
     /// Pairing. Does not relax the ARM guard: requestArm() still accepts IDLE_GROUND
     /// only, and ARM is separately rejected while Pairing.
-    /// Pairing（探索）への突入要求。IDLE_GROUND または IDLE_HELD（地上または手持ち、
-    /// 2026-09-12）で有効 — 未ペア時の自動突入とボタン再ペアに使う。INIT/武装/空中では
+    /// Pairing（探索）への突入要求。IDLE_GROUND または IDLE_HELD（地上または手持ち）
+    /// で有効 — 未ペア時の自動突入とボタン再ペアに使う。INIT/武装/空中では
     /// 拒否。既に Pairing なら冪等。ARM のガードは緩めない: requestArm() は引き続き
     /// IDLE_GROUND のみ受理し、Pairing 中は ARM を別途拒否する。
     ///

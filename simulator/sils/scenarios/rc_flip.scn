@@ -3,7 +3,7 @@
 #               コントローラ FLIP ボタン: RC のみで ARM -> ALT_HOLD 自動離陸 ->
 #               スティック上昇 -> FLIP ボタン4方向 -> DISARM 自動着陸
 #
-# Drives the FLIP-button path added in Phase 3 (flip-maneuver-plan.md §4.1,
+# Drives the FLIP-button path (flip-maneuver-plan.md §4.1,
 # §9 decision 6, F6): PilotRequest.flip_button (CTRL_FLAG_FLIP, flags bit1)
 # rising edge -> state_task's handleFlipButtonEdge() -> the SAME
 # StateManager::requestFlip() entry point the API `flip` verb uses. Unlike
@@ -12,8 +12,8 @@
 # coverage of the button trigger and its stick-direction rule (§9-6).
 #
 # STRUCTURE (two ARM/climb/DISARM cycles, not one continuous flight, and
-# only ONE pitch-axis direction — Forward): found empirically while writing
-# this scenario (2026-09-18) that in ALT_HOLD:
+# only ONE pitch-axis direction — Forward): the reasons, found empirically,
+# are, in ALT_HOLD:
 #  (a) a SECOND flip requested after a PITCH flip (Forward/Back) is
 #      reliably rejected `NotSteady` (C4, |v_h| <= flip.max_hvel_mps =
 #      0.3 m/s) NO MATTER HOW LONG the intervening neutral-RC settle window
@@ -40,7 +40,7 @@
 # both signs of both axes even though the SILS run only scripts one pitch
 # direction.
 #
-# ROOT CAUSE #1 (traced 2026-09-18 — this IS the root cause of
+# ROOT CAUSE #1 (this IS the root cause of
 # docs/architecture/simulation-policy.md backlog #12, not a new bug): the
 # yaw-rate loop's derivative-on-measurement term degenerates into a raw
 # one-step difference (rate.yaw.td=0.01, filter eta=0.125, dt=2.5 ms ->
@@ -56,7 +56,7 @@
 # rate.yaw.td=0` clears the sink (alt_drop_max 0.993->0.119 m) but is a
 # control-parameter change, out of scope here (owner decision).
 #
-# ROOT CAUSE #2 (traced 2026-09-18, spun off as
+# ROOT CAUSE #2 (tracked as
 # docs/architecture/simulation-policy.md backlog #16 — a CONSEQUENCE of
 # root cause #1 above, not a separate flip bug): landing while still
 # translating (root cause #1) lets the touchdown bounce (60-100 deg/s body
@@ -71,7 +71,7 @@
 # estimator issue, not flip-specific, so it is NOT chased further here.
 #
 # 構成（1本の連続飛行でなく ARM/上昇/DISARM の2サイクル、PITCH 方向は Forward
-# のみ）: 本シナリオ作成中（2026-09-18）に判明:
+# のみ）: 理由（実験で判明）— ALT_HOLD では:
 #  (a) ALT_HOLD では PITCH 宙返り（Forward/Back）の後に要求した2回目の宙返りが、
 #      中立 RC の待ち時間をどれだけ延ばしても（5s・8sで確認）`NotSteady`
 #      （C4, |v_h|<=flip.max_hvel_mps=0.3m/s）で拒否され続ける — 原因#1 は下記。
@@ -92,7 +92,7 @@
 # 両分岐とも確認済み）なので、SILS 実行が片方向のみでも方向選択ロジック自体は
 # 両軸・両符号とも検証されている。
 #
-# ROOT CAUSE #1（原因A、2026-09-18 に追跡 — これは
+# ROOT CAUSE #1（原因A — これは
 # docs/architecture/simulation-policy.md バックログ #12 の根本原因そのもの
 # であり、新規の不具合ではない）: ヨーレートループの微分項（観測値微分）が
 # dt=2.5ms では素の1段差分に退化し（rate.yaw.td=0.01・eta=0.125→alpha=1）、
@@ -107,8 +107,8 @@
 # 0.993→0.119m）が制御パラメータ変更であり本シナリオの対象外（オーナー
 # 判断）。
 #
-# ROOT CAUSE #2（原因B、2026-09-18 に追跡、
-# docs/architecture/simulation-policy.md バックログ #16 として切り出し —
+# ROOT CAUSE #2（原因B、
+# docs/architecture/simulation-policy.md バックログ #16 として追跡 —
 # 原因#1 の帰結であり独立した宙返りの不具合ではない）: 水平方向に並進した
 # まま着陸する（原因#1）ことで、接地時の跳ね（60-100°/s の機体角速度）が
 # 接地中の ESKF を直撃し、推定姿勢が数度水平からずれた後 まったく一定の
@@ -121,18 +121,16 @@
 #
 # Each cycle: ALT switch ON (disarmed, ground mode change) -> ARM in ALT_HOLD
 # (auto-takeoff to 0.5 m, same as alt_auto_takeoff.scn) -> throttle pushed up
-# for a 2.7 s pulse (raw 3600; 2.0 s until 2026-10-31) to climb to ~1.5 m so that every flip
-# press happens at >= 1.2 m (flip.min_height_m=1.0 m below; real flips started at 1.41 / 1.70 m;
-# the SILS ToF model's ceiling is 1.63 m since 2026-10-31, vl53_device.cpp MAX_MM). On the R_out plant
-# the craft sinks ~0.1 m/s after each flip and release, so a short re-climb pulse (raw 3600) precedes the
-# 2nd and 3rd press (rows H2, J2)
+# for a 2.7 s pulse (raw 3600) to climb toward the altitude ceiling (see the note below), so each flip
+# press happens as high as ALT_HOLD allows. On the R_out plant the craft sinks ~0.1 m/s after each flip
+# and release, so a short re-climb pulse (raw 3600) precedes the 2nd and 3rd press (rows H2, J2)
 # -> throttle back to centre (holds) -> flip(s) -> DISARM (ALT_HOLD auto-land,
 # same as alt_disarm_land.scn).
 # 各サイクル: ALT スイッチ ON（disarmed、地上モード変更）-> ALT_HOLD で ARM
-# （自動離陸0.5m、alt_auto_takeoff.scnと同じ）-> スロットルを2.7sパルス（生値3600、2026-10-31 まで 2.0s）
-# 押し上げて約1.5mへ上昇し、全ての宙返りボタン押下を1.2m以上で行う（下は flip.min_height_m=1.0m、
-# 実機の宙返り開始は 1.41 m・1.70 m、SILS ToF模擬の上限は 2026-10-31 から 1.63m）。R_out プラントでは
-# 宙返りと解放のたびに約 0.1 m/s で沈むため、2・3回目の押下の前に短い再上昇パルス（行 H2・J2）を入れる
+# （自動離陸0.5m、alt_auto_takeoff.scnと同じ）-> スロットルを2.7sパルス（生値3600）
+# 押し上げて高度上限へ向けて上昇し（下の注記参照）、宙返りボタン押下を ALT_HOLD が許す高さで行う。
+# R_out プラントでは宙返りと解放のたびに約 0.1 m/s で沈むため、2・3回目の押下の前に短い再上昇パルス
+# （生値3600、行 H2・J2）を入れる
 # -> スロットル中立（保持）-> 宙返り
 # -> DISARM（ALT_HOLD 自動着陸、alt_disarm_land.scnと同じ）。
 #
@@ -154,14 +152,14 @@
 # "Flip requested (direction=Right)" が1回、サイクルのDISARMより前に現れ、
 # 間に2回目の Flip requested が無いこと — で代用する）。
 #
-# 2026-11-09: the altitude ceiling (sf::limits::kAltitudeCeilingM = 1.2 m) now also bounds the ALT_HOLD stick climb and tapers
-# it toward the ceiling, so the throttle pulses above no longer reach ~1.5 m: the craft hovers at 1.0-1.15 m before each press
-# (truth). With the default flip.min_height_m = 1.0 m the presses were refused `TooLow`, so the run sets flip.min_height_m = 0.8 m:
+# The altitude ceiling (sf::limits::kAltitudeCeilingM = 1.2 m) also bounds the ALT_HOLD stick climb and tapers
+# it toward the ceiling, so the throttle pulses above do not reach ~1.5 m: the craft hovers at 1.0-1.15 m before each press
+# (truth). With the default flip.min_height_m = 1.0 m the presses are refused `TooLow`, so the run sets flip.min_height_m = 0.8 m:
 # the subject here is the button path and the direction rule, not the minimum height (flip.min_height_m is a safety margin
 # for the real flips, which started at 1.41 / 1.70 m; with the ceiling those are flown from STABILIZE / ACRO, which have no ceiling).
-# 2026-11-09: 高度上限（sf::limits::kAltitudeCeilingM = 1.2 m）が ALT_HOLD のスティック上昇も縛り、上限へ向けて上昇を絞るので、
-# 上のスロットルパルスはもう約 1.5 m に届かない: 機体は各押下の前に 1.0〜1.15 m（真値）でホバーする。既定の
-# flip.min_height_m = 1.0 m だと押下が `TooLow` で拒否されたので、この実行では flip.min_height_m = 0.8 m にする: ここで見るのは
+# 高度上限（sf::limits::kAltitudeCeilingM = 1.2 m）が ALT_HOLD のスティック上昇も縛り、上限へ向けて上昇を絞るので、
+# 上のスロットルパルスは約 1.5 m に届かない: 機体は各押下の前に 1.0〜1.15 m（真値）でホバーする。既定の
+# flip.min_height_m = 1.0 m だと押下が `TooLow` で拒否されるので、この実行では flip.min_height_m = 0.8 m にする: ここで見るのは
 # ボタンの経路と方向の規則で、最低高度ではない（flip.min_height_m は実機の宙返りの安全余裕で、実機は 1.41 / 1.70 m で
 # 始めた。上限があるので、それらは上限の無い STABILIZE / ACRO から飛ばす）。
 #
@@ -173,16 +171,16 @@
    0    rc   2048  2048   2048    2048  0     4000      50        0                        # A: boot at rest — IDLE_GROUND before ARM edge
    +    rc   2048  2048   2048    2048  0     1500      50        1                        # B: ALT switch ON while DISARMED -> ground mode change (t=4-5.5)
    +    rc   2048  2048   2048    2048  1     1000      50        1                        # C: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=5.5-6.5)
-   +    rc   2048  2048   2048    2048  1     4300      50        1      # D: neutral -> climb to 0.5 m target, settle (t=6.5-10.8). 2026-10-31 R_out plant: 5000->4300 ms (shifted into E so the timeline is unchanged) / 5000->4300 ms（E へ振替、時刻は不変）
-   +    rc   3600  2048   2048    2048  1     2700      50        1      # E: throttle pulse -> climb to ~1.5 m (t=10.8-13.5). 2026-10-31 R_out plant: 2000->2700 ms so the press (G) happens at >=1.2 m (real flips started at 1.41 / 1.70 m); the climb input was tuned to the old plant / 旧プラントに合わせた上昇入力を延長
+   +    rc   2048  2048   2048    2048  1     4300      50        1      # D: neutral -> climb to 0.5 m target, settle (t=6.5-10.8)
+   +    rc   3600  2048   2048    2048  1     2700      50        1      # E: throttle pulse -> climb toward the 1.2 m altitude ceiling (t=10.8-13.5)
    +    rc   2048  2048   2048    2048  1     3000      50        1                        # F: throttle centred -> hold, settle before first flip (t=13.5-16.5)
    +    rc   2048  3400   2048    2048  1     200       50        1     0    0    1        # G: roll RIGHT (|sp.roll|~0.64 > 0.5 threshold) + flip -> Right (t=16.5-16.7)
    +    rc   2048  2048   2048    2048  1     1300      50        1      # H1: neutral, flip maneuver (t=16.7-18.0)
-   +    rc   3600  2048   2048    2048  1     500      50        1      # H2: re-climb pulse (t=18.0-18.5). 2026-10-31 R_out plant: added so the 2nd press (I) is also >=1.2 m (the craft sinks ~0.1 m/s after each flip on the R_out plant) / 2回目の押下も1.2 m以上にするため追加
+   +    rc   3600  2048   2048    2048  1     500      50        1      # H2: re-climb pulse (t=18.0-18.5): the craft sinks ~0.1 m/s after each flip on the R_out plant, so this lifts it back before the 2nd press (I) / R_out プラントでは宙返りのたびに沈むので、2回目の押下(I)の前に高度を戻す
    +    rc   2048  2048   2048    2048  1     1200      50        1      # H3: neutral, settle + cooldown (t=18.5-19.7)
    +    rc   2048   696   2048    2048  1     200       50        1     0    0    1        # I: roll LEFT (|sp.roll|~0.64 > 0.5 threshold) + flip -> Left (t=19.7-19.9)
    +    rc   2048  2048   2048    2048  1     1250      50        1      # J1: neutral, flip maneuver (t=19.9-21.15)
-   +    rc   3600  2048   2048    2048  1     600      50        1      # J2: re-climb pulse (t=21.15-21.75). 2026-10-31 R_out plant: added so the 3rd press (K) is >=1.2 m / 3回目の押下も1.2 m以上にするため追加
+   +    rc   3600  2048   2048    2048  1     600      50        1      # J2: re-climb pulse (t=21.15-21.75): same reason, before the 3rd press (K) / 同じ理由で3回目の押下(K)の前に高度を戻す
    +    rc   2048  2048   2048    2048  1     1150      50        1      # J3: neutral, settle + cooldown (t=21.75-22.9)
    +    rc   2048  2048   2048    2048  1     1500      50        1     0    0    1        # K: NEUTRAL sticks, flip HELD 1.5 s -> default direction (Right), single request despite the long hold (t=22.9-24.4)
    +    rc   2048  2048   2048    2048  1     3000      50        1                        # L: neutral, maneuver + cooldown (t=24.4-27.4)
@@ -193,8 +191,8 @@
 # ---- Cycle 2: Forward alone (t=35.8-61.9) ----
    +    rc   2048  2048   2048    2048  0     1500      50        1                        # P: ALT switch ON again while DISARMED (ground mode reset to STABILIZE after landing) (t=35.8-37.3)
    +    rc   2048  2048   2048    2048  1     1000      50        1                        # Q: ARM in ALT_HOLD -> spool -> auto-takeoff fires (t=37.3-38.3)
-   +    rc   2048  2048   2048    2048  1     4300      50        1      # R: neutral -> climb to 0.5 m target, settle (t=38.3-42.6). 2026-10-31 R_out plant: 5000->4300 ms (shifted into S) / 5000->4300 ms（S へ振替）
-   +    rc   3600  2048   2048    2048  1     2700      50        1      # S: throttle pulse -> climb to ~1.5 m (t=42.6-45.3). 2026-10-31 R_out plant: 2000->2700 ms so the press (U) is >=1.2 m / U の押下を1.2 m以上にするため延長
+   +    rc   2048  2048   2048    2048  1     4300      50        1      # R: neutral -> climb to 0.5 m target, settle (t=38.3-42.6)
+   +    rc   3600  2048   2048    2048  1     2700      50        1      # S: throttle pulse -> climb toward the 1.2 m altitude ceiling (t=42.6-45.3)
    +    rc   2048  2048   2048    2048  1     3000      50        1                        # T: throttle centred -> hold, settle before the flip (t=45.3-48.3)
    +    rc   2048  2048    696    2048  1     200       50        1     0    0    1        # U: pitch FORWARD (|sp.pitch|~0.64 > 0.5 threshold, negative pitch = nose-down/forward) + flip -> Forward (t=48.3-48.5)
    +    rc   2048  2048   2048    2048  1     5000      50        1                        # V: neutral, maneuver + cooldown (pitch: 5 s like api_flip_pitch.scn) (t=48.5-53.5)

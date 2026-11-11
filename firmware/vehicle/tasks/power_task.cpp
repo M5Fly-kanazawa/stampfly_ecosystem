@@ -153,9 +153,9 @@ void PowerTask(void* pvParameters)
     // 電池レールは StampFly 基板ではチャネル index 1 — ドライバ既定値(0)は未接続で
     // 0.00 V を読む（config.hpp 参照）。
     cfg.battery_channel = config::POWER_BATTERY_CHANNEL;
-    // Battery shunt is 0.01 ohm (R12), not the old 0.1 ohm assumption — see
+    // Battery shunt is 0.01 ohm (R12), not 0.1 ohm — see
     // config.hpp. A wrong value scales the reported current and power.
-    // 電池シャントは 0.01 Ω（R12）。旧仮定の 0.1 Ω ではない（config.hpp 参照）。
+    // 電池シャントは 0.01 Ω（R12）。0.1 Ω ではない（config.hpp 参照）。
     // 値を誤ると電流と電力の表示が比例してずれる。
     cfg.shunt_resistor_ohm = config::POWER_BATTERY_SHUNT_OHM;
     const bool present = (g_power.init(cfg) == ESP_OK);
@@ -168,11 +168,11 @@ void PowerTask(void* pvParameters)
     }
 
     // Failsafe needs no hardware — it reads topics and publishes alerts. The
-    // thresholds come from the safety.* parameters (params SSOT) — the old bare
-    // init() silently used the struct defaults.
+    // thresholds come from the safety.* parameters (params SSOT) — a bare
+    // init() would silently use the struct defaults.
     // Failsafe はハードウェア不要 — トピックを読みアラートを発行する。閾値は
-    // safety.* パラメータ（params SSOT）から取得 — 旧来の素の init() は struct
-    // 既定値を暗黙使用していた。
+    // safety.* パラメータ（params SSOT）から取得 — 引数なしの init() は struct
+    // 既定値を暗黙に使ってしまう。
     g_failsafe.init(sf::loadFailsafeConfigFromParams());
 
     TickType_t last_wake = xTaskGetTickCount();

@@ -51,8 +51,7 @@
 #include "loop_timing_scope.hpp"      // period / busy-time monitor of this 400Hz loop
 #include "params.hpp"
 #include "sf_math.hpp"      // sf::math::kGravity/Quat/Vec3 (used directly below;
-                            // previously reached transitively via the removed
-                            // eskf_estimator.hpp -> eskf_core.hpp include chain)
+                            // not relied on through another header's includes)
 
 static const char* TAG = "ImuTask";
 
@@ -92,11 +91,11 @@ static sf::TakeoffLandingMgr g_takeoff_landing;
 static sf::TakeoffLandingConfig readTakeoffLandingConfig();   // defined below, used by the ReloadParams verb / 下で定義、ReloadParams verb が使う
 
 /// IMU-rate anomaly detector (impact / gyro anomaly, requirements §9). Owned by
-/// this task and fed per-sample at 400Hz — the previous 10Hz latest() peek in
-/// PowerTask missed millisecond-scale crash spikes almost certainly.
+/// this task and fed per-sample at 400Hz — a 10Hz latest() peek from another task
+/// (e.g. PowerTask) would almost certainly miss millisecond-scale crash spikes.
 /// IMU レート異常検出器（衝撃/ジャイロ異常、要件§9）。本タスクが所有し 400Hz で
-/// サンプル毎に与える — 従来の PowerTask での 10Hz latest() 覗き見はミリ秒オーダーの
-/// 墜落スパイクをほぼ確実に取りこぼしていた。
+/// サンプル毎に与える — 別タスク（PowerTask 等）での 10Hz latest() 覗き見ではミリ秒オーダーの
+/// 墜落スパイクをほぼ確実に取りこぼす。
 static sf::ImuAnomalyDetector g_imu_anomaly;
 
 /// Tilt consistency monitor — detects, on the ground, that the attitude estimate disagrees
@@ -281,8 +280,8 @@ static void refreshToFSilenceInputs(uint32_t now_us)
 /// TakeoffLandingMgr releases/sets it from ToF samples only, so during a ToF-silence EPISODE
 /// (no new sample, only invalid samples while flying, or the estimator has not re-acquired the ToF
 /// yet; failsafe_status.tof_silent) the raw flag proves nothing. A flag frozen "on the ground" kept
-/// the estimator pinning position/velocity to zero while the craft climbed (2026-11 accident), and
-/// after the samples returned the raw flag was trusted again before the estimator agreed with them.
+/// the estimator pinning position/velocity to zero while the craft climbed, and
+/// after the samples returned the raw flag would be trusted again before the estimator agreed with them.
 /// During the episode: armed -> NOT on the ground; disarmed -> on the ground
 /// (motors off). The episode ends only when the estimator has re-acquired the ToF. Ground-contact
 /// consumers (vertical handoff / hold, tilt monitor, the published airborne flag) must call this
@@ -290,8 +289,8 @@ static void refreshToFSilenceInputs(uint32_t now_us)
 /// 離着陸マネージャの接地フラグは ToF サンプルだけで立つ／下りるので、ToF 出力停止の「エピソード」
 /// （新サンプル無し、飛行中に無効サンプルだけ、または推定器がまだ ToF を取り込み直していない。
 /// failsafe_status.tof_silent）の間、生のフラグは何も保証しない。「接地」のまま固定されると、機体が
-/// 上昇しても推定器が位置・速度を 0 に固定し続けた（2026-11 の事故）。サンプルが戻った後も、推定器が
-/// それと一致する前に生のフラグが再び信用された。エピソード中は、ARM 中なら
+/// 上昇しても推定器が位置・速度を 0 に固定し続ける。サンプルが戻った後も、推定器が
+/// それと一致する前に生のフラグが再び信用されてしまう。エピソード中は、ARM 中なら
 /// 「接地していない」、DISARM 中なら「接地している」（モータ停止）。エピソードは推定器が ToF を
 /// 取り込み直したときだけ終わる。接地フラグを使う側（鉛直ハンドオフ・ホールド、傾きモニタ、発行する
 /// airborne フラグ）は g_takeoff_landing.isOnGround() でなくこれを呼ぶこと。
@@ -924,10 +923,10 @@ static void reloadEstimatorParams()
 /// Consume estimator commands published by the StateManager transition callbacks
 /// (architecture §4). This is the estimator-side endpoint of the reset consolidation:
 /// the state machine decides WHEN to reset; ImuTask (which owns the estimator) decides
-/// HOW. Replaces the ad-hoc edge detection that used to live in this task.
+/// HOW. This task has no edge detection of its own for these resets.
 /// StateManager の遷移コールバックが発行した推定器コマンドを消費する（architecture §4）。
 /// reset 集約の推定器側エンドポイント: いつ reset するかは状態機械が、どう reset するかは
-/// 推定器を所有する ImuTask が決める。本タスクにあった旧来のエッジ検出を置き換える。
+/// 推定器を所有する ImuTask が決める。本タスクにこれらのリセット用の独自のエッジ検出はない。
 ///
 /// @design architecture.md §4 — reset consolidation (estimator side)   [OK]
 static void processEstimatorCommands()
@@ -1095,27 +1094,27 @@ void ImuTask(void* pvParameters)
 
     initToFVerticalPolicy();   // vertical ground-hold only when the ToF is the vertical sensor / 地上ホールドは ToF が鉛直センサのときだけ
 
-    // The boot gyro/accel bias calibration is now started by the onEnter(IDLE_GROUND)
+    // The boot gyro/accel bias calibration is started by the onEnter(IDLE_GROUND)
     // transition callback (architecture §6 / detailed_design §3 — calibration is
     // callback-driven), which publishes estimator_command(Recalibrate); this task
     // consumes it in processEstimatorCommands() and arms startBootCalibration(). The
     // in-loop feed (feedBootCalibration) then runs while the craft rests on the ground,
-    // measuring the IMU bias and seeding the estimator before takeoff. (Previously this
-    // was called directly here in setup — an ad-hoc bypass of the onEnter callback path.)
+    // measuring the IMU bias and seeding the estimator before takeoff. (It is not called
+    // directly from setup: that would bypass the onEnter callback path.)
     // 起動バイアス校正は onEnter(IDLE_GROUND) 遷移コールバックが開始する（architecture §6 /
     // detailed_design §3 — 校正はコールバック駆動）。コールバックが estimator_command(Recalibrate)
     // を publish し、本タスクが processEstimatorCommands() で消費して startBootCalibration() を
     // 起動する。以降ループ内 feed（feedBootCalibration）が地上静止中に動き、IMU バイアスを測って
-    // 離陸前に推定器へ種付けする。（以前はここ setup で直接呼んでいた — onEnter 経路の場当たり迂回。）
+    // 離陸前に推定器へ種付けする。（setup からは直接呼ばない: onEnter 経路を迂回してしまうため。）
 
     // Drive the loop at a true 400Hz with an esp_timer periodic (2500us). The
     // FreeRTOS tick cannot express 2.5ms, so a hardware timer paces the loop;
-    // this makes the wall period match config::IMU_DT (eliminating the old
-    // 2ms/500Hz vs 2.5ms dt mismatch that mis-scaled the ESKF/PID timing).
+    // this makes the wall period match config::IMU_DT (a mismatch between the
+    // loop period and dt would mis-scale the ESKF/PID timing).
     // ループを esp_timer periodic（2500us）で真の 400Hz に駆動する。FreeRTOS tick
     // では 2.5ms を表現できないためハードウェアタイマでループを刻む。これで実周期が
-    // config::IMU_DT と一致する（旧 2ms/500Hz vs 2.5ms の不一致＝ESKF/PID のタイミング
-    // 誤差を解消）。
+    // config::IMU_DT と一致する（周期と dt が食い違うと ESKF/PID のタイミングが
+    // ずれる）。
     TaskHandle_t self = xTaskGetCurrentTaskHandle();
     const esp_timer_create_args_t imu_timer_args = {
         .callback = &imuTimerCallback,
@@ -1272,9 +1271,9 @@ void ImuTask(void* pvParameters)
 
         // Boot-complete chime: on the calibration false→true edge (boot bias done →
         // ready to arm), fire NotifyEvent::Ready once. NotifyTask plays the 3-beep
-        // readyTone (legacy vehicle's Phase-3 chime). One-shot via the edge latch.
+        // readyTone. One-shot via the edge latch.
         // 起動完了音: 校正の false→true エッジ（起動バイアス完了→ARM 可能）で NotifyEvent::Ready
-        // を1回作動。NotifyTask が 3連ビープ readyTone（旧 vehicle の Phase3 音）を鳴らす。
+        // を1回作動。NotifyTask が 3連ビープ readyTone を鳴らす。
         static bool s_prev_calibrated = false;
         if (g_calibrated && !s_prev_calibrated) {
             sf::notify_command.publish(

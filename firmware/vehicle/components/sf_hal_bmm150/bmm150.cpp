@@ -143,12 +143,12 @@ esp_err_t BMM150::read(MagData& data)
 
     // Gate on the burst-embedded DRDY (0x48 bit0, read in the same transaction
     // as the data): only a finished conversion sets it, so accepted samples are
-    // always consistent. A SEPARATE status pre-read proved unreliable on
-    // hardware (mag died entirely); the in-burst bit cannot disagree with the
+    // always consistent. A SEPARATE status pre-read is unreliable on
+    // hardware (mag fails entirely); the in-burst bit cannot disagree with the
     // data it arrived with.
     // バースト内 DRDY（0x48 bit0、データと同一トランザクションで読む）で判定:
     // 変換完了時のみ立つので、受理サンプルは常に一貫している。「別読み」の
-    // ステータス事前確認は実機で不安定（mag が全滅）だった。バースト内ビットは
+    // ステータス事前確認は実機で不安定（mag が全滅する）。バースト内ビットは
     // 一緒に届いたデータと矛盾し得ない。
     if (!raw.drdy) {
         data.data_ready = false;
@@ -217,10 +217,10 @@ esp_err_t BMM150::readRaw(MagRawData& raw)
     raw.rhall = (uint16_t)((((uint16_t)buf[7]) << 8) | (buf[6] & 0xFC)) >> 2;
 
     // DRDY status (0x48 bit0), captured in the SAME transaction as the data —
-    // a separate status read raced the conversion and proved unreliable on
+    // a separate status read races the conversion and is unreliable on
     // hardware; this bit is by definition consistent with the bytes above.
     // DRDY ステータス（0x48 bit0）。データと「同一トランザクション」で取得 —
-    // 別読みのステータスは変換と競合して実機で不安定だった。このビットは定義上
+    // 別読みのステータスは変換と競合して実機で不安定。このビットは定義上
     // 上のバイト列と一貫している。
     raw.drdy = (buf[6] & 0x01) != 0;
 

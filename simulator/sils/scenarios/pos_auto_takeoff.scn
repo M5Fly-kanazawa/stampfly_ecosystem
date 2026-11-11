@@ -1,13 +1,13 @@
 # pos_auto_takeoff.scn — POS_HOLD ARM-triggered auto-takeoff to the target altitude
-#                        POS_HOLD の ARM トリガ自動離陸（目標高度まで）   (redesign 2026-06-14)
+#                        POS_HOLD の ARM トリガ自動離陸（目標高度まで）
 #
 # Same chain as alt_auto_takeoff.scn but in POS_HOLD: ARM triggers the auto-takeoff
 # (no throttle), the climb HOLDS THE LAUNCH POINT horizontally (the position cascade
 # runs during the climb with the launch capture), and the craft parks over the spot it
-# took off from. The climb captures the 0.5 m TARGET (decision ②), not the overshoot peak.
+# took off from. The climb captures the 0.5 m TARGET, not the overshoot peak.
 # alt_auto_takeoff.scn と同じ連鎖を POS_HOLD で: ARM が自動離陸をトリガ（スロットルなし）、
 # 上昇中は「発進点の水平保持」も行い（上昇中も位置カスケードが発進点捕捉で動く）、離陸地点の
-# 真上で停止する。上昇は 0.5 m 目標を捕捉する（確定②、行き過ぎピークでなく）。
+# 真上で停止する。上昇は 0.5 m 目標を捕捉する（行き過ぎピークでなく）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/pos_auto_takeoff.scn --target vehicle
 #

@@ -6,14 +6,13 @@
 # Layer-4 位置保持判定（combined diagonal capstone）。G1 状態遷移(ログ) + G2 推定追従 + G3 位置をタイトに保持 +
 # G4 アクチュエータ健全。採用した運動加速度補償 + position.vel.kp=0.8 で合格。
 #
-# XFAIL removed 2026-10-31 (R_out plant): the yaw torque-authority saturation (duty ceiling lock) that the
-# 2026-07-26 ODE plant showed under this combined diagonal maneuver no longer appears on the R_out plant (its
-# hover duty is lower, which leaves yaw headroom; duty_max 0.704 against the 0.9 bound). pos_flight passes
-# deterministically: XPASS in two regression runs. The real-hardware NT-Kanazawa yaw saturation itself is not
-# resolved by this (pos_yaw and yaw_hold keep their markers). / XFAIL 解除 2026-10-31（R_out プラント）:
-# 2026-07-26 の ODE プラントがこの combined diagonal 動作で示したヨートルク権限飽和（デューティ天井固定）は
-# R_out プラントでは出なくなった（ホバー duty が低くヨーの余裕がある）。回帰試験 2 回で XPASS。実機 NT金沢の
-# ヨー飽和そのものは未解決（pos_yaw・yaw_hold の印は残す）。
+# XFAIL is not set: the yaw torque-authority saturation (duty ceiling lock) that the ODE plant showed under this combined
+# diagonal maneuver does not appear on the R_out plant (its hover duty is lower, which leaves yaw headroom; duty_max 0.704
+# against the 0.9 bound), and pos_flight passes deterministically. The real-hardware NT-Kanazawa yaw saturation itself is not
+# resolved by this (pos_yaw and yaw_hold keep their markers). / XFAIL の印は付けない: ODE プラントがこの combined diagonal
+# 動作で示したヨートルク権限飽和（デューティ天井固定）は R_out プラントでは出ない（ホバー duty が低くヨーの余裕があり、
+# duty_max 0.704 は上限 0.9 を下回る）ため、pos_flight は決定的に合格する。実機 NT金沢のヨー飽和そのものは未解決
+# （pos_yaw・yaw_hold の印は残す）。
 exit 0
 log_contains any "ARM accepted"                       # G1: IDLE_GROUND → ARMED_GROUND
 log_contains any "Takeoff complete"                   # G1: TAKEOFF → FLYING

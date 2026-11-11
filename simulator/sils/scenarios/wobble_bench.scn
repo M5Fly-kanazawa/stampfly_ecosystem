@@ -1,5 +1,5 @@
 # wobble_bench.scn — wobble-minimization benchmark: POS_HOLD hover under turbulence
-#                    揺れ最小化ベンチマーク: 乱流下の POS_HOLD ホバー  (experiment/wobble-min)
+#                    揺れ最小化ベンチマーク: 乱流下の POS_HOLD ホバー
 #
 # Run with: sf sils scenario simulator/sils/scenarios/wobble_bench.scn --target vehicle \
 #           --turbulence 0.03 --noise n2 --seed 7 --duration 30000000

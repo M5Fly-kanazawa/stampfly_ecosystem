@@ -13,7 +13,7 @@
 #     (or 2 s have passed), because on the real floor the sensor is invalid for 186-344 ms after the TAKEOFF entry;
 #     then kTofInvalidTakeoffPersistUs (0.15 s) of them cut the auto-takeoff (log "in TAKEOFF/ALT_HOLD -> LANDING"):
 #     the craft rises 0.20 m (peak truth height; 0.15-0.41 m over noise n2 seeds 1-3 and hover.thrust_corr 0.9 / 1.2),
-#     it does not climb away (the 2026-11 ceiling collision). With the 0.5 s of FLYING it would reach 0.39 m (noise off)
+#     it does not climb away (the guard against the ceiling collision found in flight). With the 0.5 s of FLYING it would reach 0.39 m (noise off)
 #     and 0.99-1.24 m with n2 (flight_limits.hpp has the sweep).
 #
 # ToF はサンプルを時間どおり届け続けるので時刻印の監視には問題が見えないが、全サンプルが
@@ -25,7 +25,7 @@
 # 加速度積分の推定で機体が 5 cm 上がるまで（または 2 s 経つまで）無効サンプルを数えない: 実機の床では TAKEOFF
 # に入った後 186〜344 ms はセンサが無効だから。数え始めてから kTofInvalidTakeoffPersistUs（0.15 s）続くと自動離陸が
 # 打ち切られる（ログ "in TAKEOFF/ALT_HOLD -> LANDING"）: 機体は 0.20 m 上がる（真値の最大高度。ノイズ n2 の seed 1〜3 と
-# hover.thrust_corr 0.9 / 1.2 で 0.15〜0.41 m）が、上昇し続けない（2026-11 の天井衝突）。FLYING の 0.5 s を使うと
+# hover.thrust_corr 0.9 / 1.2 で 0.15〜0.41 m）が、上昇し続けない（実機飛行で見つかった天井衝突の再発防止）。FLYING の 0.5 s を使うと
 # 0.39 m（ノイズなし）、n2 で 0.99〜1.24 m に達する（掃引は flight_limits.hpp）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/tof_invalid_alt_hover.scn --target vehicle --duration 27000000

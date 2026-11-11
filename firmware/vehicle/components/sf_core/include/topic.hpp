@@ -161,15 +161,15 @@ public:
             // loss (R14). CAS because the consumer may be claiming the same slot
             // concurrently — exactly one of us advances tail past it; if the
             // consumer wins, the slot was consumed (not lost) and space exists now.
-            // (The old code instead set head==tail, which made the ring look EMPTY
-            // — losing all Size−1 unread samples — and then overwrote a slot the
-            // consumer might be copying.)
+            // (Setting head==tail instead would make the ring look EMPTY — losing
+            // all Size−1 unread samples — and would overwrite a slot the consumer
+            // might be copying.)
             // 満杯: tail を進めて「最古の未読」を1件ドロップし、喪失をカウント（R14）。
             // consumer が同じスロットを取りに来ている可能性があるため CAS — tail を
             // 進めるのはどちらか一方だけ。consumer が勝てばそのサンプルは消費済み
-            // （喪失ではない）で空きもできている。（旧実装は head==tail にしてリングが
-            // 「空」に見え、未読 Size−1 件を一括喪失した上、consumer がコピー中かも
-            // しれないスロットを上書きしていた。）
+            // （喪失ではない）で空きもできている。（head==tail にするとリングが
+            // 「空」に見え、未読 Size−1 件を一括喪失する上、consumer がコピー中かも
+            // しれないスロットを上書きする。）
             if (tail_.compare_exchange_strong(tail, tail + 1,
                                               std::memory_order_acq_rel,
                                               std::memory_order_relaxed)) {

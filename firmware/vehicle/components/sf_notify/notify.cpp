@@ -26,8 +26,8 @@ static const char* TAG = "notify";
 namespace sf {
 
 // =============================================================================
-// LED colours and patterns — matched to the legacy vehicle's LEDManager scheme.
-// LED 色とパターン — 旧 vehicle の LEDManager 配色に合わせる。
+// LED colours and patterns — matched to the LEDManager scheme of another flight-proven firmware.
+// LED 色とパターン — 飛行実績のある別ファームの LEDManager 配色に合わせる。
 //
 // @design architecture.md §5 — Notify data flow (LED pattern per state) [OK]
 // =============================================================================
@@ -62,10 +62,10 @@ static constexpr uint16_t kSolidOn = 1000, kSolidOff = 0;
 static constexpr uint16_t kSlowOn  = 500,  kSlowOff  = 500;   // 1 Hz blink / 低速点滅
 static constexpr uint16_t kFastOn  = 100,  kFastOff  = 100;   // 5 Hz blink / 高速点滅
 
-// Flight-state LED table (legacy colours): white(INIT)→green(IDLE)→green-blink(ARMED)→
+// Flight-state LED table (colours of another flight-proven firmware): white(INIT)→green(IDLE)→green-blink(ARMED)→
 // mode colour(FLYING)→orange-blink(LANDING)→flip-orange-fast-blink(FLIP). FLYING is
 // replaced by flyingPattern().
-// 飛行状態 LED テーブル（旧の色）。FLYING は flyingPattern() が置き換える。
+// 飛行状態 LED テーブル（飛行実績のある別ファームの色）。FLYING は flyingPattern() が置き換える。
 static const LedPattern kPatternTable[FLIGHT_STATE_COUNT] = {
     { kWhite,     kSolidOn, kSolidOff },  // INIT:         white solid     / 白 常灯（静置）
     { kGreen,     kSolidOn, kSolidOff },  // IDLE_GROUND:  green solid      / 緑 常灯（ARM可）
@@ -141,14 +141,14 @@ void Notify::init(const NotifyConfig& config)
     params::get_float("safety.battery.low_v", low_v_threshold_);
 
     // Restore the buzzer mute setting. The power-on chime (startTone, the
-    // legacy vehicle's C5→E5→G5 melody) is NOT played here but DEFERRED ~2s
+    // C5→E5→G5 melody of another flight-proven firmware) is NOT played here but DEFERRED ~2s
     // into update(): `sf flash` resets the chip and esptool enters download
     // mode within ~1s of the reboot — if that lands mid-melody, the LEDC PWM
     // state survives the download-mode entry and the buzzer drones for the
     // whole write. Playing at ~3s keeps the chime clear of that window (a
     // flash-bound reboot never reaches it). The "ready to arm" chime
     // (readyTone) still follows the boot calibration (NotifyEvent::Ready).
-    // ブザーの mute 設定を復元する。起動音（startTone, 旧 vehicle の C5→E5→G5）は
+    // ブザーの mute 設定を復元する。起動音（startTone, 飛行実績のある別ファームの C5→E5→G5）は
     // ここでは鳴らさず update() 側で約2秒「遅延」させる: `sf flash` はチップを
     // リセットし、再起動から約1秒以内に esptool がダウンロードモードへ突入する —
     // それがメロディ再生中に重なると LEDC の PWM 状態がダウンロードモード突入後も
@@ -175,9 +175,9 @@ bool Notify::tofSilentWhileArmed() const
 // computeStatePattern — system-state channel (MCU LED) by priority overlay.
 // computeStatePattern — システム状態チャネル（MCU LED）。優先度オーバーレイ。
 //
-// Mirrors the legacy vehicle's LEDManager priority order:
+// Mirrors the LEDManager priority order of another flight-proven firmware:
 //   autotune > low-battery > pairing > ARM-blocked (tilt / calibrating / re-level) > flight state.
-// 旧 vehicle の LEDManager 優先度を踏襲: 低電圧 > ペアリング > 校正中 > 飛行状態。
+// 飛行実績のある別ファームの LEDManager 優先度を踏襲: 低電圧 > ペアリング > 校正中 > 飛行状態。
 // -----------------------------------------------------------------------------
 // autotuneOverlay — highest-priority LED cue while an autotune is running/finishing.
 // The buzzer is unreliable over motor noise in flight, so a solo pilot reads the
@@ -298,10 +298,10 @@ LedPattern Notify::computeModePattern() const
     }
 
     // Airborne: ACTIVE mode, slow blink — motion is signalled by blinking
-    // (pilot request 2026-06-12; ARM state on the ground stays visible on the
-    // MCU LED's state channel, which blinks green for ARMED_GROUND).
-    // 空中: 実モードの低速点滅 — 「動いている」ことを点滅で示す（2026-06-12 の
-    // パイロット要望。地上での ARM 状態は MCU LED の状態チャネルが緑点滅で表示）。
+    // (the ARM state on the ground stays visible on the MCU LED's state
+    // channel, which blinks green for ARMED_GROUND).
+    // 空中: 実モードの低速点滅 — 「動いている」ことを点滅で示す
+    // （地上での ARM 状態は MCU LED の状態チャネルが緑点滅で表示）。
     if (isAirborne(state)) {
         return { modeColor(static_cast<FlightMode>(mode.sub_mode)),
                  kSlowOn, kSlowOff };
@@ -316,8 +316,8 @@ LedPattern Notify::computeModePattern() const
 }
 
 // -----------------------------------------------------------------------------
-// modeColor — flight-mode colour (legacy vehicle mode colours).
-// modeColor — モード色（旧 vehicle のモード色）。
+// modeColor — flight-mode colour (mode colours of another flight-proven firmware).
+// modeColor — モード色（飛行実績のある別ファームのモード色）。
 // -----------------------------------------------------------------------------
 LedColor Notify::modeColor(FlightMode mode) const
 {
@@ -445,9 +445,9 @@ void Notify::applyUiCommands()
                 user_override_ = (uic.value != 0);
                 break;
             case UiCmd::LedUserColor:
-                // Setting a color implies override on, matching the legacy
+                // Setting a color implies override on, matching the
                 // workshop's ws::led_color() semantics (spec §1-2).
-                // 色の指定は override も on にする（旧 workshop ws::led_color() と
+                // 色の指定は override も on にする（workshop の ws::led_color() と
                 // 同じ意味付け、仕様 §1-2）。
                 user_color_    = {uic.r, uic.g, uic.b};
                 user_override_ = true;

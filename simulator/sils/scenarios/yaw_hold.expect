@@ -7,7 +7,7 @@
 #
 # THE gate is yaw_band over the fault window: measured 0.60° with the hold
 # (kp=3, returns to target) vs 3.06° AND MONOTONICALLY WALKING with the hold
-# disabled (attitude.yawhold.kp=0 control run, 2026-06-11) — the 1.5° bound
+# disabled (attitude.yawhold.kp=0 control run) — the 1.5° bound
 # separates the two by ~2.5× in both directions.
 #
 # yaw_hold.expect — 定在ヨー外乱下のヘディングホールド判定。本命は故障窓の
@@ -15,14 +15,13 @@
 # （attitude.yawhold.kp=0）では 3.06° かつ単調に流れ続ける。1.5° の境界は両側に
 # 約 2.5 倍の判別幅を持つ。
 #
-# XFAIL (known issue, tracked 2026-07-26): yaw-band degradation under the ODE motor
-# plant — same root cause as pos_flight/pos_yaw (yaw axis fidelity gap; the fitted
-# anti-torque zero the ODE plant now reproduces was not present in the old static
-# curve). See docs/architecture/simulation-policy.md backlog #11 (yaw-gate
+# XFAIL (known issue, tracked): yaw-band degradation under the ODE motor
+# plant — same root cause as pos_flight/pos_yaw (yaw axis fidelity gap; the ODE
+# plant reproduces the fitted anti-torque zero, which a static curve does not have). See docs/architecture/simulation-policy.md backlog #11 (yaw-gate
 # 4-parameter fit) / #12 (firmware yaw torque-authority headroom).
-# XFAIL（既知課題・追跡中 2026-07-26）: ODEモータプラント下での yaw_band 劣化 —
-# pos_flight/pos_yaw と同根（ヨー軸忠実度のギャップ。ODE化で反トルク零点を再現した
-# ことが旧・静的曲線には無かった）。simulation-policy.md バックログ#11（ヨー判定の
+# XFAIL（既知課題・追跡中）: ODEモータプラント下での yaw_band 劣化 —
+# pos_flight/pos_yaw と同根（ヨー軸忠実度のギャップ。ODE プラントは反トルク零点を再現
+# するが、静的曲線にはそれが無い）。simulation-policy.md バックログ#11（ヨー判定の
 # 4パラフィット化）/#12（ファームヨートルク権限余裕）参照。
 xfail: yaw-band degradation under the ODE motor plant, same root cause as pos_flight/pos_yaw (yaw-axis fidelity gap, simulation-policy backlog #11/#12)
 exit 0

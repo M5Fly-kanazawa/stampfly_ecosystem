@@ -5,8 +5,8 @@
 # (sf::limits::kAltitudeCeilingM = 1.2 m). The pilot climbs from the 0.5 m auto-takeoff hover to
 # about 1.15 m with the throttle stick and lets go (ALT_HOLD holds the altitude reached); then the
 # downward ToF stops. Timeline (s): ARM 7.5 -> hover 0.5 m ~9.3 -> stick up 13.0-18.0 -> hover 1.15 m -> ToF stops 20.5 -> LANDING ~20.8
-# -> touchdown ~22.4 -> ARM attempt 27.7 (refused). Since 2026-11-09 the stick climb is tapered toward the ceiling
-# (speed = 0.45 1/s x the distance to it, alt_ceiling_stick.scn), so the climb to 1.15 m takes 5 s, not 1.9 s. Spec under test:
+# -> touchdown ~22.4 -> ARM attempt 27.7 (refused). The stick climb is tapered toward the ceiling
+# (speed = 0.45 1/s x the distance to it, alt_ceiling_stick.scn), so the climb to 1.15 m takes 5 s. Spec under test:
 #  1. FLYING -> LANDING within ~0.3-0.4 s of the silence (the altitude cannot be checked).
 #  2. The descent is BLIND: a velocity loop on an accelerometer-based estimate (no altitude, no ToF landing detection).
 #  3. The craft touches down at a bounded speed, the accelerometer touchdown ends LANDING (motors
@@ -15,8 +15,8 @@
 #
 # tof_silent_hover.scn と同じ連鎖を、自動離陸・API が許す最も高い高度（sf::limits::kAltitudeCeilingM
 # = 1.2 m）から行う。パイロットは自動離陸の 0.5 m ホバーからスロットルスティックで約 1.2 m まで上げて
-# 離す（ALT_HOLD が到達高度を保持）。その後、下向き ToF が止まる。2026-11-09 から、スティック上昇は上限へ向けて
-# 絞られる（速さ = 0.45 1/s × 上限までの距離、alt_ceiling_stick.scn）ので、1.15 m までの上昇は 1.9 s でなく 5 s かかる。
+# 離す（ALT_HOLD が到達高度を保持）。その後、下向き ToF が止まる。スティック上昇は上限へ向けて
+# 絞られる（速さ = 0.45 1/s × 上限までの距離、alt_ceiling_stick.scn）ので、1.15 m までの上昇は 5 s かかる。
 # 検証する仕様:
 #  1. 出力停止から約 0.3〜0.4 s 以内に FLYING -> LANDING（高度を確認できないため）。
 #  2. 降下は「ToF なし」: 加速度計に基づく速度推定の速度ループ（高度も ToF の着地判定も使わない）。

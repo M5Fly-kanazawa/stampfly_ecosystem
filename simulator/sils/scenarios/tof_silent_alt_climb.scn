@@ -1,10 +1,10 @@
 # tof_silent_alt_climb.scn — downward ToF goes silent while CLIMBING with the ALT_HOLD stick (~0.8 m, ~0.3 m/s)
 #                            ALT_HOLD のスティックで上昇中（約 0.8 m、約 0.3 m/s）に下向き ToF が出力停止する
 #
-# Since 2026-11-09 the 1.2 m altitude ceiling bounds the ALT_HOLD stick climb too (alt_ceiling_stick.scn): a pilot can no longer
+# The 1.2 m altitude ceiling bounds the ALT_HOLD stick climb too (alt_ceiling_stick.scn): a pilot cannot
 # climb to the ToF's range limit (about 1.6 m), and the stick climb is tapered toward the ceiling (speed = 0.45 1/s x the
-# distance to it), so it is fastest low down. This scenario used to climb to 1.55 m (still rising at 0.57 m/s) when the sensor stopped;
-# it now stops the sensor while the stick climb is UNDER WAY at ~0.8 m (~0.3 m/s): the worst case left for a manual climb.
+# distance to it), so it is fastest low down. A climb to 1.55 m (still rising at 0.57 m/s) when the sensor stops cannot occur;
+# this scenario stops the sensor while the stick climb is UNDER WAY at ~0.8 m (~0.3 m/s): the worst case left for a manual climb.
 # Timeline (s): ARM 7.5 -> hover 0.5 m -> stick up 13.0-14.4 -> ToF stops 14.4 (~0.8 m, rising) -> LANDING ~14.7
 # -> peak ~1.0 m -> touchdown ~17.3 -> ARM attempt 24.0 (refused). Spec under test:
 #  1. FLYING -> LANDING; the climb momentum is stopped by the blind velocity loop (the craft overshoots the
@@ -15,9 +15,9 @@
 # The fastest climb at a silence is the auto-takeoff (tof_silent_takeoff.scn, 1.3 m/s); this one records the peak and the
 # touchdown speed after a stick climb.
 #
-# 2026-11-09 から 1.2 m の高度上限は ALT_HOLD のスティック上昇も縛る（alt_ceiling_stick.scn）: パイロットはもう ToF の
+# 1.2 m の高度上限は ALT_HOLD のスティック上昇も縛る（alt_ceiling_stick.scn）: パイロットは ToF の
 # レンジの限界（約 1.6 m）まで上げられず、スティック上昇は上限へ向けて絞られる（速さ = 0.45 1/s × 上限までの距離）ので、
-# 低いところが一番速い。このシナリオは以前、1.55 m（なお 0.57 m/s で上昇中）でセンサが止まった。今は、スティック上昇の
+# 低いところが一番速い。1.55 m（なお 0.57 m/s で上昇中）でセンサが止まる状況は起こらない。本シナリオは、スティック上昇の
 # 「最中」の約 0.8 m（約 0.3 m/s）でセンサが止まる: 手動上昇で残る最悪ケース。検証する仕様:
 #  1. FLYING -> LANDING。上昇の勢いは ToF なしの速度ループで止まり（出力停止高度からの行き過ぎは有界）、以後
 #     パイロットのスティックは無視される。

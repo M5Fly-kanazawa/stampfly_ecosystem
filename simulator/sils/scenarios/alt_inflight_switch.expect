@@ -12,36 +12,39 @@
 # ロックを掛ける（Case B）ため中央外スロットルは無視され、上昇が有界・減衰過渡に収束する。
 # G で再センターしロックが解除され、H の全上げ(4095)で上昇する。
 #
-# 2026-07-26 ODEプラント(実測Ct)対応再調整: windows shifted -0.3s (E's dwell trimmed
-# 1500ms->1200ms in alt_inflight_switch.scn, see that file's row E comment). alt_band
-# threshold 0.25->0.32 (measured 0.2975 m; small margin). Root cause: even after
-# trimming E's dwell to the shortest value that still leaves the craft genuinely
-# climbing at the switch (alt_max drops from 1.17m to 0.88m, comfortably under 1.10 with
-# NO threshold change), the post-switch altitude does a slow, decaying-then-recovering
-# oscillation (trough ~0.58m, recovering to ~0.85m by window end) whose peak-to-peak
-# stays at ~0.30-0.34m across a dwell sweep (800-1500ms) -- i.e. a fixed amplitude
-# independent of the initiating disturbance size, not reducible by further dwell/window
-# tuning. This matches the same bounded, non-diverging transient documented in
-# alt_flight.expect (same underlying cause: the new plant carries more residual momentum
-# through any ALT_HOLD capture than the old plant did). Not a runaway: alt_max and
-# alt_mean gates (unchanged) still bound the overall flight.
+# Windows [14.7,18.7] (F) and [22.2,23.2] (H) follow from E's dwell of 1200 ms in alt_inflight_switch.scn (row E).
+# E's dwell is the shortest value that still leaves the craft genuinely climbing at the switch (alt_max 0.88 m,
+# comfortably under 1.10). The post-switch altitude then does a slow, decaying-then-recovering
+# oscillation (trough ~0.58 m, recovering to ~0.85 m by window end) whose peak-to-peak
+# stays at ~0.30-0.34 m across a dwell sweep (800-1500 ms) -- i.e. a fixed amplitude
+# independent of the initiating disturbance size, not reducible by dwell/window
+# tuning. The same bounded, non-diverging transient is documented in
+# alt_flight.expect (same underlying cause: the plant carries residual momentum
+# through any ALT_HOLD capture). Not a runaway: the alt_max and
+# alt_mean gates still bound the overall flight.
+# F/H の窓 [14.7,18.7]・[22.2,23.2] は alt_inflight_switch.scn の E の滞留 1200 ms（E 行）から決まる。E の滞留は、切替時に
+# 機体が確かに上昇中である最短の値（alt_max 0.88 m、1.10 を十分下回る）。切替後の高度はゆっくり減衰して再び戻る振動
+# （谷 ~0.58 m、窓の終わりで ~0.85 m へ回復）をし、その peak-to-peak は滞留 800〜1500 ms の掃引で ~0.30〜0.34 m のまま
+# — 起点の外乱の大きさによらない一定の振幅で、滞留や窓の調整では減らせない。同じ有界で発散しない過渡は
+# alt_flight.expect にも記載（同じ原因: プラントは ALT_HOLD の捕捉を通して残留運動量を持つ）。暴走ではなく、
+# alt_max と alt_mean の判定が飛行全体を縛る。
 exit 0
 log_contains any "Mode: ALT_HOLD → STABILIZE"
 log_contains any "Mode: STABILIZE → ALT_HOLD"
 # Gate CLOSED by the in-flight switch: the off-center throttle (3330) is blocked — the
 # climb is arrested and the altitude stays bounded (< 1.1 m; an open gate would reach ~1.5 m).
 metric alt_max  < 1.10 in 14.7 18.7
-# 2026-10-31 R_out plant: alt_band 0.32 -> 0.38. No real counterpart; set 2026-10-31 to the R_out plant value 0.351 + ~8 %;
-# unverified - needs a hardware log of an in-flight switch to ALT_HOLD. / 実機の対応値なし。R_out プラントの値 0.351 に約 8 % の余裕。
+# alt_band < 0.38: the R_out plant value 0.351 + ~8 %. No real counterpart;
+# unverified - needs a hardware log of an in-flight switch to ALT_HOLD. / 実機の対応値なし。R_out プラントの値 0.351 に約 8 % の余裕を加えて 0.38。
 # 未検証 - 飛行中の ALT_HOLD 切替の実機ログが必要。
 metric alt_band < 0.38 in 14.7 18.7
-# Gate OPEN (after re-centering at G): full-up throttle now climbs well past the hold. 2026-11-09: the altitude ceiling
+# Gate OPEN (after re-centering at G): full-up throttle now climbs well past the hold. The altitude ceiling
 # (sf::limits::kAltitudeCeilingM = 1.2 m) bounds the ALT_HOLD stick climb and tapers it toward the ceiling, so the climb
-# ends near 1.1 m: alt_mean 1.09 m (it was 1.63 m without the ceiling, as the stick climbed past 1.6 m). The bound
-# 1.40 -> 0.95 still says "well past the 0.5-0.9 m hold"; alt_max < 1.25 is the ceiling.
-# ロック解除（G で再センターした後）: 全上げスロットルは保持高度を大きく超えて上昇する。2026-11-09: 高度上限
+# ends near 1.1 m: alt_mean 1.09 m (without the ceiling the stick climbs past 1.6 m). The bound
+# 0.95 says "well past the 0.5-0.9 m hold"; alt_max < 1.25 is the ceiling.
+# ロック解除（G で再センターした後）: 全上げスロットルは保持高度を大きく超えて上昇する。高度上限
 # （sf::limits::kAltitudeCeilingM = 1.2 m）が ALT_HOLD のスティック上昇を縛り、上限へ向けて絞るので、上昇は 1.1 m 付近
-# で終わる: alt_mean 1.09 m（上限が無いと、スティック上昇が 1.6 m を超えて 1.63 m だった）。下限は 1.40 → 0.95 にしても
+# で終わる: alt_mean 1.09 m（上限が無いと、スティック上昇は 1.6 m を超える）。下限 0.95 は
 # 「0.5〜0.9 m の保持を大きく超える」を表し、alt_max < 1.25 が上限。
 metric alt_mean > 0.95 in 22.2 23.2
 metric alt_max  < 1.25 in 22.2 23.2

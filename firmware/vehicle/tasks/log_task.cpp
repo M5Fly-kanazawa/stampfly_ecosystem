@@ -98,11 +98,11 @@ int writeToConsole(const char* format, ...)
 /// caller's stack and copies it into the ring; never touches the console, never waits.
 /// A line longer than the ring accepts is cut and still ends with a newline.
 /// Exception: a task whose stdout was redirected (the TCP CLI session of CLITask, which
-/// has no deadline) gets its line written straight to that stdout, as before the sink.
+/// has no deadline) gets its line written straight to that stdout, as it would without the sink.
 /// シンクを入れている間の ESP_LOG の出力関数。呼び出し側のスタックで行を整形してリングへ
 /// コピーする。コンソールには触れず、待たない。リングが受け付ける長さを超える行は切り、
 /// 改行で終える。例外: stdout を差し替えているタスク（締切を持たない CLITask の TCP CLI
-/// セッション）の行は、シンクを入れる前と同じくその stdout へ直接書く。
+/// セッション）の行は、シンクが無い場合と同じくその stdout へ直接書く。
 int sinkVprintf(const char* format, va_list arguments)
 {
     if (stdout != s_default_stdout) {

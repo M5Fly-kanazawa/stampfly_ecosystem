@@ -1323,7 +1323,7 @@ TEST(land_blind_touchdown_impact_then_stillness)
     for (int i = 0; i < kStillSamples; ++i) mgr.updateBlindTouchdown(blindSample(kRest, 1.0f, -0.4f), true);
     ASSERT_TRUE(!mgr.isBlindTouchdown());
 
-    // An impact alone: not yet (the old rule latched here). / 衝撃だけ: まだ（旧規則はここでラッチした）。
+    // An impact alone: not yet (it must not latch). / 衝撃だけ: まだ（ラッチしない）。
     for (int i = 0; i < sf::limits::kBlindTouchdownSamples; ++i) mgr.updateBlindTouchdown(blindSample(kHigh, 0.5f, -0.4f), true);
     ASSERT_TRUE(!mgr.isBlindTouchdown());
 

@@ -1,7 +1,7 @@
 # alt_disarm_land.scn — pilot DISARM in ALT_HOLD triggers an AUTO-LANDING (not a drop)
-#                      ALT_HOLD でのパイロット DISARM が自動着陸を起動（落下でなく）  (new 2026-06-14)
+#                      ALT_HOLD でのパイロット DISARM が自動着陸を起動（落下でなく）
 #
-# Spec (user request 2026-06-14): in ALT_HOLD/POS_HOLD a pilot DISARM must NOT cut the
+# Spec: in ALT_HOLD/POS_HOLD a pilot DISARM must NOT cut the
 # motors mid-air (the craft would drop). Instead it starts an AUTO-LANDING — a gradual
 # descent (computeLanding, ~0.3 m/s) — and touchdown does the real DISARM (LANDING →
 # IDLE_GROUND). ACRO/STABILIZE and the ground states still cut immediately, and a DISARM
@@ -10,14 +10,14 @@
 #   F:   press DISARM while FLYING → auto-land. Motors keep running through a gradual
 #        descent (duty > 0.3), then touchdown DISARMs. NOT an instant motor cut / drop.
 #
-# 仕様（ユーザー要望 2026-06-14）: ALT_HOLD/POS_HOLD のパイロット DISARM は空中でモータを
+# 仕様: ALT_HOLD/POS_HOLD のパイロット DISARM は空中でモータを
 # 切ってはならない（落下する）。代わりに自動着陸（緩降下 ~0.3 m/s）を起動し、接地で本当の
 # DISARM（LANDING→IDLE_GROUND）。ACRO/STABILIZE・地上は即停止のまま、着陸中の再 DISARM は緊急カット。
 #
-# The ToF close-range dead zone (the default of a run since 2026-11-09) is turned OFF here (event 0): this scenario tests the
+# The ToF close-range dead zone (on by default in every run) is turned OFF here (event 0): this scenario tests the
 # ROUTING of a pilot DISARM to the auto-landing, and with the sensor invalid on the floor the soft touchdown is not
 # detected (see landing_dead_zone.scn, the same run with the dead zone on: an open issue).
-# ToF の近距離の不感帯（2026-11-09 から、どの実行でも既定）はここでは切る（イベント 0）: 本シナリオが検証するのは、パイロットの
+# ToF の近距離の不感帯（どの実行でも既定で有効）はここでは切る（イベント 0）: 本シナリオが検証するのは、パイロットの
 # DISARM が自動着陸へ振り分けられること。床の上でセンサが無効だと柔らかい接地は検出されない
 # （不感帯を入れた同じ実行は landing_dead_zone.scn。未解決の課題）。
 #

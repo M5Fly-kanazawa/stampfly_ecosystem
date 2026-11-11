@@ -1,8 +1,8 @@
 # pos_gain_deficit_smallnudge_hold40.scn — POS_HOLD, SMALL perturbation, LONG hold
 # POS_HOLD・小さな擾乱・長時間保持
 #
-# hikoki64 §3.3 SILS gain-deficit injection study (2026-08-02), revision 2. The first
-# attempt (pos_gain_deficit_reposition_hold40.scn, a 4 s / ~0.6-0.7 m roll-stick
+# hikoki64 §3.3 SILS gain-deficit injection study. A small nudge is used instead of a reposition: the
+# pos_gain_deficit_reposition_hold40.scn variant (a 4 s / ~0.6-0.7 m roll-stick
 # reposition) never diverged even at extreme injected deficits, because the large
 # stick input drove the cascade's own nonlinear clamps (MAX_POS_VEL=1.0 m/s pos-loop
 # output limit, 10 deg tilt clamp, conditional-integration anti-windup) — the analytic
@@ -16,8 +16,8 @@
 # linear analysis's x0=0.03 m scale — then a long 40 s hold to see whether the
 # resulting transient GROWS (diverges, ~9.4 s period) or DECAYS (settles).
 #
-# hikoki64 §3.3 SILSゲイン欠損注入実験（2026-08-02）、改訂2。最初の試み
-# （pos_gain_deficit_reposition_hold40.scn、4秒/約0.6-0.7mのロールスティック再配置）は
+# hikoki64 §3.3 SILSゲイン欠損注入実験。再配置ではなく小さなタップを使う理由:
+# pos_gain_deficit_reposition_hold40.scn 版（4秒/約0.6-0.7mのロールスティック再配置）は
 # 極端な注入欠損でも発散しなかった —— 大きなスティック入力がカスケード自身の非線形
 # クランプ（位置ループ出力制限 MAX_POS_VEL=1.0m/s、10度チルトクランプ、条件付き積分
 # アンチワインドアップ）を働かせてしまったため。本スタディが照合する解析安定性モデル

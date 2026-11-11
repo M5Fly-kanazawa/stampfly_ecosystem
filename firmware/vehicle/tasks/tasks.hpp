@@ -42,11 +42,11 @@ void start_all();
 
 /// Handle of the ControlTask, registered by the task itself at startup
 /// (xTaskGetCurrentTaskHandle). ImuTask reads this to wake ControlTask after each
-/// estimate. Returns nullptr until ControlTask has run its setup. Replaces the old
-/// extern global g_control_task_handle (R3: no extern task handles).
+/// estimate. Returns nullptr until ControlTask has run its setup. Exposed through
+/// this accessor, not an extern global (R3: no extern task handles).
 /// ControlTask のハンドル。タスク自身が起動時に登録する（xTaskGetCurrentTaskHandle）。
 /// ImuTask が推定後に ControlTask を起こすために読む。ControlTask の setup 実行前は
-/// nullptr。旧 extern グローバル g_control_task_handle を置き換える（R3: extern 排除）。
+/// nullptr。extern グローバルでなくこのアクセサで公開する（R3: extern 排除）。
 TaskHandle_t control_handle();
 
 /// True once ImuTask has finished initializing the BMI270 on the shared SPI bus

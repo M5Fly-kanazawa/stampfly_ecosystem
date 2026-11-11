@@ -4,23 +4,23 @@
 # The API task blocks inside `takeoff` (waitUntil) until the auto-takeoff reaches FLYING. An
 # `emergency` that arrives meanwhile must NOT wait for that: the wait keeps reading the command
 # sources, stops the motors at once, and the interrupted `takeoff` answers
-# "error interrupted by emergency". Before the fix the `emergency` was read only after the
-# takeoff had finished, so the motors kept running for the rest of the wait.
+# "error interrupted by emergency". An `emergency` read only after the takeoff had finished
+# would leave the motors running for the rest of the wait.
 #
 # API タスクは `takeoff` の中（waitUntil）で、自動離陸が FLYING に達するまで待機する。その間に
 # 届いた `emergency` はそれを待ってはならない: 待機はコマンド源を読み続け、即座にモータを止め、
-# 打ち切られた `takeoff` は "error interrupted by emergency" を返す。main（2026-11-08 時点）は `emergency` が
-# 離陸の完了後にやっと読まれ、待機の残り時間のあいだモータが回り続けた。
+# 打ち切られた `takeoff` は "error interrupted by emergency" を返す。離陸の完了後にやっと読まれる `emergency` では、
+# 待機の残り時間のあいだモータが回り続ける。
 #
 # An emergency must not be followed by a re-takeoff: while the takeoff waits, three more lines
 # arrive — a second `takeoff`, `height?` and an `rc`. The `emergency` must DISCARD the parked
 # lines and answer each "error cancelled by emergency" (the `rc` is dropped at once: a stale
-# stick input is never replayed). Before the fix the parked `takeoff` ran right after the
-# emergency and the craft took off again.
+# stick input is never replayed). A parked `takeoff` that ran right after the
+# emergency would make the craft take off again.
 # emergency の後に再離陸しない: takeoff の待機中に、二つ目の `takeoff`・`height?`・`rc` の
 # 3 行が届く。`emergency` は後回しの行を「捨て」、それぞれに "error cancelled by emergency" を
-# 返す（`rc` はその場で捨てる: 古いスティック入力を再生しない）。main（2026-11-08 時点）は後回しの `takeoff` が
-# emergency の直後に実行され、機体が再び離陸した。
+# 返す（`rc` はその場で捨てる: 古いスティック入力を再生しない）。後回しの `takeoff` が
+# emergency の直後に実行されると、機体が再び離陸してしまう。
 #
 # Timeline: takeoff at 6.0 s, the extra lines at 6.5 s, emergency at 7.0 s (the climb is under way).
 # Run: sf sils scenario simulator/sils/scenarios/api_takeoff_emergency.scn --target vehicle --duration 14000000

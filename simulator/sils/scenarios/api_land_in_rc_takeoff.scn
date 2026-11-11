@@ -3,12 +3,12 @@
 #
 # The ARM button in ALT_HOLD starts the auto-takeoff; the API `land` is an ordinary line read by the main loop (cmdLand), not one parked during a `takeoff` wait. StateManager::notifyLandingRequest does not accept TAKEOFF
 # (a LANDING that begins on the floor can float the craft up, detailed_design.md §3 note 5), so cmdLand holds the request until the TAKEOFF has left (hasLeftTakeoff): the takeoff completes (TAKEOFF -> FLYING), the land is issued
-# (FLYING -> LANDING -> IDLE_GROUND) and answered "ok" at the touchdown. Before the fix the request was published in TAKEOFF, ignored, and answered "error land timeout" after 20 s.
+# (FLYING -> LANDING -> IDLE_GROUND) and answered "ok" at the touchdown. A request published in TAKEOFF would be ignored and answered "error land timeout" after 20 s.
 # Spec under test (detailed_design.md §3 note 13).
 #
 # RC の ARM ボタン（ALT_HOLD）が自動離陸を始める。API の `land` は主ループが読む普通の行（cmdLand）で、`takeoff` の待機中に後回しにした行ではない。StateManager::notifyLandingRequest は TAKEOFF を受け付けない
 # （床の上で始めた LANDING は機体を浮かせうる。detailed_design.md §3 注5）ので、cmdLand は TAKEOFF を抜けるまで（hasLeftTakeoff）要求を保留する: 離陸が完了し（TAKEOFF -> FLYING）、着陸を発行し
-# （FLYING -> LANDING -> IDLE_GROUND）、接地で "ok" を返す。修正前は TAKEOFF で要求を発行して無視され、20 s 後に "error land timeout" を返した。
+# （FLYING -> LANDING -> IDLE_GROUND）、接地で "ok" を返す。TAKEOFF で要求を発行すると無視され、20 s 後に "error land timeout" を返してしまう。
 # 検証する仕様（detailed_design.md §3 注13）。
 #
 # Timeline: ARM at 5.5 s (spool, the TAKEOFF begins at about 5.8 s), land at 5.95 s (the climb is under way), the touchdown within about 10 s.

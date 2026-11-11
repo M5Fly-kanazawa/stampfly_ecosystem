@@ -87,14 +87,14 @@ public:
         // exactly 360 deg (see rate_ramp_rps2 below); this caps its peak. A limit above
         // the triangle peak sqrt(2*pi/(1/(2*a_up) + 1/(2*a_down))) (1729 deg/s at 145
         // rad/s^2) gives a pure triangle, a lower limit adds a plateau. The MEASURED peak
-        // is ~8 % above the command (SILS fitted plant 2026-10-02: 1615 deg/s for 1500),
+        // is ~8 % above the command (SILS fitted plant: 1615 deg/s for 1500),
         // so the limits keep it well under the gyro range (2000) and abort (1950) lines.
         // レートプロファイルのピーク「上限」、回転軸別 [deg/s]（param flip.rate_roll_dps /
         // flip.rate_pitch_dps）。レート指令は面積がちょうど 360° の「計画」プロファイル
         // （下の rate_ramp_rps2 参照）で、これはそのピークを抑える。三角形のピーク
         // sqrt(2π/(1/(2 a_up) + 1/(2 a_down)))（145 rad/s² で 1729 deg/s）より高い上限は
         // 純粋な三角形、低い上限は平坦部が付く。「計測」ピークは指令より約 8 % 高い
-        // （SILS フィット済みプラント 2026-10-02: 指令 1500 で 1615 deg/s）ので、上限は
+        // （SILS フィット済みプラント: 指令 1500 で 1615 deg/s）ので、上限は
         // ジャイロのレンジ（2000）と打ち切り（1950）に十分な余裕を残す値にしてある。
         float rate_roll_dps  = 1500.0f;
         float rate_pitch_dps = 1400.0f;
@@ -107,10 +107,10 @@ public:
         // plus rate^2/(2*brake_ramp_rps2) reaches 2*pi, see brakeDue()). The slope is
         // chosen so the torque it needs, I*alpha (1.3 mN*m roll / 1.9 mN*m pitch at 145),
         // stays far below spin_torque_limit_nm: the rate loop then stays linear and an
-        // actuator lag only shifts the measured waveform in time, the area is kept. The
-        // earlier closed-loop trapezoid (300/500 rad/s^2, brake at a measured angle) drove
-        // the loop to the torque limit and overshot to 1909 deg/s on the first hardware
-        // flip (2026-10-02, flip-maneuver-plan.md section 5.7).
+        // actuator lag only shifts the measured waveform in time, the area is kept.
+        // Rejected alternative: a closed-loop trapezoid (300/500 rad/s^2, brake at a measured
+        // angle) drives the loop to the torque limit and overshot to 1909 deg/s in a hardware
+        // flip test (flip-maneuver-plan.md section 5.7).
         // レートプロファイルの加速ランプ: 「指令自体」の角加速度（制御ゲインではない）
         // [rad/s²]（param flip.rate_ramp_rps2）。指令は「計画」プロファイル（オーナーの
         // 工場出荷ファームも同方式）: この傾きでピークまで上げ、必要なら平坦部、
@@ -118,9 +118,9 @@ public:
         // ＋ rate²/(2·brake_ramp_rps2) が 2π に達したら Brake、brakeDue() 参照）。傾きは
         // 必要トルク I·α（145 でロール 1.3 mN·m / ピッチ 1.9 mN·m）が
         // spin_torque_limit_nm を大きく下回るように選ぶ: レートループは線形のままで、
-        // アクチュエータの遅れは計測波形を時間方向にずらすだけで面積は保たれる。以前の
-        // 閉ループ台形（300/500 rad/s²、計測角で Brake）はループをトルク上限に張り付かせ、
-        // 最初の実機宙返り（2026-10-02）で 1909 deg/s まで行き過ぎた
+        // アクチュエータの遅れは計測波形を時間方向にずらすだけで面積は保たれる。
+        // 不採用の案: 閉ループ台形（300/500 rad/s²、計測角で Brake）はループをトルク上限に張り付かせ、
+        // 実機の宙返り試験で 1909 deg/s まで行き過ぎた
         // （flip-maneuver-plan.md 5.7 節）。
         float rate_ramp_rps2 = 145.0f;
 
@@ -144,7 +144,7 @@ public:
         // ことで列生成器は自己完結し、将来の電圧依存上限化は max_thrust_n に
         // 与える値を変えるだけで済む。
         float thrust_boost_ratio   = 0.9f;    // Boost / Recover
-        float thrust_spin_hi_ratio = 0.5f;    // Spin accel/decel windows, Brake (0.5 = per-motor mid-scale: full +-torque headroom; 0.75 clamped the pitch brake in SILS 2026-09-16 / モータ中点で上下のトルク余裕が最大。0.75 では SILS でピッチの減速がクランプされた)
+        float thrust_spin_hi_ratio = 0.5f;    // Spin accel/decel windows, Brake (0.5 = per-motor mid-scale: full +-torque headroom; 0.75 clamps the pitch brake in SILS / モータ中点で上下のトルク余裕が最大。0.75 では SILS でピッチの減速がクランプされる)
 
         // Reduced thrust during the inverted coast window (phi_a..phi_b) [N]
         // (param flip.thrust_lo_n) — a small POSITIVE value, not zero, so the
@@ -189,17 +189,17 @@ public:
         // Attitude-loop output cap while a flip is active [deg/s] (param
         // flip.recover_rate_limit_dps), in place of normal flight's 3 rad/s
         // (172 deg/s). Recover can start from any attitude, up to inverted (155 deg
-        // of tilt in the 2026-10-02 hardware test); at 172 deg/s righting takes
+        // of tilt in a hardware test); at 172 deg/s righting takes
         // ~0.9 s, longer than the ~0.5 s the craft needs to fall from 1.2 m. SILS
-        // flip_abort_recover (2026-10-02) confirmed: it hit the floor at -4.8 m/s.
+        // flip_abort_recover confirms: it hits the floor at -4.8 m/s.
         // The cap only binds at large tilt errors (kp = 5 /s: it is the linear
         // regime below ~0.12 rad / 7 deg at 600 deg/s), so the Boost/Done level hold
         // and the end of every Recover are unchanged.
         // 宙返り中の姿勢ループ出力上限 [deg/s]（param flip.recover_rate_limit_dps）。
         // 通常飛行の 3 rad/s（172 deg/s）の代わりに使う。Recover は反転までの
-        // 任意の姿勢から始まりうる（2026-10-02 実機試験では傾き 155°）。172 deg/s
+        // 任意の姿勢から始まりうる（実機試験では傾き 155°）。172 deg/s
         // では立て直しに約 0.9 s かかり、1.2 m からの落下に使える約 0.5 s より長い。
-        // SILS flip_abort_recover（2026-10-02）で確認: −4.8 m/s で床に衝突した。
+        // SILS flip_abort_recover で確認: −4.8 m/s で床に衝突する。
         // 上限が効くのは傾き誤差が大きいときだけで、Boost/Done の水平保持と
         // 各 Recover の終盤は変わらない。
         float recover_rate_limit_dps = 600.0f;
@@ -207,13 +207,13 @@ public:
         // Yaw-torque cap applied by PidController during the rate-only phases
         // (Spin/Brake) [N*m] (param flip.spin_yaw_torque_limit_nm). Yaw needs
         // tau/(4*kappa) of per-motor thrust, so an unconstrained yaw loop can
-        // consume the mixer headroom the flip axis needs (SILS 2026-09-16:
-        // pitch flip brake failed for this reason). Consumed by PidController,
+        // consume the mixer headroom the flip axis needs (SILS: the
+        // pitch flip brake fails for this reason). Consumed by PidController,
         // not by the sequencer itself.
         // レートのみのフェーズ（Spin/Brake）で PidController が掛けるヨートルク
         // 上限 [N·m]（param flip.spin_yaw_torque_limit_nm）。ヨーは 1 モータあたり
         // τ/(4κ) の推力差を要するため、無制限のヨーループは回転軸に必要な
-        // ミキサーの余裕を食う（SILS 2026-09-16: これでピッチの減速が失敗）。
+        // ミキサーの余裕を食う（SILS: これでピッチの減速が失敗する）。
         // 列生成器自身ではなく PidController が使う。
         float spin_yaw_torque_limit_nm = 0.3e-3f;
 
@@ -222,23 +222,23 @@ public:
         // normal-flight clamp (rate.roll/pitch.max_torque 5.2e-3, a flight-
         // proven value below the mixer's geometric maximum of about 7.7e-3 at
         // mid-scale collective). The flip needs the extra authority on the
-        // heavier pitch axis to brake inside 360 deg (SILS 2026-09-16).
+        // heavier pitch axis to brake inside 360 deg (SILS).
         // Spin/Brake 中の回転軸レートループのトルク上限 [N·m]（param
         // flip.spin_torque_limit_nm）。PidController が通常飛行の上限
         // （rate.roll/pitch.max_torque 5.2e-3、飛行実績値で、中点集合推力での
         // ミキサー幾何学的上限 約 7.7e-3 より低い）の代わりに掛ける。慣性の
-        // 大きいピッチ軸が 360° 以内で減速するのに必要（SILS 2026-09-16）。
+        // 大きいピッチ軸が 360° 以内で減速するのに必要（SILS）。
         float spin_torque_limit_nm = 7.0e-3f;
 
         // Ramp-down of the rate command [rad/s^2] (param flip.brake_ramp_rps2), the
         // same shape as rate_ramp_rps2 mirrored (symmetric triangle by default, like the
         // factory firmware's ~150 rad/s^2). The 7 mN*m limit delivers only ~440 rad/s^2 on
-        // the hardware roll axis (first flip log), so a ramp near that (the old 500) cannot
+        // the hardware roll axis (hardware flip log), so a ramp near that (e.g. 500) cannot
         // be tracked; 145 needs 1.3 mN*m (roll) / 1.9 mN*m (pitch).
         // レート指令の減速ランプ [rad/s²]（param flip.brake_ramp_rps2）。rate_ramp_rps2 を
         // 鏡写しにした形（既定は対称三角形、工場出荷ファームの約 150 rad/s² と同じ）。
-        // 実機のロール軸は 7 mN·m の上限で約 440 rad/s² しか出せない（最初の宙返りログ）ので、
-        // それに近いランプ（旧 500）は追従できない。145 が要るのはロール 1.3 mN·m /
+        // 実機のロール軸は 7 mN·m の上限で約 440 rad/s² しか出せない（実機の宙返りログ）ので、
+        // それに近いランプ（500 など）は追従できない。145 が要るのはロール 1.3 mN·m /
         // ピッチ 1.9 mN·m。
         float brake_ramp_rps2 = 145.0f;
 
@@ -247,31 +247,31 @@ public:
         // capped at settle_tilt_deg and the yaw torque at
         // spin_yaw_torque_limit_nm, so the outer loops cannot starve the mixer
         // (and the altitude loop) while the craft still carries the flip's
-        // horizontal velocity. SILS 2026-09-16: without it the position loop
+        // horizontal velocity. SILS: without it the position loop
         // demanded the full 10 deg and the yaw loop its full clamp right after a
         // pitch flip, motors saturated, and the craft descended at 0.7 m/s.
         // 宙返り直後の整定窓（param flip.settle_ms / flip.settle_tilt_deg）:
         // FlipComplete から settle_ms の間、位置ループの傾き指令を settle_tilt_deg、
         // ヨートルクを spin_yaw_torque_limit_nm に抑え、宙返りで付いた水平速度が
         // 残る間に外側ループがミキサー（と高度ループ）の余裕を食い尽くさない
-        // ようにする。SILS 2026-09-16: これが無いとピッチ宙返り直後に位置ループが
+        // ようにする。SILS: これが無いとピッチ宙返り直後に位置ループが
         // 10° 一杯、ヨーループが上限一杯を要求してモータが飽和し 0.7 m/s で降下した。
         float settle_ms       = 1500.0f;
         float settle_tilt_deg = 5.0f;
 
         // Attitude-loop handoff conditions (plan §3.2/§3.3/§3.5): the craft
         // leaves Brake for Recover as soon as its MEASURED rate has decayed
-        // below handoff_rate_dps — at ANY rotation angle (the old "and past
-        // 290 deg" gate is gone: it stranded an aborted flip in Brake for good,
-        // hardware flip test 2026-10-02) — or unconditionally past
+        // below handoff_rate_dps — at ANY rotation angle (a condition "and past
+        // 290 deg" is not used: it strands an aborted flip in Brake for good,
+        // as seen in a hardware flip test) — or unconditionally past
         // handoff_force_deg (360: the rotation is complete; backstop if the rate never
         // decays), or after brake_timeout_ms (backstop in time; Brake cannot last forever).
         // Under the planned profile the measured rate is still ~250 deg/s when the angle
         // reaches 360 (the lag of the waveform), so the 360 deg gate normally ends Brake.
         // 姿勢ループへの引き渡し条件（plan §3.2/§3.3/§3.5）: 「計測」レートが
         // handoff_rate_dps 未満に落ちたら、回転角に「関係なく」Brake→Recover
-        // （旧「290° 超えかつ」の条件は廃止: 打ち切り後の機体を Brake に
-        // 永久に取り残した — 実機宙返り試験 2026-10-02）。または handoff_force_deg
+        // （「290° 超えかつ」の条件は使わない: 打ち切り後の機体を Brake に
+        // 永久に取り残す — 実機宙返り試験で確認）。または handoff_force_deg
         // を過ぎたら無条件（360°: 回転完了。レートが落ちない場合の安全弁）、または
         // brake_timeout_ms 経過（時間側の安全弁。Brake は永久には続かない）。計画プロファイルでは
         // 角度が 360° に達した時点でも計測レートは約 250 deg/s 残る（波形の遅れ）ため、通常は
@@ -291,7 +291,7 @@ public:
         // reading clips, the integrated rotation angle is underestimated and the
         // rate loop sees a wrong error. The limit sits just under the range
         // (97.5 %) and must be exceeded for kGyroAbortConsecutiveSamples cycles in
-        // a row, so a normal overshoot (hardware 2026-10-02: 1909 dps against a
+        // a row, so a normal overshoot (hardware: 1909 dps against a
         // 1500 dps command) or a single noisy sample does not trip it. On trip
         // the sequence goes to Brake (command -> 0): the true rate is beyond the
         // sensor, so continuing the spin would be flying blind.
@@ -300,7 +300,7 @@ public:
         // ±2000 deg/s 設定（kGyroRangeDps）で、これを超えると出力が張り付き、
         // 積算回転角が過小になりレートループは誤った誤差を見る。上限はレンジ
         // 直下（97.5 %）に置き、kGyroAbortConsecutiveSamples 周期連続で超えた
-        // ときだけ作動するので、通常のオーバーシュート（実機 2026-10-02:
+        // ときだけ作動するので、通常のオーバーシュート（実機:
         // 指令 1500 dps に対し 1909 dps）や単発のノイズでは作動しない。作動時は
         // Brake へ（指令→0）: 真のレートがセンサの範囲外にあり、スピンを続けるのは
         // 目隠し飛行になるため。

@@ -17,12 +17,12 @@ order "Auto-takeoff engaged" "Auto-takeoff complete — normal mode law engaged"
 # Gate CLOSED: throttle UP ignored → hold the captured 0.5 m.
 metric alt_max  < 0.72 in 12.0 14.0
 metric alt_band < 0.20 in 12.0 14.0
-# Gate OPEN + UP: climb well above 0.5 m. 2026-11-09: the altitude ceiling (1.2 m) tapers the stick climb toward it, so the
-# peak is 1.07 m (it was 1.19 m); the bound 1.10 -> 1.00 still says "well above 0.5 m".
-# ロック解除＋上げ: 0.5 m を大きく超えて上昇する。2026-11-09: 高度上限（1.2 m）がスティック上昇を上限へ向けて絞るので、
-# 最大は 1.07 m（以前は 1.19 m）。下限は 1.10 → 1.00 にしても「0.5 m を大きく超える」を表す。
+# Gate OPEN + UP: climb well above 0.5 m. The altitude ceiling (1.2 m) tapers the stick climb toward it, so the
+# peak is 1.07 m; the bound 1.00 says "well above 0.5 m".
+# ロック解除＋上げ: 0.5 m を大きく超えて上昇する。高度上限（1.2 m）がスティック上昇を上限へ向けて絞るので、
+# 最大は 1.07 m。下限 1.00 は「0.5 m を大きく超える」を表す。
 metric alt_max  > 1.00 in 17.5 18.5
-# DOWN: descend back below 0.9 m (symmetric stick — new descend capability).
+# DOWN: descend back below 0.9 m (symmetric stick: the stick commands descent too).
 metric alt_mean < 0.90 in 20.5 21.0
 metric tilt_max < 0.1745 in 9.0 23.0  # 10.0 deg
 metric duty_max < 0.92 in 12.0 23.0

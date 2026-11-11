@@ -84,12 +84,12 @@ i2c_master_bus_handle_t i2c_bus();
  * board::init() creates the default STA netif (R1: sf_board is the single owner of
  * esp_netif). sf_comm borrows this handle to set the hostname and then runs
  * esp_wifi_init/start (which bind to this default STA netif); sf_comm must NOT create
- * its own netif (that was the old ownership-scatter anti-pattern, hardware_init.md §3/§4).
+ * its own netif (that is the ownership-scatter anti-pattern, hardware_init.md §3/§4).
  * Returns nullptr if init() has not been called yet.
  *
  * board::init() がデフォルト STA netif を生成する (R1: esp_netif の唯一の所有者は sf_board)。
  * sf_comm はこの handle を借りて hostname を設定し esp_wifi_init/start を行う (このデフォルト
- * STA netif に bind される)。sf_comm は自前の netif を生成してはならない (旧アンチパターン、
+ * STA netif に bind される)。sf_comm は自前の netif を生成してはならない (所有分散アンチパターン、
  * hardware_init.md §3/§4)。init() 未実行なら nullptr。
  *
  * @return STA netif handle, or nullptr if uninitialized.

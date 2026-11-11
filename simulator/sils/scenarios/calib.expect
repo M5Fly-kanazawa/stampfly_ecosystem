@@ -6,13 +6,10 @@
 # ホバーを ESKF 姿勢有界で飛んだことを検証する。「校正なし」側は SILS_EMU_NO_CALIB=1 の
 # 再実行で実証（ここでは判定しない）。
 #
-# XFAIL removed 2026-10-31 (R_out plant): the known issue of 2026-07-26 (injected IMU bias x the old ODE
-# plant's takeoff dynamics -> 0.6-0.7 Hz self-oscillation, near the real-hardware ACRO ~0.9 Hz limit-cycle
-# band) no longer appears. calib passes deterministically on the R_out plant (att_rmse 0.55 deg, tilt_max 1.33
-# deg; XPASS in two regression runs, PASS in two further direct runs); the suspicion that the old plant's excess
-# thrust contributed (simulation-policy backlog #13) is supported. / XFAIL 解除 2026-10-31（R_out プラント）:
-# 2026-07-26 の既知課題（注入IMUバイアス×旧ODEプラントの離陸動特性による 0.6-0.7 Hz 自励振動）は出なくなった。
-# 回帰試験 2 回で XPASS、直接実行 2 回で PASS（att_rmse 0.55 deg・tilt_max 1.33 deg）。
+# calib passes deterministically (att_rmse 0.55 deg, tilt_max 1.33 deg): the injected IMU bias does not
+# excite a takeoff self-oscillation (0.6-0.7 Hz, near the real-hardware ACRO ~0.9 Hz limit-cycle band).
+# calib は決定的に通る（att_rmse 0.55 deg・tilt_max 1.33 deg）: 注入した IMU バイアスは離陸時の
+# 自励振動（0.6-0.7 Hz、実機 ACRO の ~0.9 Hz リミットサイクル帯の近く）を起こさない。
 exit 0
 log_contains any "ARM accepted"                       # G1: IDLE_GROUND → ARMED_GROUND
 log_contains any "Takeoff complete"                   # G1: TAKEOFF → FLYING

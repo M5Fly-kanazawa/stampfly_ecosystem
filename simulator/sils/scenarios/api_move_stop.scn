@@ -4,12 +4,11 @@
 # `forward 150` (0.3 m/s, about 5 s) blocks until the estimate reaches the target. A `stop`
 # 1.0 s into the move must be accepted at once (re-target the current position and heading),
 # end the wait ("error interrupted by stop" for the `forward`) and brake the craft well short
-# of 1.5 m. Before the fix the `stop` was read only after the move had finished, so it could
-# not stop anything.
+# of 1.5 m. A `stop` read only after the move had finished could not stop anything.
 # `forward 150`（0.3 m/s、約 5 s）は推定が目標へ着くまで待機する。移動開始 1.0 s 後の `stop` は
 # 直ちに受理され（現在位置と向きを置き直す）、待機を終わらせ（`forward` は "error interrupted by
-# stop"）、機体を 1.5 m のずっと手前で止めねばならない。main（2026-11-08 時点）は `stop` が移動の完了後にやっと
-# 読まれ、何も止められなかった。
+# stop"）、機体を 1.5 m のずっと手前で止めねばならない。移動の完了後にやっと読まれる `stop` では
+# 何も止められない。
 #
 # a `left 50` arrives while `forward` waits and is parked. The accepted `stop` must discard it
 # ("error cancelled by stop"): replaying it would make the craft move again right after the stop.

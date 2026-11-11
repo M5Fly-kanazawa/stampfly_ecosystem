@@ -9,11 +9,11 @@ log_contains any "Transition: LANDING → IDLE_GROUND"
 log_absent any "Blind landing: ToF silent"
 log_absent any "touchdown by time"
 order "Transition: FLYING → LANDING" "Transition: LANDING → IDLE_GROUND"
-# Never above the take-off overshoot after the LANDING began (before: 1.98 m, the ToF range).
-# LANDING が始まった後は、離陸の行き過ぎより上に行かない（以前: 1.98 m、ToF の範囲）。
+# Never above the take-off overshoot after the LANDING began (without the base bound before the calibration and the rise brake: 1.98 m, the ToF range).
+# LANDING が始まった後は、離陸の行き過ぎより上に行かない（較正前の基準の上限も上昇ブレーキも無いとき: 1.98 m、ToF の範囲）。
 metric alt_max < 1.35 in 12.0 28.0
-# Descent speed (truth, includes the touchdown): measured 0.38 m/s (before: 2.20 m/s).
-# 降下速度（真値。接地を含む）: 実測 0.38 m/s（以前: 2.20 m/s）。
+# Descent speed (truth, includes the touchdown): measured 0.38 m/s (without them: 2.20 m/s).
+# 降下速度（真値。接地を含む）: 実測 0.38 m/s（無いとき: 2.20 m/s）。
 metric descent_speed_max < 1.0 in 12.0 28.0
 # On the floor at the end.
 # 最後は床の上。

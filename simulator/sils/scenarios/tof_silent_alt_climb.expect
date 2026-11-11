@@ -3,14 +3,14 @@
 #
 # Chain: auto-takeoff + stick climb → ToF output stops at ~0.8 m while rising at ~0.3 m/s → FLYING → LANDING (the pilot's
 # stick is ignored from now on) → the blind velocity loop stops the climb (peak 0.92 m, 0.12 m above the silence) and lets
-# the craft down → touchdown (detector / impact cut) inside the 10 s limit → ARM is refused. Before 2026-11-09 this scenario
-# climbed to 1.55 m at 0.57 m/s (peak 1.79 m, touchdown 0.47 m/s); the altitude ceiling now bounds the stick climb at 1.2 m
+# the craft down → touchdown (detector / impact cut) inside the 10 s limit → ARM is refused. A climb to 1.55 m at 0.57 m/s
+# (peak 1.79 m, touchdown 0.47 m/s) does not occur: the altitude ceiling bounds the stick climb at 1.2 m
 # and tapers it, so the climb at the silence is slower and lower. The fastest climb at a silence is the auto-takeoff
 # (tof_silent_takeoff.scn).
 # 連鎖: 自動離陸＋スティック上昇 → 約 0.3 m/s で上昇中の約 0.8 m で ToF 出力停止 → FLYING → LANDING（以後パイロットの
 # スティックは無視）→ ToF なしの速度ループが上昇を止め（最大 0.92 m、出力停止から 0.12 m 上）、機体を降ろす → 接地
-# （検出器・衝撃カット）が 10 s の時間切れの内側 → ARM は拒否される。2026-11-09 より前はこのシナリオは 0.57 m/s で 1.55 m まで
-# 上昇していた（最大 1.79 m、接地 0.47 m/s）。高度上限がスティック上昇を 1.2 m で縛り、絞るので、出力停止の時点の上昇は
+# （検出器・衝撃カット）が 10 s の時間切れの内側 → ARM は拒否される。0.57 m/s で 1.55 m まで上昇する状況（最大 1.79 m、接地
+# 0.47 m/s）は起こらない: 高度上限がスティック上昇を 1.2 m で縛り、絞るので、出力停止の時点の上昇は
 # 遅く低い。出力停止の時点で最も速い上昇は自動離陸（tof_silent_takeoff.scn）。
 exit 0
 log_contains any "Takeoff complete → FLYING/ALT_HOLD"
@@ -25,12 +25,11 @@ order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silen
 # The climb momentum is stopped: peak 0.92 m (measured, 0.12 m above the silence altitude of ~0.8 m). Bound 1.1 m.
 # 上昇の勢いは止まる: 最大 0.92 m（実測。出力停止高度の約 0.8 m から 0.12 m 上）。上限 1.1 m。
 metric alt_max < 1.1 in 14.4 23.8
-# Touchdown speed after that climb: measured 0.40 m/s (truth), 2.9 s after the silence. Bound 0.6 m/s.
-# その上昇の後の接地速度: 実測 0.40 m/s（真値）、出力停止の 2.9 s 後。上限 0.6 m/s。
-# 2026-11-09: bound 0.6 -> 0.95 m/s (measured 0.40 -> 0.77 m/s). The thrust of the descent without a ToF is now at most 0.95 x the support thrust
-# (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g) instead of by the PI.
-# 2026-11-09: 上限 0.6 → 0.95 m/s（実測 0.40 → 0.77 m/s）。ToF なしの降下の推力は高々 支持推力の 0.95 倍（速度推定が何であれ上昇できない）になり、
-# 速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
+# Touchdown speed after that climb: measured 0.77 m/s (truth). Bound 0.95 m/s: the thrust of the descent without a ToF is at most
+# 0.95 x the support thrust (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the
+# descent speed is set by that ceiling (0.05 g) instead of by the PI.
+# その上昇の後の接地速度: 実測 0.77 m/s（真値）。上限 0.95 m/s: ToF なしの降下の推力は高々 支持推力の 0.95 倍
+# （速度推定が何であれ上昇できない）で、速度の目標に達した後の降下速度は PI でなくその上限（0.05 g）で決まる。
 metric descent_speed_max < 0.95 in 14.4 23.8
 # On the floor and stopped after the blind descent (truth 0.021 m resting).
 # ToF なしの降下の後は床の上で停止（真値 0.021 m で静止）。
