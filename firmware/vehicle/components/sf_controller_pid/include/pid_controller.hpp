@@ -738,25 +738,16 @@ private:
     // 速度クランプで、目標が近づくと位置ループがこの率以下に減速し滑らかに捕捉する。
     float takeoff_climb_rate_ = 0.3f;     // [m/s] upward / 上向き上昇率
 
-    // Auto-takeoff target altitude (TakeoffClimb phase, ALT/POS). The default hover
-    // height after an ARM-triggered auto-takeoff — high enough to clear ground effect
-    // (0.15m ToF airborne is the ESKF handoff, NOT this control target). SSOT for the
-    // takeoff height: a core component cannot depend on main/config.hpp, so it lives
-    // here alongside the other vertical constants (hover_thrust_, takeoff_climb_rate_);
-    // the network-API takeoff inherits it by holding the post-takeoff altitude.
-    // 自動離陸の目標高度（TakeoffClimb フェーズ, ALT/POS）。ARM 起動の自動離陸後の既定
-    // ホバー高度 — 地面効果を抜ける高さ（0.15m ToF 空中検知は ESKF ハンドオフであって
-    // この制御目標ではない）。離陸高度の SSOT: コア部品は main/config.hpp に依存できないため、
-    // 他の鉛直定数（hover_thrust_, takeoff_climb_rate_）と並べてここに置く。ネットワーク
-    // API の離陸は離陸後の高度を保持することでこれを継承する。
-    // The altitude ceiling (sf::limits::kAltitudeCeilingM, shared with the API) bounds this
-    // target: the build fails if the target is ever raised above it, so the ceiling holds
-    // for the auto-takeoff without a runtime check in the climb path.
-    // 高度上限（sf::limits::kAltitudeCeilingM、API と共有）がこの目標を縛る: 目標が上限を
-    // 超えるとビルドが失敗するので、上昇経路に実行時の検査を置かなくても自動離陸で上限が守られる。
-    static constexpr float kTakeoffTargetAltM = 0.5f;   // [m] / 目標高度
-    static_assert(kTakeoffTargetAltM <= limits::kAltitudeCeilingM,
-                  "auto-takeoff target must not exceed the altitude ceiling");
+    // Auto-takeoff target altitude (TakeoffClimb phase, ALT/POS): the hover height after
+    // an auto-takeoff, high enough to clear ground effect (0.15m ToF airborne is the ESKF
+    // handoff, NOT this control target). The value is sf::limits::kAutoTakeoffTargetAltitudeM,
+    // shared with the API takeoff, which seeds its guidance target at the same height; the
+    // altitude ceiling (sf::limits::kAltitudeCeilingM) bounds it at build time.
+    // 自動離陸の目標高度（TakeoffClimb フェーズ, ALT/POS）: 自動離陸後のホバー高度。地面効果を
+    // 抜ける高さ（0.15m ToF 空中検知は ESKF ハンドオフであってこの制御目標ではない）。値は
+    // sf::limits::kAutoTakeoffTargetAltitudeM で、API の離陸と共有する（API は誘導目標を同じ高さで
+    // 初期化する）。高度上限（sf::limits::kAltitudeCeilingM）がビルド時にこれを縛る。
+    static constexpr float kTakeoffTargetAltM = limits::kAutoTakeoffTargetAltitudeM;   // [m] / 目標高度
     float takeoff_target_alt_ = kTakeoffTargetAltM;     // [m] / 目標高度
 
     // Auto-takeoff complete (TakeoffClimb → Airborne, the controller-side TAKEOFF→FLYING

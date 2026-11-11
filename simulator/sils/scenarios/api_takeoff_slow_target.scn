@@ -1,0 +1,26 @@
+# api_takeoff_slow_target.scn — API `takeoff` of a craft that climbs slowly: the climb ends by its time limit below the target, `ok` is replied, and the craft goes on to the auto-takeoff target altitude (0.5 m)
+#                               ゆっくり上昇する機体の API `takeoff`: 上昇は目標に届かないまま時間切れで終わり、`ok` を返し、機体は自動離陸の目標高度（0.5 m）へ上がり続ける
+#
+# Motor health 0.88 with the ToF dead zone off (the craft of weak_spool_alt_slow_lift): the auto-takeoff reaches FLYING with the craft at about 0.23 m, below the target. `takeoff`
+# still replies `ok` (the condition and the time of the reply are the FLYING state, as for any takeoff), and the guidance target it seeds is at the target altitude of the auto-takeoff
+# (-0.50 m in NED down), not at the altitude the craft is at: the craft climbs to the target and holds it, as after a transmitter ARM. The craft overshoots the target (to about 0.79 m) and
+# returns to it slowly: the altitude takes tens of seconds to settle, so the hold is judged in the window of 40-49 s. The true altitude of the simulator includes about 0.02 m of resting offset
+# above the estimate. The run is 50 s long and no command follows the takeoff. Spec under test (detailed_design.md §3.1 note 4).
+#
+# モータの健全度 0.88 で ToF の不感帯なし（weak_spool_alt_slow_lift の機体）: 自動離陸は機体が目標より低い約 0.23 m にいる状態で FLYING に達する。`takeoff` は
+# それでも `ok` を返す（返す条件と時期は、どの離陸でも同じく FLYING の状態）。そのとき初期化する誘導目標は、機体のいる高度ではなく自動離陸の目標高度（NED 下向きで -0.50 m）:
+# 機体は目標まで上昇して保持する（送信機の ARM の後と同じ）。機体は目標を約 0.79 m まで行き過ぎ、そこから目標へゆっくり戻る: 高度が整定するまでに数十秒かかるので、
+# 保持は 40〜49 s の区間で判定する。シミュレータの真の高度には、推定より約 0.02 m の静止時の差が含まれる。実行は 50 s で、離陸の後にコマンドは続けない。検証する仕様（detailed_design.md §3.1 注4）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_takeoff_slow_target.scn --target vehicle --duration 50000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    tof_deadzone 0
+   0    fault 0 0.88
+   0    fault 1 0.88
+   0    fault 2 0.88
+   0    fault 3 0.88
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> TAKEOFF at about 6.3 s -> FLYING at about 11.5 s with the craft at about 0.23 m, `ok`
+   +    rc         2048  2048   2048    2048  0     44000     50      # D: neutral RC while the API flies (to t=50)

@@ -35,7 +35,7 @@ Tello 実機の映像ポート（UDP 11111）は StampFly には無い（カメ�
 | コマンド | 構文 | 説明 | 前提条件 |
 |---|---|---|---|
 | `command` | `command` | SDK モード開始 | なし |
-| `takeoff` | `takeoff` | 自動離陸（POS_HOLD、手動 RC 離陸と同じ経路）。FLYING 到達まで最大12秒ブロック | 地上（IDLE_GROUND/ARMED_GROUND）かつ静止校正済み |
+| `takeoff` | `takeoff` | 自動離陸（POS_HOLD、手動 RC 離陸と同じ経路）。FLYING 到達まで最大12秒ブロック。保持する高度は自動離陸の目標高度 0.5 m（到達時の高度でない） | 地上（IDLE_GROUND/ARMED_GROUND）かつ静止校正済み |
 | `land` | `land` | 自動着陸。IDLE_GROUND 到達まで最大20秒ブロック | 飛行中 |
 | `emergency` | `emergency` | 全モーター緊急停止。他の全ての判定より優先して処理される | 常時 |
 | `stop` | `stop` | 現在位置を目標に再設定してホバリング | FLYING かつ API 誘導目標が有効 |
@@ -223,7 +223,7 @@ Until `command` is sent to enter SDK mode, every other command returns `"error n
 | Command | Syntax | Description | Precondition |
 |---|---|---|---|
 | `command` | `command` | Enter SDK mode | None |
-| `takeoff` | `takeoff` | Auto takeoff (POS_HOLD, the same path as manual RC takeoff). Blocks up to 12 s until FLYING | On the ground (IDLE_GROUND/ARMED_GROUND) and stillness-calibrated |
+| `takeoff` | `takeoff` | Auto takeoff (POS_HOLD, the same path as manual RC takeoff). Blocks up to 12 s until FLYING. The altitude held is the auto-takeoff target altitude, 0.5 m (not the altitude reached) | On the ground (IDLE_GROUND/ARMED_GROUND) and stillness-calibrated |
 | `land` | `land` | Auto land. Blocks up to 20 s until IDLE_GROUND | Airborne |
 | `emergency` | `emergency` | Kill all motors immediately; processed ahead of every other gate | Always |
 | `stop` | `stop` | Re-target the current position and hover | FLYING with an active API guidance target |

@@ -141,6 +141,7 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | `api_move_flight_end` | **移動の待機中に飛行が終わる**: `forward 150` の待機中にパイロットの DISARM 押下（POS_HOLD の自動着陸）→ 待機は `error flight ended` で終わり、後回しの `takeoff`・`height?` は `error cancelled: flight ended` で捨てられ、再離陸しない。`--duration 40000000` | vehicle |
 | `api_emergency_without_command` | **`command` なしの `emergency`**: 送信機の ARM（ARMED_GROUND）の後、`land` は `error not in command mode`、`emergency` はモータを止める（`EMERGENCY STOP`）。`--duration 12000000` | vehicle |
 | `api_takeoff_refused_mode` | **ARM が拒否された API `takeoff` はモードを残さない**: `--unpaired` でペアリングが開いたままの機体に `takeoff` → POS_HOLD への切り替えと ARM の拒否の後、送信機の電文より前に STABILIZE へ戻る（"Mode re-leveled" なし）。後の送信機の ARM は受理され、自動離陸は始まらない。`--unpaired --duration 16000000` | vehicle |
+| `api_takeoff_slow_target` | **上昇が遅く、時間切れで FLYING になった機体の API `takeoff` は、到達した高度でなく自動離陸の目標高度（0.5 m）を保持する**（モータの健全度 0.88・`tof_deadzone 0`、`--duration 50000000`）: 約 11.5 s に機体が約 0.23 m で `TAKEOFF → FLYING`、`takeoff` は `ok` を返し、誘導目標は `-0.50`（NED 下向き）。機体は約 0.79 m まで行き過ぎ（上限 1.2 m に触れない）、目標へ数十秒かけて戻る。FLYING 付近の最大高度 < 0.40 m（時間切れの場合であること）、12〜20 s の最大高度 < 0.95 m（実測 0.79 m）、整定後の 40〜49 s の平均高度 0.45〜0.55 m（実測 0.483 m）・最大高度 < 0.55 m（0.496 m）・最小高度 > 0.40 m（0.462 m）を確認する（到達した高度を目標にすると同じ区間で 0.17 m に留まり不合格） | vehicle |
 
 **P8 ロバスト再飛行（`crash_refly`）が炙り出した2つのファーム欠陥（修正済）:**
 1. **ESKF 姿勢の latch**: 墜落で姿勢推定が真値から大きく外れると accel-attitude χ² 判定（カイ二乗判定）が補正自体を棄却し続け自己復帰しない。設置時（IDLE_HELD→IDLE_GROUND、機体が level・静止と既知）に ESKF を Reset して姿勢を level へ再初期化することで解決。

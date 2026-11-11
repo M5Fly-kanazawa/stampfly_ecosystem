@@ -1,0 +1,26 @@
+# api_takeoff_slow_target.expect — the API `takeoff` that ended by its time limit below the target holds the target altitude, not the altitude reached
+#                                  目標に届かないまま時間切れで終わった API `takeoff` は、到達した高度でなく目標高度を保持する
+#
+# Measured (truth, noise off, 50 s): FLYING at 11.5 s with the craft at 0.23 m; the guidance target is -0.50 m (NED down); the craft overshoots to about 0.79 m (below the 1.2 m ceiling,
+# no ceiling brake) and returns to the target slowly: the altitude takes tens of seconds to settle, 0.52 m (mean) at 30-40 s and 0.48 m (mean) at 40-50 s. The true altitude includes about 0.02 m
+# of resting offset above the estimate. A guidance target at the altitude reached (0.17 m) leaves the craft at 0.17 m in the same window.
+# 実測（真値、ノイズなし、50 s）: 11.5 s に機体が 0.23 m で FLYING、誘導目標は -0.50 m（NED 下向き）、機体は約 0.79 m まで行き過ぎ（上限 1.2 m より下、天井ブレーキなし）、
+# そこから目標へゆっくり戻る: 高度が整定するまでに数十秒かかり、30〜40 s の平均が 0.52 m、40〜50 s の平均が 0.48 m。真の高度には、推定より約 0.02 m の静止時の差が含まれる。
+# 到達した高度（0.17 m）を目標にすると、同じ区間で機体は 0.17 m に留まる。
+exit 0
+log_contains any "Auto-takeoff complete"
+log_contains any "Transition: TAKEOFF → FLYING"
+log_contains any "-0.50] yaw"
+log_absent any "Auto-takeoff aborted"
+log_absent any "Transition: TAKEOFF → LANDING"
+log_absent any "Blind landing"
+order "Auto-takeoff complete" "-0.50] yaw"
+# FLYING is reached below the target (the time-limit case this scenario exists for). / FLYING は目標より低い高度で達する（このシナリオの対象の時間切れの場合）。
+metric alt_max < 0.40 in 11.0 11.6
+# The overshoot stays bounded. / 行き過ぎは有界に留まる。
+metric alt_max < 0.95 in 12.0 20.0
+# Settled: the craft holds the target altitude (0.5 m, within the tolerance of the slow settling and the resting offset). / 整定後: 機体は目標高度（0.5 m、遅い整定と静止時の差の許容内）を保持する。
+metric alt_mean > 0.45 in 40.0 49.0
+metric alt_mean < 0.55 in 40.0 49.0
+metric alt_max < 0.55 in 40.0 49.0
+metric alt_min > 0.40 in 40.0 49.0

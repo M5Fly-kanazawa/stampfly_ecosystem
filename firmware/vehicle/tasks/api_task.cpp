@@ -116,11 +116,13 @@ constexpr float    kAltMinM        = 0.2f;    // target altitude floor / 目標�
 // 候補値、根拠は flight_limits.hpp。
 constexpr float    kAltMaxM        = sf::limits::kAltitudeCeilingM;
 constexpr float    kDefaultSpeed   = 0.3f;    // [m/s] guidance approach / 既定接近速度
-// Takeoff altitude is no longer an API constant: the auto-takeoff (controller-owned,
-// unified with manual RC) climbs to its target, and cmdTakeoff holds whatever altitude
-// FLYING was reached at (decision ④, 2026-06-14).
-// 離陸高度はもう API 定数ではない: 自動離陸（制御器所有・手動 RC と統一）が目標まで
-// 上昇し、cmdTakeoff は FLYING 到達時の高度を保持する（確定④, 2026-06-14）。
+// The takeoff altitude is not an API constant: the auto-takeoff (controller-owned, the same
+// climb as a transmitter ARM) climbs to sf::limits::kAutoTakeoffTargetAltitudeM, and cmdTakeoff
+// seeds its guidance target at that altitude, so the craft holds it even when the climb was
+// declared complete by its time limit below the target.
+// 離陸高度は API 定数ではない: 自動離陸（制御器所有・送信機の ARM と同じ上昇）が
+// sf::limits::kAutoTakeoffTargetAltitudeM まで上昇し、cmdTakeoff は誘導目標をその高度で
+// 初期化する。上昇が目標に届かないまま時間切れで完了した場合も、機体はその高度を保持する。
 constexpr float    kReachRadiusM   = 0.15f;   // move "reached" tolerance / 到達判定半径
 constexpr float    kReachYawRad    = 0.17f;   // ~10 deg yaw tolerance / ヨー到達判定
 constexpr uint32_t kTakeoffTimeoutMs = 12000;
@@ -461,19 +463,27 @@ float estimateYaw(const sf::StateEstimate& est)
     return atan2f(2.0f * (w * z + x * y), 1.0f - 2.0f * (y * y + z * z));
 }
 
-// Seed the guidance target at the CURRENT pose (position and heading) and publish it, so the
-// craft holds where it is. Shared by cmdTakeoff (after the auto-takeoff) and cmdStop.
-// 誘導目標を「現在」の姿勢（位置と向き）で初期化して publish し、機体をその場に保持させる。
-// cmdTakeoff（自動離陸の後）と cmdStop が共有する。
-void seedGuidanceAtCurrentPose()
+// Seed the guidance target at the CURRENT position and heading, at the altitude `down_m` (NED
+// down [m], negative above the origin), and publish it. Shared by cmdTakeoff (the auto-takeoff
+// target altitude) and cmdStop (the altitude the craft is at).
+// 誘導目標を「現在」の位置と向きで、高度 `down_m`（NED の下向き [m]、原点より上は負）に初期化
+// して publish する。cmdTakeoff（自動離陸の目標高度）と cmdStop（いまの高度）が共有する。
+void seedGuidance(float down_m)
 {
     const sf::StateEstimate est = sf::estimate_state.latest();
     g_target_ned[0] = est.position[0];
     g_target_ned[1] = est.position[1];
-    g_target_ned[2] = est.position[2];   // keep the current altitude / 現在の高度を保持
+    g_target_ned[2] = down_m;
     g_target_yaw    = estimateYaw(est);
     g_target_valid  = true;
     publishGuidance(g_default_speed);
+}
+
+// Seed the guidance target where the craft is, altitude included, so it holds there.
+// 誘導目標を、高度も含めて機体のいる場所に初期化し、その場に保持させる。
+void seedGuidanceAtCurrentPose()
+{
+    seedGuidance(sf::estimate_state.latest().position[2]);
 }
 
 // Reason text when a takeoff must be refused before the verb is published, else nullptr.
@@ -540,16 +550,14 @@ void cmdTakeoff()
         return;
     }
 
-    // FLYING means the auto-takeoff has already climbed to and captured its target altitude,
-    // so seed the guidance target at the CURRENT pose and simply hold it. The climb routine
-    // and target altitude are UNIFIED with manual RC takeoff (the controller owns both,
-    // decision ④); the API no longer commands its own takeoff height. Composing subsequent
-    // moves from the TARGET starts here.
-    // FLYING は自動離陸が既に目標高度まで上昇・捕捉したことを意味するので、誘導目標を「現在」の
-    // 姿勢で初期化してそのまま保持する。上昇ルーチンと目標高度は手動 RC 離陸と統一された
-    // （制御器が両方を所有, 確定④）。API は自前の離陸高度を指令しない。以降の移動合成は
-    // この「目標」から始まる。
-    seedGuidanceAtCurrentPose();
+    // FLYING ends the auto-takeoff, which holds its target altitude from here on (the same as
+    // after a transmitter ARM), also when its time limit ended the climb below the target.
+    // Seed the guidance target at the current position and heading and at that target altitude,
+    // so the craft keeps climbing to it. Composing subsequent moves from the TARGET starts here.
+    // FLYING で自動離陸が終わり、以降は目標高度を保持する（送信機の ARM の後と同じ）。上昇が
+    // 時間切れで目標に届かずに終わった場合も同じ。誘導目標を現在の位置と向き・その目標高度で
+    // 初期化し、機体が目標まで上昇を続けるようにする。以降の移動合成はこの「目標」から始まる。
+    seedGuidance(-sf::limits::kAutoTakeoffTargetAltitudeM);   // NED down = -altitude / NED 下向き = -高度
     reply("ok");
 }
 

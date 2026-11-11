@@ -53,6 +53,15 @@ namespace limits {
 /// 上限の高さから床まで約 sqrt(2 × 1.2 / 0.49) = 2.2 s、約 1.1 m/s で着く（SILS: 出力停止の 2.3〜2.9 s 後に接地、0.8〜1.2 m/s）。
 /// kBlindLandingTimeoutUs（10 s）よりずっと短い。api_task では従来 2.0 m だった。
 inline constexpr float kAltitudeCeilingM = 1.2f;
+/// Target altitude of the auto-takeoff [m]: the height every takeoff ends at and then holds, whether the ARM of the transmitter started it
+/// (PidController: the climb target) or the API `takeoff` (ApiTask: the altitude of the guidance target it seeds). High enough to clear the
+/// ground effect (the ToF airborne edge of 0.15 m is the ESKF vertical handoff, not this target). Must not exceed kAltitudeCeilingM.
+/// 自動離陸の目標高度 [m]: 送信機の ARM が始めた離陸（PidController: 上昇目標）も API の `takeoff`（ApiTask: 初期化する誘導目標の高度）も、
+/// 離陸はこの高さで終わってそのまま保持する。地面効果を抜けるのに十分な高さ（ToF の空中判定 0.15 m は ESKF の鉛直ハンドオフ用で、この目標ではない）。
+/// kAltitudeCeilingM を超えてはならない。
+inline constexpr float kAutoTakeoffTargetAltitudeM = 0.5f;
+static_assert(kAutoTakeoffTargetAltitudeM <= kAltitudeCeilingM,
+              "auto-takeoff target must not exceed the altitude ceiling");
 /// Margin above kAltitudeCeilingM [m] beyond which the controller forbids any climb command and brings the target back
 /// to the ceiling (auto-takeoff, ALT_HOLD, POS_HOLD). CANDIDATE. Basis: the ESKF altitude error with a working ToF is a
 /// few cm (innovation gate 0.5 m, ToF noise 0.02 m), so 0.15 m is the same as the ground/air threshold of the
