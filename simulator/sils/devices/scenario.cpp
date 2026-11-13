@@ -46,7 +46,7 @@ extern "C" void sils_scenario_register_api_inject(void (*fn)(const char*))
     g_api_inject_fn = fn;
 }
 
-enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api, TofSilent, TofInvalid, TofDeadZone, Param, Battery };
+enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api, TofSilent, TofInvalid, TofDeadZone, Param, Battery, Baro };
 
 // Which injector an "rc"-family event uses: the paired transmitter (rc), a
 // different non-paired one exercised AFTER bind (rc_foreign — crosstalk test), or
@@ -332,6 +332,40 @@ int parseBatteryChannel(const std::string& ch, std::istringstream& iss, Event& e
     return 1;
 }
 
+// Parse the `baro` channel (same return convention as parseTofChannel()).
+// `baro` チャネルを解釈する（戻り値の約束は parseTofChannel() と同じ）。
+int parseBaroChannel(const std::string& ch, std::istringstream& iss, Event& e, const char* path, int lineno)
+{
+    if (ch != "baro") {
+        return 0;
+    }
+    // baro <offset|drift|wash|noise|slow> <value> | baro typical [scale] | baro off — switch on the effects the real BMP280 adds to
+    // the true height: `offset` [m] an absolute altitude, `drift` [m/s], `wash` [m, x (mean duty)^2] the propeller-wash term,
+    // `noise` [m] white and `slow` [m] first-order noise (plant/baro_model.hpp). `typical [scale]` sets all of them to the
+    // magnitudes measured on real logs times `scale` (default 1; 2 = twice as large). A scenario without this event is unchanged:
+    // the barometer then reads the true height.
+    // baro … — 実機の BMP280 が真の高さに足す効果を有効にする: `offset`[m] 絶対高度、`drift`[m/s]、`wash`[m、× 平均 duty の 2 乗]
+    // 吹き下ろしの項、`noise`[m] 白色と `slow`[m] 1 次のノイズ（plant/baro_model.hpp）。`typical [scale]` は全部を実機ログで測った
+    // 大きさ × scale（既定 1。2 で 2 倍）にする。この事象を使わないシナリオは変わらない: 気圧計は真の高さを読む。
+    e.ch = Channel::Baro;
+    if (!(iss >> e.text)) {
+        err(path, lineno, "baro needs <offset|drift|wash|noise|slow|typical|off>"); return -1;
+    }
+    e.param_value = (e.text == "typical") ? 1.0 : 0.0;
+    const bool needs_value = (e.text != "typical" && e.text != "off");
+    double value = 0.0;
+    if (iss >> value) {
+        e.param_value = value;   // a failed extraction would write 0 into its target / 抽出に失敗すると対象に 0 が書かれる
+    } else if (needs_value) {
+        err(path, lineno, "baro <key> needs a value"); return -1;
+    }
+    if (e.text != "offset" && e.text != "drift" && e.text != "wash" && e.text != "noise" && e.text != "slow" &&
+        e.text != "typical" && e.text != "off") {
+        err(path, lineno, "baro key must be offset|drift|wash|noise|slow|typical|off"); return -1;
+    }
+    return 1;
+}
+
 // Parse the `handle` channel (same return convention as parseTofChannel()).
 // `handle` チャネルを解釈する（戻り値の約束は parseTofChannel() と同じ）。
 int parseHandleChannel(const std::string& ch, std::istringstream& iss, Event& e, const char* path, int lineno)
@@ -373,6 +407,8 @@ int parseExtraChannel(const std::string& ch, std::istringstream& iss, Event& e, 
     result = parseParamChannel(ch, iss, e, path, lineno);
     if (result != 0) return result;
     result = parseBatteryChannel(ch, iss, e, path, lineno);
+    if (result != 0) return result;
+    result = parseBaroChannel(ch, iss, e, path, lineno);
     if (result != 0) return result;
     return parseHandleChannel(ch, iss, e, path, lineno);
 }
@@ -478,6 +514,16 @@ void applyBatteryEvent(const Event& e)
     sils_emu_record_note("battery", note);
 }
 
+// Apply a `baro` event: switch the BMP280 effects of the Plant (plant/baro_model.hpp).
+// `baro` の事象を適用する: Plant の BMP280 の効果を切り替える（plant/baro_model.hpp）。
+void applyBaroEvent(const Event& e)
+{
+    sils_board_set_baro(e.text.c_str(), static_cast<float>(e.param_value));
+    char note[96];
+    std::snprintf(note, sizeof(note), "%s %g", e.text.c_str(), e.param_value);
+    sils_emu_record_note("baro", note);
+}
+
 // Apply the events beyond rc / key / api / wind / fault / bias / btn (see parseExtraChannel()).
 // rc / key / api / wind / fault / bias / btn の他の事象を適用する（parseExtraChannel() 参照）。
 void applyExtraEvent(const Event& e)
@@ -489,6 +535,7 @@ void applyExtraEvent(const Event& e)
         case Channel::Param:       applyParamEvent(e);  break;
         case Channel::Handle:      applyHandleEvent(e); break;
         case Channel::Battery:     applyBatteryEvent(e); break;
+        case Channel::Baro:        applyBaroEvent(e);   break;
         default:                   break;
     }
 }
@@ -875,6 +922,7 @@ void sils_scenario_driver_task(void* /*arg*/)
             case Channel::TofDeadZone:
             case Channel::Param:
             case Channel::Battery:
+            case Channel::Baro:
             case Channel::Handle:
                 applyExtraEvent(e);   // ToF fault injection, param, handle / ToF の故障注入、param、handle
                 break;

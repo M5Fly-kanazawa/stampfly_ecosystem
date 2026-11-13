@@ -125,7 +125,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | 旧機能 | 廃止理由 |
 |--------|---------|
 | 12Hz ジャイロノッチフィルタ | 旧 vehicle の実験で「無効が最良」と確定済み（振動はフィードバック励振であり、ノッチは位相を悪化させた） |
-| 気圧の鉛直融合 | ToF-only 鉛直をユーザー方針として決定（ESKF 鉛直発散の解決時）。気圧センサ自体は読んでおり Data Stream に流れる |
+| 気圧の鉛直融合 | ToF-only 鉛直をユーザー方針として決定（ESKF 鉛直発散の解決時）。気圧センサは読んでおり、床基準の気圧高度 `baro_height`（床のゼロ + ToF から学習するオフセット）を観測専用で Data Stream に流す。ToF なし降下への融合は評価の結果採用しない（detailed_design.md §5） |
 | グローバル変数群（globals.cpp） | Pub-Sub トピックへ全面置換（スパゲッティ化の主因だった） |
 | sf_svc_* の旧サービス構造 | 新アーキテクチャ（4階層＋R1〜R16）で再設計。機能は等価実装で置換（下表） |
 
@@ -210,7 +210,7 @@ All retrofitted into the design documents.
 | Legacy feature | Reason |
 |----------------|--------|
 | 12 Hz gyro notch filter | Legacy experiments concluded "off is best" (the oscillation was feedback excitation) |
-| Baro vertical fusion | ToF-only vertical chosen by policy; baro is still read and streamed |
+| Baro vertical fusion | ToF-only vertical chosen by policy; the baro is read and a floor-relative `baro_height` (floor zero + offset learned from the ToF) is streamed, observation only; fusing it into the descent without a ToF was evaluated and not adopted (detailed_design.md §5) |
 | Global variables (globals.cpp) | Fully replaced by Pub-Sub topics — the main spaghetti source |
 | Legacy sf_svc_* service structure | Re-architected (4 layers + R1–R16); functions replaced by equivalents below |
 

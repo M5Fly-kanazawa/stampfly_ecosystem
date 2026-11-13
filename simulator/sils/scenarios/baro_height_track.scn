@@ -1,0 +1,16 @@
+# baro_height_track.scn — barometric height above the floor tracks the true height while the ToF is alive (observation only)
+#                        ToF が生きている間、床からの気圧高度が真の高さに追従する（観測専用）
+#
+# `baro typical` makes the simulated BMP280 read like the real one (an absolute offset of 35 m, drift, a propeller-wash term, noise; plant/baro_model.hpp).
+# The firmware zeroes the barometer on the floor while disarmed, learns the offset from the ToF in flight, and publishes baro_height (nothing in control reads it).
+# `baro typical` で機体モデルの BMP280 を実機並みにする（絶対オフセット 35 m・ドリフト・吹き下ろしの項・ノイズ）。ファームは DISARM の床で気圧計のゼロを取り、
+# 飛行中に ToF からオフセットを学習して baro_height を出す（制御は何も読まない）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/baro_height_track.scn --target vehicle --duration 16000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    baro       typical
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD
+   +    rc         2048  2048   2048    2048  1     7500      50        1              # D: climb to 0.5 m and hold

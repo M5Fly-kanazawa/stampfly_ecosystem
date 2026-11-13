@@ -31,6 +31,9 @@ Packet IDs:
           without a ToF, failsafe verdict + reason, ToF health, ModeBlock; see
           data_stream_wire.hpp kPktToFSilence)
     0x4F  Status / Heartbeat (1Hz)
+    0x52  Barometric height above the floor (50Hz, unified-packet entry --
+          offset-corrected height, learned offset, its age and flags, written
+          with every baro sample; see data_stream_wire.hpp kPktBaroHeight)
     0x50  Unified packet: header carries a 16-bit `sequence`, unwrapped here
           and combined with each sub-sample's in-packet index to form the
           v1 flight-log `seq` column (protocol/spec/flight_log.yaml; see
@@ -96,6 +99,7 @@ PKT_RATE_REF  = 0x99  # virtual ID for 400Hz rate_ref (fixed part of unified pac
 PKT_STATUS    = 0x4F
 PKT_UNIFIED   = 0x50  # 8x IMU+ESKF + 8x PosVel + 8x RateRef + variable entries
 PKT_TEXT_LOG  = 0x51  # ESP_LOG text lines of the vehicle: [header 4B][record 8B + text]...[checksum 1B]
+PKT_BARO_HEIGHT = 0x52  # 50Hz barometric height above the floor (unified-packet entry, written with each baro sample)
 
 # Packet types whose 8 sub-samples per PKT_UNIFIED datagram get a v1
 # flight-log `seq` (protocol/spec/flight_log.yaml): unwrapped unified-packet
@@ -241,6 +245,19 @@ assert struct.calcsize(FMT_FLIGHT_FLAGS) == 8
 FMT_TOF_SILENCE = '<I3f3B'
 assert struct.calcsize(FMT_TOF_SILENCE) == 19
 
+# BaroHeight: 15 bytes (one kPktBaroHeight entry) -- mirrors WireBaroHeight.
+#   timestamp_us(I) + height_m(f) + offset_m(f) + offset_age_decis(H) + flags(B)
+FMT_BARO_HEIGHT = '<I2fHB'
+assert struct.calcsize(FMT_BARO_HEIGHT) == 15
+
+# WireBaroHeight::flags bits and the age sentinel (barometric_height_estimator.hpp kBaroHeightFlag*)
+# WireBaroHeight::flags のビットと経過時間の特別値（barometric_height_estimator.hpp の kBaroHeightFlag*）
+BARO_HEIGHT_FLAG_VALID = 0x01
+BARO_HEIGHT_FLAG_LEARNED = 0x02
+BARO_AGE_NEVER_DECIS = 0xFFFF        # offset never learned / オフセット未学習
+BARO_AGE_DECIS_PER_SECOND = 10.0     # offset_age_decis unit is 0.1 s / offset_age_decis の単位は 0.1 s
+BARO_AGE_NEVER_SECONDS = -1.0        # the bundle's offset_age for "never learned" / 未学習を表すバンドル側の値
+
 # Text-log packet 0x51 (data_stream_wire.hpp WireTextRecord): one record header per line, then `length` bytes of text.
 # テキストログのパケット 0x51（data_stream_wire.hpp の WireTextRecord）: 行ごとに 1 つのレコードヘッダ、続いて本文 length バイト。
 TEXT_ORDER_STRIDE = 1000   # > the most records one text packet can hold (1029 B / 9 B), so (sequence, index) sorts as one number / 1 パケットが持てるレコード数（517 B / 9 B）より大きいので、（通し番号, 位置）が 1 つの数として並ぶ
@@ -287,6 +304,7 @@ SAMPLE_INFO = {
     PKT_TOF_FRONT: ('ToF_Frt',   FMT_TOF,        9),
     PKT_CTRL_REF:  ('CtrlRef',   FMT_CTRL_REF,  50),
     PKT_ESKF_PDIAG:('P_diag',   FMT_ESKF_PDIAG, 64),
+    PKT_BARO_HEIGHT: ('BaroHeight', FMT_BARO_HEIGHT, 15),
 }
 
 # CSV column names per packet type
@@ -326,6 +344,10 @@ CSV_COLUMNS = {
     PKT_BARO: [
         'timestamp_us',
         'baro_altitude', 'baro_pressure',
+    ],
+    PKT_BARO_HEIGHT: [
+        'timestamp_us',
+        'height_m', 'offset_m', 'offset_age_decis', 'flags',
     ],
     PKT_MAG: [
         'timestamp_us',
@@ -842,6 +864,20 @@ def _baro_row(sample: dict) -> dict:
     }
 
 
+def _baro_height_row(sample: dict) -> dict:
+    age_decis = sample['offset_age_decis']
+    never_learned = age_decis == BARO_AGE_NEVER_DECIS
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'height': sample['height_m'],
+        'offset': sample['offset_m'],
+        'valid': int(bool(sample['flags'] & BARO_HEIGHT_FLAG_VALID)),
+        'learned': int(bool(sample['flags'] & BARO_HEIGHT_FLAG_LEARNED)),
+        'offset_age': (BARO_AGE_NEVER_SECONDS if never_learned
+                       else age_decis / BARO_AGE_DECIS_PER_SECOND),
+    }
+
+
 def _tof_row(sample: dict) -> dict:
     return {
         'timestamp_us': sample['timestamp_us'],
@@ -1350,7 +1386,8 @@ class UDPTelemetryCapture:
         # 2026-10-02 より古いファームには無い（情報表示のみ）。
         for label, pkt in (('flight phase', PKT_FLIGHT_PHASE400),
                            ('flight flags', PKT_FLIGHT_FLAGS),
-                           ('ToF silence', PKT_TOF_SILENCE)):
+                           ('ToF silence', PKT_TOF_SILENCE),
+                           ('baro height', PKT_BARO_HEIGHT)):
             n = self.sample_count.get(pkt, 0)
             state = f'present ({n} samples)' if n else 'NOT present (older firmware)'
             print(f"  {label} (0x{pkt:02X}): {state}")
@@ -1509,6 +1546,9 @@ class UDPTelemetryCapture:
         if self.samples.get(PKT_BARO):
             streams['baro'] = self._build_stream(
                 [_baro_row(s) for s in self.samples[PKT_BARO]], 'timestamp_us')
+        if self.samples.get(PKT_BARO_HEIGHT):
+            streams['baro_height'] = self._build_stream(
+                [_baro_height_row(s) for s in self.samples[PKT_BARO_HEIGHT]], 'timestamp_us')
         if self.samples.get(PKT_TOF_BOTTOM):
             streams['tof_bottom'] = self._build_stream(
                 [_tof_row(s) for s in self.samples[PKT_TOF_BOTTOM]], 'timestamp_us')

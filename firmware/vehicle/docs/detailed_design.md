@@ -648,6 +648,30 @@ sensor.tof → 推定コンポーネントに常に届く
 
 復帰時間は 1〜3s。ホバー定点用には十分だが、姿勢追跡用途には限界あり。教材として「線形化が破綻する条件」の定量データに位置付ける。
 
+### 気圧高度（観測専用）
+
+気圧計（BMP280）は**絶対**の気圧高度を出す（実機ログ: −50 m・−14 m・+80 m・+780 m。天候と場所で決まる）。床からの高さには基準が要り、飛行中はプロペラの吹き下ろしがセンサの圧力を動かす（モータが回る床の上で 0.1〜0.4 m、ホバーで 0.2〜0.9 m 高く読む）。`sf::BarometricHeightEstimator`（`barometric_height_estimator.hpp`。純粋ロジック。ImuTask が 1 つ持つ）が床基準の高さ `baro_height` を作る。**観測専用**で、制御器・推定器（`eskf.use_baro = false`）・接地判定・状態遷移は読まない（INV-3: ここは事実を出すだけで判断しない）。
+
+| 部分 | 規則 | 根拠 |
+|------|------|------|
+| 床のゼロ | DISARM かつ床の上の間、絶対高度を平均し（時定数 `kBaroZeroTauS` 2 s）、ARM で固定する | モータ始動で気圧が 0.1〜0.4 m 上がる（実機ログ）ので、ARM（モータ始動の前）で固定した値が吹き下ろしを含まない |
+| 学習するオフセット | ARM 中で ToF が使える間（有効・推定器が取り込み済み・空中・高さ 0.15〜1.5 m・傾き 30 度未満）、（絶対高度 − 床のゼロ）− ToF の高さ を、最初の `kBaroLearnTauS`（5 s）は累積平均、その後は同じ時定数の 1 次フィルタで平均する | 床のゼロだけでは飛行中の誤差が rms 0.7 m・最大 2.2 m、学習すると rms 0.2〜0.25 m・最大 1.2〜1.7 m（下の表） |
+| 保持 | ToF が使えない間はオフセットを保持する。`offset_age` が経過時間を示す | 出力停止中の誤差は吹き下ろしの項とドリフトの変化分 |
+| 新サンプルの検出 | 気圧の値が前回と違うとき新しい変換とする（BMP280 は約 13 Hz、BaroTask は 50 Hz で発行するので 3〜4 回繰り返す。ドライバは変換時刻を報告せず、20 ビットの結果はほぼ毎回変わる）。同じ値の新しい変換は繰り返しとして扱う（1 サンプルを失うだけ） | 実機ログの一意な値は 12.0〜13.8 Hz |
+
+ToF 出力停止後の誤差（気圧高度 − 実機 ToF の高さ。実機ログ 17 本、空中時間の 0.5 s ごとの開始時刻、同じ C++ クラスをホストでコンパイルして評価。`analysis/scripts/baro_offset_study.py eval`）:
+
+| 設定 | 2 s 窓 rms / 95 % / 最大 [m] | 5 s 窓 | 10 s 窓 |
+|------|------|------|------|
+| 床のゼロだけ | 0.67 / 1.12 / 1.69 | 0.68 / 1.12 / 2.23 | 0.68 / 1.13 / 1.69 |
+| 学習（時定数 5 s、採用） | 0.22 / 0.43 / 1.18 | 0.23 / 0.45 / 1.68 | 0.25 / 0.48 / 1.21 |
+
+時定数は 1〜40 s でほぼ同じ（rms 0.21〜0.25）。オフセットの雑音は 0.1 m ÷ √(2 × 13 Hz × τ) = τ 5 s で 1.4 cm、ドリフト（実機ログで最大 0.014 m/s）の追従遅れは 7 cm なので、中間の 5 s を採用した。候補値（ログが少ない）。気圧計の ToF に対する遅れは、ホバー中心のログでは相関が低く（合算 0.1）推定できなかった（未確認）。
+
+**出力:** `SensorSnapshot.baro_height`・`baro_offset`・`baro_height_flags`（bit0 有効、bit1 学習済み）・`baro_offset_age_decis`。Data Stream の 0x52 エントリ（50 Hz、15 B）→ フライトログのストリーム `baro_height`。CLI `sensor baro` が表示する。Tello の `baro?` と状態の `baro` は従来どおり絶対の気圧高度。
+
+**ToF なし降下への利用は採用しない（評価の結果）:** 気圧計の速度を `VerticalVelocityEstimator::fuseExternalVelocity()` に融合すると、実機ログの再生（`analysis/scripts/baro_offset_study.py velocity`）で誤差の rms と 95 パーセンタイルは下がる（ToF 停止の 2 s 後で 0.48 → 0.23 m/s、1.06 → 0.38 m/s）が、最大誤差はどの設定でも 1.4 m/s 以上で、事前に決めた採用条件（最大誤差 0.3 m/s 以下）を満たさない。したがって ToF なし降下の速度の源は加速度計の積分だけで、気圧計は降下・接地判定・ESKF のどこにも使わない。
+
 ## 6. パラメータシステム
 
 ### 設計方針
@@ -1287,6 +1311,30 @@ public:
 ### Sensor Observation Switch
 
 Sensor observation ON/OFF is controlled via parameters and decided internally by the estimation component. Raw data always reaches the estimator and logger; the estimator skips observation updates when the parameter is false.
+
+### Barometric height (observation only)
+
+The barometer (BMP280) gives an **absolute** pressure altitude (real logs: -50 m, -14 m, +80 m, +780 m: weather and place). A height above the floor needs a reference, and in flight the propeller wash moves the pressure at the sensor (the reading is 0.1-0.4 m high on the floor with the motors running, 0.2-0.9 m in hover). `sf::BarometricHeightEstimator` (`barometric_height_estimator.hpp`; pure logic; one instance owned by ImuTask) makes the floor-relative height `baro_height`. It is **observation only**: no controller, estimator (`eskf.use_baro = false`), touchdown detection or state transition reads it (INV-3: this publishes a fact and decides nothing).
+
+| Part | Rule | Basis |
+|------|------|-------|
+| Floor zero | While DISARMED and on the floor the absolute altitude is averaged (time constant `kBaroZeroTauS`, 2 s) and frozen at the ARM | the pressure rises 0.1-0.4 m when the motors start (real logs), so the value frozen at the ARM (before the motors start) has no wash in it |
+| Learned offset | While armed and the ToF is usable (valid, adopted by the estimator, airborne, height 0.15-1.5 m, tilt below 30 degrees), (absolute altitude - floor zero) - ToF height is averaged: a running mean for the first `kBaroLearnTauS` (5 s), then a first-order filter of that time constant | the floor zero alone leaves an in-flight error of 0.7 m rms and 2.2 m at most; learning gives 0.2-0.25 m rms and 1.2-1.7 m at most (table below) |
+| Hold | While the ToF is not usable the offset is held; `offset_age` reports how long | the error during a silence is the change of the wash term and the drift |
+| New-sample detection | A conversion is new when the pressure value differs from the previous one (the BMP280 converts at about 13 Hz and BaroTask publishes at 50 Hz, so a value arrives 3-4 times; the driver reports no conversion time and the 20-bit result changes with almost every conversion). A new conversion with the same value counts as a repeat (one sample lost) | 12.0-13.8 Hz of distinct values in the real logs |
+
+Error after the ToF goes silent (barometric height - real ToF height; 17 real logs, a start time every 0.5 s of airborne time, the same C++ class compiled on the host; `analysis/scripts/baro_offset_study.py eval`):
+
+| Setting | 2 s window rms / 95 % / max [m] | 5 s window | 10 s window |
+|---------|------|------|------|
+| Floor zero only | 0.67 / 1.12 / 1.69 | 0.68 / 1.12 / 2.23 | 0.68 / 1.13 / 1.69 |
+| Learned (time constant 5 s, adopted) | 0.22 / 0.43 / 1.18 | 0.23 / 0.45 / 1.68 | 0.25 / 0.48 / 1.21 |
+
+The time constant hardly matters between 1 and 40 s (rms 0.21-0.25). The offset noise is 0.1 m / sqrt(2 x 13 Hz x tau) = 1.4 cm at 5 s, the lag behind a drift (0.014 m/s at most in the real logs) is 7 cm, so the middle value of 5 s is used. CANDIDATE (few logs). The lag of the barometer behind the ToF could not be estimated from the hover-centred logs (pooled correlation 0.1; not confirmed).
+
+**Outputs:** `SensorSnapshot.baro_height`, `baro_offset`, `baro_height_flags` (bit0 valid, bit1 learned), `baro_offset_age_decis`; the Data Stream entry 0x52 (50 Hz, 15 B) and the flight-log stream `baro_height`; shown by CLI `sensor baro`. The Tello `baro?` reply and state field stay the absolute pressure altitude.
+
+**Not used in the descent without a ToF (result of the evaluation):** fusing a barometer velocity into `VerticalVelocityEstimator::fuseExternalVelocity()` lowers the rms and the 95th percentile of the replayed real logs (`analysis/scripts/baro_offset_study.py velocity`; 2 s after the ToF stops: 0.48 -> 0.23 m/s and 1.06 -> 0.38 m/s), but the maximum error is 1.4 m/s or more for every setting, so the adoption condition fixed in advance (maximum error at most 0.3 m/s) is not met. The velocity source of the descent without a ToF is the accelerometer integral only, and the barometer is used in neither the descent, the touchdown detection nor the ESKF.
 
 ## 6. Parameter System
 

@@ -1185,6 +1185,22 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
         if merged.empty:
             return None
         return float(np.sqrt(np.mean((merged["alt_est"] - merged["alt"]) ** 2)))
+    if name in ("baro_height_err_max", "baro_height_err_rms"):
+        # Barometric height (baro_height.csv, observation only) minus the true height, over the rows where the
+        # estimator reports valid AND learned; None (the check fails) when the window holds none.
+        # 気圧高度（baro_height.csv、観測専用）− 真値の高さ。推定器が valid かつ learned の行だけ。無ければ None（検査は失敗）。
+        bh = log.streams.get("baro_height")
+        if bh is None:
+            return None
+        bh = _window(bh).sort_values("timestamp_us")
+        bh = bh[(bh["valid"] == 1) & (bh["learned"] == 1)]
+        truth_small = pd.DataFrame({"timestamp_us": truth["timestamp_us"].to_numpy(), "alt": alt})
+        merged = pd.merge_asof(bh[["timestamp_us", "height"]], truth_small, on="timestamp_us",
+                               direction="nearest", tolerance=5000).dropna(subset=["alt"])
+        if merged.empty:
+            return None
+        err = (merged["height"] - merged["alt"]).to_numpy()
+        return float(np.max(np.abs(err))) if name == "baro_height_err_max" else float(np.sqrt(np.mean(err ** 2)))
     if name in ("flip_roll_deg", "flip_pitch_deg"):
         # FLIP maneuver (docs/plans/flip-maneuver-plan.md §5.2): the signed rotation
         # angle [deg] that the truth body angular rate (rate_x=p/roll,
@@ -1416,7 +1432,8 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               duty_max, duty_spread_max, yaw_band, yaw_turn_deg, flip_roll_deg,
                                               flip_pitch_deg, flip_gyro_abort_phi_deg,
                                               flip_gyro_abort_after_spin_s, alt_drop_max,
-                                              alt_rise_max, descent_speed_max, settle_time_s
+                                              alt_rise_max, descent_speed_max, settle_time_s,
+                                              baro_height_err_max, baro_height_err_rms
       bundle_text <contains|absent> "<text>"  the text_log stream of the bundle (the ESP_LOG lines
                                               the firmware's log sink delivered, one per row) has /
                                               has no line containing the text. A bundle without

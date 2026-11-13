@@ -105,7 +105,14 @@ struct PowerData {
 struct SensorSnapshot {
     float    mag[3];          // Magnetometer [uT]        / 地磁気
     float    baro_pressure;   // Barometer pressure [Pa]  / 気圧
-    float    baro_altitude;   // Pressure altitude [m]    / 気圧高度
+    float    baro_altitude;   // Pressure altitude [m] (ABSOLUTE: weather and place) / 気圧高度（絶対値: 天候と場所で決まる）
+    // Floor-relative barometric height (BarometricHeightEstimator), updated with every NEW baro conversion.
+    // OBSERVATION ONLY: no controller, estimator or detector reads it.
+    // 床基準の気圧高度（BarometricHeightEstimator）。気圧計の「新しい」変換ごとに更新する。観測専用: 制御器・推定器・検出器は読まない。
+    float    baro_height;           // [m] height above the floor, offset-corrected / 床からの高さ（オフセット補正済み）
+    float    baro_offset;           // [m] learned offset (absolute altitude - floor zero - ToF height) / 学習したオフセット
+    uint8_t  baro_height_flags;     // bit0 = valid (a floor zero is held or an offset is learned), bit1 = learned since the last ARM / bit0 = 有効、bit1 = 最後の ARM 以降に学習済み
+    uint16_t baro_offset_age_decis; // [0.1 s] time since the offset was last updated, saturating; 0xFFFF = never / オフセットを最後に更新してからの時間（飽和）。0xFFFF = 未学習
     float    tof_distance;    // ToF distance [m]         / ToF 距離
     uint8_t  tof_status;      // ToF status code          / ToF ステータス
     bool     tof_valid;       // ToF validity             / ToF 有効

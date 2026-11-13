@@ -1,0 +1,11 @@
+# baro_height_tof_silent.expect — after the ToF goes silent the barometric height keeps tracking the true height (held offset)
+# ToF が出力停止したあとも、保持したオフセットで気圧高度が真の高さに追従する
+#
+# Hover at 0.5 m, ToF stops at 14.0 s, blind descent. With `baro typical` the held-offset height stays within 0.3 m of the true height until touchdown (measured
+# 0.27 m at most; bound 0.5 m = the 95th percentile of the real-log study over 5 s). It is observation only: the blind landing is the one of tof_silent_hover.scn.
+# 0.5 m のホバー、14.0 s に ToF 停止、ToF なしの降下。`baro typical` で、保持したオフセットの高さは接地まで真の高さの 0.3 m 以内
+# （実測最大 0.27 m。上限 0.5 m は実機ログの調査の 5 s 窓の 95 パーセンタイル）。観測専用で、ToF なしの着陸は tof_silent_hover.scn と同じ。
+exit 0
+log_contains any "Blind landing: ToF silent, velocity loop"
+metric baro_height_err_max < 0.5 in 14.0 16.5
+metric alt_max < 0.8 in 14.0 20.0

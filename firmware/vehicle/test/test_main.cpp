@@ -992,13 +992,13 @@ TEST(wire_unified_worst_case_fits)
     constexpr size_t kFlow        = (kEntryHeader + sizeof(WireFlow)) * 2;   // 2 per packet at 100 Hz
     constexpr size_t kTof         = (kEntryHeader + sizeof(WireTof)) * 2;   // bottom + front
     constexpr size_t kBaro        = kEntryHeader + sizeof(WireBaro);
+    constexpr size_t kBaroHeight  = kEntryHeader + sizeof(WireBaroHeight);
     constexpr size_t kMag         = kEntryHeader + sizeof(WireMag);
     constexpr size_t kChecksum    = 1;
     constexpr size_t kTotal = kFixedPart + kDuty + kCtrlOutput + kPhase + kFlags + kToFSilence + kControl +
-                              kCtrlRef + kFlow + kTof + kBaro + kMag + kChecksum;
-    constexpr size_t kBeforeToFSilence = kTotal - kToFSilence;   // the worst case before the 0x4E entry was added / 0x4E の追加前の最悪値
-    printf("\n    worst-case unified packet: %zu B (before the 0x4E entry: %zu B), cap %zu B, margin %zu B\n",
-           kTotal, kBeforeToFSilence, kUnifiedMaxSize, kUnifiedMaxSize - kTotal);
+                              kCtrlRef + kFlow + kTof + kBaro + kBaroHeight + kMag + kChecksum;
+    printf("\n    worst-case unified packet: %zu B, cap %zu B, margin %zu B\n",
+           kTotal, kUnifiedMaxSize, kUnifiedMaxSize - kTotal);
     ASSERT_TRUE(kTotal <= kUnifiedMaxSize);
 
     // The same worst case built through the real builder: every addEntry() must be accepted and the
@@ -1021,6 +1021,7 @@ TEST(wire_unified_worst_case_fits)
     ASSERT_TRUE(builder.addEntry(kPktTofBottom, payload, sizeof(WireTof)));
     ASSERT_TRUE(builder.addEntry(kPktTofFront, payload, sizeof(WireTof)));
     ASSERT_TRUE(builder.addEntry(kPktBaro, payload, sizeof(WireBaro)));
+    ASSERT_TRUE(builder.addEntry(kPktBaroHeight, payload, sizeof(WireBaroHeight)));
     ASSERT_TRUE(builder.addEntry(kPktMag, payload, sizeof(WireMag)));
     const size_t length = builder.finish();
     ASSERT_TRUE(length == kTotal);
@@ -1066,6 +1067,44 @@ TEST(wire_tof_silence_entry)
     ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
 }
 
+// The 50 Hz barometric-height entry (0x52): 15 bytes, field order as the PC side (udp_capture.py FMT_BARO_HEIGHT
+// '<I2fHB') decodes it. The raw baro entry (0x45) keeps its 12 bytes.
+// 50 Hz の気圧高度エントリ（0x52）: 15 バイト、フィールド順は PC 側（udp_capture.py の FMT_BARO_HEIGHT
+// '<I2fHB'）のデコードと同じ。生の baro エントリ（0x45）は 12 バイトのまま。
+TEST(wire_baro_height_entry)
+{
+    using namespace sf::datastream;
+    static_assert(sizeof(WireBaroHeight) == 15, "wire drift");
+    static_assert(sizeof(WireBaro) == 12, "the raw baro entry stays as it is / 生の baro エントリは変えない");
+    static_assert(kPktBaroHeight == 0x52 && kPktBaroHeight > kPktTextLog, "0x52 follows the ids in use / 0x52 は使用中の id の次");
+
+    sf::LogStreamSample samples[kSamplesPerPacket] = {};
+    UnifiedPacketBuilder builder;
+    builder.begin(0, samples);
+    WireBaroHeight entry = {};
+    entry.timestamp_us     = 777777;
+    entry.height_m         = 0.75f;
+    entry.offset_m         = -0.5f;
+    entry.offset_age_decis = 123;
+    entry.flags            = 0x03;
+    ASSERT_TRUE(builder.addEntry(kPktBaroHeight, &entry, sizeof(entry)));
+    const size_t length = builder.finish();
+    const uint8_t* buf = builder.buffer();
+
+    ASSERT_TRUE(buf[916] == 1);   // entry_count / エントリ数
+    ASSERT_TRUE(buf[917] == 0x52 && buf[918] == 15);
+    uint32_t timestamp;
+    float values[2];
+    uint16_t age;
+    memcpy(&timestamp, &buf[919], 4);
+    memcpy(values, &buf[923], 8);
+    memcpy(&age, &buf[931], 2);
+    ASSERT_TRUE(timestamp == 777777);
+    ASSERT_TRUE(values[0] == 0.75f && values[1] == -0.5f);
+    ASSERT_TRUE(age == 123 && buf[933] == 0x03);
+    ASSERT_TRUE(length == 919 + 15 + 1);
+    ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
+}
 
 // Status packet v4: v3 prefix byte-identical (an older reader decodes it), the extension appended at offset 56,
 // total 224 B, every field at the offset udp_capture.py's struct format reads it from.
@@ -1925,6 +1964,7 @@ int main()
     run_wire_flight_phase_and_flags_entries();
     run_wire_quantize_flip_phi_saturation();
     run_wire_tof_silence_entry();
+    run_wire_baro_height_entry();
     run_wire_status_packet_v4();
     run_wire_status_v4_conversions_copy_every_field();
     run_wire_text_log_packet();

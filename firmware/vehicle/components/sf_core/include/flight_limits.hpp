@@ -705,5 +705,33 @@ inline constexpr uint32_t kBlindLandingTimeoutUs = 10000000;   // 10 s
 /// 接触の最大 0.7 s 前にモータを切ってしまう。
 inline constexpr uint32_t kBlindLandingMinSilentUs = 5500000;   // 5.5 s
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Floor-relative barometric height (barometric_height_estimator.hpp). Observation only: nothing in the control path reads it.
+// 床基準の気圧高度（barometric_height_estimator.hpp）。観測専用: 制御の経路は何も読まない。
+// ---------------------------------------------------------------------------------------------------------------------
+
+/// Time constant of the floor-zero average, tracked while the craft is disarmed on the floor [s]. CANDIDATE. Basis: 17 real logs (analysis/scripts/baro_offset_study.py):
+/// the BMP280 pressure altitude on the floor has a noise of 0.04-0.2 m rms (about 13 samples/s) and a drift of up to 0.04 m/s in the first minute after the power-on;
+/// 2 s averages about 26 samples (noise 1-4 cm) and lags a drift of 0.04 m/s by 8 cm at most, and the zero is replaced by the learned offset in flight anyway.
+/// 床の上で DISARM の間に追跡する、床の基準（ゼロ）の平均の時定数 [s]。候補値。根拠: 実機ログ 17 本（analysis/scripts/baro_offset_study.py）: 床の上の BMP280 の気圧高度は
+/// ノイズが rms 0.04〜0.2 m（約 13 サンプル/s）、電源投入後の最初の 1 分は最大 0.04 m/s のドリフト。2 s は約 26 サンプルの平均（ノイズ 1〜4 cm）で、0.04 m/s のドリフトに対する遅れは高々 8 cm。しかもゼロは飛行中に学習したオフセットで置き換わる。
+inline constexpr float kBaroZeroTauS = 2.0f;
+/// Time constant of the learned offset (barometric altitude above the floor zero minus the ToF height) [s]. CANDIDATE. Basis: see the table of analysis/scripts/baro_offset_study.py (pooled error after the ToF goes silent).
+/// 学習するオフセット（床のゼロからの気圧高度 − ToF の高さ）の時定数 [s]。候補値。根拠: analysis/scripts/baro_offset_study.py の表（ToF 出力停止後の誤差、全ログ合算）。
+inline constexpr float kBaroLearnTauS = 5.0f;
+/// The offset is learned only while the ToF height is inside this window [m]. CANDIDATE. Basis: below 0.15 m is the ground/air threshold of the takeoff/landing manager (ground effect, the sensor's dead zone); 1.5 m is below the 1.6 m ToF range (95-99 % valid up to 1.7 m).
+/// ToF の高さがこの範囲にある間だけオフセットを学習する [m]。候補値。根拠: 0.15 m 未満は離着陸マネージャの接地/空中のしきい値（地面効果、センサの不感帯）、1.5 m は ToF の有効距離 1.6 m 未満（1.7 m まで 95〜99 % が有効）。
+inline constexpr float kBaroLearnMinHeightM = 0.15f;
+inline constexpr float kBaroLearnMaxHeightM = 1.5f;
+/// The offset is learned only while the tilt of the craft is below this [rad]. CANDIDATE. Basis: the beam of the downward ToF leaves the floor beyond about 30 degrees (the field of view is 27 degrees) and the tilt-corrected height is no longer a height; 0.52 rad = 30 degrees.
+/// 機体の傾きがこれ未満の間だけオフセットを学習する [rad]。候補値。根拠: 約 30 度を超えると下向き ToF のビームが床から外れ（視野 27 度）、傾き補正した高さがもう高さでなくなる。0.52 rad = 30 度。
+inline constexpr float kBaroLearnMaxTiltRad = 0.52f;
+/// A sample whose error (barometric height - ToF height - offset) exceeds this is not learned [m]. CANDIDATE. Basis: the error of the in-flight barometric height minus the ToF height was 1.5 m at most in 17 real logs, mostly 0.5-1 m; 2 m only removes a ToF that jumps (a reflection).
+/// 誤差（気圧高度 − ToF の高さ − オフセット）がこれを超えるサンプルは学習しない [m]。候補値。根拠: 飛行中の気圧高度 − ToF の高さの誤差は実機ログ 17 本で最大 1.5 m、多くは 0.5〜1 m。2 m は、跳ぶ ToF（反射）だけを除く。
+inline constexpr float kBaroLearnGateM = 2.0f;
+/// The newest ToF sample must be no older than this to be paired with a barometer sample [us]. CANDIDATE. Basis: the ToF runs at about 30 Hz (33 ms period); 0.1 s allows two lost samples.
+/// 気圧計のサンプルと組にする ToF の最新サンプルは、これより古くてはならない [us]。候補値。根拠: ToF は約 30 Hz（周期 33 ms）。0.1 s は 2 サンプルの欠落を許す。
+inline constexpr uint32_t kBaroLearnMaxTofAgeUs = 100000;
+
 }  // namespace limits
 }  // namespace sf

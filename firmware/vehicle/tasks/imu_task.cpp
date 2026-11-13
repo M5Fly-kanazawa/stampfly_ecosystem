@@ -45,6 +45,7 @@
 #include "failsafe.hpp"     // ImuAnomalyDetector (400Hz impact/gyro checks)
 #include "failsafe_status_guard.hpp"   // reader-side guard: a stale failsafe_status reads as ToF silent
 #include "tof_health_tracker.hpp"       // has the estimator re-acquired the downward ToF?
+#include "barometric_height_estimator.hpp"   // floor-relative barometric height (observation only)
 #include "takeoff_policy.hpp"           // TakeoffFloorWatch / LiftoffWatch: the positive evidence that an auto-takeoff is still on the floor / that a craft in ARMED_GROUND is off it
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
@@ -139,6 +140,14 @@ static bool g_tof_vertical = true;
 /// 推定器は下向き ToF を取り込み直したか？ ToF サンプルごと（と毎周期の時計）で更新し、事実は
 /// tof_health に出す。判定（failsafe_status.tof_silent）は Failsafe が出す。
 static sf::ToFHealthTracker g_tof_health;
+
+/// Floor-relative barometric height: a floor zero taken while disarmed on the floor, an offset learned from the healthy ToF in
+/// flight and held while the ToF is silent. OBSERVATION ONLY (mirrored into sensor_snapshot for the Data Stream and the CLI);
+/// the controller, the estimator and the touchdown detection never read it (requirements.md §5).
+/// 床基準の気圧高度: DISARM で床の上にいる間に取る床のゼロと、飛行中に健全な ToF から学習し ToF の出力停止中は保持するオフセット。
+/// 観測専用（Data Stream と CLI のために sensor_snapshot へミラーする）。制御器・推定器・接地判定は読まない（requirements.md §5）。
+/// @design detailed_design.md §8 — barometric height, observation only [OK]
+static sf::BarometricHeightEstimator g_baro_height;
 static sf::TakeoffFloorWatch g_takeoff_floor_watch;   // the healthy ToF shows the craft on the floor, not rising (published as tof_health.floor_stays) / 健全な ToF が、機体は床の上で読みが増えないと示す（tof_health.floor_stays として発行）
 static sf::LiftoffWatch g_liftoff_watch;   // the healthy ToF shows the craft off the floor in ARMED_GROUND (published as tof_health.lifted_off) / ARMED_GROUND で、健全な ToF が機体は床を離れたと示す（tof_health.lifted_off として発行）
 
@@ -421,6 +430,22 @@ static void publishToFHealth()
     sf::tof_health.publish(health);
 }
 
+/// Give the barometric height estimator the ToF height of this sample, tilt-corrected, and whether the offset may be learned from it:
+/// a valid sample, the estimator has re-acquired the ToF (not silent), and the craft is off the floor.
+/// 気圧高度の推定器に、このサンプルの傾き補正した ToF の高さと、そこからオフセットを学習してよいか（有効なサンプルで、推定器が
+/// ToF を取り込み済み（出力停止でない）、かつ機体が床を離れている）を与える。
+static void feedBarometricHeightToF(const sf::TofData& tof)
+{
+    const sf::StateEstimate state = g_estimator->getState();   // attitude: quaternion w, x, y, z / 姿勢: クォータニオン
+    const float cos_tilt = 1.0f - 2.0f * (state.attitude[1] * state.attitude[1] + state.attitude[2] * state.attitude[2]);
+    sf::BarometricToFSample sample{};
+    sample.height_m     = tof.distance * cos_tilt;
+    sample.tilt_rad     = std::acos(cos_tilt > 1.0f ? 1.0f : (cos_tilt < -1.0f ? -1.0f : cos_tilt));
+    sample.timestamp_us = tof.timestamp;
+    sample.usable       = tof.valid && g_tof_health.altitudeReliable() && !g_failsafe.tof_silent && !groundContactTrusted();
+    g_baro_height.onToFSample(sample);
+}
+
 /// Drain the downward-ToF queue: feed every sample to the estimator, the takeoff/landing manager
 /// and the health tracker, mirror it into the snapshot, and publish tof_health. Returns true when at
 /// least one sample was consumed.
@@ -452,6 +477,7 @@ static bool consumeToFSamples(bool armed, bool in_landing_descent, sf::SensorSna
         g_takeoff_landing.update(tof, armed, g_estimator->getState().velocity[2],
                                  in_landing_descent);
         feedToFHealth(tof);
+        feedBarometricHeightToF(tof);
         consumed = true;
         snap.tof_distance  = tof.distance;
         snap.tof_status    = tof.status;
@@ -511,9 +537,23 @@ static bool consumeFlowSamples(sf::SensorSnapshot& snap)
     return snap_dirty;
 }
 
+/// Mirror the barometric height into the snapshot: the value as of the last NEW conversion, with the age counted to this sample.
+/// 気圧高度をスナップショットへミラーする: 最後の「新しい」変換の時点の値で、経過時間はこのサンプルまで数える。
+static void mirrorBarometricHeight(const sf::BaroData& baro, sf::SensorSnapshot& snap)
+{
+    const sf::BarometricHeightOutput out = g_baro_height.output(baro.timestamp);
+    snap.baro_height = out.height_m;
+    snap.baro_offset = out.offset_m;
+    snap.baro_height_flags = static_cast<uint8_t>((out.valid ? sf::kBaroHeightFlagValid : 0) | (out.learned ? sf::kBaroHeightFlagLearned : 0));
+    const float age_decis = out.offset_age_s * sf::kBaroAgeDecisPerSecond;
+    if (!out.learned)                              snap.baro_offset_age_decis = static_cast<uint16_t>(sf::kBaroAgeNeverDecis);
+    else if (age_decis > sf::kBaroAgeSaturatedDecis) snap.baro_offset_age_decis = static_cast<uint16_t>(sf::kBaroAgeSaturatedDecis);
+    else                                           snap.baro_offset_age_decis = static_cast<uint16_t>(age_decis);
+}
+
 /// Fuse the magnetometer and barometer samples and mirror them. Returns true if the snapshot changed.
 /// 磁気センサと気圧計のサンプルを融合してミラーする。スナップショットが変われば true。
-static bool consumeMagAndBaroSamples(sf::SensorSnapshot& snap)
+static bool consumeMagAndBaroSamples(bool armed, sf::SensorSnapshot& snap)
 {
     bool snap_dirty = false;
     sf::MagData mag;
@@ -528,7 +568,9 @@ static bool consumeMagAndBaroSamples(sf::SensorSnapshot& snap)
     sf::BaroData baro;
     while (sf::sensor_baro.read(baro)) {
         g_estimator->updateBaro(baro);
+        g_baro_height.onBaroSample({baro.altitude, baro.pressure, baro.timestamp}, {armed, groundContactTrusted()});
         snap.baro_pressure = baro.pressure; snap.baro_altitude = baro.altitude;
+        mirrorBarometricHeight(baro, snap);
         snap.baro_timestamp = baro.timestamp;
         snap_dirty = true;
     }
@@ -572,7 +614,7 @@ static void processAsyncSensors()
 
     snap_dirty = consumeFrontToFSamples(snap) || snap_dirty;
     snap_dirty = consumeFlowSamples(snap) || snap_dirty;
-    snap_dirty = consumeMagAndBaroSamples(snap) || snap_dirty;
+    snap_dirty = consumeMagAndBaroSamples(armed, snap) || snap_dirty;
 
     if (snap_dirty) {
         snap.timestamp = static_cast<uint32_t>(esp_timer_get_time());

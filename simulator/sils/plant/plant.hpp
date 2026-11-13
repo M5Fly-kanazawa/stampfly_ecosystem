@@ -45,6 +45,7 @@
 #include "frames.hpp"
 #include "data_types.hpp"
 #include "sensor_noise.hpp"
+#include "baro_model.hpp"
 #include "generated_params.hpp"
 
 namespace sils {
@@ -541,6 +542,13 @@ public:
     /// 端子電圧は電池モデル（または固定の公称値）に戻る。
     void holdBatteryVoltage(float volts);
 
+    /// Model what the real BMP280 adds to the true height (scenario `baro ...`): an absolute offset, a drift, a
+    /// thrust term (propeller wash) and noise (baro_model.hpp). OFF by default: baro() then returns the true height.
+    /// 実機の BMP280 が真の高さに足すもの（シナリオ `baro ...`）を模擬する: 絶対オフセット・ドリフト・推力の項（吹き下ろし）・
+    /// ノイズ（baro_model.hpp）。既定は OFF: baro() は真の高さを返す。
+    void configureBaro(const BaroModelConfig& config);
+    const BaroModelConfig& baroConfig() const { return baro_model_.config(); }
+
     /// Advance the physics by dt of VIRTUAL time, integrating in fixed
     /// model-timestep (m_->opt.timestep) substeps with a carried remainder, so
     /// the physics clock tracks the caller's virtual clock 1:1. mj_step always
@@ -560,7 +568,7 @@ public:
     // Synthetic sensors (body-FRD, driver-normalized convention). 合成センサ。
     sf::ImuData  imu()  const;  ///< accel [m/s²] (−9.8 at rest) + gyro [rad/s], FRD
     sf::TofData  tof()  const;  ///< downward distance [m]
-    sf::BaroData baro() const;  ///< pressure-altitude [m] (= −pos_z)
+    sf::BaroData baro() const;  ///< pressure-altitude [m] (= −pos_z, plus the BaroModel effects when on)
     sf::FlowData flow() const;  ///< PMW3901 dx/dy [counts] over the last step
     sf::MagData  mag()  const;  ///< body magnetic field [µT] (default ref, OFF by default)
 
@@ -636,6 +644,7 @@ private:
     mjData*  d_ = nullptr;
     Config cfg_;
     SensorNoise noise_;  ///< IMU noise model (seeded; advanced each step). §13 P5
+    mutable BaroModel baro_model_;  ///< what the BMP280 adds to the true height; OFF by default (own RNG) / BMP280 が真の高さに足すもの。既定 OFF（専用の乱数）
 
     float motor_omega_[4]  = {0.0f, 0.0f, 0.0f, 0.0f}; ///< ODE angular velocity state [rad/s]
     float motor_target_[4] = {0.0f, 0.0f, 0.0f, 0.0f}; ///< commanded target duty

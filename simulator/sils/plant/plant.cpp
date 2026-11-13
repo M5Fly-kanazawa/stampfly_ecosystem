@@ -485,6 +485,13 @@ void Plant::holdBatteryVoltage(float volts)
     if (!cfg_.batt_model_enable) v_batt_ = cfg_.v_batt;
 }
 
+// configureBaro — switch the BMP280 effects (offset, drift, wash, noise) on/off at the current virtual time.
+// configureBaro — BMP280 の効果（オフセット・ドリフト・吹き下ろし・ノイズ）を現在の仮想時刻で ON/OFF する。
+void Plant::configureBaro(const BaroModelConfig& config)
+{
+    baro_model_.configure(config, d_->time);
+}
+
 // -----------------------------------------------------------------------------
 // hoverDuty — per-motor duty that gives mg/4 of thrust at motor STEADY STATE
 // (R_out model, 2026-10-30). The old closed-form inversion of the D·V equilibrium no
@@ -944,6 +951,11 @@ sf::BaroData Plant::baro() const
     // ファームへ伝播）。出荷 config は USE_BAROMETER=false ゆえ ESKF は baro 未融合（ノイズは
     // 忠実だが現状テレメトリのみに影響）。
     noise_.applyBaro(alt);
+    // What the real sensor adds (scenario `baro ...`; OFF by default, then `alt` is untouched and no random number is drawn).
+    // 実機のセンサが足すもの（シナリオ `baro ...`。既定は OFF で、そのとき alt は変わらず乱数も引かない）。
+    float mean_duty = 0.0f;
+    for (int motor = 0; motor < 4; ++motor) mean_duty += motor_target_[motor] * 0.25f;
+    alt = baro_model_.apply(alt, d_->time, mean_duty);
 
     sf::BaroData out{};
     out.altitude = alt;

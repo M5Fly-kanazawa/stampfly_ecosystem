@@ -492,6 +492,7 @@ void DataStream::appendAbsoluteSensorEntries(datastream::UnifiedPacketBuilder& b
         baro.altitude     = snap.baro_altitude;
         baro.pressure     = snap.baro_pressure * 0.01f;   // Pa → hPa (wire unit)
         countDrop(builder.addEntry(datastream::kPktBaro, &baro, sizeof(baro)));
+        appendBaroHeightEntry(builder, snap);   // 0x52, next to the raw baro entry / 生の気圧エントリの隣
     }
     if (snap.mag_timestamp != last_mag_ts_) {
         last_mag_ts_ = snap.mag_timestamp;
@@ -502,6 +503,26 @@ void DataStream::appendAbsoluteSensorEntries(datastream::UnifiedPacketBuilder& b
         }
         countDrop(builder.addEntry(datastream::kPktMag, &mag, sizeof(mag)));
     }
+}
+
+// -----------------------------------------------------------------------------
+// appendBaroHeightEntry — barometric height above the floor (0x52), written with the baro entry (0x45).
+// appendBaroHeightEntry — 床からの気圧高度（0x52）。baro エントリ（0x45）と同じ条件で書く。
+//
+// A mirror of the SensorSnapshot fields ImuTask copies from sf::BarometricHeightEstimator (observation only).
+// ImuTask が sf::BarometricHeightEstimator から写す SensorSnapshot の値をそのまま運ぶ（観測のみ）。
+//
+// @design requirements.md §7 — Data Stream; protocol/spec/flight_log.yaml stream baro_height [OK]
+// -----------------------------------------------------------------------------
+void DataStream::appendBaroHeightEntry(datastream::UnifiedPacketBuilder& builder, const SensorSnapshot& snap)
+{
+    datastream::WireBaroHeight entry = {};
+    entry.timestamp_us     = snap.baro_timestamp;
+    entry.height_m         = snap.baro_height;
+    entry.offset_m         = snap.baro_offset;
+    entry.offset_age_decis = snap.baro_offset_age_decis;
+    entry.flags            = snap.baro_height_flags;
+    countDrop(builder.addEntry(datastream::kPktBaroHeight, &entry, sizeof(entry)));
 }
 
 // -----------------------------------------------------------------------------

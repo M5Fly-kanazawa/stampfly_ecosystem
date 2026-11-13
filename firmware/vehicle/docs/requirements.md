@@ -143,7 +143,7 @@ PairingState（FlightState と並行）
 |--------|------|------|--------|------|
 | IMU | BMI270 | SPI | 400Hz | 姿勢推定の主センサ |
 | 地磁気 | BMM150 | I2C | 25Hz | ヨー推定（研究対象） |
-| 気圧 | BMP280 | I2C | 50Hz | 高度推定（ToF範囲外） |
+| 気圧 | BMP280 | I2C | 50Hz | 床基準の気圧高度（観測専用。制御・推定・接地判定は使わない） |
 | ToF（下面） | VL53L3CX | I2C | 30Hz | 高度計測 |
 | ToF（前面） | VL53L3CX | I2C | 30Hz | 障害物検知・SLAM・ナビゲーション |
 | OpticalFlow | PMW3901 | SPI | 100Hz | 水平位置推定 |
@@ -413,7 +413,7 @@ PairingState (parallel to FlightState)
 |--------|------|-----|------|---------|
 | IMU | BMI270 | SPI | 400Hz | Primary sensor for attitude estimation |
 | Magnetometer | BMM150 | I2C | 25Hz | Yaw estimation (research target) |
-| Barometer | BMP280 | I2C | 50Hz | Altitude estimation (beyond ToF range) |
+| Barometer | BMP280 | I2C | 50Hz | Floor-relative barometric height (observation only; not used by control, estimation or touchdown detection) |
 | ToF (bottom) | VL53L3CX | I2C | 30Hz | Altitude measurement |
 | ToF (front) | VL53L3CX | I2C | 30Hz | Obstacle detection, SLAM, navigation |
 | Optical Flow | PMW3901 | SPI | 100Hz | Horizontal position estimation |

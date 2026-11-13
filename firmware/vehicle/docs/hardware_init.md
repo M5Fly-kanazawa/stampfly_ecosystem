@@ -161,7 +161,7 @@ Level 3: Optional sensors
   - BMM150 Mag → 失敗時は sensor_present(Mag) = false で続行
   - VL53L3CX Front ToF → 失敗時は sensor_present(FrontToF) = false
   - PMW3901 Flow → 失敗時は sensor_present(Flow) = false
-  - BMP280 Baro → 高度推定の補助、失敗時は flag-only
+  - BMP280 Baro → 床基準の気圧高度（観測専用）、失敗時は flag-only
 
 Level 4: Communication infrastructure
   - WiFi STA netif の生成（sf_board が所有・生成。R1: esp_netif の唯一の所有者は
@@ -209,8 +209,8 @@ ledc_timer     ─→  Motor / LED / Buzzer
 | Critical | VL53L3CX Bottom ToF | `abort()`（モードを問わない。実行時に出力停止すると ACRO を含め次の ARM を拒否、`detailed_design.md` §3 注12） | 高度推定の主観測。ACRO / STABILIZE の制御則は高度を使わないが、高度センサが保証できない機体は離陸させない |
 | **Optional** | BMM150 Mag | `sensor_present(Mag) = false` で続行 | ヨー推定がドリフトしやすくなるが ACRO/STAB は可能 |
 | Optional | VL53L3CX Front ToF | `sensor_present(FrontToF) = false` | 障害物検知不能、フライトは可能 |
-| Optional | PMW3901 Flow | `sensor_present(Flow) = false` | 位置推定の補助、ホバーは ToF + Baro で可能 |
-| Optional | BMP280 Baro | `sensor_present(Baro) = false` | ToF と冗長、片方あれば高度推定可能 |
+| Optional | PMW3901 Flow | `sensor_present(Flow) = false` | 位置推定の補助（ホバーは ToF が鉛直を担う。気圧計は観測専用） |
+| Optional | BMP280 Baro | `sensor_present(Baro) = false` | 観測専用（制御・推定は ToF のみ）。無くても飛行は変わらない |
 | Optional | Power monitor | `sensor_present(Power) = false` | 電圧監視なしでも飛行は可能（バッテリ警告は失われる） |
 | **Recoverable** | I2C / SPI 一時的 I/O エラー | task ループ内で retry、`READ_FAIL_LOG_INTERVAL = 400` cycles で警告抑制 | 振動や電源ノイズで稀に発生、再試行で復帰可能 |
 | Recoverable | ESP-NOW パケットロス | failsafe 側で `command_setpoint` の age を判定 | 通信ロスは飛行中に発生しうる、タイムアウト Failsafe で対応 |

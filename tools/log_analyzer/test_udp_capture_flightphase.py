@@ -197,3 +197,64 @@ def test_save_bundle_writes_tof_silence_stream_and_old_firmware_has_none():
         cap.save_bundle(str(bundle_path))
         assert 'tof_silence' not in sflog.load(bundle_path).streams
 
+
+
+def _baro_height_entry(ts, height_m, offset_m, age_decis, flags):
+    """[id][size][payload] for kPktBaroHeight (0x52, 15 bytes)."""
+    payload = struct.pack('<I2fHB', ts, height_m, offset_m, age_decis, flags)
+    assert len(payload) == 15
+    return bytes([udp_capture.PKT_BARO_HEIGHT, 15]) + payload
+
+
+def test_baro_height_entry_decodes_and_neighbours_are_intact():
+    baro = bytes([udp_capture.PKT_BARO, 12]) + struct.pack('<I2f', 5, 3.0, 1013.0)
+    entry = _baro_height_entry(888000, 0.75, -0.5, 123, 0x03)
+    control = bytes([udp_capture.PKT_CONTROL, 20]) + struct.pack('<I4f', 42, 0.5, 0.0, 0.0, 0.0)
+    pkt, _ = build_unified(1, entries=baro + entry + control, entry_count=3)
+    results = udp_capture.parse_packet(pkt)
+    got = [s for pid, s in results if pid == udp_capture.PKT_BARO_HEIGHT]
+    assert len(got) == 1
+    assert got[0]['timestamp_us'] == 888000
+    assert (got[0]['height_m'], got[0]['offset_m']) == (0.75, -0.5)
+    assert (got[0]['offset_age_decis'], got[0]['flags']) == (123, 0x03)
+    assert [s for pid, s in results if pid == udp_capture.PKT_BARO][0]['baro_pressure'] == 1013.0
+    assert [s for pid, s in results if pid == udp_capture.PKT_CONTROL][0]['timestamp_us'] == 42
+
+
+def test_unknown_entry_id_is_skipped_by_size():
+    """A reader that does not know an id skips it by [id][size] (new captures stay readable by old readers)."""
+    unknown = bytes([0x7E, 15]) + bytes(15)
+    control = bytes([udp_capture.PKT_CONTROL, 20]) + struct.pack('<I4f', 42, 0.5, 0.0, 0.0, 0.0)
+    pkt, _ = build_unified(1, entries=unknown + control, entry_count=2)
+    results = udp_capture.parse_packet(pkt)
+    assert [s['timestamp_us'] for pid, s in results if pid == udp_capture.PKT_CONTROL] == [42]
+
+
+def test_save_bundle_writes_baro_height_stream_and_old_firmware_has_none():
+    entries = (_baro_height_entry(3_000_000, 0.5, 0.1, 65535, 0x01)
+               + _baro_height_entry(3_020_000, 0.6, 0.2, 25, 0x03))
+    pkt, _ = build_unified(1, entries=entries, entry_count=2)
+    cap = udp_capture.UDPTelemetryCapture()
+    cap._process_datagram(pkt)
+    with tempfile.TemporaryDirectory() as td:
+        bundle_path = Path(td) / "test.sflog.zip"
+        cap.start_time, cap.end_time = 0, 1.0
+        cap.save_bundle(str(bundle_path))
+        log = sflog.load(bundle_path)
+        rows = log.streams['baro_height']
+        assert len(rows) == 2
+        assert (rows.iloc[0]['valid'], rows.iloc[0]['learned']) == (1, 0)
+        assert rows.iloc[0]['offset_age'] == -1.0
+        assert (rows.iloc[1]['valid'], rows.iloc[1]['learned']) == (1, 1)
+        assert rows.iloc[1]['offset_age'] == pytest.approx(2.5)
+        assert rows.iloc[1]['height'] == pytest.approx(0.6, abs=1e-6)
+        assert not [f for f in sflog.check_bundle(log) if f.level == 'error' and 'baro_height' in str(f)]
+
+    old_pkt, _ = build_unified(1, entries=b'', entry_count=0)
+    cap = udp_capture.UDPTelemetryCapture()
+    cap._process_datagram(old_pkt)
+    with tempfile.TemporaryDirectory() as td:
+        bundle_path = Path(td) / "old.sflog.zip"
+        cap.start_time, cap.end_time = 0, 1.0
+        cap.save_bundle(str(bundle_path))
+        assert 'baro_height' not in sflog.load(bundle_path).streams

@@ -50,6 +50,7 @@
 #include <cerrno>
 
 #include "topics.hpp"
+#include "barometric_height_estimator.hpp"   // kBaroHeightFlag* (the CLI shows the barometric height)
 #include "tasks.hpp"      // flush_log_sink()
 #include "params.hpp"
 #include "flight_state.hpp"
@@ -468,7 +469,16 @@ int cmd_sensor(int argc, char** argv)
         std::printf("mag  : [%.1f %.1f %.1f] uT\n", snap.mag[0], snap.mag[1], snap.mag[2]);
     }
     if (all || std::strcmp(which, "baro") == 0) {
-        std::printf("baro : %.1f Pa  alt %.2f m\n", snap.baro_pressure, snap.baro_altitude);
+        std::printf("baro : %.1f Pa  alt %.2f m (absolute)\n", snap.baro_pressure, snap.baro_altitude);
+        // Floor-relative height (observation only): the age is the time since the offset was last learned from the ToF.
+        // 床基準の高さ（観測専用）: 経過時間は、オフセットを最後に ToF から学習してからの時間。
+        const bool height_learned = (snap.baro_height_flags & sf::kBaroHeightFlagLearned) != 0;
+        std::printf("       height %.2f m  offset %.2f m  %s%s", snap.baro_height, snap.baro_offset,
+                    (snap.baro_height_flags & sf::kBaroHeightFlagValid) ? "valid" : "not valid",
+                    height_learned ? "" : ", offset not learned\n");
+        if (height_learned) {
+            std::printf(", offset age %.1f s\n", snap.baro_offset_age_decis / sf::kBaroAgeDecisPerSecond);
+        }
     }
     if (all || std::strcmp(which, "tof") == 0) {
         std::printf("tof  : %.3f m  status=%u valid=%s\n", snap.tof_distance, snap.tof_status,

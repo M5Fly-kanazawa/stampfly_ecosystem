@@ -99,6 +99,8 @@ inline constexpr uint8_t kPktStatus    = 0x4F;  // standalone 1Hz packet
 inline constexpr uint8_t kPktUnified   = 0x50;  // 50Hz batched packet
 inline constexpr uint8_t kPktTextLog   = 0x51;  // ESP_LOG text lines (separate packet, sent only while lines wait)
                                                 // ESP_LOG の文字列の行（別パケット。行が待っている間だけ送る）
+inline constexpr uint8_t kPktBaroHeight = 0x52; // 50Hz barometric height above the floor (unified-packet entry)
+                                                // 50Hz 床からの気圧高度（統合パケットのエントリ）
 
 /// 8 control cycles (400 Hz) per unified packet → 50 sendto()/s, ≈48 KB/s.
 /// The packet rate, not the sample rate, is what the WiFi stack pays for —
@@ -130,7 +132,7 @@ inline constexpr int    kSamplesPerPacket = 8;
 /// flow/tof/baro/mag 計 ~70B）= 典型 1237B を収める必要があり、1400B なら WiFi MTU
 /// （1472）・PC 受信バッファ（2048）に対して ~163B の余白が残る。
 /// 50Hz の ToF 出力停止エントリ（kPktToFSilence、2B + 19B = 21B）を含めた最悪ケースは
-/// 1317B で、この上限まで 83B の余裕が残る（test_main.cpp の
+/// 1317B、50Hz の気圧高度エントリ（kPktBaroHeight、2B + 15B = 17B）を含めると 1334B で、この上限まで 66B の余裕が残る（test_main.cpp の
 /// wire_unified_worst_case_fits が、実際のビルダでこの最悪ケースを組み、全エントリが
 /// 受理されることを検査する）。
 inline constexpr size_t kUnifiedMaxSize   = 1400;
@@ -376,6 +378,26 @@ struct WireToFSilence {
     uint8_t  mode_block;             // ModeBlock (0 = no refused mode request pending) / ModeBlock（0 = 拒否されたモード要求なし）
 };
 static_assert(sizeof(WireToFSilence) == 19, "wire drift");
+
+/// 50Hz barometric-height entry — the floor-relative height of sf::BarometricHeightEstimator, next to the raw baro entry
+/// (0x45, unchanged). Observation only. Written with every sensor_baro sample (the sensor converts at about 13 Hz, so values repeat).
+/// flags: kBaroHeightFlagValid / kBaroHeightFlagLearned (barometric_height_estimator.hpp). offset_age_decis: time since the
+/// offset was last learned in 0.1 s units, saturating at 65534; 65535 = never learned. Entry id 0x52; a parser that does not
+/// know the id skips it by size.
+/// 50Hz 気圧高度エントリ — sf::BarometricHeightEstimator の床からの高さ。生の baro エントリ（0x45、変更なし）の隣に置く。
+/// 観測のみ。sensor_baro の各サンプルごとに書く（センサの変換は約 13 Hz なので値は繰り返す）。
+/// flags: kBaroHeightFlagValid / kBaroHeightFlagLearned（barometric_height_estimator.hpp）。offset_age_decis: オフセットを
+/// 最後に学習してからの時間（0.1 s 単位、65534 で飽和）。65535 = 未学習。エントリ id 0x52。id を判別できないパーサは
+/// size でスキップする。
+/// @design requirements.md §7 — Data Stream; protocol/spec/flight_log.yaml stream baro_height [OK]
+struct WireBaroHeight {
+    uint32_t timestamp_us;        // baro sample time / 気圧計サンプルの時刻
+    float    height_m;            // [m] height above the floor, offset-corrected (valid only with the valid flag) / 床からの高さ（オフセット補正済み。valid フラグがあるときのみ有効）
+    float    offset_m;            // [m] learned offset / 学習したオフセット
+    uint16_t offset_age_decis;    // [0.1 s] age of the offset, 65535 = never learned / オフセットの経過時間、65535 = 未学習
+    uint8_t  flags;               // kBaroHeightFlag* bits / kBaroHeightFlag* のビット
+};
+static_assert(sizeof(WireBaroHeight) == 15, "wire drift");
 
 /// 50Hz pilot input entry — FMT_CONTROL '<I 4f' (20B)
 struct WireControl {

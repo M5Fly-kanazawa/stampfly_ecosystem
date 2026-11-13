@@ -164,6 +164,16 @@ STREAMS = {   'imu': {   'file': 'imu.csv',
                 'columns': (   ('timestamp_us', 'int', 'us'),
                                ('altitude', 'float', 'm'),
                                ('pressure', 'float', 'Pa'))},
+    'baro_height': {   'file': 'baro_height.csv',
+                       'source': 'BaroHeight (0x52)',
+                       'nominal_rate_hz': 50,
+                       'required': False,
+                       'columns': (   ('timestamp_us', 'int', 'us'),
+                                      ('height', 'float', 'm'),
+                                      ('offset', 'float', 'm'),
+                                      ('valid', 'int', '0/1'),
+                                      ('learned', 'int', '0/1'),
+                                      ('offset_age', 'float', 's'))},
     'tof_bottom': {   'file': 'tof_bottom.csv',
                       'source': 'ToF bottom (0x44)',
                       'nominal_rate_hz': 30,
@@ -1211,9 +1221,22 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                 {   'name': 'altitude',
                     'type': 'float',
                     'unit': 'm',
-                    'description_ja': '気圧高度（相対値、基準は起動時気圧）。',
-                    'description_en': 'Barometric altitude (relative to the power-on '
-                                      'reference pressure).'},
+                    'description_ja': 'BMP280 の絶対の気圧高度 44330·(1 − '
+                                      '(p/101325)^0.1903)（起動時気圧に対する相対値ではない）。天候と場所で変わる '
+                                      '（実機ログで −50 m、−14 m、+80 m、+780 m を観測）。センサの変換は約 '
+                                      '13 Hz で本ストリームは 50 Hz のため、同じ値が 3〜4 '
+                                      '回繰り返す（新しい変換は気圧の変化で見分ける）。床からの高さは baro_height '
+                                      'ストリームを使う。',
+                    'description_en': 'ABSOLUTE pressure altitude of the BMP280, '
+                                      '44330·(1 − (p/101325)^0.1903) (not relative to '
+                                      'the power-on pressure). It depends on weather '
+                                      'and place (real logs read −50 m, −14 m, +80 m, '
+                                      '+780 m). The sensor converts at about 13 Hz '
+                                      'while this stream is 50 Hz, so each value '
+                                      'repeats 3-4 times (a new conversion is '
+                                      'recognised by a change of pressure). For the '
+                                      'height above the floor use the baro_height '
+                                      'stream.'},
                 {   'name': 'pressure',
                     'type': 'float',
                     'unit': 'Pa',
@@ -1226,6 +1249,46 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                                       'data_stream_wire.hpp: "hPa on the wire, Pa '
                                       'inside the firmware"), so the conversion '
                                       'multiplies by 100 before recording.'}],
+    'baro_height': [   {   'name': 'timestamp_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': '機体起動基準のマイクロ秒タイムスタンプ（気圧計サンプルの時刻）。',
+                           'description_en': 'Vehicle boot-relative microsecond '
+                                             'timestamp (time of the barometer '
+                                             'sample).'},
+                       {   'name': 'height',
+                           'type': 'float',
+                           'unit': 'm',
+                           'description_ja': '床からの気圧高度（オフセット補正済み）。valid=1 のときだけ有効。',
+                           'description_en': 'Barometric height above the floor, '
+                                             'offset-corrected; valid only when '
+                                             '`valid`=1.'},
+                       {   'name': 'offset',
+                           'type': 'float',
+                           'unit': 'm',
+                           'description_ja': 'ToF から学習したオフセット（プロペラの吹き下ろしとドリフトの分）。',
+                           'description_en': 'Offset learned from the ToF (the '
+                                             'propeller-wash term and the drift).'},
+                       {   'name': 'valid',
+                           'type': 'int',
+                           'unit': '0/1',
+                           'description_ja': '床のゼロを持つか、オフセットを学習済みで、height が有効。',
+                           'description_en': 'A floor zero is held or an offset is '
+                                             'learned, so `height` is valid.'},
+                       {   'name': 'learned',
+                           'type': 'int',
+                           'unit': '0/1',
+                           'description_ja': '最後の ARM 以降にオフセットを学習した。',
+                           'description_en': 'The offset was learned since the last '
+                                             'ARM.'},
+                       {   'name': 'offset_age',
+                           'type': 'float',
+                           'unit': 's',
+                           'description_ja': 'オフセットを最後に学習してからの経過時間（電文は 0.1 s 単位。−1 '
+                                             'は未学習）。',
+                           'description_en': 'Time since the offset was last learned '
+                                             '(0.1 s units on the wire; -1 = never '
+                                             'learned).'}],
     'tof_bottom': [   {   'name': 'timestamp_us',
                           'type': 'int',
                           'unit': 'us',

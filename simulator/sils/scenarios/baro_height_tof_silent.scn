@@ -1,0 +1,19 @@
+# baro_height_tof_silent.scn — after the ToF goes silent the barometric height keeps tracking the true height with the held offset
+#                             ToF が出力停止したあと、保持したオフセットで気圧高度が真の高さに追従し続ける
+#
+# Same flight as tof_silent_hover.scn (ToF stops at 14.0 s while hovering at 0.5 m, blind landing) with `baro typical`. baro_height is observation only: the blind descent
+# is the same as without the barometer.
+# tof_silent_hover.scn と同じ飛行（0.5 m のホバー中の 14.0 s に ToF が止まり、ToF なしの着陸）に `baro typical` を足したもの。baro_height は観測専用で、
+# ToF なしの降下は気圧計の有無で変わらない。
+#
+# Run: sf sils scenario simulator/sils/scenarios/baro_height_tof_silent.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    baro       typical
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM
+   +    rc         2048  2048   2048    2048  1     5500      50        1              # D: climb to 0.5 m and hold (to 14.0 s)
+   +    tof_silent 1                                                                   # E: 14.0 s — ToF output stops
+   +    rc         2048  2048   2048    2048  1     7000      50        1              # F: LANDING by silence, blind descent
+   +    rc         2048  2048   2048    2048  0     200       50        1              # G: release the ARM button

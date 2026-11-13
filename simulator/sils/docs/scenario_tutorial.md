@@ -62,6 +62,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `tof_deadzone` | `<0\|1>` | 下向き ToF の近距離の不感帯のモデルを切る（0）/ 入れる（1）。**既定は 1**: 真の距離が 31 mm 未満では反射パルスが無く「目標なし」（無効）になる。実機のセンサは床の上で無効を返し、TAKEOFF に入った後 186〜344 ms 無効のまま、距離 0.031〜0.032 m の最初の有効サンプルに至るため（実機ログ 3 本）。SILS の機体モデルは床の 21 mm 上で静止するので、実機と同じく地上で無効を返し、10 mm 上がると有効になる。0 にすると不感帯を持たない（床まで真の距離を測る）。降下の最後の数 cm で読みが無効になるため、柔らかい接地の ToF 着陸は、不感帯での接地（有効な読みの後に無効サンプルだけが 0.2 s 続く）で終わる（`landing_dead_zone.scn`、`detailed_design.md` §3 注7）。`alt_disarm_land.scn` は 0 にして DISARM の振り分けだけを検証する |
 | `battery` | `<volts>` または `model` | 電池の端子電圧 [V] を、実行のこの時点から `<volts>`（0 超 5 以下）に保つ: モータの電源（推力）と、ファームが INA3221 電源モニタで読む電圧の両方がこの値になり、電流による電圧降下とクーロンカウントは止まる。`model` で保持を解き、電池モデル（既定の SILS は有効）が再び決める。弱った電池の電圧が、選んだ時刻に危険閾値（`critical_battery_v` = 3.0 V）を下回る状況の模擬（`battery_emergency_*.scn`、`detailed_design.md` §3 注14）。2.99 V は危険閾値のすぐ下で、モータの推力はほぼそのまま残る。この事象を使わないシナリオの出力は、バイト単位で変わらない |
 | `param` | `<name> <value>` | 実行のこの時点でファームのパラメータを 1 つ、型に正しいセッタで設定する（範囲検証あり。変更コールバックが呼ばれ、制御器のパラメータは再読込される）。ファームが頼る値に誤差を、それ以前の飛行を変えずに注入する。`t = 0` で使えば起動時の値の上書き（学習を切る、見積もりをずらす）になる（`tof_silent_est_high.scn`: `hover.thrust_corr` を真のホバーより高く、`hover.thrust.learn 0`）。注意: 飛行中に推力の見積もりを変えると、制御器が 1 周期分その値で推力を出す |
+| `baro` | `<offset\|drift\|wash\|noise\|slow> <値>` / `typical [倍率]` / `off` | 実機の BMP280 が真の高さに足す効果を有効にする: `offset`[m] 絶対高度、`drift`[m/s]、`wash`[m、× 平均 duty の 2 乗] 吹き下ろしの項、`noise`[m] 白色と `slow`[m] 1 次のノイズ。`typical` は全部を実機ログ 17 本で測った大きさ（35 m・0.010 m/s・1.4 m・0.04 m・0.12 m）× 倍率（既定 1）にする。使わないシナリオでは気圧計は真の高さを読む（`baro_height_*.scn`、`plant/baro_model.hpp`） |
 | `bias` | `<ax> <ay> <az> <gx> <gy> <gz>` | 生IMUに決定論的なバイアスを注入（機体 FRD＝前右下座標系）。加速度 [m/s²]・角速度 [rad/s] |
 | `handle` | `<carry_alt_m> <place_x> <place_y> <lift_ms> <carry_ms> <place_ms>` | 人が持ち上げて運ぶ動作の模擬（lift→right→carry→place）。`carry_alt_m>0`、各所要時間 `>0` 必須。タイムライン上は瞬時に作動し、その後の disarmed な `rc` 保持が実時間を占有する |
 | `btn` | （未実装・予約） | 現状は警告を出して読み飛ばされるだけ（GPIOボタンの模擬は将来実装） |
@@ -95,7 +96,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 - `rc`: `hold_ms` ぶん先（0 なら単発フレームで時間を消費しない）
 - `rc_ramp`: 掃引に要するフレーム数 × 周期
 - `wind`: `dur_ms` を指定したときだけその時間ぶん（突風パルス）。省略時（定常ステップ）は瞬時
-- それ以外（`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`battery`/`param`/`handle`/`btn`）: タイムライン上は瞬時（0ms）
+- それ以外（`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`battery`/`baro`/`param`/`handle`/`btn`）: タイムライン上は瞬時（0ms）
 
 ## 3. `.expect` の書き方
 
@@ -140,6 +141,8 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `flip_roll_deg` | deg（**度**、上記の角度系とは異なりラジアンではない） | 窓内で真値の機体角速度 `rate_x`（ロール p、FRD）を時間積分した符号付き回転角。FLIP（宙返り）の実回転量の確認用（`docs/plans/flip-maneuver-plan.md` §5.2） |
 | `flip_pitch_deg` | deg（度） | 同上、`rate_y`（ピッチ q）を積分 |
 | `descent_speed_max` | m/s | 窓内の真値の最大「降下」速度（下向き正の `vel_z` の最大値、上昇のみの窓は 0）。接地速度の確認用（`tof_silent_*.scn` の ToF なしの着陸） |
+| `baro_height_err_max` | m | 窓内で、推定器が valid かつ learned の行の、気圧高度（`baro_height.csv`）− 真値の高さの最大絶対値（該当行が無ければ FAIL） |
+| `baro_height_err_rms` | m | 同じ行の二乗平均平方根 |
 | `alt_drop_max` | m | 窓の**開始時点の高度**から窓内の最低高度までの落ち込み（正の値。下回らなければ 0） |
 | `alt_rise_max` | m | 窓の**開始時点の高度**から窓内の最高高度までの上昇（正の値。上回らなければ 0） |
 | `settle_time_s` | s | 窓の開始時刻から、真値の傾き `hypot(roll, pitch)` が 10° 未満に**それ以降ずっと**留まる最初の時刻までの経過時間。窓内で収まらなければ大きな値（999）を返す |
@@ -345,6 +348,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 | `tof_deadzone` | `<0\|1>` | Turns the downward ToF's close-range dead zone model off (0) / on (1). **The default is 1**: a true distance below 31 mm has no return pulse and reads "no target" (invalid), because the real sensor reads invalid on the floor, stays invalid for 186-344 ms after the TAKEOFF entry and then returns its first valid sample at 0.031-0.032 m (3 real flight logs). The SILS plant rests 21 mm above the floor, so it reads invalid on the ground as the real craft does, and valid after rising 10 mm. 0 = no dead zone (the true distance down to the floor). Because the reading goes invalid in the last centimetres of a descent, a soft ToF landing ends by the dead-zone touchdown (only invalid samples for 0.2 s after a valid reading near the floor; `landing_dead_zone.scn`, `detailed_design.md` §3 note 7). `alt_disarm_land.scn` sets 0 to test only the routing of the DISARM |
 | `battery` | `<volts>` or `model` | Holds the battery terminal voltage [V] at `<volts>` (above 0, at most 5) from this point of the run: both the motors' supply (the thrust) and the voltage that the firmware reads on the INA3221 power monitor take this value, and the current-dependent voltage drop and the Coulomb count stop. `model` releases the hold and the battery model (enabled by default in the SILS) decides again. Models a weak pack whose voltage falls below the critical threshold (`critical_battery_v` = 3.0 V) at a chosen time (`battery_emergency_*.scn`, `detailed_design.md` §3 note 14). 2.99 V is just below the critical threshold, with almost the full motor thrust left. A scenario that does not use the event is not affected by it (its output is byte-identical) |
 | `param` | `<name> <value>` | Sets one firmware parameter at this point of the run through the type-correct setter (range-validated; the change callback fires, so a controller parameter is reloaded). Injects an ERROR into a value the firmware relies on without changing the flight before it. At `t = 0` it overrides a boot value (switch learning off, shift an estimate: `tof_silent_est_high.scn` sets `hover.thrust_corr` above the true hover with `hover.thrust.learn 0`). Note: changing the thrust estimate mid-flight makes the controller output thrust from the new value for a cycle |
+| `baro` | `<offset\|drift\|wash\|noise\|slow> <value>` / `typical [scale]` / `off` | Switches on the effects the real BMP280 adds to the true height: `offset` [m] an absolute altitude, `drift` [m/s], `wash` [m, x (mean duty)^2] the propeller-wash term, `noise` [m] white and `slow` [m] first-order noise. `typical` sets all of them to the magnitudes measured on 17 real logs (35 m, 0.010 m/s, 1.4 m, 0.04 m, 0.12 m) times the scale (default 1). A scenario without it reads the true height (`baro_height_*.scn`, `plant/baro_model.hpp`) |
 | `bias` | `<ax> <ay> <az> <gx> <gy> <gz>` | Injects a deterministic raw IMU bias (body FRD = Forward-Right-Down). Accel [m/s²], gyro [rad/s] |
 | `handle` | `<carry_alt_m> <place_x> <place_y> <lift_ms> <carry_ms> <place_ms>` | Simulates a human hand-carry maneuver (lift→right→carry→place). `carry_alt_m>0` and each duration `>0` are required. Fires instantaneously on the timeline; a following disarmed `rc` hold occupies the real time it takes |
 | `btn` | (reserved, not implemented) | Currently just warns and is skipped (GPIO button simulation is a future feature) |
@@ -378,7 +382,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 - `rc`: `hold_ms` later (0 consumes no time — single frame)
 - `rc_ramp`: frame count needed for the sweep × its period
 - `wind`: only if `dur_ms` was given (gust pulse); a sustained step (no `dur_ms`) is instantaneous
-- everything else (`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`battery`/`param`/`handle`/`btn`): instantaneous (0 ms) on the timeline
+- everything else (`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`battery`/`baro`/`param`/`handle`/`btn`): instantaneous (0 ms) on the timeline
 
 ## 3. Writing a `.expect` file
 
@@ -423,6 +427,8 @@ Computed from the streams inside the run's flight-log bundle (the zip-format log
 | `flip_roll_deg` | deg (**degrees**, unlike the radian-valued angular metrics above) | signed rotation angle from integrating the truth body angular rate `rate_x` (roll p, FRD) over the window in time. For checking the actual rotation of a FLIP maneuver (`docs/plans/flip-maneuver-plan.md` §5.2) |
 | `flip_pitch_deg` | deg | same, integrating `rate_y` (pitch q) |
 | `descent_speed_max` | m/s | largest truth **downward** speed in the window (max of the NED-down `vel_z`; 0 for a climb-only window). Touchdown-speed check (blind landing, `tof_silent_*.scn`) |
+| `baro_height_err_max` | m | largest absolute value of the barometric height (`baro_height.csv`) minus the true height over the rows where the estimator reports valid AND learned in the window (FAIL when there is none) |
+| `baro_height_err_rms` | m | root mean square over the same rows |
 | `alt_drop_max` | m | drop from the window's **start** altitude to the window's lowest altitude (positive; 0 if it never drops below) |
 | `alt_rise_max` | m | rise from the window's **start** altitude to the window's highest altitude (positive; 0 if it never rises above) |
 | `settle_time_s` | s | elapsed time from the window's start until true tilt `hypot(roll, pitch)` stays below 10° for the **rest** of the window; a large value (999) if it never settles within the window |

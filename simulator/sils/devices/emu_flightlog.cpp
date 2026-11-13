@@ -26,7 +26,7 @@ namespace {
 // Fixed-size stream table (name -> lazily-opened FILE*). 32 covers every
 // stream protocol/spec/flight_log.yaml defines today (imu/attitude/posvel/
 // rate_ref/motor/ctrl_output/pilot/ctrl_ref/baro/tof_bottom/tof_front/flow/
-// mag/status/eskf_cov/truth/events + flight_phase/flight_flags/tof_silence + tof_diagnostics/loop_timing/
+// mag/status/eskf_cov/truth/events + flight_phase/flight_flags/tof_silence/baro_height + tof_diagnostics/loop_timing/
 // nonfinite/link_health/text_log) with headroom.
 // 固定サイズのストリーム表（名前→遅延オープンした FILE*）。32 は
 // flight_log.yaml が現在定義する全ストリームに余裕を持って収まる数。

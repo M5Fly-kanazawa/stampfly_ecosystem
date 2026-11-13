@@ -1,0 +1,11 @@
+# baro_height_track.expect — barometric height above the floor tracks the true height while the ToF is alive
+# ToF が生きている間、床からの気圧高度が真の高さに追従する
+#
+# The simulated BMP280 reads 35 m too high with drift, a propeller-wash term and noise (`baro typical`); after the offset is learned in flight the error
+# against the true height is 0.31 m at most (rms 0.12 m) over the hold (measured; the real-log study of analysis/scripts/baro_offset_study.py gives 0.2-0.3 m rms).
+# 機体モデルの BMP280 は 35 m 高く、ドリフト・吹き下ろしの項・ノイズ付きで読む（`baro typical`）。飛行中にオフセットを学習したあとの、ホバー保持中の
+# 真の高さに対する誤差は最大 0.31 m（rms 0.12 m。実測。実機ログの調査 analysis/scripts/baro_offset_study.py では rms 0.2〜0.3 m）。
+exit 0
+bundle_value baro_height.learned last == 1 in 12.0 14.0
+metric baro_height_err_max < 0.5 in 10.5 14.0
+metric baro_height_err_rms < 0.2 in 10.5 14.0

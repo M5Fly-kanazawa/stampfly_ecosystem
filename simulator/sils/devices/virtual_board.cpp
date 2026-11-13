@@ -25,6 +25,7 @@
  */
 
 #include "virtual_board.hpp"
+#include <string>
 
 #include <cmath>
 #include <cstdlib>
@@ -451,6 +452,24 @@ void sils_board_set_tof_invalid(int invalid)
 void sils_board_set_tof_deadzone(int enabled)
 {
     sils_vl53::set_deadzone(enabled != 0);
+}
+
+int sils_board_set_baro(const char* key, float value)
+{
+    if (g_plant == nullptr) return 1;
+    const std::string name(key);
+    sils::BaroModelConfig config = g_plant->baroConfig();
+    config.enable = true;
+    if      (name == "offset")  config.offset_m = value;
+    else if (name == "drift")   config.drift_mps = value;
+    else if (name == "wash")    config.wash_m = value;
+    else if (name == "noise")   config.white_sigma_m = value;
+    else if (name == "slow")    config.slow_sigma_m = value;
+    else if (name == "typical") config = sils::BaroModel::typical(value);
+    else if (name == "off")     config = sils::BaroModelConfig{};
+    else return 0;
+    g_plant->configureBaro(config);
+    return 1;
 }
 
 void sils_board_handle_place(float carry_alt_m, float place_x_ned, float place_y_ned,

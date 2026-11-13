@@ -116,6 +116,15 @@ void sils_board_set_tof_invalid(int invalid);
 // Plant には依存しない。
 void sils_board_set_tof_deadzone(int enabled);
 
+// Scenario `baro <key> [value]`: switch on the effects the real BMP280 adds to the true height (plant/baro_model.hpp).
+// key: `offset` [m], `drift` [m/s], `wash` [m, x duty^2], `noise` (white, m), `slow` (first-order, m) set one effect and turn the model on;
+// `typical [scale]` sets every effect to the typical magnitude times `scale` (default 1); `off` turns the model off.
+// Returns 1 when the key is known, 0 otherwise. No-op (returns 1) until a Plant is attached.
+// シナリオ `baro <key> [value]`: 実機の BMP280 が真の高さに足す効果（plant/baro_model.hpp）を有効にする。
+// key: `offset`[m]・`drift`[m/s]・`wash`[m、× duty^2]・`noise`（白色、m）・`slow`（1 次、m）は効果を 1 つ設定してモデルを ON にする。
+// `typical [scale]` は全効果を典型値 × scale（既定 1）にする。`off` でモデルを切る。key が既知なら 1、未知なら 0。Plant 未接続なら何もせず 1。
+int sils_board_set_baro(const char* key, float value);
+
 // P8 handling hook (scenario `handle` event → Plant). Begin a physical handling maneuver:
 // the hand lifts the (crashed) craft to carry_alt [m up], rights it to level, carries it to
 // place_x/place_y [NED m] and sets it back on the ground, over lift/carry/place seconds.

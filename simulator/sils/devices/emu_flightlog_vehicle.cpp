@@ -50,6 +50,7 @@
 
 #include "esp_system.h"    // esp_reset_reason() — host shim, see esp_idf_host/esp_system.h
 #include "topics.hpp"       // sf::sensor_imu, sf::estimate_state, sf::control_output, ...
+#include "barometric_height_estimator.hpp"   // kBaroHeightFlag*, kBaroAge* — the baro_height flags and age units
 #include "data_types.hpp"   // sf::ImuData, sf::StateEstimate, sf::ControlOutput, ...
 #include "params.hpp"       // sf::params::get_float — SSOT rate-loop gains
 #include "flight_state.hpp" // sf::isArmed — controller_status is only live while armed
@@ -61,6 +62,7 @@ namespace {
 constexpr int kCtrlRefDecimation = 8;    // 400Hz / 8 = 50Hz, matches CtrlRef's real rate
 constexpr int kFlightFlagsDecimation = 8;   // 400Hz / 8 = 50Hz, matches FlightFlags' real rate
 constexpr int kToFSilenceDecimation  = 8;   // 400Hz / 8 = 50Hz, matches the ToFSilence (0x4E) entry's real rate
+constexpr double kBaroAgeNeverSeconds = -1.0;   // baro_height.offset_age of an offset never learned / オフセット未学習のときの baro_height.offset_age
 constexpr int kStatusDecimation  = 400;  // 400Hz / 400 = 1Hz, matches Status's real rate
 
 // eskf_status bitmask literal. Not a live topic -- the real firmware's own
@@ -90,7 +92,7 @@ uint32_t g_last_cmd_ts   = 0;   // pilot.csv edge detect
 uint32_t g_last_ctrl_ts  = 0;   // rate_ref/ctrl_output edge detect (see write_rate_ref_and_ctrl_output_rows)
 uint32_t g_last_motor_ts = 0;   // motor.csv edge detect (see write_motor_row)
 uint32_t g_last_mag_ts   = 0;
-uint32_t g_last_baro_ts  = 0;
+uint32_t g_last_baro_ts  = 0;   // baro.csv and baro_height.csv edge detect
 uint32_t g_last_tof_ts   = 0;
 uint32_t g_last_flow_ts  = 0;
 int64_t  g_seq           = 0;   // running IMU-edge (control-cycle) counter, starts at 0
@@ -372,6 +374,25 @@ void write_status_row(int64_t ts)
 // タイムスタンプ欄で個別にエッジ検出 -- 共有の snapshot.timestamp では
 // どのセンサが更新したか分からない）。
 
+// baro_height.csv rides on the baro edge, as the firmware Data Stream writes the 0x52 entry next to the 0x45 entry
+// (DataStream::appendBaroHeightEntry). The age is converted from the wire's 0.1 s units; the "never learned"
+// value of the wire becomes -1, as udp_capture.py does.
+// baro_height.csv は baro のエッジで書く（ファームの Data Stream が 0x52 を 0x45 の隣に書くのと同じ。
+// DataStream::appendBaroHeightEntry）。経過時間は電文の 0.1 s 単位から換算し、電文の「未学習」の値は
+// udp_capture.py と同じく -1 にする。
+void write_baro_height_row(const sf::SensorSnapshot& snap)
+{
+    std::FILE* f = sils_emu_flightlog_stream("baro_height", "timestamp_us,height,offset,valid,learned,offset_age");
+    if (f == nullptr) return;
+    const bool never_learned = static_cast<float>(snap.baro_offset_age_decis) == sf::kBaroAgeNeverDecis;
+    const double age_s = never_learned ? kBaroAgeNeverSeconds
+                                       : static_cast<double>(snap.baro_offset_age_decis) / sf::kBaroAgeDecisPerSecond;
+    std::fprintf(f, "%lld,%.7g,%.7g,%d,%d,%.7g\n", (long long)snap.baro_timestamp,
+        (double)snap.baro_height, (double)snap.baro_offset,
+        (snap.baro_height_flags & sf::kBaroHeightFlagValid) ? 1 : 0,
+        (snap.baro_height_flags & sf::kBaroHeightFlagLearned) ? 1 : 0, age_s);
+}
+
 void write_sensor_snapshot_rows()
 {
     const sf::SensorSnapshot snap = sf::sensor_snapshot.latest();
@@ -384,6 +405,7 @@ void write_sensor_snapshot_rows()
             std::fprintf(f, "%lld,%.7g,%.7g\n", (long long)snap.baro_timestamp,
                 (double)snap.baro_altitude, (double)snap.baro_pressure);
         }
+        write_baro_height_row(snap);
     }
     if (snap.tof_timestamp != 0 && snap.tof_timestamp != g_last_tof_ts) {
         g_last_tof_ts = snap.tof_timestamp;

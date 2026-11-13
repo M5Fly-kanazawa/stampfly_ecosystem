@@ -22,6 +22,7 @@ version: 1
 # `version` is bumped only for a change that breaks existing readers (renaming
 # or retyping a column, changing a unit). Streams added after v1.0:
 #   flight_phase (400 Hz), flight_flags (50 Hz) -- 2026-10-02; tof_silence (50 Hz) -- 2026-11-09.
+# Streams added in the current design (no date): baro_height (50 Hz).
 # Streams added with the status packet v4 and the text-log packet (no date: they are part of the current design):
 #   tof_diagnostics, loop_timing, nonfinite, link_health (1 Hz each), text_log (event-driven).
 # 任意ストリーム（または末尾の任意列）の追加は後方互換で `version: 1` のまま:
@@ -29,6 +30,7 @@ version: 1
 # 単に持たない（「無いものは無い」）。`version` を上げるのは既存の読み込み側を
 # 壊す変更（列名・型・単位の変更）のときだけ。v1.0 以後に追加したストリーム:
 #   flight_phase（400 Hz）, flight_flags（50 Hz）-- 2026-10-02。tof_silence（50 Hz）-- 2026-11-09。
+# 現行の設計で加えたストリーム（日付なし）: baro_height（50 Hz）。
 # ステータスパケット v4 とテキストログのパケットで加えたストリーム（日付なし: 現行の設計の一部）:
 #   tof_diagnostics・loop_timing・nonfinite・link_health（各 1 Hz）、text_log（イベント駆動）。
 
@@ -928,6 +930,10 @@ streams:
     source: "Baro (0x45)"
     nominal_rate_hz: 50
     required: false
+    # The BMP280 converts at about 13 Hz while this stream is 50 Hz, so each value repeats 3-4 times; a new conversion
+    # is recognised by a change of pressure. The altitude is ABSOLUTE (weather and place dependent), not relative.
+    # BMP280 の変換は約 13 Hz で、このストリームは 50 Hz なので、各値が 3〜4 回繰り返す。新しい変換は気圧の変化で見分ける。
+    # 高度は絶対値（天候と場所で変わる）で、相対値ではない。
     columns:
       - name: timestamp_us
         type: int
@@ -937,8 +943,15 @@ streams:
       - name: altitude
         type: float
         unit: "m"
-        description_ja: 気圧高度（相対値、基準は起動時気圧）。
-        description_en: "Barometric altitude (relative to the power-on reference pressure)."
+        description_ja: >-
+          BMP280 の絶対の気圧高度 44330·(1 − (p/101325)^0.1903)（起動時気圧に対する相対値ではない）。天候と場所で変わる
+          （実機ログで −50 m、−14 m、+80 m、+780 m を観測）。センサの変換は約 13 Hz で本ストリームは 50 Hz のため、同じ値が
+          3〜4 回繰り返す（新しい変換は気圧の変化で見分ける）。床からの高さは baro_height ストリームを使う。
+        description_en: >-
+          ABSOLUTE pressure altitude of the BMP280, 44330·(1 − (p/101325)^0.1903) (not relative to the power-on
+          pressure). It depends on weather and place (real logs read −50 m, −14 m, +80 m, +780 m). The sensor converts
+          at about 13 Hz while this stream is 50 Hz, so each value repeats 3-4 times (a new conversion is recognised
+          by a change of pressure). For the height above the floor use the baro_height stream.
       - name: pressure
         type: float
         unit: "Pa"
@@ -953,6 +966,49 @@ streams:
           data_stream_wire.hpp: "hPa on the wire, Pa inside the
           firmware"), so the conversion multiplies by 100 before
           recording.
+
+  - name: baro_height
+    file: baro_height.csv
+    source: "BaroHeight (0x52)"
+    nominal_rate_hz: 50
+    required: false
+    # Optional stream of the current design (see `versioning` above): the floor-relative barometric height of
+    # sf::BarometricHeightEstimator, observation only (nothing in control reads it). Written with every baro sample, so
+    # the sensor's 13 Hz conversions repeat 3-4 times at 50 Hz. Absent from bundles of firmware without the entry.
+    # 現行の設計の任意ストリーム（上の `versioning` 参照）: sf::BarometricHeightEstimator の床からの気圧高度。観測のみ
+    # （制御は読まない）。baro の各サンプルと同時に書くので、センサの 13 Hz の変換が 50 Hz で 3〜4 回繰り返す。
+    # このエントリを持たないファームの一式には無い。
+    columns:
+      - name: timestamp_us
+        type: int
+        unit: "us"
+        description_ja: 機体起動基準のマイクロ秒タイムスタンプ（気圧計サンプルの時刻）。
+        description_en: "Vehicle boot-relative microsecond timestamp (time of the barometer sample)."
+      - name: height
+        type: float
+        unit: "m"
+        description_ja: 床からの気圧高度（オフセット補正済み）。valid=1 のときだけ有効。
+        description_en: "Barometric height above the floor, offset-corrected; valid only when `valid`=1."
+      - name: offset
+        type: float
+        unit: "m"
+        description_ja: ToF から学習したオフセット（プロペラの吹き下ろしとドリフトの分）。
+        description_en: "Offset learned from the ToF (the propeller-wash term and the drift)."
+      - name: valid
+        type: int
+        unit: "0/1"
+        description_ja: 床のゼロを持つか、オフセットを学習済みで、height が有効。
+        description_en: "A floor zero is held or an offset is learned, so `height` is valid."
+      - name: learned
+        type: int
+        unit: "0/1"
+        description_ja: 最後の ARM 以降にオフセットを学習した。
+        description_en: "The offset was learned since the last ARM."
+      - name: offset_age
+        type: float
+        unit: "s"
+        description_ja: オフセットを最後に学習してからの経過時間（電文は 0.1 s 単位。−1 は未学習）。
+        description_en: "Time since the offset was last learned (0.1 s units on the wire; -1 = never learned)."
 
   - name: tof_bottom
     file: tof_bottom.csv

@@ -62,6 +62,7 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `pilot` | `pilot.csv` | Control (0x42) | 50 Hz | - |
 | `ctrl_ref` | `ctrl_ref.csv` | CtrlRef (0x48) | 50 Hz | - |
 | `baro` | `baro.csv` | Baro (0x45) | 50 Hz | - |
+| `baro_height` | `baro_height.csv` | BaroHeight (0x52) | 50 Hz | - |
 | `tof_bottom` | `tof_bottom.csv` | ToF bottom (0x44) | 30 Hz | - |
 | `tof_front` | `tof_front.csv` | ToF front (0x47) | 30 Hz | - |
 | `flow` | `flow.csv` | Flow (0x43) | 100 Hz | - |
@@ -266,8 +267,21 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | 列名 | 型 | 単位 | 説明 |
 |---|---|---|---|
 | `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ。 |
-| `altitude` | float | m | 気圧高度（相対値、基準は起動時気圧）。 |
+| `altitude` | float | m | BMP280 の絶対の気圧高度 44330·(1 − (p/101325)^0.1903)（起動時気圧に対する相対値ではない）。天候と場所で変わる （実機ログで −50 m、−14 m、+80 m、+780 m を観測）。センサの変換は約 13 Hz で本ストリームは 50 Hz のため、同じ値が 3〜4 回繰り返す（新しい変換は気圧の変化で見分ける）。床からの高さは baro_height ストリームを使う。 |
 | `pressure` | float | Pa | 気圧。本書の SI 規約どおり Pa で統一する。電文上は hPa で 送られる（data_stream_wire.hpp の WireBaro 構造体コメント 「電文上は hPa、ファーム内部は Pa」参照）ため、変換時に ×100 して記録する。 |
+
+#### baro_height（`baro_height.csv`）
+
+由来: BaroHeight (0x52) ／ 公称レート: 50 Hz ／ 必須: 任意
+
+| 列名 | 型 | 単位 | 説明 |
+|---|---|---|---|
+| `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ（気圧計サンプルの時刻）。 |
+| `height` | float | m | 床からの気圧高度（オフセット補正済み）。valid=1 のときだけ有効。 |
+| `offset` | float | m | ToF から学習したオフセット（プロペラの吹き下ろしとドリフトの分）。 |
+| `valid` | int | 0/1 | 床のゼロを持つか、オフセットを学習済みで、height が有効。 |
+| `learned` | int | 0/1 | 最後の ARM 以降にオフセットを学習した。 |
+| `offset_age` | float | s | オフセットを最後に学習してからの経過時間（電文は 0.1 s 単位。−1 は未学習）。 |
 
 #### tof_bottom（`tof_bottom.csv`）
 
@@ -553,6 +567,7 @@ Encoding utf-8, header row, no comment rows. Column 1 is always `timestamp_us` (
 | `pilot` | `pilot.csv` | Control (0x42) | 50 Hz | - |
 | `ctrl_ref` | `ctrl_ref.csv` | CtrlRef (0x48) | 50 Hz | - |
 | `baro` | `baro.csv` | Baro (0x45) | 50 Hz | - |
+| `baro_height` | `baro_height.csv` | BaroHeight (0x52) | 50 Hz | - |
 | `tof_bottom` | `tof_bottom.csv` | ToF bottom (0x44) | 30 Hz | - |
 | `tof_front` | `tof_front.csv` | ToF front (0x47) | 30 Hz | - |
 | `flow` | `flow.csv` | Flow (0x43) | 100 Hz | - |
@@ -757,8 +772,21 @@ Source: Baro (0x45) / Nominal rate: 50 Hz / Required: no
 | Column | Type | Unit | Description |
 |---|---|---|---|
 | `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp. |
-| `altitude` | float | m | Barometric altitude (relative to the power-on reference pressure). |
+| `altitude` | float | m | ABSOLUTE pressure altitude of the BMP280, 44330·(1 − (p/101325)^0.1903) (not relative to the power-on pressure). It depends on weather and place (real logs read −50 m, −14 m, +80 m, +780 m). The sensor converts at about 13 Hz while this stream is 50 Hz, so each value repeats 3-4 times (a new conversion is recognised by a change of pressure). For the height above the floor use the baro_height stream. |
 | `pressure` | float | Pa | Pressure, unified to Pa per this document's SI convention. The wire sends hPa (see the WireBaro struct comment in data_stream_wire.hpp: "hPa on the wire, Pa inside the firmware"), so the conversion multiplies by 100 before recording. |
+
+#### baro_height (`baro_height.csv`)
+
+Source: BaroHeight (0x52) / Nominal rate: 50 Hz / Required: no
+
+| Column | Type | Unit | Description |
+|---|---|---|---|
+| `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp (time of the barometer sample). |
+| `height` | float | m | Barometric height above the floor, offset-corrected; valid only when `valid`=1. |
+| `offset` | float | m | Offset learned from the ToF (the propeller-wash term and the drift). |
+| `valid` | int | 0/1 | A floor zero is held or an offset is learned, so `height` is valid. |
+| `learned` | int | 0/1 | The offset was learned since the last ARM. |
+| `offset_age` | float | s | Time since the offset was last learned (0.1 s units on the wire; -1 = never learned). |
 
 #### tof_bottom (`tof_bottom.csv`)
 
