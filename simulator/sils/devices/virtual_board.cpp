@@ -454,6 +454,11 @@ void sils_board_set_tof_deadzone(int enabled)
     sils_vl53::set_deadzone(enabled != 0);
 }
 
+void sils_board_set_tof_offline(int offline)
+{
+    sils_vl53::set_offline(offline != 0);
+}
+
 int sils_board_set_baro(const char* key, float value)
 {
     if (g_plant == nullptr) return 1;

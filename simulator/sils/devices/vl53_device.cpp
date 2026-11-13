@@ -41,6 +41,7 @@ namespace {
 // 検証済みレジスタ事実。
 constexpr uint16_t REG_SYS_STATUS  = 0x00E5;  // FIRMWARE__SYSTEM_STATUS (boot gate)
 constexpr uint16_t REG_GPIO_STAT   = 0x0031;  // GPIO__TIO_HV_STATUS (data-ready)
+constexpr uint16_t REG_CONFIG_START = 0x0001;  // first config register (STATIC_NVM_MANAGED): the full init-and-start block begins here
 constexpr uint16_t REG_MODE_START  = 0x0087;  // SYSTEM__MODE_START (frame/measurement (re)start)
 constexpr uint16_t REG_HIST        = 0x0088;  // RESULT__INTERRUPT_STATUS (histogram base)
 constexpr uint16_t REG_OSC_CAL     = 0x00DE;  // RESULT__OSC_CALIBRATE_VAL (must be non-zero)
@@ -154,6 +155,8 @@ struct State {
     bool     silent     = false;      // fault injection: never "data ready" / 故障注入: 常に未準備
     bool     invalid    = false;      // fault injection: every sample is "no target" (invalid) / 故障注入: 全サンプルが「目標なし」（無効）
     bool     deadzone   = true;       // close-range dead zone modelled (MIN_MM) / 近距離の不感帯を模擬する（MIN_MM）
+    bool     offline    = false;      // fault injection: the chip does not answer on the bus (NACK) / 故障注入: チップがバスに応答しない（NACK）
+    bool     unconfigured = false;    // answers again after `offline`, but has lost its configuration until the driver's next full init-and-start write / `offline` の後に再び応答するが、ドライバの次の完全な初期化＋開始の書き込みまで設定を失っている
 };
 State g_st;
 
@@ -320,10 +323,31 @@ void set_deadzone(bool enabled)
     g_st.deadzone = enabled;
 }
 
+void set_offline(bool offline)
+{
+    // A chip that stopped answering has lost its supply or its configuration: when it answers again it delivers no
+    // sample until the firmware has re-initialised it and started ranging (the driver's full init-and-start write), so a
+    // driver that was configured BEFORE the loss does not simply carry on.
+    // 応答しなくなったチップは電源か設定を失っている: 再び応答するようになっても、ファームが再初期化して測距を開始する
+    // （ドライバの完全な初期化＋開始の書き込み）まではサンプルを出さない。喪失の「前」に設定されたドライバが、そのまま
+    // 続くことはない。
+    if (g_st.offline && !offline) {
+        g_st.unconfigured = true;
+    }
+    g_st.offline = offline;
+}
+
 // One VL53 I2C transaction. 16-bit BE register pointer in wbuf[0..1].
 // VL53 の1 I2Cトランザクション。16bit BE レジスタポインタは wbuf[0..1]。
 int xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
 {
+    // Fault injection (scenario `tof_offline`): the chip does not answer at all — every transaction is NACKed, so the
+    // firmware sees an I2C error on its first access, as with a sensor whose supply or bus connection is gone.
+    // 故障注入（シナリオ `tof_offline`）: チップは全く応答しない — 全ての通信が NACK され、ファームは最初のアクセスで
+    // I2C エラーを見る。電源やバスの接続が失われたセンサと同じ。
+    if (g_st.offline) {
+        return -1;
+    }
     if (wbuf != nullptr && wlen >= 2) {
         g_st.ptr = (uint16_t)((wbuf[0] << 8) | wbuf[1]);
     }
@@ -341,6 +365,19 @@ int xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
     if (rbuf == nullptr) {
         const uint16_t write_end = (uint16_t)(g_st.ptr + (wlen >= 2 ? wlen - 2 : 0));
         if (g_st.ptr <= REG_MODE_START && REG_MODE_START < write_end) {
+            // A write that starts at the very first config register (0x0001) is the driver's FULL init-and-start
+            // (StartMeasurement after a (re-)initialisation); the later ClearInterruptAndStartMeasurement writes start at
+            // 0x0044. The full start restarts the driver's interleaved A/B ranging at frame 0, so the model's frame counters
+            // start over with it, and it gives a chip that lost its configuration (`tof_offline`) its configuration back.
+            // 先頭の設定レジスタ（0x0001）から始まる書き込みはドライバの「完全な」初期化＋開始（(再)初期化の後の
+            // StartMeasurement）。その後の ClearInterruptAndStartMeasurement の書き込みは 0x0044 から。完全な開始は
+            // ドライバの A/B 交互の測距を frame 0 から再開させるので、モデルのフレームカウンタもそれに合わせて数え直し、
+            // 設定を失ったチップ（`tof_offline`）に設定を戻す。
+            if (g_st.ptr <= REG_CONFIG_START) {
+                g_st.stream = 0xFF;
+                g_st.frame  = 0xFFFFFFFF;
+                g_st.unconfigured = false;
+            }
             g_st.stream = (uint8_t)((g_st.stream + 1) & 0xFF);  // 8-bit field for d[3]
             g_st.frame  = g_st.frame + 1u;                      // free-running; drives config A/B parity
         }
@@ -353,7 +390,7 @@ int xfer(const uint8_t* wbuf, size_t wlen, uint8_t* rbuf, size_t rlen)
     } else if (g_st.ptr == REG_GPIO_STAT) {
         // data ready (ACTIVE_LOW: bit0=0); bit0=1 = not ready, held forever while silent
         // データ準備完了（ACTIVE_LOW: bit0=0）。bit0=1 は未準備で、出力停止中はずっとこれを返す。
-        rbuf[0] = g_st.silent ? 0x01 : 0x00;
+        rbuf[0] = (g_st.silent || g_st.unconfigured) ? 0x01 : 0x00;
     } else if (g_st.ptr == REG_OSC_CAL && rlen >= 2) {
         // RESULT__OSC_CALIBRATE_VAL (BE word) — MUST be non-zero or the driver's
         // set_inter_measurement_period_ms returns DIVISION_BY_ZERO during init. The

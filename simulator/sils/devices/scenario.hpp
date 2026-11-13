@@ -40,6 +40,8 @@
  *                                                  target"; samples keep arriving on time), 0 = restore
  *   <t> tof_deadzone <0|1>                         0 = turn the downward ToF's close-range dead zone model off
  *                                                  (the default of every run is 1: below 31 mm the floor reads "no target")
+ *   <t> tof_offline <0|1>                             1 = the downward ToF does not answer on the I2C bus (every
+ *                                                  transaction is NACKed), 0 = it answers again but has lost its configuration
  *   <t> battery <volts|model>                      hold the battery terminal voltage [V] at this value (motors' supply
  *                                                  and the power monitor's reading), or `model` to release the hold
  *   <t> param   <name> <value>                     set one firmware parameter mid-run (type-correct,

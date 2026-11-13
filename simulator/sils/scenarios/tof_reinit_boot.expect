@@ -1,0 +1,28 @@
+# tof_reinit_boot.expect — a downward ToF absent at boot is re-initialised while disarmed, then flies normally
+# 起動時に無かった下向き ToF が、DISARM の間に再初期化され、その後は通常に飛ぶ
+#
+# Chain: bring-up fails (chip offline) → attempt 1 fails → ARM refused → chip answers → attempt 2 succeeds → the episode
+# ends → ARM accepted → auto-takeoff → hover 0.5 m → landing. Only two attempts are logged (10 s apart), none after the success.
+# 連鎖: 立ち上げ失敗（チップ停止）→ 試行 1 が失敗 → ARM 拒否 → チップが応答 → 試行 2 が成功 → エピソード終了 →
+# ARM 受理 → 自動離陸 → 0.5 m のホバー → 着陸。ログに出る試行は 2 回だけ（10 s 間隔）で、成功の後は無い。
+exit 0
+log_contains any "VL53L3CX bottom bring-up failed"
+log_contains any "VL53L3CX bottom re-init: attempt 1"
+log_contains any "VL53L3CX bottom re-init failed (attempt 1"
+log_contains any "ARM rejected: downward ToF is silent"
+log_contains any "VL53L3CX bottom re-init succeeded (attempt 2"
+log_contains any "ARM accepted"
+log_contains any "Auto-takeoff complete — normal mode law engaged"
+log_absent any "VL53L3CX bottom re-init: attempt 3"
+log_absent any "VL53L3CX bottom re-init failed (attempt 2"
+order "bottom bring-up failed" "re-init: attempt 1"
+order "re-init: attempt 1" "ARM rejected: downward ToF is silent"
+order "ARM rejected: downward ToF is silent" "re-init succeeded"
+order "re-init succeeded" "ARM accepted"
+order "ARM accepted" "Auto-takeoff complete"
+# On the floor until the ARM (no lift while the sensor is absent), then the normal 0.5 m hover.
+# ARM までは床の上（センサが無い間は上昇しない）、その後は通常の 0.5 m のホバー。
+metric alt_max < 0.05 in 0.0 14.0
+metric alt_mean > 0.42 in 19.5 21.4
+metric alt_mean < 0.62 in 19.5 21.4
+metric alt_max < 0.05 in 26.0 27.5

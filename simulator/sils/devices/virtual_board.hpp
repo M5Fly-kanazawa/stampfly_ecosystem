@@ -116,6 +116,15 @@ void sils_board_set_tof_invalid(int invalid);
 // Plant には依存しない。
 void sils_board_set_tof_deadzone(int enabled);
 
+// Fault injection (scenario `tof_offline`): the downward ToF stops answering on the I2C bus (1: every transaction is
+// NACKed, as if its supply or its bus connection were lost) / answers again (0), but without its configuration: no
+// sample until the firmware has reset and initialised it. Unlike `tof_silent` the firmware sees bus errors.
+// Independent of the Plant.
+// 故障注入（シナリオ `tof_offline`）: 下向き ToF が I2C バスに応答しなくなる（1: 全ての通信が NACK される。電源や
+// バスの接続が失われたかのよう）/ 再び応答する（0。ただし設定は失っていて、ファームがリセットして初期化する
+// までサンプルを出さない）。`tof_silent` と違い、ファームはバスのエラーを見る。Plant には依存しない。
+void sils_board_set_tof_offline(int offline);
+
 // Scenario `baro <key> [value]`: switch on the effects the real BMP280 adds to the true height (plant/baro_model.hpp).
 // key: `offset` [m], `drift` [m/s], `wash` [m, x duty^2], `noise` (white, m), `slow` (first-order, m) set one effect and turn the model on;
 // `typical [scale]` sets every effect to the typical magnitude times `scale` (default 1); `off` turns the model off.

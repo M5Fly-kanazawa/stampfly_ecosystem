@@ -1,0 +1,33 @@
+# tof_reinit_ground.scn — the downward ToF stops answering on the ground after boot: ARM refused, re-initialised, ARM accepted
+#                         起動後、地上で下向き ToF が応答しなくなる: ARM 拒否、再初期化、ARM 受理
+#
+# The sensor runs normally for 4 s, then stops answering on the I2C bus (every transaction is NACKed). It answers
+# again at 9.0 s but has lost its configuration, so it delivers no sample until it is re-initialised. Spec under test:
+#  1. While the sensor is silent, ARM is REFUSED with the reason "downward ToF is silent".
+#  2. TofTask re-initialises it while the craft is disarmed (the first attempt 2 s after the last sample fails
+#     because the chip does not answer, the second one 10 s later succeeds).
+#  3. After the estimator has re-acquired the ToF, a fresh ARM is ACCEPTED (and the motors never ran before).
+#
+# センサは 4 s の間正常に動き、その後 I2C バスに応答しなくなる（全ての通信が NACK される）。9.0 s に再び応答するが
+# 設定を失っているので、再初期化されるまでサンプルを出さない。検証する仕様:
+#  1. センサが出力停止している間、ARM は「下向き ToF が出力停止」の理由で拒否される。
+#  2. TofTask は、機体が DISARM の間にセンサを再初期化する（最後のサンプルの 2 s 後の最初の試行はチップが応答しないので
+#     失敗、10 s 後の 2 回目が成功）。
+#  3. 推定器が ToF を取り込み直した後、新しい ARM は受理される（それまでモータは回っていない）。
+#
+# Timeline (s): chip offline 4 → attempt 1 ~6 (fails) → ARM attempt 7 (refused) → chip answers 9
+#               → attempt 2 ~16 (succeeds) → episode ends ~17.5 → ARM attempt 19 (accepted) → DISARM.
+# Run: sf sils scenario simulator/sils/scenarios/tof_reinit_ground.scn --target vehicle --duration 24000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest, ToF alive for 4 s
+   +    tof_offline   1                                                                    # B: 4.0 s — the chip stops answering on the bus
+   +    rc         2048  2048   2048    2048  0     3000      50                       # C: calibration completes (~5 s), the sensor is silent
+   +    rc         2048  2048   2048    2048  1     1000      50                       # D: ARM attempt (7 s) -> REFUSED (downward ToF silent)
+   +    rc         2048  2048   2048    2048  0     1000      50                       # E: release
+   +    tof_offline   0                                                                    # F: 9.0 s — the chip answers again (unconfigured: still no sample)
+   +    rc         2048  2048   2048    2048  0     9500      50                       # G: attempt 2 at ~16 s succeeds, the episode ends ~17.5 s
+   +    rc         2048  2048   2048    2048  1     1000      50                       # H: ARM attempt (18.5 s) -> ACCEPTED
+   +    rc         2048  2048   2048    2048  0     500       50                       # I: release the ARM button
+   +    rc         2048  2048   2048    2048  1     200       50                       # J: press again -> DISARM
+   +    rc         2048  2048   2048    2048  0     600       50                       # K: settle disarmed

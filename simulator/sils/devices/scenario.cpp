@@ -46,7 +46,7 @@ extern "C" void sils_scenario_register_api_inject(void (*fn)(const char*))
     g_api_inject_fn = fn;
 }
 
-enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api, TofSilent, TofInvalid, TofDeadZone, Param, Battery, Baro };
+enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api, TofSilent, TofInvalid, TofDeadZone, TofOffline, Param, Battery, Baro };
 
 // Which injector an "rc"-family event uses: the paired transmitter (rc), a
 // different non-paired one exercised AFTER bind (rc_foreign — crosstalk test), or
@@ -108,6 +108,10 @@ struct Event {
     // tof_deadzone: model (1, the default of a run) / ignore (0) the downward ToF's close-range dead zone.
     // tof_deadzone: 下向き ToF の近距離の不感帯を模擬する（1、どの実行でも既定）/ しない（0）。
     int   tof_deadzone = 1;
+
+    // tof_offline: the downward ToF does not answer on the bus (1) / answers again, unconfigured (0) (fault injection).
+    // tof_offline: 下向き ToF がバスに応答しない（1）/ 再び応答する（0）（故障注入）。
+    int   tof_offline = 0;
 
     // param: firmware parameter name (text) and value, applied mid-run (fault / error injection).
     // param: ファームのパラメータ名（text）と値。実行中に適用する（故障・誤差の注入）。
@@ -229,9 +233,9 @@ bool parse_rc_field(const std::string& s, int& field)
 
 bool in_adc(long v) { return v >= 0 && v <= 4095; }
 
-// Parse the downward-ToF fault-injection channels (tof_silent, tof_invalid, tof_deadzone). Returns 1 when `ch` is
+// Parse the downward-ToF fault-injection channels (tof_silent, tof_invalid, tof_deadzone, tof_offline). Returns 1 when `ch` is
 // one of them and the line is valid, -1 on an error (already reported), 0 when `ch` is some other channel.
-// 下向き ToF の故障注入のチャネル（tof_silent、tof_invalid、tof_deadzone）を解釈する。`ch` がそのどれかで行が
+// 下向き ToF の故障注入のチャネル（tof_silent、tof_invalid、tof_deadzone、tof_offline）を解釈する。`ch` がそのどれかで行が
 // 正しければ 1、エラー（報告済み）なら −1、別のチャネルなら 0 を返す。
 int parseTofChannel(const std::string& ch, std::istringstream& iss, Event& e, const char* path, int lineno)
 {
@@ -268,6 +272,20 @@ int parseTofChannel(const std::string& ch, std::istringstream& iss, Event& e, co
         e.ch = Channel::TofDeadZone;
         if (!(iss >> e.tof_deadzone) || (e.tof_deadzone != 0 && e.tof_deadzone != 1)) {
             err(path, lineno, "tof_deadzone needs <0|1>"); return -1;
+        }
+
+    } else if (ch == "tof_offline") {
+        // tof_offline <0|1> — 1 makes the downward ToF stop answering on the I2C bus (every transaction is
+        // NACKed: the firmware sees an I2C error, not just a missing sample), 0 lets it answer again, but without
+        // its configuration (no sample until the firmware has reset and initialised it). Unlike tof_silent (answers, but delivers no sample) this is the bus-level
+        // loss that only a re-initialisation of the sensor can recover from.
+        // tof_offline <0|1> — 1 で下向き ToF が I2C バスに応答しなくなる（全ての通信が NACK される: ファームは
+        // サンプルの欠落だけでなく I2C エラーを見る）、0 で再び応答する（ただし設定は失っていて、ファームがリセットして初期化するまでサンプルを出さない）。
+        // tof_silent（応答はするがサンプルを出さない）と違い、センサの再初期化でしか復旧できないバスの
+        // レベルの喪失。
+        e.ch = Channel::TofOffline;
+        if (!(iss >> e.tof_offline) || (e.tof_offline != 0 && e.tof_offline != 1)) {
+            err(path, lineno, "tof_offline needs <0|1>"); return -1;
         }
 
     } else {
@@ -413,8 +431,8 @@ int parseExtraChannel(const std::string& ch, std::istringstream& iss, Event& e, 
     return parseHandleChannel(ch, iss, e, path, lineno);
 }
 
-// Apply a downward-ToF fault-injection event (tof_silent, tof_invalid, tof_deadzone).
-// 下向き ToF の故障注入の事象（tof_silent、tof_invalid、tof_deadzone）を適用する。
+// Apply a downward-ToF fault-injection event (tof_silent, tof_invalid, tof_deadzone, tof_offline).
+// 下向き ToF の故障注入の事象（tof_silent、tof_invalid、tof_deadzone、tof_offline）を適用する。
 void applyTofEvent(const Event& e)
 {
     switch (e.ch) {
@@ -442,6 +460,14 @@ void applyTofEvent(const Event& e)
             sils_board_set_tof_deadzone(e.tof_deadzone);
             sils_emu_record_note("tof_deadzone", e.tof_deadzone ? "1 (ToF close-range dead zone modelled)"
                                                                 : "0 (ToF dead zone off)");
+            break;
+        }
+        case Channel::TofOffline: {
+            // The downward ToF stops answering on the bus / answers again (without its configuration).
+            // 下向き ToF がバスに応答しなくなる / 再び応答する（設定は失ったまま）。
+            sils_board_set_tof_offline(e.tof_offline);
+            sils_emu_record_note("tof_offline", e.tof_offline ? "1 (ToF does not answer on the bus)"
+                                                        : "0 (ToF answers again, unconfigured)");
             break;
         }
         default:
@@ -531,7 +557,8 @@ void applyExtraEvent(const Event& e)
     switch (e.ch) {
         case Channel::TofSilent:
         case Channel::TofInvalid:
-        case Channel::TofDeadZone: applyTofEvent(e);    break;
+        case Channel::TofDeadZone:
+        case Channel::TofOffline:     applyTofEvent(e);    break;
         case Channel::Param:       applyParamEvent(e);  break;
         case Channel::Handle:      applyHandleEvent(e); break;
         case Channel::Battery:     applyBatteryEvent(e); break;
@@ -920,6 +947,7 @@ void sils_scenario_driver_task(void* /*arg*/)
             case Channel::TofSilent:
             case Channel::TofInvalid:
             case Channel::TofDeadZone:
+            case Channel::TofOffline:
             case Channel::Param:
             case Channel::Battery:
             case Channel::Baro:

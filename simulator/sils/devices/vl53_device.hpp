@@ -63,6 +63,16 @@ void set_invalid(bool invalid);
 // （「目標なし」。床の上の実機のセンサと同じ）。無効 = 床まで真の距離を測る（2026-11-09 より前のモデル）。
 void set_deadzone(bool enabled);
 
+// Fault injection (scenario `tof_offline`): while offline, the chip does not answer on the bus at all (every transaction is
+// NACKed, xfer() returns nonzero), unlike `tof_silent` where it answers but delivers no sample. When it answers
+// again it has lost its configuration: it delivers no sample until the firmware has re-initialised it and started ranging
+// (the driver's full init-and-start write), at which point the frame counters also start over.
+// 故障注入（シナリオ `tof_offline`）: 停止中はチップがバスに全く応答しない（全ての通信が NACK され、xfer() が非ゼロを
+// 返す）。サンプルを出さないだけで応答はする `tof_silent` とは違う。再び応答するときは設定を失っていて、ファームが
+// 再初期化して測距を開始する（ドライバの完全な初期化＋開始の書き込み）までサンプルを出さない。そのときフレーム
+// カウンタも数え直す。
+void set_offline(bool offline);
+
 // One VL53 I2C transaction. 16-bit BE register pointer in wbuf[0..1] (write-then-
 // read = repeated-START). Returns 0 (ACK). Mirrors the real chip's register map
 // only where the ST driver reads it; everything else is zero/ACK self-heal.

@@ -22,17 +22,34 @@
  * sensor_tof_front トピックに発行する。
  *
  * @publisher  sensor_tof, sensor_tof_front
+ * @subscriber system_mode, failsafe_status (facts for the re-initialisation decision)
  *
  * @design architecture.md §6 — TofTask: Sensing(ToF)                  [OK]
  * @design detailed_design.md §8 — TofTask: 30Hz, priority 14         [OK]
  * @design hardware_init.md §3 — sf_board が i2c_bus を所有 (R1)      [OK]
+ * @design hardware_init.md §5 — bottom ToF: Recoverable while disarmed [OK]
+ * @design detailed_design.md §3 note 12 — ToF re-initialisation        [OK]
+ * @design architecture.md INV-3 — detect + execute here, decide in sf::mayReinitializeToF [OK]
  * @design topic_reference.md §3 — sensor_tof: Queue 2, 30Hz          [OK]
  *
  * Failure classification (hardware_init.md §5):
- *   - VL53L3CX init failure for **bottom** sensor → Critical for
- *     ALT/POS modes. Currently logged as warning and task aborts;
- *     escalation to abort() is pending the failure handling story
- *     (M5 で sensor_health Topic と一緒に整備)
+ *   - VL53L3CX **bottom** sensor: Recoverable while the craft is NOT armed
+ *     (INIT / IDLE_GROUND / IDLE_HELD). If init or startRanging fails at boot, or the
+ *     sensor has delivered no sample for kTofReinitSilenceUs, this task resets it
+ *     through XSHUT (GPIO 7) and brings it up again, every kTofReinitRetryIntervalUs
+ *     for as long as it stays silent. The decision "may it be re-initialised now" is
+ *     the pure sf::mayReinitializeToF (tof_silence_policy.hpp); this task only
+ *     observes the facts and executes. While ARMED (ARMED_GROUND / TAKEOFF / FLYING /
+ *     LANDING / FLIP) the sensor is never touched. ARM stays refused during the
+ *     whole silence by ArmBlock::TofSilent; the task never exits.
+ *     底面センサ: ARM されていない間（INIT / IDLE_GROUND / IDLE_HELD）は復旧可能。
+ *     起動時の init / startRanging の失敗、または kTofReinitSilenceUs の間サンプルが
+ *     無いとき、本タスクが XSHUT（GPIO 7）でリセットして立ち上げ直し、出力停止が
+ *     続く間 kTofReinitRetryIntervalUs ごとに繰り返す。「今再初期化してよいか」の判断は
+ *     純関数 sf::mayReinitializeToF（tof_silence_policy.hpp）で、本タスクは事実の観測と
+ *     実行だけを行う。ARM 中（ARMED_GROUND / TAKEOFF / FLYING / LANDING / FLIP）は
+ *     センサに触れない。出力停止の間ずっと ArmBlock::TofSilent が ARM を拒否する。
+ *     タスクは終了しない。
  *   - VL53L3CX init failure for **front** sensor → Optional. Logged as
  *     a warning, XSHUT is held low, bottom sensing continues unchanged.
  *     前方センサの初期化失敗は Optional 扱い: 警告のみ、XSHUT を Low に保ち
@@ -56,6 +73,8 @@
 #include "topics.hpp"
 #include "config.hpp"
 #include "sf_board.hpp"
+#include "flight_limits.hpp"
+#include "tof_silence_policy.hpp"
 #include "vl53l3cx_wrapper.hpp"
 
 static const char* TAG = "TofTask";
@@ -111,15 +130,22 @@ static sf::TofData buildTofTopic(const stampfly::DistanceData& src,
     return out;
 }
 
+/// Hold a ToF in reset (its XSHUT low) so it cannot answer on the bus.
+/// ToF をリセット保持（XSHUT Low）し、バスに応答させない。
+static void holdInReset(int xshut_gpio)
+{
+    gpio_config_t xshut = {};
+    xshut.pin_bit_mask = 1ULL << xshut_gpio;
+    xshut.mode         = GPIO_MODE_OUTPUT;
+    gpio_config(&xshut);
+    gpio_set_level(static_cast<gpio_num_t>(xshut_gpio), 0);
+}
+
 /// Hold the front ToF in reset (XSHUT low) so it cannot answer at 0x29.
 /// 前方 ToF をリセット保持（XSHUT Low）し、0x29 に応答させない。
 static void holdFrontInReset()
 {
-    gpio_config_t xshut_front = {};
-    xshut_front.pin_bit_mask = 1ULL << config::GPIO_TOF_XSHUT_FRONT;
-    xshut_front.mode         = GPIO_MODE_OUTPUT;
-    gpio_config(&xshut_front);
-    gpio_set_level(static_cast<gpio_num_t>(config::GPIO_TOF_XSHUT_FRONT), 0);
+    holdInReset(config::GPIO_TOF_XSHUT_FRONT);
 }
 
 /// Bring up the optional front sensor. Call only after the bottom sensor has been
@@ -221,6 +247,126 @@ static void trackFrontFailure(bool ok, uint32_t& fail_streak)
         sf::internal::board::SensorId::FrontToF, false);
 }
 
+/// What TofTask keeps about the bottom sensor between cycles.
+/// 底面センサについて TofTask が周期をまたいで保持するもの。
+struct BottomState {
+    bool     ranging = false;             ///< Initialised and ranging; polled only while true / 初期化済みで測距中。真の間だけポーリングする
+    uint32_t last_fail_log_cycle = 0;     ///< Read-failure log throttle (pollSensor) / 読み取り失敗ログの抑制（pollSensor）
+    uint32_t last_seen_update_us = 0;     ///< Last BSP freshness stamp seen: a change means a sample was published / 最後に見た BSP 鮮度の時刻印: 変化は発行を意味する
+    uint32_t attempts = 0;                ///< Re-initialisation attempts since the sensor last delivered / センサが最後に出力してからの再初期化の試行回数
+    sf::ToFReinitClock clock;             ///< Silence and attempt times for sf::mayReinitializeToF / sf::mayReinitializeToF 用の出力停止と試行の時間
+};
+
+static uint32_t nowMicroseconds()
+{
+    return static_cast<uint32_t>(esp_timer_get_time());
+}
+
+/// Reset the bottom sensor through XSHUT, initialise it and start ranging. Presence is reported to the BSP
+/// (R15) according to the result; a failed sensor is released so the next call can try again. The sensor
+/// is configured with the same code at boot and at every re-initialisation.
+/// XSHUT で底面センサをリセットし、初期化して測距を開始する。結果に応じて presence を BSP へ報告する (R15)。
+/// 失敗したセンサは解放し、次の呼び出しでやり直せるようにする。起動時も再初期化でも同じコードで設定する。
+static esp_err_t bringUpBottom()
+{
+    g_tof_bottom.release();
+    auto cfg = stampfly::VL53L3CXWrapper::Config::defaultBottom(sf::internal::board::i2c_bus());
+    esp_err_t result = g_tof_bottom.init(cfg);
+    if (result == ESP_OK) {
+        result = g_tof_bottom.startRanging();
+    }
+    if (result != ESP_OK) {
+        g_tof_bottom.release();
+    }
+    sf::internal::board::set_sensor_present(sf::internal::board::SensorId::BottomToF, result == ESP_OK);
+    return result;
+}
+
+/// Note a sample of the bottom sensor, seen as a change of its BSP freshness stamp (pollSensor writes it
+/// when it publishes), so the silence clock starts over.
+/// 底面センサのサンプルを記録する。BSP の鮮度の時刻印の変化として見える（発行時に pollSensor が書く）ので、
+/// 出力停止の時計を数え直す。
+static void noteBottomSample(BottomState& bottom, uint32_t now_us)
+{
+    const uint32_t stamp = sf::internal::board::sensor_last_update_us(sf::internal::board::SensorId::BottomToF);
+    if (stamp == bottom.last_seen_update_us) {
+        return;
+    }
+    bottom.last_seen_update_us = stamp;
+    bottom.clock.onSample(now_us);
+    bottom.attempts = 0;
+}
+
+/// The facts mayReinitializeToF() decides on: what this task observed plus what Failsafe and the state machine
+/// published (failsafe_status read raw: a stale or missing status never says "silent", so nothing is reset).
+/// mayReinitializeToF() が判断に使う事実: 本タスクの観測と、Failsafe・状態機械が発行したもの
+/// （failsafe_status は生で読む。古い・無い状態は「出力停止」と言わないので、何もリセットしない）。
+static sf::ToFReinitFacts observeReinitFacts(const BottomState& bottom, uint32_t now_us)
+{
+    const sf::FailsafeStatus status = sf::failsafe_status.latest();
+    sf::ToFReinitFacts facts{};
+    facts.state             = static_cast<sf::FlightState>(sf::system_mode.latest().state);
+    facts.no_sample_episode = status.tof_silent &&
+                              status.tof_reason == static_cast<uint8_t>(sf::ToFSilenceReason::NoSample);
+    facts.silent_us         = bottom.clock.silentUs(now_us);
+    facts.since_attempt_us  = bottom.clock.sinceAttemptUs(now_us);
+    return facts;
+}
+
+/// Judge the finished attempt: too slow counts as failed (the sensor goes back in reset), and report the result.
+/// One line on success; a failure line on the first failure and then every kTofReinitFailLogEveryAttempts-th attempt.
+/// 終わった試行を判定して結果を報告する。遅すぎれば失敗とする（センサはリセットに戻す）。
+/// 成功は 1 行。失敗の行は最初の失敗と、その後 kTofReinitFailLogEveryAttempts 回目ごと。
+static void reportReinitResult(BottomState& bottom, esp_err_t result, uint32_t elapsed_us)
+{
+    if (result == ESP_OK && elapsed_us > sf::limits::kTofReinitAttemptTimeoutUs) {
+        result = ESP_ERR_TIMEOUT;
+        g_tof_bottom.release();
+        holdInReset(config::GPIO_TOF_XSHUT_BOTTOM);
+        sf::internal::board::set_sensor_present(sf::internal::board::SensorId::BottomToF, false);
+    }
+    bottom.ranging = (result == ESP_OK);
+    if (result == ESP_OK) {
+        ESP_LOGI(TAG, "VL53L3CX bottom re-init succeeded (attempt %u, %u ms)",
+                 static_cast<unsigned>(bottom.attempts), static_cast<unsigned>(elapsed_us / 1000u));
+    } else if ((bottom.attempts - 1u) % sf::limits::kTofReinitFailLogEveryAttempts == 0u) {
+        ESP_LOGW(TAG, "VL53L3CX bottom re-init failed (attempt %u, %u ms): %s",
+                 static_cast<unsigned>(bottom.attempts), static_cast<unsigned>(elapsed_us / 1000u),
+                 esp_err_to_name(result));
+    }
+}
+
+/// One re-initialisation attempt of the bottom sensor. Called only after mayReinitializeToF() said yes. Nothing
+/// else runs in this task meanwhile, so no sample is published and the silence episode (hence the ARM refusal)
+/// lasts for the whole attempt.
+/// 底面センサの再初期化の試行 1 回。mayReinitializeToF() が「可」と答えた後でだけ呼ぶ。その間、本タスクは他の
+/// ことをせず、サンプルは発行されないので、出力停止のエピソード（つまり ARM の拒否）は試行の全期間続く。
+static void reinitBottom(BottomState& bottom, uint32_t now_us)
+{
+    ++bottom.attempts;
+    ESP_LOGI(TAG, "VL53L3CX bottom re-init: attempt %u (no sample for %u ms)",
+             static_cast<unsigned>(bottom.attempts), static_cast<unsigned>(bottom.clock.silentUs(now_us) / 1000u));
+    const esp_err_t result = bringUpBottom();
+    const uint32_t end_us = nowMicroseconds();
+    reportReinitResult(bottom, result, end_us - now_us);
+    bottom.clock.onAttemptEnd(end_us);
+}
+
+/// Poll the bottom sensor while it is ranging, note its samples, and re-initialise it when the policy allows.
+/// 底面センサが測距中ならポーリングし、サンプルを記録し、判断が許せば再初期化する。
+static void serviceBottom(BottomState& bottom, uint32_t cycle_count)
+{
+    if (bottom.ranging) {
+        pollSensor(g_tof_bottom, sf::sensor_tof, sf::internal::board::SensorId::BottomToF, "bottom",
+                   cycle_count, bottom.last_fail_log_cycle);
+    }
+    const uint32_t now_us = nowMicroseconds();
+    noteBottomSample(bottom, now_us);
+    if (sf::mayReinitializeToF(observeReinitFacts(bottom, now_us))) {
+        reinitBottom(bottom, now_us);
+    }
+}
+
 void TofTask(void* /*pvParameters*/)
 {
     ESP_LOGI(TAG, "TofTask started");
@@ -230,55 +376,33 @@ void TofTask(void* /*pvParameters*/)
     // 0x29, so they must never be awake together while one is being re-addressed:
     //   1. Hold FRONT in reset, then bring up BOTTOM (0x29 -> 0x30).
     //   2. Only then release FRONT (0x29 -> 0x31), as an optional sensor.
+    // A bottom sensor that fails here is not the end: the loop below re-initialises it
+    // while the craft is not armed (the front sensor stays in reset until the next boot).
     // 2 センサ起動手順。VL53L3CX は 2 個とも同じ I2C アドレス 0x29 で起動するため、
     // 片方の付け替え中にもう片方が起きていてはならない:
     //   1. 前方をリセット保持したまま底面を起動する（0x29 -> 0x30）。
     //   2. その後に前方を解除する（0x29 -> 0x31）。前方は任意センサ。
+    // ここで底面が失敗しても終わりではない: 下のループが、ARM されていない間に再初期化する
+    // （前方センサは次の起動までリセットのまま）。
     // -------------------------------------------------------------------
     holdFrontInReset();
 
-    // -------------------------------------------------------------------
-    // Setup: borrow I2C bus from BSP and initialise the VL53L3CX driver
-    // セットアップ: BSP から I2C バスを借用し VL53L3CX ドライバを初期化
-    // -------------------------------------------------------------------
-    auto cfg = stampfly::VL53L3CXWrapper::Config::defaultBottom(
-        sf::internal::board::i2c_bus()
-    );
-
-    esp_err_t init_result = g_tof_bottom.init(cfg);
-    if (init_result != ESP_OK) {
-        ESP_LOGE(TAG, "VL53L3CX bottom init failed: %s — task aborting",
-                 esp_err_to_name(init_result));
-        sf::internal::board::set_sensor_present(
-            sf::internal::board::SensorId::BottomToF, false);
-        vTaskDelete(NULL);
-        return;
+    BottomState bottom;
+    const esp_err_t bring_up = bringUpBottom();
+    bottom.clock.onBringUp(nowMicroseconds());
+    bottom.ranging = (bring_up == ESP_OK);
+    if (bottom.ranging) {
+        ESP_LOGI(TAG, "VL53L3CX bottom ready (continuous ranging at ~30Hz)");
+        // Bottom has left 0x29, so the optional front sensor can now be released safely.
+        // 底面が 0x29 を離れたので、任意の前方センサを安全に解除できる。
+        initFrontTof();
+    } else {
+        ESP_LOGE(TAG, "VL53L3CX bottom bring-up failed: %s - retried while the craft is not armed",
+                 esp_err_to_name(bring_up));
     }
-
-    // Begin continuous ranging (≈30Hz, matching timing_budget_ms=33).
-    // 連続測距を開始 (≈30Hz、timing_budget_ms=33 に整合)。
-    esp_err_t range_result = g_tof_bottom.startRanging();
-    if (range_result != ESP_OK) {
-        ESP_LOGE(TAG, "VL53L3CX startRanging failed: %s — task aborting",
-                 esp_err_to_name(range_result));
-        sf::internal::board::set_sensor_present(
-            sf::internal::board::SensorId::BottomToF, false);
-        vTaskDelete(NULL);
-        return;
-    }
-    // ToF up and ranging — report presence for the sensor_health snapshot (R15).
-    // ToF 起動・測距開始 — sensor_health 用に presence を報告 (R15)。
-    sf::internal::board::set_sensor_present(
-        sf::internal::board::SensorId::BottomToF, true);
-    ESP_LOGI(TAG, "VL53L3CX bottom ready (continuous ranging at ~30Hz)");
-
-    // Bottom has left 0x29, so the optional front sensor can now be released safely.
-    // 底面が 0x29 を離れたので、任意の前方センサを安全に解除できる。
-    initFrontTof();
 
     TickType_t last_wake = xTaskGetTickCount();
     uint32_t cycle_count = 0;
-    uint32_t last_fail_log_cycle = 0;
     uint32_t last_front_fail_log_cycle = 0;
     uint32_t front_fail_streak = 0;
 
@@ -287,9 +411,7 @@ void TofTask(void* /*pvParameters*/)
 
         // Bottom first, so its timing is unaffected by the front sensor's I2C traffic.
         // 底面を先に処理し、前方センサの I2C 通信が底面のタイミングに影響しないようにする。
-        pollSensor(g_tof_bottom, sf::sensor_tof,
-                   sf::internal::board::SensorId::BottomToF, "bottom",
-                   cycle_count, last_fail_log_cycle);
+        serviceBottom(bottom, cycle_count);
         if (g_front_present) {
             const bool front_ok = pollSensor(g_tof_front, sf::sensor_tof_front,
                                              sf::internal::board::SensorId::FrontToF,

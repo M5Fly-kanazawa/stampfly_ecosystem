@@ -406,6 +406,120 @@ TEST(blind_landing_limits_are_consistent)
     ASSERT_TRUE(sf::limits::kBlindTouchdownSamples >= 2);
 }
 
+// ----------------------------------------------------------------------------
+// 3. Re-initialisation of the downward ToF / 下向き ToF の再初期化
+// ----------------------------------------------------------------------------
+
+static constexpr uint32_t kReinitSilenceUs = sf::limits::kTofReinitSilenceUs;
+static constexpr uint32_t kReinitRetryUs   = sf::limits::kTofReinitRetryIntervalUs;
+
+/// Facts with every condition met except the one under test (state).
+/// 試験対象（状態）以外の条件を全て満たす事実。
+static sf::ToFReinitFacts readyFacts(FlightState state)
+{
+    sf::ToFReinitFacts facts{};
+    facts.state             = state;
+    facts.no_sample_episode = true;
+    facts.silent_us         = kReinitSilenceUs;
+    facts.since_attempt_us  = sf::kToFNoAttemptYet;
+    return facts;
+}
+
+TEST(reinit_is_allowed_in_exactly_the_states_where_the_craft_is_not_armed)
+{
+    // Every FlightState: allowed exactly where !isArmed (INIT, IDLE_GROUND, IDLE_HELD); never in an armed state.
+    // 全ての FlightState: !isArmed の状態（INIT、IDLE_GROUND、IDLE_HELD）でだけ許可し、ARM 中の状態では決して許可しない。
+    for (int value = 0; value < sf::FLIGHT_STATE_COUNT; ++value) {
+        const FlightState state = static_cast<FlightState>(value);
+        ASSERT_TRUE(sf::mayReinitializeToF(readyFacts(state)) == !sf::isArmed(state));
+        ASSERT_TRUE(sf::toFReinitAllowedInState(state) == !sf::isArmed(state));
+    }
+    ASSERT_TRUE(sf::mayReinitializeToF(readyFacts(FlightState::INIT)));
+    ASSERT_TRUE(sf::mayReinitializeToF(readyFacts(FlightState::IDLE_GROUND)));
+    ASSERT_TRUE(sf::mayReinitializeToF(readyFacts(FlightState::IDLE_HELD)));
+    for (FlightState armed : {FlightState::ARMED_GROUND, FlightState::TAKEOFF, FlightState::FLYING,
+                              FlightState::LANDING, FlightState::FLIP}) {
+        ASSERT_TRUE(!sf::mayReinitializeToF(readyFacts(armed)));
+    }
+    // an unknown state value never resets the sensor / 未知の状態値ではリセットしない
+    ASSERT_TRUE(!sf::mayReinitializeToF(readyFacts(static_cast<FlightState>(200))));
+}
+
+TEST(reinit_in_an_armed_state_is_refused_whatever_the_other_facts)
+{
+    // No combination of the other facts (any silence, any time since the last attempt, episode or not) can allow an
+    // attempt in an armed state.
+    // 他の事実がどんな組み合わせでも（出力停止の長さ、前回の試行からの時間、エピソードの有無）、ARM 中の状態で試行を許可しない。
+    const uint32_t silences[] = {0u, kReinitSilenceUs, 10u * kReinitSilenceUs, 0xFFFFFFFFu};
+    const uint32_t since[]    = {0u, kReinitRetryUs, sf::kToFNoAttemptYet};
+    for (int value = 0; value < sf::FLIGHT_STATE_COUNT; ++value) {
+        const FlightState state = static_cast<FlightState>(value);
+        if (!sf::isArmed(state)) {
+            continue;
+        }
+        for (bool episode : {false, true}) {
+            for (uint32_t silent_us : silences) {
+                for (uint32_t since_attempt_us : since) {
+                    sf::ToFReinitFacts facts{state, episode, silent_us, since_attempt_us};
+                    ASSERT_TRUE(!sf::mayReinitializeToF(facts));
+                }
+            }
+        }
+    }
+}
+
+TEST(reinit_needs_the_declared_episode_the_silence_time_and_the_retry_interval)
+{
+    sf::ToFReinitFacts facts = readyFacts(FlightState::IDLE_GROUND);
+    ASSERT_TRUE(sf::mayReinitializeToF(facts));
+    facts.no_sample_episode = false;                         // ARM would not be refused: never reset / ARM が拒否されない: リセットしない
+    ASSERT_TRUE(!sf::mayReinitializeToF(facts));
+    facts = readyFacts(FlightState::IDLE_GROUND);
+    facts.silent_us = kReinitSilenceUs - 1u;                 // boundary / 境界
+    ASSERT_TRUE(!sf::mayReinitializeToF(facts));
+    facts.silent_us = kReinitSilenceUs;
+    ASSERT_TRUE(sf::mayReinitializeToF(facts));
+    facts.since_attempt_us = kReinitRetryUs - 1u;            // too soon after the last attempt / 前回の試行から早すぎる
+    ASSERT_TRUE(!sf::mayReinitializeToF(facts));
+    facts.since_attempt_us = kReinitRetryUs;
+    ASSERT_TRUE(sf::mayReinitializeToF(facts));
+}
+
+TEST(reinit_clock_counts_silence_and_attempts_across_a_clock_wrap)
+{
+    sf::ToFReinitClock clock;
+    uint32_t now = 0xFFFFF000u;                              // close to the 32-bit wrap / 32 ビットの巻き戻りの近く
+    clock.onBringUp(now);
+    ASSERT_TRUE(clock.silentUs(now) == 0u);
+    ASSERT_TRUE(clock.sinceAttemptUs(now) == sf::kToFNoAttemptYet);
+    now += kReinitSilenceUs;                                 // wraps / 巻き戻る
+    ASSERT_TRUE(clock.silentUs(now) == kReinitSilenceUs);
+    ASSERT_TRUE(sf::mayReinitializeToF(sf::ToFReinitFacts{FlightState::IDLE_GROUND, true, clock.silentUs(now), clock.sinceAttemptUs(now)}));
+    clock.onAttemptEnd(now);                                 // the attempt counts: the next one is a retry interval away / 試行として数える: 次は再試行間隔だけ先
+    ASSERT_TRUE(clock.sinceAttemptUs(now) == 0u && clock.silentUs(now) == 0u);
+    now += kReinitRetryUs - 1u;
+    ASSERT_TRUE(!sf::mayReinitializeToF(sf::ToFReinitFacts{FlightState::IDLE_GROUND, true, clock.silentUs(now), clock.sinceAttemptUs(now)}));
+    now += 1u;
+    ASSERT_TRUE(sf::mayReinitializeToF(sf::ToFReinitFacts{FlightState::IDLE_GROUND, true, clock.silentUs(now), clock.sinceAttemptUs(now)}));
+    clock.onSample(now);                                     // a sample: both start over / サンプル: どちらも数え直す
+    ASSERT_TRUE(clock.silentUs(now) == 0u && clock.sinceAttemptUs(now) == sf::kToFNoAttemptYet);
+}
+
+TEST(reinit_limits_are_consistent)
+{
+    // Basis check: the first attempt comes after the silence episode is declared (0.3 s + one 10 Hz Failsafe tick), the
+    // retry interval is not shorter than the silence time, and an attempt may take as long as the driver's own worst
+    // case (XSHUT 20 ms + boot polling 500 ms + one 100 ms I2C timeout + ~0.1 s bring-up).
+    // 根拠の確認: 最初の試行はエピソードの宣言（0.3 s + Failsafe の 10 Hz の 1 周期）より後、再試行間隔は出力停止の時間
+    // より短くなく、試行にはドライバ自身の最悪値（XSHUT 20 ms + 起動待ち 500 ms + I2C タイムアウト 100 ms + 立ち上げ約 0.1 s）
+    // まで許す。
+    ASSERT_TRUE(kReinitSilenceUs >= sf::limits::kTofSilenceUs + 100000u);
+    ASSERT_TRUE(kReinitRetryUs >= kReinitSilenceUs);
+    ASSERT_TRUE(sf::limits::kTofReinitAttemptTimeoutUs >= 20000u + 500000u + 100000u + 100000u);
+    ASSERT_TRUE(sf::limits::kTofReinitAttemptTimeoutUs < kReinitRetryUs);
+    ASSERT_TRUE(sf::limits::kTofReinitFailLogEveryAttempts >= 1u);
+}
+
 int main()
 {
     printf("=== ToF silence judgement and state-machine response unit tests ===\n");
@@ -432,6 +546,11 @@ int main()
     run_landing_time_is_counted_from_the_entry_into_landing_and_not_extended_by_a_returning_tof();
     run_landing_clock_counts_the_continuous_silence_of_this_landing();
     run_blind_landing_limits_are_consistent();
+    run_reinit_is_allowed_in_exactly_the_states_where_the_craft_is_not_armed();
+    run_reinit_in_an_armed_state_is_refused_whatever_the_other_facts();
+    run_reinit_needs_the_declared_episode_the_silence_time_and_the_retry_interval();
+    run_reinit_clock_counts_silence_and_attempts_across_a_clock_wrap();
+    run_reinit_limits_are_consistent();
 
     printf("\n=== Results: %d run, %d passed, %d failed ===\n",
            tests_run, tests_passed, tests_failed);

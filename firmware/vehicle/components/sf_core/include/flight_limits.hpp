@@ -165,6 +165,39 @@ inline constexpr float kLandingRiseBrakeRampMps  = 0.2f;                        
 /// 時刻差（sensor_freshness.hpp）で行い、「現在」より少し新しい時刻印は fresh とみなす。
 inline constexpr uint32_t kTofSilenceUs = 300000;   // 0.3 s
 
+/// Re-initialisation of the downward ToF while the craft is NOT armed (tof_silence_policy.hpp
+/// decideToFReinit, executed by TofTask). CANDIDATES.
+///  - kTofReinitSilenceUs: the silence (no new sample, or no sensor at all) that must have lasted before the
+///    first attempt. 2 s = about 60 missing 30 Hz samples and 6.7 x kTofSilenceUs: the silence episode (and with it
+///    the ARM refusal) is declared by Failsafe within 0.4 s, so it is long established before the sensor is reset,
+///    and a bus glitch of a few samples never resets a healthy sensor.
+///  - kTofReinitRetryIntervalUs: the time between two attempts for as long as the sensor stays dead. 10 s = at most
+///    6 attempts per minute: a failing attempt on a sensor that does not answer costs one NACKed transaction and
+///    the 20 ms XSHUT pulse (bus busy well under 1 ms), a working sensor needs one attempt, and the log carries at
+///    most 6 attempt lines per minute (kTofReinitFailLogEveryAttempts throttles the failure line to 1 per minute).
+///  - kTofReinitAttemptTimeoutUs: an attempt that took longer than this is rejected as failed (the sensor is put back
+///    in reset). The driver cannot be interrupted, so this bounds ACCEPTANCE; the real upper bound of one attempt is
+///    the driver's own: XSHUT pulse 20 ms + boot polling at most 500 ms (VL53LX_BOOT_COMPLETION_POLLING_TIMEOUT_MS)
+///    + one 100 ms I2C transaction timeout + the ordinary bring-up of ~0.1 s = about 0.72 s, below this value.
+/// 機体が ARM 中でないときの下向き ToF の再初期化（tof_silence_policy.hpp の decideToFReinit、実行は TofTask）。
+/// 候補値。
+///  - kTofReinitSilenceUs: 最初の試行までに続いていなければならない出力停止（新サンプル無し、またはセンサ自体が無い）。
+///    2 s = 30 Hz のサンプル約 60 個の欠落で kTofSilenceUs の 6.7 倍: 出力停止のエピソード（ARM の拒否も）は
+///    Failsafe が 0.4 s 以内に宣言するので、センサをリセットするずっと前から成立しており、数サンプルのバスの
+///    乱れで正常なセンサをリセットすることはない。
+///  - kTofReinitRetryIntervalUs: センサが動かない間の試行の間隔。10 s = 毎分最大 6 回: 応答しないセンサへの
+///    失敗する試行は NACK された通信 1 回と 20 ms の XSHUT パルスだけ（バスの使用は 1 ms を十分下回る）、
+///    動くセンサなら 1 回で済み、ログに出る試行の行は毎分最大 6 行（失敗の行は
+///    kTofReinitFailLogEveryAttempts で毎分 1 行に抑制）。
+///  - kTofReinitAttemptTimeoutUs: これより長くかかった試行は失敗として却下する（センサはリセットに戻す）。
+///    ドライバは中断できないので、これは「受理」の上限で、1 回の試行の実際の上限はドライバ自身のもの:
+///    XSHUT パルス 20 ms + 起動待ちのポーリング最大 500 ms（VL53LX_BOOT_COMPLETION_POLLING_TIMEOUT_MS）
+///    + I2C 通信 1 回のタイムアウト 100 ms + 通常の立ち上げ約 0.1 s = 約 0.72 s で、この値より小さい。
+inline constexpr uint32_t kTofReinitSilenceUs          = 2000000;    // 2 s
+inline constexpr uint32_t kTofReinitRetryIntervalUs    = 10000000;   // 10 s
+inline constexpr uint32_t kTofReinitAttemptTimeoutUs   = 1000000;    // 1 s
+inline constexpr uint32_t kTofReinitFailLogEveryAttempts = 6;        // 6 x 10 s = 1 failure line per minute / 毎分 1 行
+
 /// ToF-silence EPISODE: it starts at the loss (no new sample for kTofSilenceUs, or only invalid
 /// samples while flying for kTofInvalidPersistUs) and ends only when the estimator has RE-ACQUIRED
 /// the ToF: kTofReacquireSamples consecutive samples adopted with an innovation (|ToF height -

@@ -1,0 +1,26 @@
+# tof_reinit_forever.scn — the downward ToF never answers again: attempts continue at the bounded rate, ARM stays refused
+#                          下向き ToF が二度と応答しない: 試行は有界の頻度で続き、ARM は拒否され続ける
+#
+# The chip does not answer from t = 0 and never will. Spec under test over 45 s:
+#  1. Re-initialisation attempts continue for as long as the sensor does not answer, but at most one per 10 s
+#     (kTofReinitRetryIntervalUs): attempts 1..5 at ~2, 12, 22, 32, 42 s and no sixth.
+#  2. The failure line is throttled: attempt 1 is reported, attempts 2..6 are not (the next report would be attempt 7).
+#  3. ARM is refused every time it is tried (7 s, 25 s, 40 s), the motors never spin.
+#
+# チップは t = 0 から応答せず、今後も応答しない。45 s にわたって検証する仕様:
+#  1. 再初期化の試行は、センサが動かない間ずっと続くが、10 s（kTofReinitRetryIntervalUs）に最大 1 回:
+#     試行 1〜5 が約 2、12、22、32、42 s で、6 回目は無い。
+#  2. 失敗の行は抑制される: 試行 1 は報告し、試行 2〜6 は報告しない（次の報告は試行 7）。
+#  3. ARM は試すたびに拒否され（7 s、25 s、40 s）、モータは回らない。
+#
+# Run: sf sils scenario simulator/sils/scenarios/tof_reinit_forever.scn --target vehicle --duration 45000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    tof_offline   1                                                                    # A: 0 s — the chip never answers
+   +    rc         2048  2048   2048    2048  0     7000      50                       # B: boot at rest, no ToF
+   +    rc         2048  2048   2048    2048  1     1000      50                       # C: ARM attempt (7 s) -> REFUSED
+   +    rc         2048  2048   2048    2048  0     17000     50                       # D: release (to 25 s)
+   +    rc         2048  2048   2048    2048  1     1000      50                       # E: ARM attempt (25 s) -> REFUSED
+   +    rc         2048  2048   2048    2048  0     14000     50                       # F: release (to 40 s)
+   +    rc         2048  2048   2048    2048  1     1000      50                       # G: ARM attempt (40 s) -> REFUSED
+   +    rc         2048  2048   2048    2048  0     3800      50                       # H: release, the 5th attempt (~42 s) fails too

@@ -1,0 +1,43 @@
+# tof_reinit_flight.scn — the downward ToF stops answering IN FLIGHT: nothing changes while armed, re-initialised after DISARM
+#                         飛行中に下向き ToF が応答しなくなる: ARM 中は何も変わらず、DISARM の後に再初期化される
+#
+# Same flight as tof_silent_hover_timed.scn (auto-takeoff, hover at 0.5 m, the ToF stops at 14.0 s, blind landing ended by
+# TIME, impact cut and accelerometer touchdown disabled), but the failure is at the bus level (`tof_offline`) and the
+# chip answers again at 20.0 s, WHILE STILL ARMED (unconfigured: it needs a re-initialisation). Spec under test:
+#  1. The response to the silence is exactly that of tof_silent_hover_timed.scn: FLYING -> LANDING by silence, blind descent,
+#     touchdown by time, LANDING -> IDLE_GROUND. The sensor is NOT touched while armed: no re-initialisation attempt
+#     is logged before the craft is disarmed, although the silence lasted 10 s (5 x kTofReinitSilenceUs) and the chip answered
+#     again at 20 s.
+#  2. After the landing (IDLE_GROUND) the sensor is re-initialised at once and succeeds; after the estimator has re-acquired
+#     the ToF, ARM is ACCEPTED and the takeoff and hover are normal.
+#
+# tof_silent_hover_timed.scn と同じ飛行（自動離陸、0.5 m のホバー、14.0 s に ToF 停止、「時間」で終わる ToF なしの着陸、
+# 衝撃カットと加速度計の接地検出は無効）だが、故障はバスのレベル（`tof_offline`）で、チップは 20.0 s に、まだ ARM 中のうちに
+# 再び応答する（設定は失っていて、再初期化が要る）。検証する仕様:
+#  1. 出力停止への応答は tof_silent_hover_timed.scn とまったく同じ: 出力停止で FLYING -> LANDING、ToF なしの降下、
+#     時間による接地、LANDING -> IDLE_GROUND。ARM 中はセンサに触れない: 出力停止が 10 s（kTofReinitSilenceUs の 5 倍）
+#     続き、20 s にチップが再び応答しても、DISARM になるまで再初期化の試行はログに出ない。
+#  2. 着陸（IDLE_GROUND）の後、センサはすぐ再初期化されて成功し、推定器が ToF を取り込み直した後、ARM は受理される。
+#
+# Timeline (s): ARM accepted 7.5 → takeoff complete ~9.3 → hover → chip offline 14.0 → LANDING ~14.3 → chip answers 20.0 (armed)
+#               → touchdown by time ~24.3 → IDLE_GROUND → re-init attempt 1 at once (succeeds) → ARM in ALT_HOLD 29.2 (accepted)
+#               → a normal auto-takeoff and hover at 0.5 m → DISARM ~36.4 → landed.
+# Run: sf sils scenario simulator/sils/scenarios/tof_reinit_flight.scn --target vehicle --duration 42000000 --param safety.impact.accel_g=10 --param safety.blind_touchdown.accel_g=10 --param safety.blind_touchdown.floor_s=100
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (7.5 s) — spool, then the auto-takeoff climb
+   +    rc         2048  2048   2048    2048  1     5500      50        1              # D: stick centre — climb to 0.5 m and hold (to 14.0 s)
+   +    tof_offline   1                                                                    # E: 14.0 s — the chip stops answering while hovering
+   +    rc         2048  2048   2048    2048  1     6000      50        1              # F: LANDING by silence, blind descent (to 20.0 s)
+   +    tof_offline   0                                                                    # G: 20.0 s — the chip answers again, still ARMED (no attempt may follow)
+   +    rc         2048  2048   2048    2048  1     5500      50        1              # H: landing ends by time (~24.3 s), then IDLE_GROUND and the re-init (to 25.5 s)
+   +    rc         2048  2048   2048    2048  0     200       50        1              # I: release the ARM button
+   +    rc         2048  2048   2048    2048  0     2500      50                       # J: the episode ends (~1.5 s after the re-init), to 28.2 s
+   +    rc         2048  2048   2048    2048  0     1000      50        1              # K: ALT switch ON while DISARMED
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # L: ARM in ALT_HOLD (29.2 s) -> ACCEPTED, auto-takeoff
+   +    rc         2048  2048   2048    2048  1     6000      50        1              # M: hover at 0.5 m (to 36.2 s)
+   +    rc         2048  2048   2048    2048  0     200       50        1              # N: release the ARM button
+   +    rc         2048  2048   2048    2048  1     200       50        1              # O: press again -> DISARM (auto-land)
+   +    rc         2048  2048   2048    2048  0     5000      50                       # P: land and settle

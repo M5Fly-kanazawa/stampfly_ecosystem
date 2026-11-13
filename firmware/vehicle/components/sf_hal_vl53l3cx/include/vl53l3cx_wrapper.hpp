@@ -157,6 +157,14 @@ public:
     esp_err_t init(const Config& config);
 
     /**
+     * @brief Give back the I2C device handle and clear the state, so init() can run again
+     *
+     * Makes no I2C transaction (the XSHUT pulse of the next init() stops the sensor).
+     * I2C 通信はしない（次の init() の XSHUT パルスがセンサを止める）。
+     */
+    void release();
+
+    /**
      * @brief Start continuous ranging
      *
      * @return ESP_OK on success, error code otherwise
@@ -268,6 +276,11 @@ private:
     bool initialized_ = false;   ///< Initialization status
     bool ranging_ = false;       ///< Ranging active status
     i2c_master_dev_handle_t i2c_dev_handle_ = nullptr;
+
+    /**
+     * @brief Remove the I2C device handle (if any) and forget it
+     */
+    void releaseI2cDevice();
 
     /**
      * @brief Control XSHUT pin

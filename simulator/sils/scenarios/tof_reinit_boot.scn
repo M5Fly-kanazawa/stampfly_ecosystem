@@ -1,0 +1,36 @@
+# tof_reinit_boot.scn — the downward ToF does not answer at boot, answers later: re-initialised, then a normal flight
+#                       下向き ToF が起動時に応答せず、後から応答する: 再初期化され、その後は通常の飛行
+#
+# The chip does not answer on the I2C bus from t = 0 (the bring-up at boot fails, so the sensor is absent). It answers again
+# at 9.0 s, but without its configuration.
+# Spec under test:
+#  1. While the sensor is absent, ARM is REFUSED with the reason "downward ToF is silent".
+#  2. TofTask re-initialises the sensor by itself while the craft is disarmed (first attempt 2 s after the failed
+#     bring-up, then every 10 s): the attempt at ~2 s fails because the chip does not answer, the one at ~12 s succeeds
+#     ("re-init succeeded"). No third attempt is made.
+#  3. After the estimator has re-acquired the ToF (~1 s of samples), ARM is ACCEPTED and the auto-takeoff, the
+#     hover at 0.5 m and the landing are normal.
+#
+# チップは t = 0 から I2C バスに応答しない（起動時の立ち上げが失敗し、センサは無い状態になる）。9.0 s に再び応答するが、
+# 設定は失っている。検証する仕様:
+#  1. センサが無い間、ARM は「下向き ToF が出力停止」の理由で拒否される。
+#  2. TofTask は、機体が DISARM の間、自力でセンサを再初期化する（最初の試行は立ち上げの失敗の 2 s 後、以後 10 s ごと）:
+#     約 2 s の試行はチップが応答しないので失敗し、約 12 s の試行が成功する（"re-init succeeded"）。3 回目の試行はしない。
+#  3. 推定器が ToF を取り込み直した後（サンプルが約 1 s）、ARM は受理され、自動離陸・0.5 m のホバー・着陸は通常どおり。
+#
+# Timeline (s): chip offline 0 → attempt 1 ~2 (fails) → ARM attempt 7 (refused) → chip answers 9
+#               → attempt 2 ~12 (succeeds) → ARM in ALT_HOLD ~14.5 (accepted) → auto-takeoff, hover → DISARM ~21.7 → landed ~25.
+# Run: sf sils scenario simulator/sils/scenarios/tof_reinit_boot.scn --target vehicle --duration 28000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    tof_offline   1                                                                    # A: 0 s — the chip does not answer on the bus
+   +    rc         2048  2048   2048    2048  0     7000      50                       # B: boot at rest, no ToF (calibration completes ~5 s)
+   +    rc         2048  2048   2048    2048  1     1000      50                       # C: ARM attempt (7 s) -> REFUSED (downward ToF silent)
+   +    rc         2048  2048   2048    2048  0     1000      50                       # D: release
+   +    tof_offline   0                                                                    # E: 9.0 s — the chip answers again (unconfigured)
+   +    rc         2048  2048   2048    2048  0     5500      50        1              # F: attempt 2 at ~12 s succeeds, the episode ends ~13.5 s; ALT switch ON
+   +    rc         2048  2048   2048    2048  1     1000      50        1              # G: ARM in ALT_HOLD (14.5 s) -> accepted, auto-takeoff
+   +    rc         2048  2048   2048    2048  1     6000      50        1              # H: hover at 0.5 m
+   +    rc         2048  2048   2048    2048  0     200       50        1              # I: release the ARM button
+   +    rc         2048  2048   2048    2048  1     200       50        1              # J: press again -> DISARM (auto-land)
+   +    rc         2048  2048   2048    2048  0     5000      50                       # K: land and settle

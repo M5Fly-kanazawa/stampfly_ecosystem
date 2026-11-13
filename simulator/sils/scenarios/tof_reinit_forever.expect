@@ -1,0 +1,18 @@
+# tof_reinit_forever.expect — a downward ToF that never answers: bounded attempts, ARM refused every time
+# 応答しない下向き ToF: 有界の試行、ARM は毎回拒否
+#
+# Attempts 1..5 in 45 s (one per 10 s, none beyond), the failure line only for attempt 1, ARM refused throughout, no motor output.
+# 45 s の間に試行 1〜5（10 s に 1 回、それ以上は無い）、失敗の行は試行 1 だけ、ARM は終始拒否、モータ出力なし。
+exit 0
+log_contains any "VL53L3CX bottom bring-up failed"
+log_contains any "VL53L3CX bottom re-init: attempt 1 "
+log_contains any "VL53L3CX bottom re-init: attempt 5 "
+log_absent any "VL53L3CX bottom re-init: attempt 6 "
+log_contains any "VL53L3CX bottom re-init failed (attempt 1,"
+log_absent any "VL53L3CX bottom re-init failed (attempt 2,"
+log_absent any "VL53L3CX bottom re-init failed (attempt 6,"
+log_absent any "VL53L3CX bottom re-init succeeded"
+log_contains any "ARM rejected: downward ToF is silent"
+log_absent any "ARM accepted"
+metric alt_max < 0.05 in 0.0 45.0
+log_absent any "Motors armed"

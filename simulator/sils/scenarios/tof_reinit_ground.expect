@@ -1,0 +1,20 @@
+# tof_reinit_ground.expect — a downward ToF that stops answering on the ground is re-initialised, then ARM is accepted
+# 地上で応答しなくなった下向き ToF が再初期化され、その後 ARM が受理される
+#
+# The first ARM attempt (sensor silent since 4.0 s) is refused; the sensor is re-initialised (attempt 1 fails while the chip is
+# offline, attempt 2 succeeds after it answers); a fresh ARM is accepted. The motors never spin before it.
+# 最初の ARM 試行（センサは 4.0 s から出力停止）は拒否される。センサが再初期化され（試行 1 はチップが応答しない間は失敗、
+# 応答した後の試行 2 が成功）、新しい ARM は受理される。それまでモータは回らない。
+exit 0
+log_contains any "VL53L3CX bottom re-init: attempt 1"
+log_contains any "VL53L3CX bottom re-init failed (attempt 1"
+log_contains any "ARM rejected: downward ToF is silent"
+log_contains any "VL53L3CX bottom re-init succeeded (attempt 2"
+log_contains any "ARM accepted"
+log_absent any "VL53L3CX bottom re-init: attempt 3"
+order "re-init: attempt 1" "ARM rejected: downward ToF is silent"
+order "ARM rejected: downward ToF is silent" "re-init succeeded"
+order "re-init succeeded" "ARM accepted"
+log_absent any "Transition: ARMED_GROUND → TAKEOFF"
+metric alt_max < 0.05 in 0.0 24.0
+metric duty_max < 0.05 in 0.0 18.4

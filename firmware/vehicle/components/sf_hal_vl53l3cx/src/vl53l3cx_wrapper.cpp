@@ -67,6 +67,29 @@ VL53L3CXWrapper& VL53L3CXWrapper::operator=(VL53L3CXWrapper&& other) noexcept
     return *this;
 }
 
+void VL53L3CXWrapper::releaseI2cDevice()
+{
+    // Remove the I2C device handle and forget it, so a failed init() never leaves a stale handle behind.
+    // I2C デバイスのハンドルを外して忘れる。init() が失敗しても古いハンドルを残さない。
+    if (i2c_dev_handle_ != nullptr) {
+        i2c_master_bus_rm_device(i2c_dev_handle_);
+        i2c_dev_handle_ = nullptr;
+    }
+}
+
+void VL53L3CXWrapper::release()
+{
+    // Give the I2C device handle back and clear the state so init() can run again (a re-initialisation after the
+    // sensor stopped). No I2C transaction is made: the XSHUT pulse of the next init() stops the sensor anyway, and a
+    // sensor that does not answer must not cost a bus timeout here.
+    // I2C デバイスのハンドルを返して状態を消し、init() をもう一度実行できるようにする（センサが出力停止した後の
+    // 再初期化）。I2C 通信はしない: 次の init() の XSHUT パルスがどのみちセンサを止めるし、応答しないセンサに
+    // ここでバスのタイムアウトを払いたくない。
+    releaseI2cDevice();
+    initialized_ = false;
+    ranging_ = false;
+}
+
 esp_err_t VL53L3CXWrapper::setXshut(bool enable)
 {
     // Configure XSHUT pin as output
@@ -147,7 +170,7 @@ esp_err_t VL53L3CXWrapper::init(const Config& config)
     // Wait for device boot
     ret = waitDeviceBoot();
     if (ret != ESP_OK) {
-        i2c_master_bus_rm_device(i2c_dev_handle_);
+        releaseI2cDevice();
         return ret;
     }
 
@@ -156,12 +179,12 @@ esp_err_t VL53L3CXWrapper::init(const Config& config)
         VL53LX_Error status = VL53LX_SetDeviceAddress(&device_, config_.i2c_addr << 1);
         if (status != VL53LX_ERROR_NONE) {
             ESP_LOGE(TAG, "SetDeviceAddress failed: %d", status);
-            i2c_master_bus_rm_device(i2c_dev_handle_);
+            releaseI2cDevice();
             return ESP_FAIL;
         }
 
         // Remove old device and add with new address
-        i2c_master_bus_rm_device(i2c_dev_handle_);
+        releaseI2cDevice();
 
         dev_cfg.device_address = config_.i2c_addr;
         ret = i2c_master_bus_add_device(config_.i2c_bus, &dev_cfg, &i2c_dev_handle_);
@@ -178,7 +201,7 @@ esp_err_t VL53L3CXWrapper::init(const Config& config)
     VL53LX_Error status = VL53LX_DataInit(&device_);
     if (status != VL53LX_ERROR_NONE) {
         ESP_LOGE(TAG, "DataInit failed: %d", status);
-        i2c_master_bus_rm_device(i2c_dev_handle_);
+        releaseI2cDevice();
         return ESP_FAIL;
     }
 
@@ -186,7 +209,7 @@ esp_err_t VL53L3CXWrapper::init(const Config& config)
     status = VL53LX_SetDistanceMode(&device_, VL53LX_DISTANCEMODE_LONG);
     if (status != VL53LX_ERROR_NONE) {
         ESP_LOGE(TAG, "SetDistanceMode failed: %d", status);
-        i2c_master_bus_rm_device(i2c_dev_handle_);
+        releaseI2cDevice();
         return ESP_FAIL;
     }
 
@@ -195,7 +218,7 @@ esp_err_t VL53L3CXWrapper::init(const Config& config)
                                                            config_.timing_budget_ms * 1000);
     if (status != VL53LX_ERROR_NONE) {
         ESP_LOGE(TAG, "SetTimingBudget failed: %d", status);
-        i2c_master_bus_rm_device(i2c_dev_handle_);
+        releaseI2cDevice();
         return ESP_FAIL;
     }
 

@@ -155,7 +155,7 @@ Level 1: Bus peripherals
 Level 2: Critical sensors / actuators
   - BMI270 IMU 初期化 → 失敗時は abort()
   - Motor HAL 初期化 → 失敗時は abort()
-  - VL53L3CX Bottom ToF 初期化 → **モードを問わず必須**（要件: ToF の出力停止中は ACRO を含め次の ARM を拒否する。実行時の出力停止の扱いは `detailed_design.md` §3 注12）、失敗時は abort()
+  - VL53L3CX Bottom ToF 初期化 → **ARM の条件（モードを問わない）**（要件: ToF の出力停止中は ACRO を含め次の ARM を拒否する。実行時の出力停止の扱いは `detailed_design.md` §3 注12）。失敗しても起動は止めない（TofTask が `sensor_present(BottomToF) = false` にして続行し、ARM されていない間、XSHUT でリセットして初期化をやり直し続ける。ARM は ToF の出力停止として拒否される）
 
 Level 3: Optional sensors
   - BMM150 Mag → 失敗時は sensor_present(Mag) = false で続行
@@ -206,13 +206,13 @@ ledc_timer     ─→  Motor / LED / Buzzer
 | Critical | Motor HAL | `abort()` + LED 赤点滅 | 推力を出せない |
 | Critical | NVS | `abort()` | パラメータ・キャリブを読めない |
 | Critical | I2C bus / SPI host / LEDC timer | `abort()` | 全 HAL が依存する基盤 |
-| Critical | VL53L3CX Bottom ToF | `abort()`（モードを問わない。実行時に出力停止すると ACRO を含め次の ARM を拒否、`detailed_design.md` §3 注12） | 高度推定の主観測。ACRO / STABILIZE の制御則は高度を使わないが、高度センサが保証できない機体は離陸させない |
 | **Optional** | BMM150 Mag | `sensor_present(Mag) = false` で続行 | ヨー推定がドリフトしやすくなるが ACRO/STAB は可能 |
 | Optional | VL53L3CX Front ToF | `sensor_present(FrontToF) = false` | 障害物検知不能、フライトは可能 |
 | Optional | PMW3901 Flow | `sensor_present(Flow) = false` | 位置推定の補助（ホバーは ToF が鉛直を担う。気圧計は観測専用） |
 | Optional | BMP280 Baro | `sensor_present(Baro) = false` | 観測専用（制御・推定は ToF のみ）。無くても飛行は変わらない |
 | Optional | Power monitor | `sensor_present(Power) = false` | 電圧監視なしでも飛行は可能（バッテリ警告は失われる） |
-| **Recoverable** | I2C / SPI 一時的 I/O エラー | task ループ内で retry、`READ_FAIL_LOG_INTERVAL = 400` cycles で警告抑制 | 振動や電源ノイズで稀に発生、再試行で復帰可能 |
+| **Recoverable** | VL53L3CX Bottom ToF（起動時の初期化失敗、または出力停止） | ARM されていない間（INIT・IDLE_GROUND・IDLE_HELD）だけ、TofTask が XSHUT（GPIO 7）でリセットして初期化・測距開始をやり直す。最初の試行は出力停止が 2 s 続いた後、以後出力停止が続く間 10 s ごと（`kTofReinitSilenceUs`・`kTofReinitRetryIntervalUs`）。判断は純関数 `sf::mayReinitializeToF()`。ARM 中は決して試行しない。出力停止の間、ARM は `ArmBlock::TofSilent` で拒否される（モードを問わない、`detailed_design.md` §3 注12） | 高度推定の主観測。ACRO / STABILIZE の制御則は高度を使わないが、高度センサが保証できない機体は離陸させない。センサの電源・バスの一時的な喪失はリセットで復帰しうるので、電源の入れ直しを要求しない。飛行中は、ToF なしの着陸が働く |
+| Recoverable | I2C / SPI 一時的 I/O エラー | task ループ内で retry、`READ_FAIL_LOG_INTERVAL = 400` cycles で警告抑制 | 振動や電源ノイズで稀に発生、再試行で復帰可能 |
 | Recoverable | ESP-NOW パケットロス | failsafe 側で `command_setpoint` の age を判定 | 通信ロスは飛行中に発生しうる、タイムアウト Failsafe で対応 |
 
 ### LED エラーパターン（Critical 失敗時）
@@ -223,7 +223,6 @@ ledc_timer     ─→  Motor / LED / Buzzer
 |------|---------|------|
 | IMU init 失敗 | 赤色高速点滅 | 5 Hz |
 | Motor HAL init 失敗 | 赤+紫交互 | 2 Hz |
-| Critical ToF init 失敗 | 赤+橙交互 | 2 Hz |
 | その他 Critical | 赤色低速点滅 | 1 Hz |
 
 abort 後は `esp_restart()` を呼ばず、LED 表示のまま停止する（学習者が原因を読み取れる時間を確保）。watchdog 設定は `coding_and_education.md` 側で議論する。
@@ -344,5 +343,7 @@ This document specifies:
 - Failure classification (Critical / Optional / Recoverable)
 - HAL connection contract (Config-based DI, 2-stage init)
 - Namespace boundaries for the 4-tier learner access (L0 / L1 / L2 / L3)
+
+**Bottom ToF classification (Recoverable while disarmed).** A bottom ToF whose bring-up fails at boot, or that delivers no sample for 2 s, is reset through XSHUT (GPIO 7) and initialised again by TofTask, as long as the craft is not armed (INIT / IDLE_GROUND / IDLE_HELD): the first attempt after 2 s of silence, then every 10 s while the sensor stays silent (`kTofReinitSilenceUs`, `kTofReinitRetryIntervalUs`). The decision is the pure function `sf::mayReinitializeToF()` (`tof_silence_policy.hpp`); in every armed state nothing about the sensor changes. While the sensor is silent ARM is refused in every mode (`ArmBlock::TofSilent`; `detailed_design.md` §3 note 12). The task never deletes itself, and a failed bring-up does not stop the boot.
 
 See the Japanese section for complete content.

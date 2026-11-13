@@ -247,4 +247,106 @@ private:
     uint32_t silent_elapsed_us_ = 0;
 };
 
+// =============================================================================
+// Re-initialisation of the downward ToF (pure decision + the clock TofTask feeds it)
+// 下向き ToF の再初期化（純粋な判断 + TofTask が与える時計）
+// =============================================================================
+
+/// What TofTask observed, and what Failsafe has declared, when it asks "may I re-initialise the downward ToF now?".
+/// TofTask が「今、下向き ToF を再初期化してよいか」と尋ねるときの、TofTask の観測と Failsafe の宣言。
+struct ToFReinitFacts {
+    FlightState state;              ///< Flight state (system_mode)                                       / 飛行状態（system_mode）
+    bool        no_sample_episode;  ///< Failsafe has declared the episode with the reason "no new sample"
+                                    ///< (failsafe_status.tof_silent and tof_reason == NoSample)          / Failsafe が「新サンプル無し」の理由でエピソードを宣言済み
+    uint32_t    silent_us;          ///< Time since the last sample, or since the sensor was last brought up [us] / 最後のサンプル、またはセンサを最後に立ち上げた時刻からの経過 [us]
+    uint32_t    since_attempt_us;   ///< Time since the previous attempt ended [us]; kToFNoAttemptYet when there has been none since the last sample
+                                    ///< 前回の試行が終わってからの経過 [us]。最後のサンプルの後に試行が無ければ kToFNoAttemptYet
+};
+
+/// since_attempt_us when no attempt has been made since the last sample: older than any retry interval.
+/// 最後のサンプルの後に試行が無いときの since_attempt_us: どの再試行間隔よりも古い。
+inline constexpr uint32_t kToFNoAttemptYet = 0xFFFFFFFFu;
+
+/// True in the states where the craft is NOT armed and the motors cannot spin (the same set as !isArmed(), listed cell by
+/// cell for INV-4): the only states in which the sensor may be reset. In every armed state nothing about the sensor changes.
+/// 機体が ARM されておらずモータが回らない状態（!isArmed() と同じ集合を INV-4 のためにセル毎に列挙）: センサを
+/// リセットしてよい唯一の状態。ARM 中のどの状態でも、センサには何もしない。
+inline constexpr bool toFReinitAllowedInState(FlightState state)
+{
+    switch (state) {
+        case FlightState::INIT:
+        case FlightState::IDLE_GROUND:
+        case FlightState::IDLE_HELD:
+            return true;
+        case FlightState::ARMED_GROUND:
+        case FlightState::TAKEOFF:
+        case FlightState::FLYING:
+        case FlightState::LANDING:
+        case FlightState::FLIP:
+            return false;
+    }
+    return false;   // an unknown state value: never reset / 未知の状態値: リセットしない
+}
+
+/// May the downward ToF be re-initialised (reset + init + start of ranging) NOW? Yes only when ALL hold:
+///  - the craft is not armed (toFReinitAllowedInState);
+///  - Failsafe has declared the no-sample episode, so the ARM refusal (ArmBlock::TofSilent) is in force. The episode can only
+///    end with a new sample, and only TofTask produces samples, so it holds for the whole attempt: an ARM request that
+///    arrives while the attempt runs is refused. This is why no attempt can overlap a flight, whatever the timing;
+///  - the silence has lasted kTofReinitSilenceUs;
+///  - the previous attempt ended at least kTofReinitRetryIntervalUs ago.
+/// 下向き ToF を「今」再初期化（リセット + 初期化 + 測距開始）してよいか。次の「すべて」が成り立つときだけ:
+///  - 機体が ARM されていない（toFReinitAllowedInState）。
+///  - Failsafe が「新サンプル無し」のエピソードを宣言済みで、ARM の拒否（ArmBlock::TofSilent）が効いている。エピソードは
+///    新サンプルでしか終わらず、サンプルを作るのは TofTask だけなので、試行の全期間にわたって成り立つ: 試行中に来た
+///    ARM 要求は拒否される。だからタイミングによらず、試行が飛行と重なることはない。
+///  - 出力停止が kTofReinitSilenceUs の間続いている。
+///  - 前回の試行が終わってから kTofReinitRetryIntervalUs 以上経っている。
+///
+/// @design architecture.md INV-3 — decision here, detection and execution in TofTask     [OK]
+/// @design architecture.md INV-4 — every FlightState cell is in the table                [OK]
+/// @design hardware_init.md §5 — downward ToF: Recoverable while disarmed                [OK]
+inline constexpr bool mayReinitializeToF(const ToFReinitFacts& facts)
+{
+    return toFReinitAllowedInState(facts.state) &&
+           facts.no_sample_episode &&
+           facts.silent_us >= limits::kTofReinitSilenceUs &&
+           facts.since_attempt_us >= limits::kTofReinitRetryIntervalUs;
+}
+
+/// The two times mayReinitializeToF() needs, kept from what TofTask sees. Unsigned differences: correct across a wrap
+/// of the 32-bit microsecond clock (a silence longer than 71.6 min only delays the next attempt by kTofReinitSilenceUs).
+/// mayReinitializeToF() が必要とする 2 つの時間。TofTask が見たことから保持する。符号なしの差: 32 ビットのマイクロ秒
+/// 時計の巻き戻りをまたいでも正しい（71.6 分を超える出力停止では、次の試行が kTofReinitSilenceUs だけ遅れるだけ）。
+class ToFReinitClock {
+public:
+    /// A sample was published: the silence and the attempt count start over. / サンプルを発行した: 出力停止と試行の数え直し。
+    void onSample(uint32_t now_us)
+    {
+        quiet_since_us_ = now_us;
+        attempted_      = false;
+    }
+    /// The sensor was brought up (or failed to) at boot: the silence is counted from now, an attempt is not counted.
+    /// 起動時にセンサを立ち上げた（または失敗した）: 出力停止は今から数え、試行としては数えない。
+    void onBringUp(uint32_t now_us)
+    {
+        quiet_since_us_ = now_us;
+    }
+    /// An attempt ended (success or failure): the next one is due kTofReinitRetryIntervalUs later.
+    /// 試行が終わった（成功も失敗も）: 次の試行は kTofReinitRetryIntervalUs 後。
+    void onAttemptEnd(uint32_t now_us)
+    {
+        quiet_since_us_ = now_us;
+        attempt_end_us_ = now_us;
+        attempted_      = true;
+    }
+    uint32_t silentUs(uint32_t now_us) const { return now_us - quiet_since_us_; }
+    uint32_t sinceAttemptUs(uint32_t now_us) const { return attempted_ ? (now_us - attempt_end_us_) : kToFNoAttemptYet; }
+
+private:
+    uint32_t quiet_since_us_ = 0;
+    uint32_t attempt_end_us_ = 0;
+    bool     attempted_      = false;
+};
+
 }  // namespace sf

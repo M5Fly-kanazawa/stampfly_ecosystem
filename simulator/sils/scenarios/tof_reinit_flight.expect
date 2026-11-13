@@ -1,0 +1,35 @@
+# tof_reinit_flight.expect — ToF lost in flight: the armed response is unchanged, no attempt while armed, re-init after the landing
+# 飛行中の ToF 喪失: ARM 中の応答は変わらず、ARM 中は試行せず、着陸の後に再初期化する
+#
+# Chain: hover → chip stops answering → FLYING -> LANDING (silence) → blind descent → touchdown by time → IDLE_GROUND
+# → re-init attempt 1 (the FIRST attempt of the run comes after the landing ended, so none ran while armed, even with the chip
+# answering again at 20 s) → success → ARM accepted. The armed part is checked with the same metrics as tof_silent_hover_timed.expect.
+# 連鎖: ホバー → チップが応答しなくなる → FLYING -> LANDING（出力停止）→ ToF なしの降下 → 時間による接地 → IDLE_GROUND →
+# 再初期化の試行 1（実行の「最初」の試行は着陸が終わった後に来る。20 s にチップが再び応答しても、ARM 中は試行しなかった）→
+# 成功 → ARM 受理。ARM 中の部分は tof_silent_hover_timed.expect と同じ指標で確認する。
+exit 0
+log_contains any "Takeoff complete → FLYING/ALT_HOLD"
+log_contains any "Downward ToF silent (>= 300 ms without a sample) in FLYING/ALT_HOLD → LANDING"
+log_contains any "Blind landing: ToF silent, velocity loop"
+log_contains any "ms of LANDING → touchdown by time"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_contains any "VL53L3CX bottom re-init: attempt 1"
+log_contains any "VL53L3CX bottom re-init succeeded (attempt 1"
+log_contains any "ARM accepted"
+log_absent any "Impact detected"
+log_absent any "Touchdown detected by accelerometer"
+log_absent any "VL53L3CX bottom re-init: attempt 2"
+order "in FLYING/ALT_HOLD → LANDING" "touchdown by time"
+order "touchdown by time" "Transition: LANDING → IDLE_GROUND"
+order "Transition: LANDING → IDLE_GROUND" "VL53L3CX bottom re-init: attempt 1"
+order "VL53L3CX bottom re-init: attempt 1" "VL53L3CX bottom re-init succeeded"
+metric alt_mean > 0.40 in 13.0 14.0
+metric alt_max < 0.60 in 13.0 14.5
+metric descent_speed_max < 0.8 in 14.0 18.0
+metric alt_max < 0.05 in 21.0 22.5
+metric alt_max < 0.05 in 26.0 29.0
+# After the re-init the ARM at 29.2 s is accepted (log_contains cannot tell it from the first ARM, so the flight is the evidence): a normal 0.5 m hover.
+# 再初期化の後の 29.2 s の ARM は受理される（log_contains では 1 回目の ARM と区別できないので、飛行が証拠）: 通常の 0.5 m のホバー。
+metric alt_mean > 0.42 in 34.2 36.1
+metric alt_mean < 0.62 in 34.2 36.1
+metric alt_max < 0.05 in 40.5 41.5
