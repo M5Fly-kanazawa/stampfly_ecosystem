@@ -12,7 +12,6 @@ StampFlyエコシステムは以下の通信プロトコルを使用：
 |-----------|------|------|--------|
 | ESP-NOW + TDMA | 制御・基本テレメトリ | Controller ↔ Vehicle | 50Hz |
 | UDP over WiFi | 制御・基本テレメトリ（代替） | Controller ↔ Vehicle | 50Hz |
-| WebSocket | 拡張テレメトリ（ESKF+センサ） | Vehicle → GCS | 400Hz |
 
 ### 通信モード
 
@@ -32,8 +31,7 @@ protocol/
 ├── README.md              # 本ドキュメント
 ├── spec/                  # 機械可読なプロトコル仕様
 │   ├── messages.yaml      # メッセージ定義
-│   ├── espnow_tdma.yaml   # ESP-NOW & TDMAプロトコル
-│   └── websocket.yaml     # WebSocketテレメトリ
+│   └── espnow_tdma.yaml   # ESP-NOW & TDMAプロトコル
 └── tools/                 # 仕様検証、コード生成ツール
 ```
 
@@ -81,32 +79,6 @@ protocol/
 | 19 | 1 | state | - | FlightState |
 | 20 | 1 | flags | - | 警告フラグ |
 | 21 | 1 | checksum | - | チェックサム（sum） |
-
-### TelemetryWSPacket (116 bytes) - Legacy
-機体からGCSへの拡張テレメトリ（WebSocket、レガシー50Hz用）。
-
-| Offset | Size | Field | Unit | Description |
-|--------|------|-------|------|-------------|
-| 0 | 1 | header | - | 0xAA |
-| 1 | 1 | packet_type | - | 0x20 |
-| 2 | 4 | timestamp_ms | ms | 起動からの経過時間 |
-| 6 | 4 | roll | rad | ロール角（ESKF推定） |
-| 10 | 4 | pitch | rad | ピッチ角（ESKF推定） |
-| 14 | 4 | yaw | rad | ヨー角（ESKF推定） |
-| 18 | 12 | position | m | 位置 (x,y,z) NED座標 |
-| 30 | 12 | velocity | m/s | 速度 (x,y,z) |
-| 42 | 12 | gyro | rad/s | ジャイロ（バイアス補正済） |
-| 54 | 12 | accel | m/s² | 加速度（バイアス補正済） |
-| 66 | 16 | control | - | 制御入力 (throttle,roll,pitch,yaw) |
-| 82 | 12 | magnetometer | uT | 磁力計 (x,y,z) |
-| 94 | 4 | voltage | V | バッテリー電圧 |
-| 98 | 4 | tof_bottom | m | 底面ToF距離 |
-| 102 | 4 | tof_front | m | 前方ToF距離 |
-| 106 | 1 | flight_state | - | FlightState |
-| 107 | 1 | sensor_status | - | センサ状態フラグ |
-| 108 | 4 | heartbeat | - | パケットカウンタ |
-| 112 | 1 | checksum | - | チェックサム（XOR） |
-| 113 | 3 | padding | - | アラインメント |
 
 ### TelemetryExtendedBatchPacket (552 bytes) - 現行
 400Hz統一テレメトリ。4サンプル×136バイト/サンプルをバッチ送信。
@@ -272,7 +244,7 @@ for (size_t i = 0; i < packet_size - 1; i++) {
 }
 ```
 
-### XOR (TelemetryWSPacket)
+### XOR (TelemetryExtendedBatchPacket)
 ```c
 uint8_t checksum = 0;
 for (size_t i = 0; i < checksum_offset; i++) {
@@ -323,7 +295,7 @@ return crc;
 ### Vehicle
 - `firmware/vehicle/components/sf_svc_comm/` - ESP-NOW通信
 - `firmware/vehicle/components/sf_svc_udp/` - UDPサーバー
-- `firmware/vehicle/components/sf_svc_telemetry/` - WebSocketテレメトリ
+- `firmware/vehicle/components/sf_telemetry/` - UDP テレメトリ（Data Stream・Tello 状態文字列）
 
 ### Controller
 - `firmware/controller/components/espnow_tdma/` - TDMA実装
@@ -357,7 +329,6 @@ StampFly ecosystem uses the following protocols:
 |----------|---------|-----------|------|
 | ESP-NOW + TDMA | Control & basic telemetry | Controller ↔ Vehicle | 50Hz |
 | UDP over WiFi | Control & basic telemetry (alternative) | Controller ↔ Vehicle | 50Hz |
-| WebSocket | Extended telemetry (ESKF+sensors) | Vehicle → GCS | 400Hz |
 
 ### Communication Modes
 
@@ -373,7 +344,6 @@ Mode switching is done via CLI `comm` command (saved to NVS).
 See `spec/*.yaml` for detailed machine-readable specifications.
 
 **Key Packet Types:**
-- `0xAA/0x20`: Legacy WebSocket packet (116 bytes, deprecated)
 - `0xBD/0x32`: Extended batch packet (552 bytes, current)
   - 4 samples × 136 bytes with ESKF estimates and sensor data
   - Effective rate: 400 Hz (4 samples × 100 fps)

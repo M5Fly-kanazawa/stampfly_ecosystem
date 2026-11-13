@@ -62,7 +62,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | 機能 | 内容 | 検証 |
 |------|------|------|
 | SSOT プロトコル準拠 | ControlPacket 14B（protocol/spec 準拠、コントローラ無改変） | 実機 |
-| Telemetry | UDP 50Hz 状態モニタ。受信は `sf telemetry`（ターミナル、`--web` でブラウザ。UDP→SSE プロキシ — requirements §7 の WebSocket は stdlib 等価の SSE で実現） | 実機＋ループバック E2E |
+| Telemetry | UDP 50Hz 状態モニタ。受信は `sf telemetry`（ターミナル、`--web` でブラウザ。UDP→SSE プロキシ） | 実機＋ループバック E2E |
 | Data Stream | 制御周期 400Hz の解析ログ。**旧 vehicle 電文完全互換**（UDP 8890 / 0x50 統合パケット）で `sf log wifi` → `sf log viz` が無改造で動く | 実機 E2E（全センサ設計レート、欠損ゼロ） |
 | Data Stream のフリップ解析用エントリ | 0x4C（400Hz: `flight_state`・フリップのフェーズ/結果/積算角、40B）と 0x4D（50Hz: 操縦 ARM/FLIP ボタン・`flip_ready`/`flip_block_reason`・`arm_block`・姿勢判定、8B）。計約 +2.6 KB/s。旧ファームのログには無い（`sf log` 各コマンドは両方を読める） | ホスト単体試験＋SILS（`api_flip_roll`） |
 | Data Stream の ToF 出力停止エントリ | 0x4E（50Hz、19B）: 加速度計に基づく鉛直速度の推定・上昇量の推定・ToF なし降下の推力比・フェイルセーフの判定と理由（`tof_silent`・`tof_reason`）・ToF の健全状態・`mode_block`。ログのストリーム名は `tof_silence`。統合パケットの最悪の長さは 1296 B から 1317 B（上限 1400 B、余裕 83 B）。旧ファームのログには無い | ホスト単体試験（電文の配置・最悪長）＋SILS（`tof_silent_*`）＋合成データの `sf log` 各コマンド |
@@ -83,7 +83,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 
 | 機能 | 計画箇所 | 状態 | 備考 |
 |------|---------|------|------|
-| Tello API / UDP コマンド受信 | requirements §7（TelloAPI: Yes） | **コア実装済**（2026-06-11, ApiTask）: command/takeoff/land/emergency/stop/移動/回頭/クエリ＋Python SDK（tools/stampfly_py）。SILS api_flight で全鎖検証。**flip 実装**（2026-09-16、`FlightState::FLIP`、docs/plans/flip-maneuver-plan.md）: `flip <l/r/f/b>` + Python SDK `flip()`/`flip_left()` 等 | 残: `flip` の実機飛行検証、コントローラ FLIP ボタン（Phase 3）、Tello 互換の拡張コマンド（curve 等）|
+| Tello API / UDP コマンド受信 | requirements §7（TelloAPI: Yes） | **コア実装済**（2026-06-11, ApiTask）: command/takeoff/land/emergency/stop/移動/回頭/クエリ＋Python SDK（tools/stampfly_py）＋ `sf takeoff`/`sf land`/`sf rc`/`sf battery` 等（PC から UDP 8889 で送る）。SILS api_flight で全鎖検証。**flip 実装**（2026-09-16、`FlightState::FLIP`、docs/plans/flip-maneuver-plan.md）: `flip <l/r/f/b>` + Python SDK `flip()`/`flip_left()` 等 | 残: `flip` の実機飛行検証、コントローラ FLIP ボタン（Phase 3）、Tello 互換の拡張コマンド（curve 等）|
 | Data Stream の USB 経路 | requirements §7（UDP/USB 選択） | UDP のみ | WiFi 不要環境向けの変種 |
 | 校正の NVS 永続化 | calibration.cpp に保存系あり | **意図的保留** | NVS commit のフラッシュ消去が 400Hz ループを >10ms 停止させる。CONFIG_SPI_FLASH_AUTO_SUSPEND 調査とセットで再開 |
 | 前方 ToF | hardware_init（XSHUT 配線済み） | HAL あり・未ブリングアップ | 障害物検知用途 |
@@ -113,7 +113,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 
 | 旧機能 | 内容 | 優先度メモ |
 |--------|------|-----------|
-| CLI コマンド群（約50） | 自律飛行（`takeoff`/`land`/`hover`/`jump`）、Tello 風相対移動（`up/down/forward/.../cw/ccw`）、クエリ（`battery?` 等）、`trim`/`gain` | Tello API（§3）と同根。教材価値が高い |
+| CLI コマンド群（約50） | 自律飛行（`takeoff`/`land`/`hover`/`jump`）、Tello 風相対移動（`up/down/forward/.../cw/ccw`）、クエリ（`battery?` 等）、`trim`/`gain` | Tello API（§3）と同根。教材価値が高い。Tello 風の飛行・移動・クエリは UDP 8889 の API が担う（この CLI（TCP 23）に飛行コマンドは無い） |
 | flight_command サービス | 上記コマンドの実行系（自律コマンドキュー） | 同上 |
 | USB バイナリログ取得 | 旧 `sf log capture`（USB 経由） | Data Stream USB 変種（§3）として実現予定 |
 | レベル基準の活用 | 旧 level_calibrator 相当。新は level_offset と同じ量（窓平均の重力ベクトルの傾き）を校正窓の**水平チェック**に使う（機体 −Z から `CALIB_LEVEL_MAX_DEG`=5° 超なら窓を棄却してやり直し）。傾き補正としての適用（姿勢への加算）は未実装 | 傾いた机での校正精度に関わる |
@@ -122,7 +122,6 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 
 | 旧機能 | 廃止理由 |
 |--------|---------|
-| WebSocket テレメトリ | UDP に統一（requirements §7 に明記。ブロッキングリスク排除）。ブラウザ表示はホスト側プロキシで対応する方針 |
 | 12Hz ジャイロノッチフィルタ | 旧 vehicle の実験で「無効が最良」と確定済み（振動はフィードバック励振であり、ノッチは位相を悪化させた） |
 | 気圧の鉛直融合 | ToF-only 鉛直をユーザー方針として決定（ESKF 鉛直発散の解決時）。気圧センサ自体は読んでおり Data Stream に流れる |
 | グローバル変数群（globals.cpp） | Pub-Sub トピックへ全面置換（スパゲッティ化の主因だった） |
@@ -199,7 +198,7 @@ All retrofitted into the design documents.
 
 | Legacy feature | Note |
 |----------------|------|
-| ~50 CLI commands (autonomous `takeoff`/`land`/`hover`/`jump`, Tello-style moves, queries, `trim`/`gain`) | Same root as the Tello API item (§3); high educational value |
+| ~50 CLI commands (autonomous `takeoff`/`land`/`hover`/`jump`, Tello-style moves, queries, `trim`/`gain`) | Same root as the Tello API item (§3); high educational value. Tello-style flight, moves and queries go through the UDP 8889 API (this TCP 23 CLI has no flight commands) |
 | flight_command service (autonomous command queue) | Ditto |
 | USB binary log capture (`sf log capture`) | To be realized as the USB Data Stream variant |
 | Level-reference usage | The window tilt (same gravity-vector angle as level_offset) is used as a level check: a calibration window whose mean accel is more than `CALIB_LEVEL_MAX_DEG` (5 deg) from body -Z is rejected and restarted. Applying the offset as an attitude correction is not implemented |
@@ -208,7 +207,6 @@ All retrofitted into the design documents.
 
 | Legacy feature | Reason |
 |----------------|--------|
-| WebSocket telemetry | Unified on UDP (stated in requirements §7; blocking risk); browser view via a host-side proxy |
 | 12 Hz gyro notch filter | Legacy experiments concluded "off is best" (the oscillation was feedback excitation) |
 | Baro vertical fusion | ToF-only vertical chosen by policy; baro is still read and streamed |
 | Global variables (globals.cpp) | Fully replaced by Pub-Sub topics — the main spaghetti source |

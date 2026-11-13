@@ -5,16 +5,14 @@ Receives the vehicle 50Hz monitoring telemetry (UDP broadcast :5005,
 104-byte binary packet — decoder shared with `sf telemetry`) and serves a
 single-page browser dashboard. Zero external dependencies, matching the SILS
 GUI policy: a stdlib ThreadingHTTPServer serves the embedded page and pushes
-live JSON over Server-Sent Events (`/events`) — SSE is the stdlib-friendly
-equivalent of the WebSocket proxy named in requirements §7 (one-way push is
-all a monitor needs).
+live JSON over Server-Sent Events (`/events`) — one-way push is all a
+monitor needs.
 
 vehicle の 50Hz モニタ用テレメトリ（UDP ブロードキャスト :5005、104B
 バイナリ — デコーダは `sf telemetry` と共有）を受信し、ブラウザ用の
 シングルページダッシュボードを提供する。SILS GUI と同じ「外部依存ゼロ」方針:
 stdlib の ThreadingHTTPServer が埋め込みページを配信し、Server-Sent Events
-（`/events`）でライブ JSON をプッシュする — SSE は requirements §7 の
-WebSocket プロキシの stdlib 等価（モニタに必要なのは一方向プッシュのみ）。
+（`/events`）でライブ JSON をプッシュする — モニタに必要なのは一方向プッシュのみ。
 """
 
 import json

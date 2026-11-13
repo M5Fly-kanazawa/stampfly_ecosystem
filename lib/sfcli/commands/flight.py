@@ -1,34 +1,85 @@
 """
-sf takeoff / land / hover / jump / up / down / cw / ccw / forward / back / left / right / emergency / stop
+sf takeoff / land / up / down / cw / ccw / forward / back / left / right / emergency / stop
 Flight commands
+飛行コマンド
 
-Send flight commands to StampFly via WiFi CLI and monitor in real-time.
-WiFi CLI経由でフライトコマンドを送信し、リアルタイムで監視します。
+Each verb sends one Tello-style text command to the vehicle on UDP port 8889 and waits for the
+vehicle's reply (see lib/sfcli/utils/vehicle_api.py and docs/architecture/tello-api-reference.md).
+各 verb は Tello 風のテキストコマンドを機体の UDP 8889 へ 1 つ送り、機体の応答を待つ
+（lib/sfcli/utils/vehicle_api.py と docs/architecture/tello-api-reference.md 参照）。
 
 Commands:
-    takeoff [alt]       - Take off to specified altitude (default: 0.5m)
-    land                - Land the vehicle
-    hover [alt] [dur]   - Hover at altitude for duration (default: 0.5m, 5.0s)
-    jump [alt]          - Quick jump: climb then descend (default: 0.15m)
-    up <cm>             - Move up by distance (20-200 cm)
-    down <cm>           - Move down by distance (20-200 cm)
-    cw <deg>            - Rotate clockwise (1-360 degrees)
-    ccw <deg>           - Rotate counter-clockwise (1-360 degrees)
-    forward <cm>        - Move forward by distance (20-200 cm)
-    back <cm>           - Move backward by distance (20-200 cm)
-    left <cm>           - Move left by distance (20-200 cm)
-    right <cm>          - Move right by distance (20-200 cm)
-    emergency           - Emergency motor stop (kill all motors)
-    stop                - Stop and hover at current position
+    takeoff             - Auto-takeoff to the fixed takeoff altitude (0.5 m)
+    land                - Land
+    up <cm>             - Move up (10-300 cm, stays below the 120 cm ceiling)
+    down <cm>           - Move down (10-300 cm, stays above 20 cm)
+    forward <cm>        - Move forward (10-300 cm)
+    back <cm>           - Move backward (10-300 cm)
+    left <cm>           - Move left (10-300 cm)
+    right <cm>          - Move right (10-300 cm)
+    cw <deg>            - Rotate clockwise (1-360 deg)
+    ccw <deg>           - Rotate counter-clockwise (1-360 deg)
+    stop                - Hold the current position (also interrupts a waiting command)
+    emergency           - Cut the motors
+
+Exit status / 終了コード:
+    0 ok, 1 the vehicle replied "error ..." or the arguments were rejected,
+    3 no reply (timeout), 130 interrupted with Ctrl-C.
+    0 成功、1 機体が "error ..." を返した・引数を拒否した、3 応答なし（タイムアウト）、
+    130 Ctrl-C で中断。
+
+Ctrl-C while waiting for a reply / 応答待ちの間の Ctrl-C:
+    takeoff, up, down, forward, back, left, right, cw, ccw: send `stop` and say so.
+        `stop` holds the position (a move or rotation ends at once); it is refused while the
+        takeoff is still climbing, which then goes on, and the message says how to land.
+    land: send nothing; the landing is already what the vehicle is doing.
+    `emergency` is never sent automatically: cutting the motors in the air is the operator's
+    decision.
+    takeoff・移動・回頭: `stop` を送り、そのことを表示する。`stop` は位置を保持する（移動・回頭は
+    その場で終わる）。離陸の上昇中は拒否され、離陸は続く。表示で着陸のしかたを案内する。
+    land: 何も送らない（機体は既に着陸している）。
+    `emergency` は自動では送らない: 空中でモータを止めるかは操縦者の判断。
 """
 
 import argparse
-import asyncio
-import sys
-import time
+from typing import Callable, Optional
 
 from ..utils import console
-from ..utils.vehicle_connection import VehicleConnection, DEFAULT_HOST
+from ..utils.vehicle_api import (
+    ALTITUDE_CEILING_CM,
+    ALTITUDE_FLOOR_CM,
+    DEFAULT_HOST,
+    KIND_TIMEOUT,
+    LAND_TIMEOUT_S,
+    MOVE_MAX_CM,
+    MOVE_MIN_CM,
+    ROTATE_MAX_DEG,
+    ROTATE_MIN_DEG,
+    ROTATE_TIMEOUT_S,
+    TAKEOFF_TIMEOUT_S,
+    ApiResult,
+    VehicleApi,
+    move_timeout_s,
+)
+
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_TIMEOUT = 3
+EXIT_INTERRUPTED = 130
+
+# Moves: verb -> help text / 移動: verb -> ヘルプ文
+_MOVE_VERBS = {
+    "up": "Move up",
+    "down": "Move down",
+    "forward": "Move forward",
+    "back": "Move backward",
+    "left": "Move left",
+    "right": "Move right",
+}
+_ROTATE_VERBS = {
+    "cw": "Rotate clockwise",
+    "ccw": "Rotate counter-clockwise",
+}
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -36,204 +87,72 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
     フライトコマンドをCLIに登録する
     """
-    # --- takeoff ---
     takeoff_parser = subparsers.add_parser(
         "takeoff",
-        help="Take off to specified altitude",
-        description="Take off and hold altitude. WiFi CLI経由で離陸コマンドを送信。",
-    )
-    takeoff_parser.add_argument(
-        "altitude",
-        nargs="?",
-        type=float,
-        default=0.5,
-        help="Target altitude in meters (0.1-2.0, default: 0.5)",
+        help="Auto-takeoff (rises to the fixed 0.5 m takeoff altitude)",
+        description="Auto-takeoff. The vehicle climbs to its fixed takeoff altitude (0.5 m) and "
+                    "replies when it is flying. 自動離陸。機体は固定の離陸高度（0.5 m）まで上昇し、"
+                    "飛行状態になったら応答する。",
     )
     _add_common_args(takeoff_parser)
     takeoff_parser.set_defaults(func=run_takeoff)
 
-    # --- land ---
     land_parser = subparsers.add_parser(
         "land",
-        help="Land the vehicle",
-        description="Land the vehicle. WiFi CLI経由で着陸コマンドを送信。",
+        help="Land",
+        description="Land. The vehicle replies when it is on the ground. "
+                    "着陸。機体は地上に降りたら応答する。",
     )
     _add_common_args(land_parser)
     land_parser.set_defaults(func=run_land)
 
-    # --- hover ---
-    hover_parser = subparsers.add_parser(
-        "hover",
-        help="Hover at altitude for duration",
-        description="Hover at specified altitude for a duration then land. "
-                    "WiFi CLI経由でホバリングコマンドを送信。",
-    )
-    hover_parser.add_argument(
-        "altitude",
-        nargs="?",
-        type=float,
-        default=0.5,
-        help="Target altitude in meters (0.1-2.0, default: 0.5)",
-    )
-    hover_parser.add_argument(
-        "duration",
-        nargs="?",
-        type=float,
-        default=5.0,
-        help="Hover duration in seconds (0.1-60.0, default: 5.0)",
-    )
-    _add_common_args(hover_parser)
-    hover_parser.set_defaults(func=run_hover)
+    for verb, help_text in _MOVE_VERBS.items():
+        parser = subparsers.add_parser(
+            verb,
+            help=f"{help_text} (cm)",
+            description=f"{help_text} by <distance> cm ({MOVE_MIN_CM}-{MOVE_MAX_CM}). "
+                        "The vehicle replies when it has arrived. 到達したら応答する。",
+        )
+        parser.add_argument("distance", type=int,
+                            help=f"Distance in cm ({MOVE_MIN_CM}-{MOVE_MAX_CM})")
+        _add_common_args(parser)
+        parser.set_defaults(func=_make_move_runner(verb))
 
-    # --- jump ---
-    jump_parser = subparsers.add_parser(
-        "jump",
-        help="Quick jump: climb then descend",
-        description="Quick jump: climb to altitude then descend immediately. "
-                    "WiFi CLI経由でジャンプコマンドを送信。",
-    )
-    jump_parser.add_argument(
-        "altitude",
-        nargs="?",
-        type=float,
-        default=0.15,
-        help="Target altitude in meters (0.1-2.0, default: 0.15)",
-    )
-    _add_common_args(jump_parser)
-    jump_parser.set_defaults(func=run_jump)
+    for verb, help_text in _ROTATE_VERBS.items():
+        parser = subparsers.add_parser(
+            verb,
+            help=f"{help_text} (degrees)",
+            description=f"{help_text} by <angle> degrees ({ROTATE_MIN_DEG}-{ROTATE_MAX_DEG}). "
+                        "The vehicle replies when it has turned. 回り終えたら応答する。",
+        )
+        parser.add_argument("angle", type=int,
+                            help=f"Angle in degrees ({ROTATE_MIN_DEG}-{ROTATE_MAX_DEG})")
+        _add_common_args(parser)
+        parser.set_defaults(func=_make_rotate_runner(verb))
 
-    # --- up ---
-    up_parser = subparsers.add_parser(
-        "up",
-        help="Move up by distance (cm)",
-        description="Move up by specified distance. WiFi CLI経由で上昇コマンドを送信。",
-    )
-    up_parser.add_argument(
-        "distance",
-        type=int,
-        help="Distance in cm (20-200)",
-    )
-    _add_common_args(up_parser)
-    up_parser.set_defaults(func=run_up)
-
-    # --- down ---
-    down_parser = subparsers.add_parser(
-        "down",
-        help="Move down by distance (cm)",
-        description="Move down by specified distance. WiFi CLI経由で降下コマンドを送信。",
-    )
-    down_parser.add_argument(
-        "distance",
-        type=int,
-        help="Distance in cm (20-200)",
-    )
-    _add_common_args(down_parser)
-    down_parser.set_defaults(func=run_down)
-
-    # --- cw ---
-    cw_parser = subparsers.add_parser(
-        "cw",
-        help="Rotate clockwise (degrees)",
-        description="Rotate clockwise by specified angle. WiFi CLI経由で時計回り回転を送信。",
-    )
-    cw_parser.add_argument(
-        "angle",
-        type=int,
-        help="Angle in degrees (1-360)",
-    )
-    _add_common_args(cw_parser)
-    cw_parser.set_defaults(func=run_cw)
-
-    # --- ccw ---
-    ccw_parser = subparsers.add_parser(
-        "ccw",
-        help="Rotate counter-clockwise (degrees)",
-        description="Rotate counter-clockwise by specified angle. WiFi CLI経由で反時計回り回転を送信。",
-    )
-    ccw_parser.add_argument(
-        "angle",
-        type=int,
-        help="Angle in degrees (1-360)",
-    )
-    _add_common_args(ccw_parser)
-    ccw_parser.set_defaults(func=run_ccw)
-
-    # --- emergency ---
-    emergency_parser = subparsers.add_parser(
-        "emergency",
-        help="Emergency motor stop",
-        description="Emergency stop: kill all motors immediately. 緊急停止：全モーター即時停止。",
-    )
-    _add_common_args(emergency_parser)
-    emergency_parser.set_defaults(func=run_emergency)
-
-    # --- forward ---
-    forward_parser = subparsers.add_parser(
-        "forward",
-        help="Move forward by distance (cm)",
-        description="Move forward by specified distance. WiFi CLI経由で前進コマンドを送信。",
-    )
-    forward_parser.add_argument(
-        "distance",
-        type=int,
-        help="Distance in cm (20-200)",
-    )
-    _add_common_args(forward_parser)
-    forward_parser.set_defaults(func=run_forward)
-
-    # --- back ---
-    back_parser = subparsers.add_parser(
-        "back",
-        help="Move backward by distance (cm)",
-        description="Move backward by specified distance. WiFi CLI経由で後退コマンドを送信。",
-    )
-    back_parser.add_argument(
-        "distance",
-        type=int,
-        help="Distance in cm (20-200)",
-    )
-    _add_common_args(back_parser)
-    back_parser.set_defaults(func=run_back)
-
-    # --- left ---
-    left_parser = subparsers.add_parser(
-        "left",
-        help="Move left by distance (cm)",
-        description="Move left by specified distance. WiFi CLI経由で左移動コマンドを送信。",
-    )
-    left_parser.add_argument(
-        "distance",
-        type=int,
-        help="Distance in cm (20-200)",
-    )
-    _add_common_args(left_parser)
-    left_parser.set_defaults(func=run_left)
-
-    # --- right ---
-    right_parser = subparsers.add_parser(
-        "right",
-        help="Move right by distance (cm)",
-        description="Move right by specified distance. WiFi CLI経由で右移動コマンドを送信。",
-    )
-    right_parser.add_argument(
-        "distance",
-        type=int,
-        help="Distance in cm (20-200)",
-    )
-    _add_common_args(right_parser)
-    right_parser.set_defaults(func=run_right)
-
-    # --- stop ---
     stop_parser = subparsers.add_parser(
         "stop",
-        help="Stop and hover at current position",
-        description="Cancel current command and hover in place. 現在のコマンドをキャンセルしてその場でホバリング。",
+        help="Hold the current position",
+        description="Hold the current position; a command another terminal is waiting for ends "
+                    "at once. Sent without waiting behind anything. "
+                    "現在位置を保持する。他の端末が待っているコマンドはその場で終わる。"
+                    "何の後ろにも待たずに送る。",
     )
-    _add_common_args(stop_parser)
+    _add_common_args(stop_parser, with_timeout=False)
     stop_parser.set_defaults(func=run_stop)
 
+    emergency_parser = subparsers.add_parser(
+        "emergency",
+        help="Cut the motors",
+        description="Emergency stop: cut all motors at once, in the air as well. Sent without "
+                    "waiting behind anything. 緊急停止: 空中でも全モータを即座に止める。"
+                    "何の後ろにも待たずに送る。",
+    )
+    _add_common_args(emergency_parser, with_timeout=False)
+    emergency_parser.set_defaults(func=run_emergency)
 
-def _add_common_args(parser: argparse.ArgumentParser) -> None:
+
+def _add_common_args(parser: argparse.ArgumentParser, with_timeout: bool = True) -> None:
     """Add common options to a flight command parser.
 
     フライトコマンドパーサーに共通オプションを追加する
@@ -243,417 +162,218 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         default=DEFAULT_HOST,
         help=f"Vehicle IP address (default: {DEFAULT_HOST})",
     )
-    parser.add_argument(
-        "--timeout",
-        type=float,
-        default=120.0,
-        help="Monitor timeout in seconds (default: 120)",
-    )
-    parser.add_argument(
-        "--no-monitor",
-        action="store_true",
-        help="Send command without monitoring (fire & forget)",
-    )
+    if with_timeout:
+        parser.add_argument(
+            "--timeout",
+            type=float,
+            default=None,
+            help="Seconds to wait for the reply (default: derived from the vehicle's own timeouts)",
+        )
 
 
 # =============================================================================
-# Command Runners
+# Sending and reporting / 送信と報告
+# =============================================================================
+
+def _report(result: ApiResult, label: str) -> int:
+    """Print the vehicle's reply and return the exit status.
+
+    機体の応答を表示し、終了コードを返す
+    """
+    if result.kind == KIND_TIMEOUT:
+        console.error(f"{label}: no reply from the vehicle (timeout)")
+        return EXIT_TIMEOUT
+    if not result.succeeded:
+        console.error(f"{label}: {result.text}")
+        return EXIT_ERROR
+    console.success(f"{label}: {result.text}")
+    return EXIT_OK
+
+
+def _send_waiting(
+    args: argparse.Namespace,
+    label: str,
+    command: str,
+    default_timeout_s: float,
+    on_interrupt: Optional[Callable[[VehicleApi], None]],
+) -> int:
+    """Send `command`, wait for the reply, handle Ctrl-C by `on_interrupt`.
+
+    `command` を送り、応答を待ち、Ctrl-C は `on_interrupt` で扱う
+    """
+    api = VehicleApi(args.ip)
+    timeout_s = args.timeout if args.timeout is not None else default_timeout_s
+    console.info(f"{command} (waiting up to {timeout_s:.0f} s for the reply)", prefix=label)
+    try:
+        result = api.send(command, timeout_s)
+    except KeyboardInterrupt:
+        console.print()
+        if on_interrupt is not None:
+            on_interrupt(api)
+        return EXIT_INTERRUPTED
+    except OSError as error:
+        console.error(f"{label}: cannot send to {args.ip}:{api.port} ({error})")
+        return EXIT_ERROR
+    return _report(result, label)
+
+
+def _stop_on_interrupt(api: VehicleApi) -> None:
+    """Ctrl-C policy for takeoff / moves / rotations: send `stop`, report its reply.
+
+    takeoff・移動・回頭での Ctrl-C の方針: `stop` を送り、その応答を表示する
+    """
+    console.warning("Interrupted: sending stop (hold position)", prefix="STOP")
+    try:
+        result = api.stop()
+    except OSError as error:
+        console.error(f"stop could not be sent ({error}). Use sf emergency to cut the motors.")
+        return
+    if result.kind == KIND_TIMEOUT:
+        console.error("stop: no reply from the vehicle (timeout)")
+    elif result.succeeded:
+        console.success(f"stop: {result.text}")
+    else:
+        # Refused while the takeoff is still climbing: the vehicle goes on.
+        # 離陸の上昇中は拒否される: 機体は続けている。
+        console.warning(f"stop: {result.text}")
+    console.print("  The vehicle keeps its state. sf land lands it; sf emergency cuts the motors.")
+
+
+def _land_on_interrupt(api: VehicleApi) -> None:
+    """Ctrl-C policy for land: send nothing.
+
+    land での Ctrl-C の方針: 何も送らない
+    """
+    console.warning("Interrupted: the vehicle keeps landing (nothing was sent). "
+                    "sf emergency cuts the motors.", prefix="LAND")
+
+
+# =============================================================================
+# Command Runners / コマンド実行
 # =============================================================================
 
 def run_takeoff(args: argparse.Namespace) -> int:
-    """Execute takeoff command"""
-    alt = args.altitude
-    if alt < 0.1 or alt > 2.0:
-        console.error("Altitude must be 0.1-2.0 [m]")
-        return 1
-
-    console.info(f"Takeoff to {alt:.2f} m", prefix="TAKEOFF")
-    return _run_flight_command(
-        cli_cmd=f"takeoff {alt}",
-        label="TAKEOFF",
-        target_alt=alt,
-        args=args,
-    )
+    """takeoff: no argument; the altitude is the vehicle's fixed takeoff altitude."""
+    return _send_waiting(args, "TAKEOFF", "takeoff", TAKEOFF_TIMEOUT_S, _stop_on_interrupt)
 
 
 def run_land(args: argparse.Namespace) -> int:
-    """Execute land command"""
-    console.info("Landing", prefix="LAND")
-    return _run_flight_command(
-        cli_cmd="land",
-        label="LAND",
-        target_alt=0.0,
-        args=args,
-    )
+    """land"""
+    return _send_waiting(args, "LAND", "land", LAND_TIMEOUT_S, _land_on_interrupt)
 
 
-def run_hover(args: argparse.Namespace) -> int:
-    """Execute hover command"""
-    alt = args.altitude
-    dur = args.duration
-    if alt < 0.1 or alt > 2.0:
-        console.error("Altitude must be 0.1-2.0 [m]")
-        return 1
-    if dur < 0.1 or dur > 60.0:
-        console.error("Duration must be 0.1-60.0 [s]")
-        return 1
-
-    console.info(f"Hover at {alt:.2f} m for {dur:.1f} s", prefix="HOVER")
-    return _run_flight_command(
-        cli_cmd=f"hover {alt} {dur}",
-        label="HOVER",
-        target_alt=alt,
-        args=args,
-    )
+def _make_move_runner(verb: str):
+    def run(args: argparse.Namespace) -> int:
+        return run_move(args, verb)
+    return run
 
 
-def run_jump(args: argparse.Namespace) -> int:
-    """Execute jump command"""
-    alt = args.altitude
-    if alt < 0.1 or alt > 2.0:
-        console.error("Altitude must be 0.1-2.0 [m]")
-        return 1
-
-    console.info(f"Jump to {alt:.2f} m", prefix="JUMP")
-    return _run_flight_command(
-        cli_cmd=f"jump {alt}",
-        label="JUMP",
-        target_alt=alt,
-        args=args,
-    )
+def _make_rotate_runner(verb: str):
+    def run(args: argparse.Namespace) -> int:
+        return run_rotate(args, verb)
+    return run
 
 
-def run_up(args: argparse.Namespace) -> int:
-    """Execute up command"""
-    cm = args.distance
-    if cm < 20 or cm > 200:
-        console.error("Distance must be 20-200 [cm]")
-        return 1
+def check_move_range(distance_cm: int) -> Optional[str]:
+    """Reason text if the distance is outside what the vehicle accepts, else None.
 
-    console.info(f"Move up {cm} cm", prefix="UP")
-    return _run_flight_command(
-        cli_cmd=f"up {cm}",
-        label="UP",
-        target_alt=0.0,  # Relative move, no fixed target to display
-        args=args,
-    )
+    距離が機体の受け付ける範囲外のときその理由文、そうでなければ None
+    """
+    if distance_cm < MOVE_MIN_CM or distance_cm > MOVE_MAX_CM:
+        return (f"Distance must be {MOVE_MIN_CM}-{MOVE_MAX_CM} cm "
+                f"(the vehicle refuses less and shortens more)")
+    return None
 
 
-def run_down(args: argparse.Namespace) -> int:
-    """Execute down command"""
-    cm = args.distance
-    if cm < 20 or cm > 200:
-        console.error("Distance must be 20-200 [cm]")
-        return 1
+def check_rotate_range(angle_deg: int) -> Optional[str]:
+    """Reason text if the angle is outside what the vehicle accepts, else None.
 
-    console.info(f"Move down {cm} cm", prefix="DOWN")
-    return _run_flight_command(
-        cli_cmd=f"down {cm}",
-        label="DOWN",
-        target_alt=0.0,
-        args=args,
-    )
+    角度が機体の受け付ける範囲外のときその理由文、そうでなければ None
+    """
+    if angle_deg < ROTATE_MIN_DEG or angle_deg > ROTATE_MAX_DEG:
+        return f"Angle must be {ROTATE_MIN_DEG}-{ROTATE_MAX_DEG} deg"
+    return None
 
 
-def run_cw(args: argparse.Namespace) -> int:
-    """Execute clockwise rotation command"""
-    deg = args.angle
-    if deg < 1 or deg > 360:
-        console.error("Angle must be 1-360 [deg]")
-        return 1
+def check_vertical_move(verb: str, distance_cm: int, height_cm: int) -> Optional[str]:
+    """Reason text if a vertical move from `height_cm` leaves the allowed altitude, else None.
 
-    console.info(f"Rotate CW {deg} deg", prefix="CW")
-    return _run_flight_command(
-        cli_cmd=f"cw {deg}",
-        label="CW",
-        target_alt=0.0,
-        args=args,
-    )
-
-
-def run_ccw(args: argparse.Namespace) -> int:
-    """Execute counter-clockwise rotation command"""
-    deg = args.angle
-    if deg < 1 or deg > 360:
-        console.error("Angle must be 1-360 [deg]")
-        return 1
-
-    console.info(f"Rotate CCW {deg} deg", prefix="CCW")
-    return _run_flight_command(
-        cli_cmd=f"ccw {deg}",
-        label="CCW",
-        target_alt=0.0,
-        args=args,
-    )
+    The vehicle clamps such a move to the ceiling / floor and still replies "ok"; the PC
+    refuses it instead so that a shortened move is never reported as done.
+    `height_cm` is the vehicle's estimated height (`height?`); the vehicle composes moves on its
+    guidance target, which differs from the estimate by the tracking error (a few cm).
+    機体はこうした移動を上限・下限へ縮めたうえで "ok" を返す。PC 側では縮んだ移動を「済んだ」と
+    報告しないよう、あらかじめ拒否する。`height_cm` は機体の推定高度（`height?`）。機体は移動を
+    誘導目標に対して合成するので、推定との差（追従誤差、数 cm）がある。
+    """
+    if verb == "up" and height_cm + distance_cm > ALTITUDE_CEILING_CM:
+        return (f"up {distance_cm} from {height_cm} cm would pass the "
+                f"{ALTITUDE_CEILING_CM} cm altitude ceiling")
+    if verb == "down" and height_cm - distance_cm < ALTITUDE_FLOOR_CM:
+        return (f"down {distance_cm} from {height_cm} cm would go below the "
+                f"{ALTITUDE_FLOOR_CM} cm lower limit")
+    return None
 
 
-def run_emergency(args: argparse.Namespace) -> int:
-    """Execute emergency stop command (fire & forget)"""
-    console.warning("EMERGENCY STOP", prefix="EMERGENCY")
-    # Force no-monitor for emergency (instant response)
-    # 緊急停止はモニタリング不要（即時応答）
-    args.no_monitor = True
-    return _run_flight_command(
-        cli_cmd="emergency",
-        label="EMERGENCY",
-        target_alt=0.0,
-        args=args,
-    )
+def _read_height_cm(api: VehicleApi) -> "tuple[Optional[int], Optional[str]]":
+    """Ask `height?`; return (height_cm, None) or (None, reason).
+
+    `height?` で問い合わせ、(高度 cm, None) か (None, 理由) を返す
+    """
+    result = api.send("height?")
+    if result.kind == KIND_TIMEOUT:
+        return None, "no reply to height? (timeout)"
+    if not result.succeeded:
+        return None, f"height?: {result.text}"
+    try:
+        return int(result.text), None
+    except ValueError:
+        return None, f"height? answered {result.text!r}, not a number of cm"
 
 
-def run_forward(args: argparse.Namespace) -> int:
-    """Execute forward command"""
-    cm = args.distance
-    if cm < 20 or cm > 200:
-        console.error("Distance must be 20-200 [cm]")
-        return 1
-
-    console.info(f"Move forward {cm} cm", prefix="FORWARD")
-    return _run_flight_command(
-        cli_cmd=f"forward {cm}",
-        label="FORWARD",
-        target_alt=0.0,
-        args=args,
-    )
-
-
-def run_back(args: argparse.Namespace) -> int:
-    """Execute back command"""
-    cm = args.distance
-    if cm < 20 or cm > 200:
-        console.error("Distance must be 20-200 [cm]")
-        return 1
-
-    console.info(f"Move back {cm} cm", prefix="BACK")
-    return _run_flight_command(
-        cli_cmd=f"back {cm}",
-        label="BACK",
-        target_alt=0.0,
-        args=args,
-    )
+def run_move(args: argparse.Namespace, verb: str) -> int:
+    """up / down / forward / back / left / right"""
+    label = verb.upper()
+    reason = check_move_range(args.distance)
+    if reason is not None:
+        console.error(reason)
+        return EXIT_ERROR
+    if verb in ("up", "down"):
+        height_cm, reason = _read_height_cm(VehicleApi(args.ip))
+        if reason is None:
+            reason = check_vertical_move(verb, args.distance, height_cm)
+        if reason is not None:
+            console.error(f"{label}: {reason}")
+            return EXIT_ERROR
+    return _send_waiting(args, label, f"{verb} {args.distance}",
+                         move_timeout_s(args.distance), _stop_on_interrupt)
 
 
-def run_left(args: argparse.Namespace) -> int:
-    """Execute left command"""
-    cm = args.distance
-    if cm < 20 or cm > 200:
-        console.error("Distance must be 20-200 [cm]")
-        return 1
-
-    console.info(f"Move left {cm} cm", prefix="LEFT")
-    return _run_flight_command(
-        cli_cmd=f"left {cm}",
-        label="LEFT",
-        target_alt=0.0,
-        args=args,
-    )
-
-
-def run_right(args: argparse.Namespace) -> int:
-    """Execute right command"""
-    cm = args.distance
-    if cm < 20 or cm > 200:
-        console.error("Distance must be 20-200 [cm]")
-        return 1
-
-    console.info(f"Move right {cm} cm", prefix="RIGHT")
-    return _run_flight_command(
-        cli_cmd=f"right {cm}",
-        label="RIGHT",
-        target_alt=0.0,
-        args=args,
-    )
+def run_rotate(args: argparse.Namespace, verb: str) -> int:
+    """cw / ccw"""
+    reason = check_rotate_range(args.angle)
+    if reason is not None:
+        console.error(reason)
+        return EXIT_ERROR
+    return _send_waiting(args, verb.upper(), f"{verb} {args.angle}",
+                         ROTATE_TIMEOUT_S, _stop_on_interrupt)
 
 
 def run_stop(args: argparse.Namespace) -> int:
-    """Execute stop (hover in place) command"""
-    console.info("Stop and hover", prefix="STOP")
-    return _run_flight_command(
-        cli_cmd="stop",
-        label="STOP",
-        target_alt=0.0,
-        args=args,
-    )
-
-
-# =============================================================================
-# Common Flight Execution
-# =============================================================================
-
-def _run_flight_command(
-    cli_cmd: str,
-    label: str,
-    target_alt: float,
-    args: argparse.Namespace,
-) -> int:
-    """Common flight command execution flow.
-
-    共通フライトコマンド実行フロー
-    """
+    """stop: sent at once, with no handshake / 即座に送る（手順なし）"""
+    console.info("stop", prefix="STOP")
     try:
-        return asyncio.run(_async_flight(cli_cmd, label, target_alt, args))
-    except KeyboardInterrupt:
-        # Ctrl+C triggers cancel in the async handler
-        # Ctrl+Cは非同期ハンドラ内でキャンセルを発動
-        return 130
+        return _report(VehicleApi(args.ip).stop(), "STOP")
+    except OSError as error:
+        console.error(f"STOP: cannot send to {args.ip} ({error})")
+        return EXIT_ERROR
 
 
-async def _async_flight(
-    cli_cmd: str,
-    label: str,
-    target_alt: float,
-    args: argparse.Namespace,
-) -> int:
-    """Async flight command execution.
-
-    非同期フライトコマンド実行
-    """
-    conn = VehicleConnection()
-    start_time = time.monotonic()
-
+def run_emergency(args: argparse.Namespace) -> int:
+    """emergency: sent at once, with no handshake / 即座に送る（手順なし）"""
+    console.warning("EMERGENCY STOP", prefix="EMERGENCY")
     try:
-        # Connect to vehicle
-        # 機体に接続
-        console.print(f"  Connecting to {args.ip}...")
-        try:
-            await conn.connect(args.ip, timeout=5.0)
-        except OSError:
-            console.error(
-                "Vehicle not reachable. Connect to StampFly WiFi AP first."
-            )
-            return 1
-        except ImportError as e:
-            console.error(str(e))
-            return 1
-
-        console.success("Connected (CLI + WebSocket)")
-
-        # Send flight command
-        # フライトコマンドを送信
-        response = await conn.send_flight_command(cli_cmd)
-        if response:
-            console.print(f"  {response}")
-
-        # Check for error in response
-        # 応答にエラーがないかチェック
-        if "Error" in response or "Failed" in response:
-            console.error("Command rejected by vehicle")
-            await conn.disconnect()
-            return 1
-
-        # Fire & forget mode
-        # ファイア＆フォーゲットモード
-        if args.no_monitor:
-            console.success("Command sent (no-monitor mode)")
-            await conn.disconnect()
-            return 0
-
-        # Monitor flight with real-time display
-        # リアルタイム表示で飛行を監視
-        console.print()
-
-        monitor_state = {
-            "label": label,
-            "target_alt": target_alt,
-            "start_time": start_time,
-            "last_line_len": 0,
-        }
-
-        try:
-            await conn.monitor_flight(
-                callback=lambda telem, status: _display_callback(
-                    telem, status, monitor_state
-                ),
-                poll_interval=0.5,
-                timeout=args.timeout,
-            )
-        except KeyboardInterrupt:
-            # Cancel flight on Ctrl+C
-            # Ctrl+Cでフライトをキャンセル
-            console.print()  # Clear the \r line
-            console.warning("Cancelling flight...")
-            try:
-                cancel_resp = await conn.cancel_flight()
-                if cancel_resp:
-                    console.print(f"  {cancel_resp}")
-            except Exception:
-                pass
-            await conn.disconnect()
-            return 130
-
-        # Final summary
-        # 最終サマリー
-        elapsed = time.monotonic() - start_time
-        console.print()  # Newline after \r updates
-        console.success(
-            f"{label} completed ({elapsed:.1f}s)", prefix="OK"
-        )
-
-        await conn.disconnect()
-        return 0
-
-    except ConnectionError as e:
-        console.print()
-        console.error(f"Connection lost: {e}")
-        return 1
-    except Exception as e:
-        console.print()
-        console.error(f"Flight command failed: {e}")
-        try:
-            await conn.disconnect()
-        except Exception:
-            pass
-        return 1
-
-
-def _display_callback(
-    telemetry: dict,
-    flight_status: dict,
-    state: dict,
-) -> None:
-    """Real-time flight status display callback (overwrites line with \\r).
-
-    リアルタイムフライト状態表示コールバック（\\rで行を上書き）
-    """
-    label = state["label"]
-    target_alt = state["target_alt"]
-    elapsed = time.monotonic() - state["start_time"]
-
-    # Extract values from telemetry
-    # テレメトリから値を取得
-    pos_z = telemetry.get("pos_z", 0.0) if telemetry else 0.0
-    vel_z = telemetry.get("vel_z", 0.0) if telemetry else 0.0
-    tof = telemetry.get("tof_bottom", 0.0) if telemetry else 0.0
-
-    # Flight state from CLI polling
-    # CLIポーリングからのフライト状態
-    cmd_state = flight_status.get("state", "UNKNOWN")
-
-    # Format velocity sign
-    # 速度の符号をフォーマット
-    vel_sign = "+" if vel_z >= 0 else ""
-
-    # Build status line
-    # ステータス行を構築
-    if target_alt > 0:
-        line = (
-            f"  [{label}] {cmd_state} | "
-            f"Alt: {pos_z:.2f}m -> {target_alt:.2f}m | "
-            f"Vel: {vel_sign}{vel_z:.2f} m/s | "
-            f"ToF: {tof:.2f}m | "
-            f"{elapsed:.1f}s"
-        )
-    else:
-        line = (
-            f"  [{label}] {cmd_state} | "
-            f"Alt: {pos_z:.2f}m | "
-            f"Vel: {vel_sign}{vel_z:.2f} m/s | "
-            f"ToF: {tof:.2f}m | "
-            f"{elapsed:.1f}s"
-        )
-
-    # Pad with spaces to clear previous longer line
-    # 前の長い行を消すためにスペースでパディング
-    pad = max(0, state["last_line_len"] - len(line))
-    print(f"\r{line}{' ' * pad}", end="", flush=True)
-    state["last_line_len"] = len(line)
+        return _report(VehicleApi(args.ip).emergency(), "EMERGENCY")
+    except OSError as error:
+        console.error(f"EMERGENCY: cannot send to {args.ip} ({error})")
+        return EXIT_ERROR

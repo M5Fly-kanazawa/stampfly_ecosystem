@@ -198,7 +198,7 @@ Tello 互換の外部 API（UDP:8889 のテキストコマンド）はコンポ�
 旧世代の機体ファームウェア（`sf_hal_*`/`sf_algo_*`/`sf_svc_*` の層分け命名、実飛行 87 回、2026-07-05 に凍結）は
 **2026-09-13 に削除した**（タグ `archive/2026-09-13`）。同時に、SILS の `emu_vehicle_old` と `vehicle_old` 専用の
 シナリオ（`console_cli`・`hover_espnow`・`hover_alt`・`hover_long`）、`sf build/sils` の `vehicle_old` ターゲット、
-`sf params check` の参照、`vehicle_old` 専用だった Python SDK `lib/stampfly/`（TCP 23＋WebSocket 80 前提）も削除した。
+`sf params check` の参照、`vehicle_old` 専用だった Python SDK `lib/stampfly/` も削除した。
 
 ### firmware/controller/
 操縦用コントローラ（送信機）側のファームウェア。人間の意思を信号に変換する HMI。
@@ -256,8 +256,7 @@ protocol/
 ├── spec/
 │   ├── messages.yaml      # ESP-NOW ControlPacket/PairingPacket の正
 │   ├── flight_log.yaml    # 標準フライトログ一式（.sflog.zip）の正: ストリーム名・列名・単位・レート
-│   ├── espnow_tdma.yaml   # 実装からの逆文書化（生成・検査の対象外）
-│   └── websocket.yaml     # 同上
+│   └── espnow_tdma.yaml   # 実装からの逆文書化（生成・検査の対象外）
 └── tools/
     ├── gen_flight_log.py  # flight_log.yaml → lib/sflog/schema.py と docs/reference/flight-log-format.md を生成（--check で鮮度検査）
     └── check_messages.py  # messages.yaml ⇔ firmware/common/protocol/include/espnow_protocol.hpp の整合検査
@@ -267,7 +266,7 @@ protocol/
   `docs/reference/`）。`protocol/generated/` は置かない
 - 「正」を名乗る仕様には整合検査を付ける。`flight_log.yaml` は `gen_flight_log.py --check`、
   `messages.yaml` は `check_messages.py`。いずれも CI（§14）で実行する
-- `espnow_tdma.yaml`・`websocket.yaml` は firmware 実装から書き起こした文書であり、生成・検査の対象ではない
+- `espnow_tdma.yaml` は firmware 実装から書き起こした文書であり、生成・検査の対象ではない
 
 ---
 
@@ -338,6 +337,8 @@ lib/
 ```
 
 （`stampfly_edu/`（大学講義用ヘルパ）は 2026-09-13 に削除。§11）
+
+- 機体への飛行・問い合わせ（`sf takeoff/land/up/down/forward/back/left/right/cw/ccw/stop/emergency`・`sf rc`・`sf battery/height/tof/baro/attitude/acceleration/speed`）は、UDP 8889 の Tello 風テキスト API を話す `lib/sfcli/utils/vehicle_api.py` を通る。TCP 23 の CLI（`lib/sfcli/utils/vehicle_connection.py`）は台上・デバッグ用で、使うのは `sf motor` だけ。機体に WebSocket・HTTP サーバは無い
 
 - `pyproject.toml` の `package-dir = {"" = "lib"}` により `pip install -e .` で導入される
 - sf CLI は開発・書き込み・診断・ログ・シミュレーション・自作プロジェクト・講習の一貫した入口。

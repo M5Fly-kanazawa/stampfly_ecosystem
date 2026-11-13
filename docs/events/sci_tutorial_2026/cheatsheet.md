@@ -33,7 +33,7 @@
 | `sf sysid noise` | 静止センサログから Allan 分散でノイズ特性を推定（`--sensor gyro/accel/baro/tof/all`） |
 | `sf params check` | 物理パラメータ整合検査 |
 | `sf trim analyze` | ホバーログから姿勢トリムを算出 |
-| `sf takeoff/land/hover/jump/up/down/cw/ccw/forward/back/left/right/stop/emergency` | Tello 風ミニフライトコマンド |
+| `sf takeoff/land/up/down/cw/ccw/forward/back/left/right/stop/emergency` | Tello 風ミニフライトコマンド |
 | `sf motor` | ベンチモータテスト（disarm 時のみ） |
 | `sf battery/height/tof/baro/attitude/acceleration/speed` | 機体状態の問い合わせ |
 | `sf rc` | RC 値の一時送信 |
@@ -179,7 +179,7 @@ In `sf --help` display order.
 | `sf sysid noise` | Estimate sensor noise from a static log via Allan variance (`--sensor gyro/accel/baro/tof/all`) |
 | `sf params check` | Physical-parameter consistency audit |
 | `sf trim analyze` | Compute attitude trim from a hover log |
-| `sf takeoff/land/hover/jump/up/down/cw/ccw/forward/back/left/right/stop/emergency` | Tello-style mini flight commands |
+| `sf takeoff/land/up/down/cw/ccw/forward/back/left/right/stop/emergency` | Tello-style mini flight commands |
 | `sf motor` | Bench motor test (disarmed only) |
 | `sf battery/height/tof/baro/attitude/acceleration/speed` | Query vehicle state |
 | `sf rc` | Send RC values one-shot |

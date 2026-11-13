@@ -1,11 +1,15 @@
 """
 sf rc - RC (Remote Control) command
+RC（遠隔操縦）コマンド
 
-Send real-time RC control inputs to StampFly.
-リアルタイムRC制御入力をStampFlyに送信する。
+Send `rc a b c d` lines to the vehicle on UDP port 8889 (lib/sfcli/utils/vehicle_api.py). The
+vehicle never answers `rc`, and ignores it unless it is flying under the API (after `sf takeoff`).
+A stream that stops makes the vehicle hold its position.
+機体の UDP 8889 へ `rc a b c d` を送る（lib/sfcli/utils/vehicle_api.py）。機体は `rc` に応答せず、
+API で飛行中（`sf takeoff` の後）でなければ無視する。送信が止まると機体は位置を保持する。
 
 Modes:
-    sf rc <a> <b> <c> <d>   - One-shot: send single RC command
+    sf rc <a> <b> <c> <d>   - One-shot: send a single rc line
     sf rc                   - Interactive: keyboard control mode
 
 Parameters (Tello SDK compatible):
@@ -13,11 +17,13 @@ Parameters (Tello SDK compatible):
     b: forward/back  (-100~100) → pitch
     c: up/down       (-100~100) → throttle
     d: yaw           (-100~100) → yaw
+
+Exit status / 終了コード: 0 sent, 1 refused or the vehicle did not answer `command`,
+3 no reply to `command` (timeout).
+0 送信した、1 拒否または `command` へのエラー応答、3 `command` への応答なし（タイムアウト）。
 """
 
 import argparse
-import asyncio
-import os
 import sys
 import time
 
@@ -32,7 +38,19 @@ except ImportError:
     _HAS_TERMIOS = False
 
 from ..utils import console
-from ..utils.vehicle_connection import VehicleConnection, DEFAULT_HOST
+from ..utils.vehicle_api import (
+    DEFAULT_HOST,
+    KIND_OK,
+    KIND_TIMEOUT,
+    LAND_TIMEOUT_S,
+    RC_LIMIT,
+    ApiResult,
+    VehicleApi,
+)
+
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_TIMEOUT = 3
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -78,8 +96,8 @@ def run_rc(args: argparse.Namespace) -> int:
             console.error("Expected 4 values: sf rc <a> <b> <c> <d>")
             return 1
         for v in args.values:
-            if v < -100 or v > 100:
-                console.error("Values must be -100~100")
+            if v < -RC_LIMIT or v > RC_LIMIT:
+                console.error(f"Values must be -{RC_LIMIT}~{RC_LIMIT}")
                 return 1
         return _run_oneshot(args)
     else:
@@ -91,46 +109,26 @@ def run_rc(args: argparse.Namespace) -> int:
 # =============================================================================
 
 def _run_oneshot(args: argparse.Namespace) -> int:
-    """Send a single rc command and disconnect."""
+    """Send a single rc line and report what happened.
+
+    rc を 1 行送り、結果を報告する
+    """
     a, b, c, d = args.values
     console.info(f"RC one-shot: a={a} b={b} c={c} d={d}", prefix="RC")
+    api = VehicleApi(args.ip)
     try:
-        return asyncio.run(_async_oneshot(a, b, c, d, args.ip))
-    except KeyboardInterrupt:
-        return 130
-
-
-async def _async_oneshot(a: int, b: int, c: int, d: int, host: str) -> int:
-    """Async one-shot RC command."""
-    conn = VehicleConnection()
-
-    try:
-        console.print(f"  Connecting to {host}...")
-        try:
-            await conn.connect(host, timeout=5.0)
-        except OSError:
-            console.error("Vehicle not reachable. Connect to StampFly WiFi AP first.")
-            return 1
-        except ImportError as e:
-            console.error(str(e))
-            return 1
-
-        console.success("Connected")
-
-        response = await conn.cli.send_command(f"rc {a} {b} {c} {d}")
-        if response:
-            console.print(f"  {response}")
-
-        await conn.disconnect()
-        return 0
-
-    except Exception as e:
-        console.error(f"RC command failed: {e}")
-        try:
-            await conn.disconnect()
-        except Exception:
-            pass
-        return 1
+        result = api.send_without_reply(f"rc {a} {b} {c} {d}")
+    except OSError as error:
+        console.error(f"RC: cannot send to {args.ip}:{api.port} ({error})")
+        return EXIT_ERROR
+    if result.kind == KIND_TIMEOUT:
+        console.error("RC: no reply to command from the vehicle (timeout)")
+        return EXIT_TIMEOUT
+    if result.kind != KIND_OK:
+        console.error(f"RC: {result.text}")
+        return EXIT_ERROR
+    console.success("rc sent (the vehicle does not answer rc; it ignores it unless flying under the API)")
+    return EXIT_OK
 
 
 # =============================================================================
@@ -150,7 +148,7 @@ KEY_HELP = """
   +/-     Speed adjust (10-100)
   L       Land
   X       Emergency stop
-  Ctrl+C  Quit (sends rc 0 0 0 0)
+  Ctrl+C  Quit (sends rc 0 0 0 0; the vehicle then holds its position)
 """
 
 
@@ -173,26 +171,31 @@ def _run_interactive(args: argparse.Namespace) -> int:
     console.print(KEY_HELP)
 
     try:
-        return asyncio.run(_async_interactive(args.ip, args.rate))
+        return _interactive_loop(args.ip, args.rate)
     except KeyboardInterrupt:
         return 0
 
 
-async def _async_interactive(host: str, rate: int) -> int:
-    """Async interactive RC control loop."""
-    conn = VehicleConnection()
+def _interactive_loop(host: str, rate: int) -> int:
+    """Keyboard loop: read keys, send one rc line per period.
 
-    console.print(f"  Connecting to {host}...")
+    キーボードループ: キーを読み、周期ごとに rc を 1 行送る
+    """
+    api = VehicleApi(host)
     try:
-        await conn.connect(host, timeout=5.0)
-    except OSError:
-        console.error("Vehicle not reachable. Connect to StampFly WiFi AP first.")
-        return 1
-    except ImportError as e:
-        console.error(str(e))
-        return 1
+        stream = api.open_rc_stream()
+    except OSError as error:
+        console.error(f"RC: cannot reach {host}:{api.port} ({error})")
+        return EXIT_ERROR
+    if stream.handshake.kind != KIND_OK:
+        stream.close()
+        if stream.handshake.kind == KIND_TIMEOUT:
+            console.error("RC: no reply to command from the vehicle (timeout)")
+            return EXIT_TIMEOUT
+        console.error(f"RC: {stream.handshake.text}")
+        return EXIT_ERROR
 
-    console.success("Connected (CLI + WebSocket)")
+    console.success("Command mode entered")
     console.print("  Press keys to control. Ctrl+C to quit.\n")
 
     # State for RC values
@@ -218,7 +221,8 @@ async def _async_interactive(host: str, rate: int) -> int:
 
     interval = 1.0 / rate
     start_time = time.monotonic()
-    last_telemetry = None
+    land_requested = False
+    emergency_requested = False
 
     try:
         # Set raw mode for character-by-character input
@@ -238,49 +242,24 @@ async def _async_interactive(host: str, rate: int) -> int:
             # キーリリース検出: 最近押されていない軸をゼロにする
             _update_key_release(rc_state, key_timers, loop_start, timeout=0.08)
 
-            # Handle special commands (land / emergency)
-            # 特殊コマンドの処理（着陸 / 緊急停止）
             if rc_state.pop("_land", False):
-                try:
-                    await conn.cli.send_command("land", timeout=2.0)
-                except Exception:
-                    pass
-                rc_state["running"] = False
+                land_requested = True
                 break
             if rc_state.pop("_emergency", False):
-                try:
-                    await conn.cli.send_command("emergency", timeout=2.0)
-                except Exception:
-                    pass
-                rc_state["running"] = False
+                emergency_requested = True
                 break
 
-            # Send RC command via CLI
-            # CLI経由でRCコマンドを送信
-            a, b, c, d = rc_state["a"], rc_state["b"], rc_state["c"], rc_state["d"]
-            try:
-                await conn.cli.send_command(f"rc {a} {b} {c} {d}", timeout=1.0)
-            except Exception:
-                pass
+            # Send one rc line (fire-and-forget)
+            # rc を 1 行送る（撃ちっぱなし）
+            stream.send(rc_state["a"], rc_state["b"], rc_state["c"], rc_state["d"])
 
-            # Receive telemetry (non-blocking)
-            # テレメトリ受信（ノンブロッキング）
-            try:
-                telem = await conn.telemetry.receive(timeout=0.05)
-                if telem:
-                    last_telemetry = telem
-            except Exception:
-                pass
-
-            # Display status line
-            # ステータス行を表示
-            _display_status(rc_state, last_telemetry, start_time)
+            _display_status(rc_state, start_time)
 
             # Rate limiting
             # レート制限
             elapsed = time.monotonic() - loop_start
             if elapsed < interval:
-                await asyncio.sleep(interval - elapsed)
+                time.sleep(interval - elapsed)
 
     except KeyboardInterrupt:
         pass
@@ -289,19 +268,34 @@ async def _async_interactive(host: str, rate: int) -> int:
         # ターミナル設定を復元
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-        # Send neutral RC to stop
-        # ニュートラルRCを送信して停止
+        # Send neutral rc to stop the stream's motion
+        # ニュートラルの rc を送り、ストリームの動きを止める
         console.print("\n")
         console.info("Sending rc 0 0 0 0...", prefix="RC")
-        try:
-            await conn.cli.send_command("rc 0 0 0 0", timeout=2.0)
-        except Exception:
-            pass
+        stream.send(0, 0, 0, 0)
+        stream.close()
 
-        await conn.disconnect()
-        console.success("Disconnected")
+    if emergency_requested:
+        return _finish_with(api.emergency(), "EMERGENCY")
+    if land_requested:
+        console.info("land (waiting for the vehicle to reach the ground)", prefix="LAND")
+        return _finish_with(api.send("land", LAND_TIMEOUT_S), "LAND")
+    return EXIT_OK
 
-    return 0
+
+def _finish_with(result: ApiResult, label: str) -> int:
+    """Print the vehicle's reply to the closing land / emergency; return the exit status.
+
+    締めの land / emergency への機体の応答を表示し、終了コードを返す
+    """
+    if result.kind == KIND_TIMEOUT:
+        console.error(f"{label}: no reply from the vehicle (timeout)")
+        return EXIT_TIMEOUT
+    if not result.succeeded:
+        console.error(f"{label}: {result.text}")
+        return EXIT_ERROR
+    console.success(f"{label}: {result.text}")
+    return EXIT_OK
 
 
 def _handle_key(ch: str, state: dict, timers: dict, now: float) -> None:
@@ -385,7 +379,7 @@ def _update_key_release(state: dict, timers: dict, now: float, timeout: float) -
         state["d"] = 0
 
 
-def _display_status(state: dict, telemetry: dict, start_time: float) -> None:
+def _display_status(state: dict, start_time: float) -> None:
     """Display real-time status line (overwrites with \\r).
 
     リアルタイムステータス行を表示（\\rで上書き）
@@ -394,18 +388,7 @@ def _display_status(state: dict, telemetry: dict, start_time: float) -> None:
     spd = state["speed"]
     elapsed = time.monotonic() - start_time
 
-    # Telemetry values
-    # テレメトリ値
-    alt = 0.0
-    tof = 0.0
-    if telemetry:
-        alt = telemetry.get("pos_z", 0.0)
-        tof = telemetry.get("tof_bottom", 0.0)
-
-    line = (
-        f"  [RC] R={a:+4d} P={b:+4d} T={c:+4d} Y={d:+4d} "
-        f"spd={spd:3d} | Alt: {alt:.2f}m | ToF: {tof:.2f}m | {elapsed:.1f}s"
-    )
+    line = f"  [RC] R={a:+4d} P={b:+4d} T={c:+4d} Y={d:+4d} spd={spd:3d} | {elapsed:.1f}s"
 
     # Pad to clear previous line
     # 前の行を消すためにパディング

@@ -2,8 +2,6 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-**最終更新: 2026-09-13**（現行 `firmware/vehicle` の実装に合わせて全面書き換え。旧版は TCP 23 + WebSocket を前提にした 2026-02-14 時点の設計検討記録で、現行実装と通信方式のレベルで食い違っていたため置き換えた。旧版の原文は `git show archive/2026-09-13:docs/architecture/tello-api-reference.md` で参照できる）。
-
 ## 1. 概要と接続
 
 ### このドキュメントについて
@@ -156,7 +154,9 @@ mid:-2;x:0;y:0;z:0;mpry:0,0,0;pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy:%d;vgz:%d;templ
 
 ## 4. Python から使う
 
-`tools/stampfly_py/` に2つの入口がある。
+PC のコマンドラインからは `sf takeoff`・`sf land`・`sf up`・`sf rc`・`sf battery` などが、このポート（UDP 8889）へ `command` に続けてテキストを 1 つ送る（`lib/sfcli/utils/vehicle_api.py`、対応表は `docs/commands/flight-commands.md`）。
+
+Python プログラムからは `tools/stampfly_py/` に2つの入口がある。
 
 - **`djitellopy`（推奨）**: `pip install djitellopy` するだけで、無改変の `Tello()` が SoftAP既定IP（192.168.10.1）にそのまま繋がる。`tools/stampfly_py/example_djitellopy.py`・`example_djitellopy2.py` が使用例
 - **`stampfly.py`**: 依存ゼロの軽量クライアント（`djitellopy`を入れたくない場合）。`example_square.py` が使用例
@@ -171,11 +171,7 @@ mid:-2;x:0;y:0;z:0;mpry:0,0,0;pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy:%d;vgz:%d;templ
 
 **注意:** `sf log wifi`（400Hz/50Hzの DataStream キャプチャ）と Tello 状態ストリームは、どちらも PC 側で UDP:8890 を使うため**同時実行不可**。
 
-## 5. 経緯
-
-2026-02-14 に「TCP CLI + WebSocket をそのまま活用し、API 名レベルの互換を優先する」という設計検討（当時の `firmware/vehicle`＝現在の `vehicle_old` 世代の CLI/WebSocket を前提）が作成された。その後 2026-06-11 のコミット `caca9cc5`（"Tello-style programmatic flight — guidance + ApiTask + Python SDK"）で、UDP 8889/8890 を使う Tello 実機準拠のプロトコルとして実装された。TCP+WebSocket 前提から UDP ネイティブ実装へと転換した理由を記した設計判断の記録は見当たらなかった（**未確認**）。
-
-## 6. 非対応・未実装
+## 5. 非対応・未実装
 
 - カメラ映像（`streamon`/`streamoff` は `ok` を返すが実際の映像配信はしない）
 - `curve`（円弧移動、および座標移動系のミッションパッド指定 `mid` 引数）
@@ -189,8 +185,6 @@ mid:-2;x:0;y:0;z:0;mpry:0,0,0;pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy:%d;vgz:%d;templ
 <a id="english"></a>
 
 # StampFly Tello-Compatible API Reference
-
-**Last updated: 2026-09-13** (fully rewritten to match the current `firmware/vehicle` implementation. The previous version was a 2026-02-14 design-study record that assumed TCP 23 + WebSocket, which no longer matches the current implementation even at the level of communication method; the original text can be retrieved via `git show archive/2026-09-13:docs/architecture/tello-api-reference.md`).
 
 ## 1. Overview and Connection
 
@@ -345,7 +339,9 @@ Whether the sign conventions and frame for attitude/velocity match what `djitell
 
 ## 4. Using It From Python
 
-`tools/stampfly_py/` provides two entry points.
+From the PC command line, `sf takeoff`, `sf land`, `sf up`, `sf rc`, `sf battery` and the others send `command` followed by one text line to this port (UDP 8889; `lib/sfcli/utils/vehicle_api.py`, mapping table in `docs/commands/flight-commands.md`).
+
+From a Python program, `tools/stampfly_py/` provides two entry points.
 
 - **`djitellopy` (recommended)**: just `pip install djitellopy`; the unmodified `Tello()` connects directly to the SoftAP's default IP (192.168.10.1). `tools/stampfly_py/example_djitellopy.py` and `example_djitellopy2.py` are working examples.
 - **`stampfly.py`**: a dependency-free lightweight client (if you'd rather not install `djitellopy`). `example_square.py` is a usage example.
@@ -360,11 +356,7 @@ Whether the sign conventions and frame for attitude/velocity match what `djitell
 
 **Note:** `sf log wifi` (the 400Hz/50Hz DataStream capture) and the Tello state stream both use UDP:8890 on the PC side, so **they cannot run at the same time**.
 
-## 5. History
-
-On 2026-02-14, a design study was written that proposed leveraging the existing TCP CLI + WebSocket infrastructure and prioritizing API-name-level compatibility (assuming the CLI/WebSocket of the `firmware/vehicle` of that era — the codebase now called `vehicle_old`). It was then implemented on 2026-06-11 in commit `caca9cc5` ("Tello-style programmatic flight — guidance + ApiTask + Python SDK") as a real Tello-hardware-compatible protocol over UDP 8889/8890. No record explaining the reasoning for the switch from TCP+WebSocket to a native UDP implementation was found (**unconfirmed**).
-
-## 6. Not Supported / Not Implemented
+## 5. Not Supported / Not Implemented
 
 - Camera video (`streamon`/`streamoff` reply `ok` but no video is actually streamed)
 - `curve` (arc movement, and the pad-relative `mid` argument on movement commands)

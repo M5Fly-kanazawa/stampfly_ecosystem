@@ -32,7 +32,7 @@ JSON レコードを並べたテキスト形式）は、一式から必要なと
 
 ## 3. sf log wifi
 
-WiFi 経由（UDP、WebSocket ではない）でフルレートのテレメトリを取得し、一式として保存します。
+WiFi 経由（UDP）でフルレートのテレメトリを取得し、一式として保存します。
 StampFly の電源を入れて WiFi AP に接続するだけでよく、USB での事前設定は不要です。
 
 ```bash
@@ -390,7 +390,7 @@ newest bundle in `logs/` when none is given. A bundle name's extension may be om
 
 ## 3. sf log wifi
 
-Captures full-rate telemetry over WiFi (UDP, not WebSocket) and saves it as a bundle. Just power
+Captures full-rate telemetry over WiFi (UDP) and saves it as a bundle. Just power
 on StampFly and connect to its WiFi AP — no USB setup step is needed beforehand.
 
 ```bash

@@ -52,13 +52,13 @@ Connect your PC to the StampFly WiFi access point (SSID: `StampFly_XXXX`).
 ### 3. Use sf CLI for flight / sf CLIでフライト
 ```bash
 # Takeoff to 0.5m / 0.5mまで離陸
-sf flight takeoff
+sf takeoff
 
-# Hover for 5 seconds / 5秒間ホバリング
-sf flight hover --duration 5
+# Move forward 50 cm / 50cm前進
+sf forward 50
 
 # Land / 着陸
-sf flight land
+sf land
 ```
 
 ### 4. Python SDK in Jupyter / JupyterでPython SDKを使う
@@ -127,9 +127,9 @@ Lesson 8. The focus is on the Python side, not the C++ side.
 ## Useful Commands / 便利なコマンド
 | Command | Description |
 |---------|-------------|
-| `sf flight takeoff` | Takeoff to default altitude |
-| `sf flight land` | Land and disarm |
-| `sf flight hover --duration N` | Hover for N seconds |
+| `sf takeoff` | Takeoff to the fixed 0.5 m altitude |
+| `sf land` | Land |
+| `sf forward <cm>` | Move forward by <cm> (10-300) |
 | `sf log wifi` | Stream real-time telemetry |
 | `sf monitor` | Serial debug output |
 

@@ -44,10 +44,8 @@ sf <command> [subcommand] [options]
 | `sf sysid` | フライトログからのシステム同定 | [sf-sysid.md](sf-sysid.md) |
 | `sf params` | 物理パラメータ整合検査（C_T・C_Q・κ・慣性 等） | `sf params --help` |
 | `sf trim` | ホバリングログから平衡姿勢トリムを同定 | `sf trim --help` |
-| `sf takeoff` | 指定高度まで離陸 | [flight-commands.md](flight-commands.md) |
+| `sf takeoff` | 自動離陸（高度は機体固定の 0.5 m） | [flight-commands.md](flight-commands.md) |
 | `sf land` | 着陸 | [flight-commands.md](flight-commands.md) |
-| `sf hover` | 指定高度で指定時間ホバリング | [flight-commands.md](flight-commands.md) |
-| `sf jump` | クイックジャンプ（上昇後下降） | [flight-commands.md](flight-commands.md) |
 | `sf up` | 指定距離 (cm) だけ上昇 | [flight-commands.md](flight-commands.md) |
 | `sf down` | 指定距離 (cm) だけ下降 | [flight-commands.md](flight-commands.md) |
 | `sf cw` | 時計回りに回転（度） | [flight-commands.md](flight-commands.md) |
@@ -57,16 +55,16 @@ sf <command> [subcommand] [options]
 | `sf back` | 後方へ指定距離 (cm) 移動 | [flight-commands.md](flight-commands.md) |
 | `sf left` | 左へ指定距離 (cm) 移動 | [flight-commands.md](flight-commands.md) |
 | `sf right` | 右へ指定距離 (cm) 移動 | [flight-commands.md](flight-commands.md) |
-| `sf stop` | 停止して現在位置でホバリング | [flight-commands.md](flight-commands.md) |
+| `sf stop` | 現在位置を保持 | [flight-commands.md](flight-commands.md) |
 | `sf motor` | ベンチモータ試験／CW-CCW 電流スイープ（DISARM 時のみ） | `sf motor --help` |
 | `sf battery` | バッテリー残量 (%) を取得 | [query-commands.md](query-commands.md) |
-| `sf height` | ESKF 推定高度 (cm) を取得 | [query-commands.md](query-commands.md) |
+| `sf height` | 推定高度 (cm) を取得 | [query-commands.md](query-commands.md) |
 | `sf tof` | ToF 底面距離 (cm) を取得 | [query-commands.md](query-commands.md) |
-| `sf baro` | 気圧高度 (cm) を取得 | [query-commands.md](query-commands.md) |
+| `sf baro` | 気圧高度 (m) を取得 | [query-commands.md](query-commands.md) |
 | `sf attitude` | 姿勢角 (deg) を取得 | [query-commands.md](query-commands.md) |
-| `sf acceleration` | 加速度 (cm/s²) を取得 | [query-commands.md](query-commands.md) |
+| `sf acceleration` | 加速度 (0.001 g) を取得 | [query-commands.md](query-commands.md) |
 | `sf speed` | 設定速度 (cm/s) を取得 | [query-commands.md](query-commands.md) |
-| `sf rc` | RC 操作（単発またはキーボード対話） | [sf-rc.md](sf-rc.md) |
+| `sf rc` | RC 操作（単発またはキーボード対話。UDP 8889） | [sf-rc.md](sf-rc.md) |
 | `sf lesson` | 実習管理 | [sf-lesson.md](sf-lesson.md) |
 | `sf competition` | ワークショップ競技会用ツール | [sf-competition.md](sf-competition.md) |
 | `sf app` | 自分のドローンファームプロジェクトを管理 | [sf-app.md](sf-app.md) |
@@ -185,10 +183,8 @@ command with no dedicated page, run `sf <command> --help` for details.
 | `sf sysid` | System identification from flight logs | [sf-sysid.md](sf-sysid.md) |
 | `sf params` | Physical parameter consistency audit (C_T, C_Q, kappa, inertia, ...) | `sf params --help` |
 | `sf trim` | Identify equilibrium attitude trim from hover logs | `sf trim --help` |
-| `sf takeoff` | Take off to specified altitude | [flight-commands.md](flight-commands.md) |
-| `sf land` | Land the vehicle | [flight-commands.md](flight-commands.md) |
-| `sf hover` | Hover at altitude for duration | [flight-commands.md](flight-commands.md) |
-| `sf jump` | Quick jump: climb then descend | [flight-commands.md](flight-commands.md) |
+| `sf takeoff` | Auto-takeoff (fixed 0.5 m altitude) | [flight-commands.md](flight-commands.md) |
+| `sf land` | Land | [flight-commands.md](flight-commands.md) |
 | `sf up` | Move up by distance (cm) | [flight-commands.md](flight-commands.md) |
 | `sf down` | Move down by distance (cm) | [flight-commands.md](flight-commands.md) |
 | `sf cw` | Rotate clockwise (degrees) | [flight-commands.md](flight-commands.md) |
@@ -198,14 +194,14 @@ command with no dedicated page, run `sf <command> --help` for details.
 | `sf back` | Move backward by distance (cm) | [flight-commands.md](flight-commands.md) |
 | `sf left` | Move left by distance (cm) | [flight-commands.md](flight-commands.md) |
 | `sf right` | Move right by distance (cm) | [flight-commands.md](flight-commands.md) |
-| `sf stop` | Stop and hover at current position | [flight-commands.md](flight-commands.md) |
+| `sf stop` | Hold the current position | [flight-commands.md](flight-commands.md) |
 | `sf motor` | Bench motor test / CW-CCW current sweep (disarmed only) | `sf motor --help` |
 | `sf battery` | Query battery level (%) | [query-commands.md](query-commands.md) |
-| `sf height` | Query ESKF estimated height (cm) | [query-commands.md](query-commands.md) |
+| `sf height` | Query estimated height (cm) | [query-commands.md](query-commands.md) |
 | `sf tof` | Query ToF bottom distance (cm) | [query-commands.md](query-commands.md) |
-| `sf baro` | Query barometric altitude (cm) | [query-commands.md](query-commands.md) |
+| `sf baro` | Query barometric altitude (m) | [query-commands.md](query-commands.md) |
 | `sf attitude` | Query attitude angles (deg) | [query-commands.md](query-commands.md) |
-| `sf acceleration` | Query acceleration (cm/s2) | [query-commands.md](query-commands.md) |
+| `sf acceleration` | Query acceleration (0.001 g) | [query-commands.md](query-commands.md) |
 | `sf speed` | Query configured speed (cm/s) | [query-commands.md](query-commands.md) |
 | `sf rc` | RC control (one-shot or interactive keyboard) | [sf-rc.md](sf-rc.md) |
 | `sf lesson` | Lesson management | [sf-lesson.md](sf-lesson.md) |

@@ -44,12 +44,12 @@
 | # | 対象 | 事実 | 処置 | 判断 |
 |---|------|------|------|------|
 | S1 | `firmware/vehicle/docs/coding_and_education.md` §4 の Ch.1〜10 表、`development_roadmap.md` §6.1「Level 2（09-13）」 | 原典 §16 の地図に置き換わった。11・12 番は雛形に転用済み | 表を削除して §16 を参照。Level 2 の範囲を「09・10」に | 済 |
-| S2 | `docs/architecture/tello-api-reference.md` | 照合結果（2026-09-13）: 通信方式のレベル（TCP 23＋WebSocket 前提）で現行（UDP ネイティブ、SoftAP `192.168.10.1`、8889/8890/5005）と食い違う。`firmware/vehicle/docs/operation_manual.md` が現行と一致 | 現行実装（`tasks/api_task.cpp`・`sf_telemetry/tello_state`）を正として全面更新。2 月→6 月の方針反転の経緯を 1 段落記す | 中 |
+| S2 | `docs/architecture/tello-api-reference.md` | 照合結果（2026-09-13）: 通信方式のレベル（TCP 23＋WebSocket 前提）で現行（UDP ネイティブ、SoftAP `192.168.10.1`、8889/8890/5005）と食い違う。`firmware/vehicle/docs/operation_manual.md` が現行と一致 | 現行実装（`tasks/api_task.cpp`・`sf_telemetry/tello_state`）を基準として全面更新 | 中 |
 | S3 | `firmware/vehicle/docs/` の必読 6 文書以外 21 件（実装ログ・調査メモ・運用手引・トピック一覧 等） | 記録と生きた資料が混在 | 「生きた資料」「無害な記録」「害悪（削除）」に仕分け中。害悪は削除（タグ `archive/2026-09-13`） | 調査 |
 | S4 | `docs/commands/README.md` の一覧（12/44、英語表に `sf app` 無し）、`sf-flight.md`・`sf-query.md`（実コマンド名と不一致）、`sf blocks`・`sf sils`・`sf trim`・`sf params` の専用ページ無し | 索引の欠落 | 索引を 44 コマンドで再構築（日英）。2 ページを `flight-commands.md`・`query-commands.md` に改名。専用ページ無しは `--help` を案内 | 済 |
 | S5 | `landing/index.html` の「制御を自作できる」訴求 | 入口へのリンク無し | 入口の設計が決まったら導線を付ける | 入口の設計に従属 |
 | S6 | `.mkdocs/mkdocs.yml` の目次「計画 > 現行」 | 2 本のみ | 生きている計画 10 本を掲載 | 済 |
-| S7 | `docs/assets/presentation.md`・`firmware/workshop/lessons/lesson_12_python_sdk/README.md` に `sf flight takeoff` 等の記述 | `takeoff`/`land`/`hover` はトップレベルの sf コマンドで、`sf flight` というグループは無い（S4 の作業で判明） | 実コマンド名に直す（Lesson 12 は Workshop の L0 更新時） | 要 |
+| S7 | `docs/assets/presentation.md`・`firmware/workshop/lessons/lesson_12_python_sdk/README.md` に `sf flight takeoff` 等の記述 | `takeoff`/`land` はトップレベルの sf コマンドで、`sf flight` というグループは無い。`hover`/`jump` は API に対応する文字列が無く削除した（`docs/commands/flight-commands.md`） | 実コマンド名に直す（Lesson 12 は Workshop の L0 更新時） | 要 |
 | S8 | スライド `docs/events/sci_tutorial_2026/slides/chapters/sci_s5_sim_analysis.tex`（`lib/stampfly` のパス誤記 1 か所）、`docs/events/stampfly_workshop/slides/chapters/python_sdk.tex`（章全体が TCP 23／WebSocket の旧 SDK 前提） | `lib/stampfly` は 2026-09-13 に削除。`.tex` の変更は PDF リビルドと目視レビューが必須（`CLAUDE.md` Slide Rules）のため今回は未修正 | スライドレビューの工程として別途実施。`python_sdk.tex` は `tools/stampfly_py`（UDP 8889/8890）前提に書き直す | 要 |
 
 ## 4. 記録の扱い（アーカイブ禁止規則との整合）

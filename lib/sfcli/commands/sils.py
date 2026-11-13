@@ -1834,14 +1834,14 @@ def run_scenario_with_exe(exe: Path, scenario: Path, args: argparse.Namespace) -
 # translates raw-mode keystrokes into that protocol at ~50Hz, and renders the
 # emulator's own 'STATE ...' HUD line as a live one-line status readout —
 # mirroring `sf rc`'s interactive keyboard mode (lib/sfcli/commands/rc.py) as
-# closely as the different transport (stdin pipe vs. WebSocket/CLI) allows.
+# closely as the different transport (stdin pipe vs. UDP) allows.
 #
 # emu_vehicle を SILS_EMU_REALTIME=1（決定論スケジューラを壁時計にペーシング —
 # emu_realtime.cpp）＋SILS_EMU_RC_STDIN=1（ライブ 'rc ...'/'arm'/'land'/'quit'
 # 行を受理 — rc_stdin.cpp）付きで起動し、rawモードのキー入力を~50Hzで
 # そのプロトコルへ変換、エミュレータ自身の 'STATE ...' HUD行を1行ステータス
 # として描画する — `sf rc` の対話キーボードモード（rc.py）に、輸送経路の違い
-# （stdin pipe 対 WebSocket/CLI）が許す限り揃える。
+# （stdin pipe 対 UDP）が許す限り揃える。
 # =============================================================================
 
 _FLY_KEY_HELP = """

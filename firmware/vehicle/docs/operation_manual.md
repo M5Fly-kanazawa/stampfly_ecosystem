@@ -375,11 +375,11 @@ sf telemetry --csv f.csv  # CSV 記録（ターミナル/--web どちらでも�
 `unpair` → `button_event` → StateTask）。これにより**将来 WiFi/UDP から同じトピックへ注入すれば
 WiFi 経由の制御を追加できる**（§7）。
 
-**既知の問題:** `sf flight land` と `sf rc`（着陸の操作）は、vehicle の CLI に無い `land` を送るため `unknown command (try 'help')` になる（API の `land`、またはコントローラの操作を使う。未対応で、移植が要る）。手動モード（ACRO / STABILIZE）の ARMED_GROUND は、スロットルが 0.5 未満でも浮いて上がれるので、この状態にいることは床の上にいることを保証しない（直していない。API の `land` は手動モードの ARMED_GROUND では拒否する）。
+**既知の問題:** 手動モード（ACRO / STABILIZE）の ARMED_GROUND は、スロットルが 0.5 未満でも浮いて上がれるので、この状態にいることは床の上にいることを保証しない（直していない。API の `land` は手動モードの ARMED_GROUND では拒否する）。
 
 ### 旧 vehicle のコマンド（参考・将来移植候補）
 
-旧 vehicle には約50コマンドがある（移植は対応する内部機能が要るため順次）。主なもの:
+旧 vehicle には約50コマンドがある（移植は対応する内部機能が要るため順次）。この CLI（TCP 23）に飛行・移動・クエリのコマンドは無く、同等の操作は UDP 8889 の API（PC からは `sf takeoff`・`sf land`・`sf battery` など。`docs/commands/flight-commands.md`）で行う。主なもの:
 
 | カテゴリ | コマンド例 | 説明 |
 |---------|-----------|------|
@@ -685,11 +685,13 @@ Every command publishes a FACT on a topic and the owning task applies it (e.g. `
 future WiFi/UDP receiver can inject the same topics to add **WiFi control without changing the command
 implementations** (§7).
 
-**Known problem:** `sf flight land` and `sf rc` (the landing operation) send a `land` that the vehicle's CLI does not have, so they answer `unknown command (try 'help')` (use the API `land` or the controller instead; not yet supported, it needs porting). In a manual mode (ACRO / STABILIZE) the craft in ARMED_GROUND can lift off even with the throttle below 0.5, so being in that state does not guarantee being on the floor (not fixed; the API `land` is refused in ARMED_GROUND in a manual mode).
+**Known problem:** In a manual mode (ACRO / STABILIZE) the craft in ARMED_GROUND can lift off even with the throttle below 0.5, so being in that state does not guarantee being on the floor (not fixed; the API `land` is refused in ARMED_GROUND in a manual mode).
 
 The legacy vehicle has ~50 commands (flight: `takeoff`/`hover`/`jump`; Tello-style moves and queries:
 `battery?`/`height?`; `trim`/`gain`/`magcal`/`comm`/`wifi`). These are for autonomous flight / WiFi /
-Tello compatibility and are ported to vehicle on demand.
+Tello compatibility and are ported to vehicle on demand. This CLI (TCP 23) has no flight, move or query
+commands; the equivalent operations go through the UDP 8889 API (from the PC: `sf takeoff`, `sf land`,
+`sf battery` and the like; `docs/commands/flight-commands.md`).
 
 ## 7. Future WiFi Control (Direction)
 

@@ -76,7 +76,7 @@ docstring（"Controller-Vehicle間の主系統ESP-NOW+TDMAリンク" のみを�
 
 WHAT IS NOT COMPARED, AND WHY / 比較しない項目とその理由
 --------------------------------------------------------
-  * TelemetryPacket, TelemetryWSPacket, TDMABeacon: not implemented in
+  * TelemetryPacket, TDMABeacon: not implemented in
     `espnow_protocol.hpp` at all (confirmed: no struct, no matching
     constants). Per the header's own docstring this is out of scope for
     this file -- TelemetryPacket has independent, non-shared definitions
@@ -84,7 +84,7 @@ WHAT IS NOT COMPARED, AND WHY / 比較しない項目とその理由
     firmware/common/protocol/include/udp_protocol.hpp, and TDMABeacon has
     no C++ byte-layout definition anywhere in the tree. These messages are
     reported as "skipped" (not a mismatch) rather than silently ignored.
-  * TelemetryPacket・TelemetryWSPacket・TDMABeacon: `espnow_protocol.hpp`
+  * TelemetryPacket・TDMABeacon: `espnow_protocol.hpp`
     に一切実装が無い（struct も対応する定数も無いことを確認済み）。ヘッダ
     自身の docstring からもこのファイルの対象外である --
     TelemetryPacket は firmware/vehicle/.../telemetry.hpp や
@@ -624,7 +624,7 @@ def run_check() -> tuple[list[Mismatch], list[str], list[str]]:
         raise CheckError(f"{YAML_PATH}: 'PairingPacket' message not found under messages:")
 
     # ---- Messages with no C++ representation in this header: skip, don't fail ----
-    for name in ("TelemetryPacket", "TelemetryWSPacket", "TDMABeacon"):
+    for name in ("TelemetryPacket", "TDMABeacon"):
         if name in messages:
             skipped.append(name)
 

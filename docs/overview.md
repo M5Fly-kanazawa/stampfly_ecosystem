@@ -27,7 +27,7 @@ WiFi経由でPCから離陸・着陸・移動・回転などをプログラム�
 │  │  (AtomS3)    │  ESP-NOW/UDP │  (StampFly)  │              │
 │  └──────────────┘              └──────────────┘              │
 │        │                              │                        │
-│        │ USB HID                      │ WebSocket              │
+│        │ USB HID                      │ UDP                    │
 │        ↓                              ↓                        │
 │  ┌──────────────┐              ┌──────────────┐              │
 │  │  Simulator   │              │     GCS      │              │
@@ -158,7 +158,7 @@ with 87 real flights, but was not a target for new development).
 │  │  (AtomS3)    │   ESP-NOW/UDP   │  (StampFly)  │             │
 │  └──────────────┘                 └──────────────┘             │
 │        │                                 │                      │
-│        │ USB HID                         │ WebSocket            │
+│        │ USB HID                         │ UDP                  │
 │        ↓                                 ↓                      │
 │  ┌──────────────┐                 ┌──────────────┐             │
 │  │  Simulator   │                 │     GCS      │             │

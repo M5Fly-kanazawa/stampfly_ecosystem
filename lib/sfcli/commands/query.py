@@ -1,25 +1,36 @@
 """
 sf battery / height / tof / baro / attitude / acceleration / speed
 Telemetry query commands
+状態の問い合わせコマンド
 
-Send Tello-compatible query commands to StampFly via WiFi CLI and display results.
-WiFi CLI経由でTello互換クエリコマンドを送信し、結果を表示します。
+Each command sends one Tello-style query (`battery?` ...) to the vehicle on UDP port 8889 and
+prints the vehicle's answer (lib/sfcli/utils/vehicle_api.py). The units are those of the
+vehicle's replies (firmware/vehicle/tasks/api_task.cpp, cmdQuery).
+各コマンドは Tello 風の問い合わせ（`battery?` など）を機体の UDP 8889 へ 1 つ送り、機体の答えを
+表示する（lib/sfcli/utils/vehicle_api.py）。単位は機体の応答のもの（api_task.cpp の cmdQuery）。
 
 Commands:
-    battery       - Query battery level (%)
-    height        - Query ESKF estimated height (cm)
-    tof           - Query ToF bottom distance (cm)
-    baro          - Query barometric altitude (cm)
-    attitude      - Query attitude angles (pitch, roll, yaw in deg)
-    acceleration  - Query acceleration (x, y, z in cm/s²)
-    speed         - Query configured speed (cm/s)
+    battery       - Battery level (%)               reply: "87"
+    height        - Estimated height (cm)           reply: "50"
+    tof           - Downward ToF distance (cm)      reply: "10"
+    baro          - Barometric altitude (m)         reply: "170.07"
+    attitude      - Pitch, roll, yaw (deg)          reply: "pitch:0;roll:0;yaw:0;"
+    acceleration  - IMU acceleration (0.001 g)      reply: "agx:-13.00;agy:-5.00;agz:-998.00;"
+    speed         - Cruise speed setting (cm/s)     reply: "30"
+
+Exit status / 終了コード: 0 answered, 1 the vehicle replied "error ...", 3 no reply (timeout).
+0 応答あり、1 機体が "error ..." を返した、3 応答なし（タイムアウト）。
 """
 
 import argparse
-import asyncio
+import re
 
 from ..utils import console
-from ..utils.vehicle_connection import VehicleCLI, DEFAULT_HOST
+from ..utils.vehicle_api import DEFAULT_HOST, KIND_TIMEOUT, VehicleApi
+
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_TIMEOUT = 3
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -27,22 +38,23 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
     クエリコマンドをCLIに登録する
     """
-    # Define query commands: (name, help, cli_cmd, format_func)
+    # (name, help, API query, formatter of the reply)
+    # （名前、ヘルプ、API の問い合わせ、応答の整形関数）
     queries = [
         ("battery", "Query battery level (%%)", "battery?", _fmt_battery),
-        ("height", "Query ESKF estimated height (cm)", "height?", _fmt_height),
-        ("tof", "Query ToF bottom distance (cm)", "tof?", _fmt_tof),
-        ("baro", "Query barometric altitude (cm)", "baro?", _fmt_baro),
+        ("height", "Query estimated height (cm)", "height?", _fmt_height),
+        ("tof", "Query downward ToF distance (cm)", "tof?", _fmt_tof),
+        ("baro", "Query barometric altitude (m)", "baro?", _fmt_baro),
         ("attitude", "Query attitude angles (deg)", "attitude?", _fmt_attitude),
-        ("acceleration", "Query acceleration (cm/s2)", "acceleration?", _fmt_acceleration),
-        ("speed", "Query configured speed (cm/s)", "speed?", _fmt_speed),
+        ("acceleration", "Query acceleration (0.001 g)", "acceleration?", _fmt_acceleration),
+        ("speed", "Query cruise speed setting (cm/s)", "speed?", _fmt_speed),
     ]
 
-    for name, help_text, cli_cmd, fmt_func in queries:
+    for name, help_text, query, fmt_func in queries:
         parser = subparsers.add_parser(
             name,
             help=help_text,
-            description=f"{help_text}. WiFi CLI経由でクエリ送信。",
+            description=f"{help_text}. UDP 8889 経由で機体に問い合わせる。",
         )
         parser.add_argument(
             "--ip",
@@ -50,16 +62,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
             help=f"Vehicle IP address (default: {DEFAULT_HOST})",
         )
         parser.set_defaults(
-            func=lambda args, c=cli_cmd, f=fmt_func: _run_query(args, c, f)
+            func=lambda args, q=query, f=fmt_func: _run_query(args, q, f)
         )
 
 
 # =============================================================================
-# Format Functions
+# Format Functions / 整形関数
 # =============================================================================
 
 def _fmt_battery(raw: str) -> str:
-    return f"Battery: {raw.strip()}%"
+    return f"Battery: {raw.strip()} %"
 
 
 def _fmt_height(raw: str) -> str:
@@ -71,76 +83,52 @@ def _fmt_tof(raw: str) -> str:
 
 
 def _fmt_baro(raw: str) -> str:
-    return f"Baro: {raw.strip()} cm"
+    return f"Baro: {raw.strip()} m"
+
+
+def _fields(raw: str) -> dict:
+    """Split "a:1;b:2;" into {"a": "1", "b": "2"} / "a:1;b:2;" を辞書に分ける"""
+    return dict(re.findall(r"(\w+):([^;]*)", raw))
 
 
 def _fmt_attitude(raw: str) -> str:
-    parts = raw.strip().split()
-    if len(parts) == 3:
-        return f"Attitude: P={parts[0]} R={parts[1]} Y={parts[2]} deg"
+    f = _fields(raw)
+    if {"pitch", "roll", "yaw"} <= f.keys():
+        return f"Attitude: pitch={f['pitch']} roll={f['roll']} yaw={f['yaw']} deg"
     return f"Attitude: {raw.strip()}"
 
 
 def _fmt_acceleration(raw: str) -> str:
-    parts = raw.strip().split()
-    if len(parts) == 3:
-        return f"Acceleration: X={parts[0]} Y={parts[1]} Z={parts[2]} cm/s²"
+    f = _fields(raw)
+    if {"agx", "agy", "agz"} <= f.keys():
+        return f"Acceleration: x={f['agx']} y={f['agy']} z={f['agz']} (0.001 g)"
     return f"Acceleration: {raw.strip()}"
 
 
 def _fmt_speed(raw: str) -> str:
-    return f"Speed: {raw.strip()} cm/s"
+    return f"Speed setting: {raw.strip()} cm/s"
 
 
 # =============================================================================
-# Query Execution
+# Query Execution / 問い合わせの実行
 # =============================================================================
 
-def _run_query(args: argparse.Namespace, cli_cmd: str, fmt_func) -> int:
-    """Execute a query command via WiFi CLI.
+def _run_query(args: argparse.Namespace, query: str, fmt_func) -> int:
+    """Send one query, print the answer or the vehicle's reply verbatim on error.
 
-    WiFi CLI経由でクエリコマンドを実行する
+    問い合わせを 1 つ送り、答えを表示する。エラー時は機体の応答をそのまま表示する
     """
+    api = VehicleApi(args.ip)
     try:
-        return asyncio.run(_async_query(args, cli_cmd, fmt_func))
-    except KeyboardInterrupt:
-        return 130
-
-
-async def _async_query(args: argparse.Namespace, cli_cmd: str, fmt_func) -> int:
-    """Async query execution: connect → send → display → disconnect.
-
-    非同期クエリ実行: 接続 → 送信 → 表示 → 切断
-    """
-    cli = VehicleCLI()
-
-    try:
-        # Connect to vehicle CLI
-        # 機体CLIに接続
-        try:
-            await cli.connect(args.ip, timeout=5.0)
-        except OSError:
-            console.error("Vehicle not reachable. Connect to StampFly WiFi AP first.")
-            return 1
-
-        # Send query command
-        # クエリコマンドを送信
-        response = await cli.send_command(cli_cmd, timeout=3.0)
-
-        # Format and display
-        # フォーマットして表示
-        console.success(fmt_func(response))
-
-        await cli.disconnect()
-        return 0
-
-    except ConnectionError as e:
-        console.error(f"Connection lost: {e}")
-        return 1
-    except Exception as e:
-        console.error(f"Query failed: {e}")
-        try:
-            await cli.disconnect()
-        except Exception:
-            pass
-        return 1
+        result = api.send(query)
+    except OSError as error:
+        console.error(f"{query}: cannot send to {args.ip}:{api.port} ({error})")
+        return EXIT_ERROR
+    if result.kind == KIND_TIMEOUT:
+        console.error(f"{query}: no reply from the vehicle (timeout)")
+        return EXIT_TIMEOUT
+    if not result.succeeded:
+        console.error(f"{query}: {result.text}")
+        return EXIT_ERROR
+    console.success(fmt_func(result.text))
+    return EXIT_OK

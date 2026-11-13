@@ -257,13 +257,14 @@ sf build vehicle && sf flash vehicle -m
 
 ### WiFi テレメトリー
 
-機体はWebSocketサーバーを内蔵しており、リアルタイムでセンサデータを確認できます。
+機体は WiFi 上で UDP だけを話す（WebSocket・HTTP のサーバは無い）。接続のしかたと全ポートは
+[Tello 互換 API リファレンス](architecture/tello-api-reference.md)を参照。
 
-| 項目 | 値 |
-|-----|-----|
-| SSID | `StampFly` |
-| パスワード | なし |
-| URL | `http://192.168.10.1/` |
+| 用途 | ポート | PC 側の入口 |
+|-----|-------|------------|
+| 飛行コマンド・問い合わせ（Tello 風テキスト） | UDP 8889 | `sf takeoff`・`sf land`・`sf battery` など（[飛行コマンド](commands/flight-commands.md)） |
+| 状態の表示（50Hz） | UDP 5005 | `sf telemetry`（`--web` でブラウザ表示） |
+| 400Hz の記録 | UDP 8890 | `sf log wifi` |
 
 ### ログキャプチャ
 
@@ -593,13 +594,14 @@ sf build vehicle && sf flash vehicle -m
 
 ### WiFi Telemetry
 
-The vehicle has a built-in WebSocket server for real-time sensor data.
+The vehicle speaks only UDP over WiFi (there is no WebSocket or HTTP server). See the
+[Tello-compatible API reference](architecture/tello-api-reference.md) for how to connect and for every port.
 
-| Item | Value |
-|------|-------|
-| SSID | `StampFly` |
-| Password | None |
-| URL | `http://192.168.10.1/` |
+| Purpose | Port | Entry on the PC |
+|---------|------|-----------------|
+| Flight commands and queries (Tello-style text) | UDP 8889 | `sf takeoff`, `sf land`, `sf battery`, ... ([flight commands](commands/flight-commands.md)) |
+| Live state display (50 Hz) | UDP 5005 | `sf telemetry` (`--web` for the browser) |
+| 400 Hz recording | UDP 8890 | `sf log wifi` |
 
 ### Log Capture
 

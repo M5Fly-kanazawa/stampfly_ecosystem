@@ -59,10 +59,6 @@ Flip の設計に効く現行実装の事実。行番号は調査時点。
 | SILS メトリクス | `tilt_max` 等は小角度前提。360° 回転の完遂・高度損失を判定するメトリクスは無い | `lib/sfcli/commands/sils.py` `_traj_metric` |
 | 物理パラメータ | m = 0.037 kg、Ixx = 9.16e-6、Iyy = 1.33e-5、Izz = 2.04e-5 kg·m²、モータ物理上限 0.2 N | `control/models/stampfly_physical.yaml` → `generated_params.hpp:15-36` |
 
-**孤立コードの発見（本計画とは別件）:** `sf flight jump/hover/takeoff/land` は TCP:23 の CLI に文字列を送るが、
-現行 `cli_task.cpp:1198-1212` にこれらのコマンドは登録されていない（`vehicle_old` 削除に伴う取り残し）。
-`feature_status.md:108-114` の「未移植」記述と整合。別途、削除または Tello API 経由への付け替えを判断する。
-
 ## 3. 提案アルゴリズム（案 A: 角度スケジュール型）
 
 ### 3.1 実行条件

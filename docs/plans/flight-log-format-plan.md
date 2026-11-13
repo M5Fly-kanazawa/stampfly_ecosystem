@@ -81,7 +81,7 @@ UDP Data Stream（ポート 8890）で機体から届くパケット種別と、
 
 ### 1.3 ログ形式の棚卸し
 
-**現行**は firmware/vehicle と対になるもの、**旧**は vehicle_old（WebSocket 時代）由来で
+**現行**は firmware/vehicle と対になるもの、**旧**は vehicle_old 由来で
 現行ファームでは発生しないもの。旧ファームはアーカイブ予定のため、**旧に分類した 5 形式は
 統一の対象外**とし、専用コードは Phase 2 で削除する。
 
@@ -123,10 +123,8 @@ UDP Data Stream（ポート 8890）で機体から届くパケット種別と、
 | `docs/guides/tools.md:91-145` | 「JSONL が既定、`.csv` 指定時は整列 CSV」と現行どおり記載 |
 | `docs/guides/flight-log-viz.md`、`tools/log_analyzer/README.md` | 例が全て `-o flight.csv`。JSONL が既定との記載なし |
 | `docs/commands/sf-log.md` | 2026-09-11 朝の 0c8dd6e1 で全面改訂され現行実装と一致。本計画で既定を変えるので再改訂が要る |
-| `lib/sfcli/commands/log.py:398` | docstring「UDP full-rate or legacy WebSocket」だが WebSocket 分岐は無い |
 | `firmware/vehicle/docs/development_roadmap.md:283` | `logs/<date>_<mode>_<seq>.jsonl` と規定するが実装は `stampfly_udp_<timestamp>.jsonl` |
 | SCI チュートリアル S2/S4/S5、実習ガイド、チートシート | 全例が `-o *.csv`。既定が JSONL であることの記載なし。S5「`sf log wifi` で取得した CSV」、S4 デモ手順は引数なし |
-| `protocol/spec/websocket.yaml`、`messages.yaml` の `TelemetryWSPacket` | 現行ファームで撤去済みの WebSocket 電文を定義したまま |
 
 ### 1.6 仕様定義の所在
 
@@ -308,7 +306,7 @@ Stream の電文定義も `protocol/spec/` には無く、
 |-------|------|
 | `protocol/spec/flight_log.yaml` | v1 のストリーム・列名・型・単位・レート・由来パケット・各ツールの必須列。**基準ファイル** |
 | 生成物 | `lib/sflog/schema.py`（列定数）、`docs/reference/flight-log-format.md`（列表）。生成スクリプト `protocol/tools/gen_flight_log.py`、`--check` で生成物の鮮度を CI で検査 |
-| `protocol/spec/data_stream.yaml` | 現行 UDP Data Stream 電文（`data_stream_wire.hpp` の内容）を仕様に収録。`websocket.yaml` と `TelemetryWSPacket` は「撤去済み」と注記して凍結（別作業でもよい） |
+| `protocol/spec/data_stream.yaml` | 現行 UDP Data Stream 電文（`data_stream_wire.hpp` の内容）を仕様に収録 |
 | CI | 現状の CI（`.github/workflows/sils-regression.yml`）は `tools/` や `lib/` の pytest を回していない。同ワークフローに pytest の工程を足し、(1) `lib/sflog` の単体テスト、(2) 基準一式（実機 1 本・SILS 1 本、`analysis/datasets/flightlog/` に置く）が `sf log check` を通る、(3) 全読み込み側コマンドが基準一式を読める、(4) `sf sysid fit --selftest` と参照同定値（`analysis/reports/rate_sysid_reference/`。2026-11-01 に削除、タグ `archive/2026-11-01`）が変わらない、を検査する |
 
 ## 4. 決定事項の記録
@@ -354,7 +352,7 @@ Genesis 未導入のため未検証。
 |------|------|
 | ガイド | `docs/guides/tools.md`、`docs/guides/flight-log-viz.md`、`docs/commands/sf-log.md`、`tools/log_analyzer/README.md`、`tools/sysid/README.md`（`tools/log_capture/README.md` は削除） |
 | 設計文書 | `firmware/vehicle/docs/development_roadmap.md:283`（命名規則）、`docs/architecture/simulation-policy.md`（形式の同一を明記）、`PROJECT_PLAN.md`（protocol/ の基準文書にログ形式を含める）、`firmware/vehicle/docs/coding_and_education.md`（Blackbox 例の記述） |
-| 仕様 | 新設 `flight_log.yaml`・`data_stream.yaml`、`websocket.yaml`・`messages.yaml` の撤去済み注記 |
+| 仕様 | 新設 `flight_log.yaml`・`data_stream.yaml` |
 | 講習資料 | `docs/events/sci_tutorial_2026/slides/chapters/sci_s2_setup_sensors.tex`、`sci_s4_pid.tex`、`sci_s5_sim_analysis.tex`、`handson_guide.md`、`cheatsheet.md`、Docswell の PDF |
 | ワークショップ | `firmware/workshop/lessons/lesson_07_sysid/README.md` |
 | コード内文書 | `lib/sfcli/commands/log.py:398` docstring、`udp_capture.py` 冒頭 |
@@ -384,9 +382,6 @@ Phase 0 の検証で `logs/stampfly_udp_20260908T121243.jsonl`（30 秒、ホバ
 
 - 一式のファイルサイズ実測（zip 圧縮後）。Phase 1 で既存 JSONL を変換して測る。
 - ~~実機での `sf log wifi` 一式書き出し~~ → 2026-09-12 実機で 30 秒取得と `sf log viz` の表示を確認済み（ユーザー報告）。
-- `lib/stampfly` SDK が `vehicle_connection.py` のどのクラスを使うか（旧 WebSocket 電文の
-  解析コード `packet_parser.py` は生きた操縦経路が使っている可能性があるため、本計画では
-  触らない）。
 
 解消済み: SILS 内の Data Stream 経路（§3.3 に記載）。`analysis/scripts/` の JSONL 消費
 スクリプトは 33 本。
