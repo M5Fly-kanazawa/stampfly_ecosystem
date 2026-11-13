@@ -1,0 +1,20 @@
+# landing_low_hover.expect — a LANDING that begins in a steady low hover ends on the floor in bounded time
+# 定常の低いホバーで始まる LANDING は、有限の時間で床の上で終わる
+#
+# Measured: the hover at 0.106 m (vertical speed -0.003 m/s) from 20.7 s; LANDING at 20.72 s, LANDING -> IDLE_GROUND at 21.44 s (0.72 s), true height 0.020 m.
+# 実測: 0.106 m（鉛直速度 -0.003 m/s）のホバーが 20.7 s から、LANDING は 20.72 s、LANDING → IDLE_GROUND は 21.44 s（0.72 s）、真の高さ 0.020 m。
+exit 0
+log_contains any "Auto-takeoff engaged"
+log_contains any "Takeoff complete"
+log_contains any "DISARM in ALT_HOLD → auto-land"
+log_contains any "Transition: FLYING → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+order "DISARM in ALT_HOLD → auto-land" "Transition: LANDING → IDLE_GROUND"
+# The craft is in the low hover (between 0.07 and 0.15 m) when the LANDING begins.
+# LANDING が始まるとき、機体は低いホバー（0.07〜0.15 m）にいる。
+metric alt_max < 0.15 in 20.4 20.7
+metric alt_min > 0.07 in 20.4 20.7
+# On the floor within 2 s of the LANDING, and the motors stopped.
+# LANDING の 2 s 以内に床の上で、モータは止まる。
+metric alt_max < 0.05 in 22.7 25.0
+metric duty_max < 0.01 in 22.7 25.0

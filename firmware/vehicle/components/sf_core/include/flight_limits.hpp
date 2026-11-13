@@ -313,6 +313,26 @@ inline constexpr float    kTofInvalidLandingMinHeightM = 0.10f;  // [m]
 inline constexpr float    kLandingDeadZoneBandM  = kTofInvalidLandingMinHeightM;   // [m]
 inline constexpr uint32_t kLandingDeadZoneHoldMs = 200;                            // 0.2 s
 
+/// At rest while the ground flag of the takeoff/landing manager is true. While the flag is true ImuTask holds the vertical state at zero (applyVerticalGroundHandoff), and the flag stays true up to
+/// kTakeoffAirborneBandM after the craft has been below kTakeoffGroundBandM, so the estimated vertical velocity there is a held zero, not a measurement of rest; the ToF readings are the evidence
+/// (TakeoffLandingMgr::atRest()). Two values, both CANDIDATES. (1) kLandingRestBandM [m]: how far the valid readings of the present run may spread. Basis: the velocity gate of the same detector
+/// (TakeoffLandingConfig::landing_vel_mps 0.05 m/s) over its shortest hold (stall_hold_ms 0.4 s) is 0.02 m, which equals kAutoTakeoffFloorRiseM (four times the ToF noise, 0.5 cm). A real craft
+/// that holds still keeps the readings of 0.8 s within 0.005 m (real log flip_test1, 0.045-0.050 m, 123.8-124.6 s). (2) kLandingRestHoldMs: how long the stillness must last where the readings
+/// are at or above kTakeoffGroundBandM (the flag cannot be the evidence there; on the floor the base hold applies). The band alone does not reject every craft that moves: in the 56 SILS cases where a LANDING that began in
+/// the first 0.6 s of a takeoff ended in the air (the held estimate read "at rest" while the craft climbed or sank at up to 0.45 m/s), the ToF spread in the first 0.4 s was 0.011-0.068 m (median 0.034 m), and
+/// 15 of the 56 (4 distinct trajectories, the craft turning round at the top of the climb, the SILS ToF flattening the turn) stayed within 0.02 m. A hold of 0.5 s still let 3 of the 56 stop in the air (0.074 m), 0.7 s let none, and
+/// 1 s is the weight of evidence the takeoff already asks of the floor (kAutoTakeoffFloorHoldUs): about 1.4 times the least that works. A craft that really hangs in the ground effect keeps its readings, so the
+/// longer hold costs it only time.
+/// 接地フラグが true の間の静止。フラグが true の間、ImuTask は鉛直状態を 0 に固定し（applyVerticalGroundHandoff）、フラグは機体が kTakeoffGroundBandM を下回った後 kTakeoffAirborneBandM まで true のままなので、
+/// そこでの推定の鉛直速度は固定された 0 であり、静止の測定ではない。証拠は ToF の読み（TakeoffLandingMgr::atRest()）。値は 2 つ、いずれも候補値。(1) kLandingRestBandM [m]: 今の区間の有効な読みが広がってよい幅。
+/// 根拠: 同じ検出器の速度ゲート（TakeoffLandingConfig::landing_vel_mps 0.05 m/s）に最短の保持時間（stall_hold_ms 0.4 s）を掛けた 0.02 m で、kAutoTakeoffFloorRiseM（ToF ノイズ 0.5 cm の 4 倍）と同じ。
+/// 静止する実機は 0.8 s の読みを 0.005 m の中に保つ（実機ログ flip_test1、0.045〜0.050 m、123.8〜124.6 s）。(2) kLandingRestHoldMs: 読みが kTakeoffGroundBandM 以上にある間（そこでは接地フラグは証拠になれない。床の上では基本の保持時間のまま）、
+/// 静止が続くべき時間。幅だけでは、動く機体を全部は除けない: 離陸の最初の 0.6 s の間に始まった LANDING が空中で終わった SILS の 56 通り（固定された推定が「静止」を報告する間に、機体は最大 0.45 m/s で上昇または降下していた）で、
+/// 最初の 0.4 s の ToF の広がりは 0.011〜0.068 m（中央値 0.034 m）、56 通りのうち 15 通り（軌道としては 4 通り。上昇の頂点で向きを変える機体を、SILS の ToF が平らに読む）は 0.02 m に収まった。保持時間 0.5 s では 56 通りのうち 3 通りが
+/// 空中（0.074 m）で止まり、0.7 s では 0 通り。1 s は、離陸が床の証拠に既に求める重さ（kAutoTakeoffFloorHoldUs）で、働く最小の値の約 1.4 倍。地面効果で本当に浮いて止まる機体は読みを保つので、保持時間が長くなっても失うのは時間だけ。
+inline constexpr float    kLandingRestBandM      = 0.02f;                          // [m]
+inline constexpr uint32_t kLandingRestHoldMs     = 1000;                           // 1 s
+
 /// failsafe_status is published by Failsafe every 100 ms. A reader that finds it older than this
 /// treats the ToF as silent: a status nobody refreshes (Failsafe dead / PowerTask stalled) must
 /// never leave the last "not silent" in force (every ToF protection reads that flag).

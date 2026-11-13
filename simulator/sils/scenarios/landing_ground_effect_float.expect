@@ -1,0 +1,12 @@
+# landing_ground_effect_float.expect — a LANDING held above the floor by the ground effect ends by the stalled-descent verdict
+# 地面効果が床の上に留める LANDING は、降下停滞の判定で終わる
+#
+# Measured (--ground-effect): FLYING -> LANDING at 13.02 s; "Landing detected (stalled descent / ground effect)"; LANDING -> IDLE_GROUND at 15.62 s, the motors stop at a true height of 0.045 m.
+# 実測（--ground-effect）: FLYING → LANDING は 13.02 s、「Landing detected (stalled descent / ground effect)」、LANDING → IDLE_GROUND は 15.62 s、モータは真の高さ 0.045 m で止まる。
+exit 0
+log_contains any "Transition: FLYING → LANDING"
+log_contains any "Landing detected (stalled descent / ground effect)"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+order "Transition: FLYING → LANDING" "Landing detected (stalled descent" "Transition: LANDING → IDLE_GROUND"
+metric duty_max > 0.50 in 13.5 14.5
+metric alt_max < 0.05 in 16.0 19.0

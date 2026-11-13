@@ -85,6 +85,12 @@ struct TakeoffLandingConfig {
     float    dead_zone_band_m   = limits::kLandingDeadZoneBandM;    ///< Valid reading at or below this arms the test [m] / これ以下の有効な読みで判定を始める [m]
     uint32_t dead_zone_hold_ms  = limits::kLandingDeadZoneHoldMs;   ///< Invalid samples only for this long = on the floor [ms] / 無効サンプルだけがこの時間 = 床の上 [ms]
 
+    // At rest while the ground flag is true: the vertical velocity is then a zero that ImuTask holds (not a measurement), so the evidence of rest is the ToF itself: its readings stay within rest_band_m.
+    // basis: flight_limits.hpp kLandingRestBandM.
+    // 接地フラグが true の間の静止: 鉛直速度は ImuTask が固定した 0（測定ではない）なので、静止の証拠は ToF そのもの: 読みが rest_band_m の中に収まる。根拠: flight_limits.hpp の kLandingRestBandM。
+    float    rest_band_m        = limits::kLandingRestBandM;
+    uint32_t rest_hold_ms       = limits::kLandingRestHoldMs;   ///< The hold of paths (1) and (2) while that stillness is judged from readings at or above ground_tof_m [ms] / その静止を ground_tof_m 以上の読みから判定している間の、経路 (1) (2) の保持時間 [ms]
+
     // Touchdown while the downward ToF is SILENT (no height, no stalled-descent evidence): an IMPACT
     // (|accel| above blind_touchdown_accel_mps2 for blind_touchdown_samples consecutive IMU samples)
     // followed by STILLNESS (not accelerating, thrust too low to hold the craft, vertical velocity ~0)
@@ -223,6 +229,18 @@ private:
     /// detectLanding() の経路 (3): 着陸降下中、不感帯の証拠が dead_zone_hold_ms 続いている間 true
     bool deadZoneTouchdown(bool in_landing_descent, uint32_t now_ms) const;
 
+    /// At rest: the injected velocity below landing_vel_mps while the ground flag is false; the ToF within rest_band_m while it is true (the estimate is held at zero then)
+    /// 静止: 接地フラグが false の間は注入された速度が landing_vel_mps 未満、true の間は ToF が rest_band_m の中（そのとき推定は 0 に固定されている）
+    bool atRest(float vertical_velocity) const;
+
+    /// Track the run of valid ToF readings that stays within rest_band_m (only while the ground flag is true)
+    /// rest_band_m の中に収まる有効な ToF の読みの区間を追う（接地フラグが true の間だけ）
+    void trackRest(const TofData& tof);
+
+    /// The hold time of a touchdown path: base_hold_ms, or rest_hold_ms when the stillness is judged from ToF readings at or above ground_tof_m
+    /// 接地の経路の保持時間: base_hold_ms。静止を ground_tof_m 以上の ToF の読みから判定している間は rest_hold_ms
+    uint32_t holdFor(uint32_t base_hold_ms) const;
+
     /// Log which path detected the landing (once, on the rising edge)
     /// 着陸を検出した経路を記録する（立ち上がりで 1 回）
     void logLandingDetected(bool firm, bool stalled, uint32_t now_ms) const;
@@ -255,6 +273,9 @@ private:
     bool     dead_zone_armed_  = false;  // A valid reading inside the band was seen and only invalid samples followed / 帯の中の有効な読みがあり、以後は無効サンプルだけ
     uint32_t dead_zone_valid_ms_ = 0;    // Time of that last valid reading [ms] / その最後の有効な読みの時刻 [ms]
     float    dead_zone_valid_m_  = 0.0f; // Its distance [m] (log only) / その距離 [m]（ログ用）
+    bool     rest_run_active_  = false;  // A run of valid ToF readings within rest_band_m is in progress (ground flag true) / rest_band_m の中の有効な ToF の読みの区間が進行中（接地フラグ true）
+    float    rest_lo_m_        = 0.0f;   // Lowest reading of the run [m] / 区間の最低の読み [m]
+    float    rest_hi_m_        = 0.0f;   // Highest reading of the run [m] / 区間の最高の読み [m]
     BlindTouchdownDetector blind_touchdown_;   // Impact-then-stillness detector / 衝撃→静止の検出器
     uint8_t  ground_streak_    = 0;      // Consecutive ground-side ToF samples (air→ground debounce) / 地上側連続数
 };

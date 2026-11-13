@@ -13,6 +13,7 @@
  *
  * @design architecture.md §4 — State machine transitions               [OK]
  * @design detailed_design.md §3 — State transition table (TAKEOFF/LANDING) [OK]
+ * @design detailed_design.md §3 注7 — stalled-descent touchdown; the rest evidence while the estimate is held [OK]
  */
 
 #include "takeoff_landing.hpp"
@@ -77,12 +78,14 @@ void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_ve
         stall_start_ms_   = 0;
         ground_streak_   = 0;
         dead_zone_armed_ = false;
+        rest_run_active_ = false;
         evaluateHeld(tof);
         return;
     }
 
     held_ = false;   // armed: by definition not hand-held / armed 中は定義上手持ちでない
     evaluateToF(tof);
+    trackRest(tof);
     const uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
     trackDeadZone(tof, in_landing_descent, now_ms);
     detectLanding(vertical_velocity, in_landing_descent, now_ms);
@@ -164,6 +167,7 @@ void TakeoffLandingMgr::noteLandingDescent(bool in_landing_descent)
         landing_start_ms_ = 0;
         stall_start_ms_   = 0;
         dead_zone_armed_  = false;   // so is the dead-zone evidence of before it / 前から残った不感帯の証拠も同じ
+        rest_run_active_  = false;   // and the stillness seen before it / その前に見た静止も同じ
     }
     was_landing_descent_ = in_landing_descent;
 }
@@ -174,8 +178,7 @@ void TakeoffLandingMgr::noteLandingDescent(bool in_landing_descent)
 // -----------------------------------------------------------------------------
 void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_descent, uint32_t now_ms)
 {
-    float vz = std::fabs(vertical_velocity);  // injected, not a topic read / 注入値
-    const bool at_rest = (vz < config_.landing_vel_mps);
+    const bool at_rest = atRest(vertical_velocity);   // injected velocity, or the ToF while the estimate is anchored / 注入された速度、推定が固定されている間は ToF
 
     // Three independent touchdown paths, each a sustained level condition. landing_detected_
     // is a LEVEL flag (true while the condition holds, cleared when it breaks) so a 50 Hz
@@ -188,6 +191,8 @@ void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_d
     //       (so (1) never fires). Gated on in_landing_descent so a deliberate low hover is
     //       NOT a landing — only a STALLED descent is.
     //   (3) DEAD ZONE: invalid samples only after a valid one near the floor (deadZoneTouchdown()).
+    // "At rest" in (1) and (2) is atRest(): the injected velocity while the ground flag is false, the ToF readings while it is true (the estimate is held at zero then); holdFor() lengthens the hold in the 5-15 cm band.
+    // (1)(2) の「静止」は atRest(): 接地フラグが false の間は注入された速度、true の間は ToF の読み（そのとき推定は 0 に固定されている）。holdFor() は 5〜15 cm の帯で保持時間を長くする。
     // 3つの独立した接地経路。各々が持続レベル条件。landing_detected_ はレベルフラグ。
     //   (1) 確実な接地: ToF が <5cm を確認（on_ground_）＋静止を landing_hold_ms 持続。
     //   (2) 降下停滞: 着陸降下が指令＋ToF が near_ground_tof_m 以内＋静止を stall_hold_ms 持続。
@@ -197,7 +202,7 @@ void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_d
     bool firm = false;
     if (on_ground_ && at_rest) {
         if (landing_start_ms_ == 0) landing_start_ms_ = now_ms;
-        firm = (now_ms - landing_start_ms_ >= config_.landing_hold_ms);
+        firm = (now_ms - landing_start_ms_ >= holdFor(config_.landing_hold_ms));
     } else {
         landing_start_ms_ = 0;
     }
@@ -205,7 +210,7 @@ void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_d
     bool stalled = false;
     if (in_landing_descent && near_ground_ && at_rest) {
         if (stall_start_ms_ == 0) stall_start_ms_ = now_ms;
-        stalled = (now_ms - stall_start_ms_ >= config_.stall_hold_ms);
+        stalled = (now_ms - stall_start_ms_ >= holdFor(config_.stall_hold_ms));
     } else {
         stall_start_ms_ = 0;
     }
@@ -217,6 +222,79 @@ void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_d
         logLandingDetected(firm, stalled, now_ms);   // once on the rising edge / 立上りで1回
     }
     landing_detected_ = detected;
+}
+
+// -----------------------------------------------------------------------------
+// atRest — is the craft at rest, judged from evidence that is not a held zero?
+// 静止か — 固定された 0 ではない証拠から判定する
+//
+// While the ground flag is false the injected vertical velocity is the estimator's own, so it is the evidence. While the flag is true ImuTask HOLDS the vertical state at zero
+// (applyVerticalGroundHandoff), and the flag stays true up to kTakeoffAirborneBandM (0.15 m) after a craft has been below kTakeoffGroundBandM: a craft that climbs or descends at 0.2-0.4 m/s
+// between 0.05 and 0.15 m then reports 0 m/s, which is not a measurement. There the evidence is the ToF itself (trackRest()): the readings of the present run stay within rest_band_m.
+// 接地フラグが false の間、注入される鉛直速度は推定器自身のものなので、それが証拠になる。フラグが true の間は ImuTask が鉛直状態を 0 に「固定」し（applyVerticalGroundHandoff）、
+// フラグは一度 kTakeoffGroundBandM を下回った機体では kTakeoffAirborneBandM（0.15 m）まで true のままなので、0.05〜0.15 m で 0.2〜0.4 m/s で上昇または降下する機体も 0 m/s を報告する。
+// それは測定ではない。そこでの証拠は ToF そのもの（trackRest()）: 今の区間の読みが rest_band_m の中に収まっている。
+//
+// @design detailed_design.md §3 注7 — a held zero is no evidence of rest (positive evidence only) [OK]
+// @design architecture.md INV-3 — detection in the detector, fed by ImuTask [OK]
+// -----------------------------------------------------------------------------
+bool TakeoffLandingMgr::atRest(float vertical_velocity) const
+{
+    if (!on_ground_) {
+        return std::fabs(vertical_velocity) < config_.landing_vel_mps;
+    }
+    return rest_run_active_ && (rest_hi_m_ - rest_lo_m_ <= config_.rest_band_m);
+}
+
+// -----------------------------------------------------------------------------
+// holdFor — the hold time of a touchdown path, longer while the stillness is judged from the ToF readings alone in the band where the ground flag is only a memory
+// 保持時間 — 接地の経路の保持時間。接地フラグが記憶にすぎない帯で、ToF の読みだけから静止を判定している間は長くなる
+//
+// The readings of the run lie at or above kTakeoffGroundBandM (the flag cannot be the evidence there) and the estimate is held, so a craft that turns round (the top of a climb, the start of a descent) can read
+// a narrow spread for a while (SILS: the ToF flattens the turn). A craft that stands still keeps its readings in the band for as long as it is asked to, a craft that moves does not, so a longer hold costs
+// the float nothing but time. On the floor (readings below ground_tof_m) the base hold applies.
+// 区間の読みは kTakeoffGroundBandM 以上にあり（そこでは接地フラグは証拠になれない）、推定は固定されているので、向きを変える機体（上昇の頂点、降下の始まり）は、しばらく狭い広がりを読みうる
+// （SILS: ToF が折り返しを平らにする）。静止する機体は求められるだけ長く読みを帯の中に保ち、動く機体は保たないので、保持時間を長くしても、フロートには時間のほかに失うものは無い。
+// 床の上（読みが ground_tof_m 未満）では基本の保持時間のまま。
+// -----------------------------------------------------------------------------
+uint32_t TakeoffLandingMgr::holdFor(uint32_t base_hold_ms) const
+{
+    const bool judged_by_readings_above_floor = on_ground_ && rest_run_active_ && (rest_hi_m_ >= config_.ground_tof_m);
+    if (judged_by_readings_above_floor && config_.rest_hold_ms > base_hold_ms) {
+        return config_.rest_hold_ms;
+    }
+    return base_hold_ms;
+}
+
+// -----------------------------------------------------------------------------
+// trackRest — the run of ToF readings that stays within rest_band_m, while the ground flag is true
+// 静止の区間 — 接地フラグが true の間、rest_band_m の中に収まる ToF の読みの区間
+//
+// A valid reading starts the run or widens it. A reading that makes the run wider than rest_band_m ends it: the craft moved, and the next valid reading starts a new run. An invalid
+// sample neither starts a run nor ends one (no evidence either way). The run is not kept while the flag is false (atRest() uses the velocity then).
+// 有効な読みは区間を始める、または広げる。区間の幅が rest_band_m を超える読みは区間を終わらせる: 機体は動いた。次の有効な読みが新しい区間を始める。
+// 無効サンプルは区間を始めも終わらせもしない（どちらの証拠でもない）。フラグが false の間は区間を保たない（そのとき atRest() は速度を使う）。
+// -----------------------------------------------------------------------------
+void TakeoffLandingMgr::trackRest(const TofData& tof)
+{
+    if (!on_ground_) {
+        rest_run_active_ = false;
+        return;
+    }
+    if (!tof.valid) {
+        return;
+    }
+    if (!rest_run_active_) {
+        rest_run_active_ = true;
+        rest_lo_m_ = tof.distance;
+        rest_hi_m_ = tof.distance;
+        return;
+    }
+    rest_lo_m_ = std::fmin(rest_lo_m_, tof.distance);
+    rest_hi_m_ = std::fmax(rest_hi_m_, tof.distance);
+    if (rest_hi_m_ - rest_lo_m_ > config_.rest_band_m) {
+        rest_run_active_ = false;   // the craft moved: atRest() is false from this sample, a new run starts with the next one / 機体は動いた: この読みから atRest() は false、新しい区間は次の読みから
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -295,6 +373,7 @@ void TakeoffLandingMgr::markAirborne()
     landing_start_ms_ = 0;    // a firm-ground landing timer must not survive the evidence it stood on / 接地着陸のタイマーは、拠り所の証拠とともに破棄する
     stall_start_ms_   = 0;    // the descent-stall timer likewise / 降下停滞のタイマーも同様
     dead_zone_armed_  = false;   // the dead-zone evidence is also a ToF fact / 不感帯の証拠も ToF の事実
+    rest_run_active_  = false;   // the stillness of the ToF readings is a ToF fact as well / ToF の読みの静止も ToF の事実
 }
 
 // -----------------------------------------------------------------------------

@@ -1,0 +1,25 @@
+# landing_low_hover.scn — a LANDING that begins in a steady low hover (0.106 m) ends on the floor in bounded time
+#                         定常の低いホバー（0.106 m）で始まる LANDING は、有限の時間で床の上で終わる
+#
+# ALT_HOLD auto-takeoff to 0.5 m, then the throttle stick held below the centre for 3.7 s lowers the hover to 0.106 m (true height; vertical speed -0.003 m/s), where the craft is at rest. The pilot DISARM (the second press) then starts the
+# auto-landing from that low hover. Spec under test (detailed_design.md §3 note 7): a LANDING that begins in a low hover, with the craft at rest, ends in bounded time with the motors stopped on the floor: the ground flag is clear (the craft has been above 0.15 m), so the
+# estimated vertical velocity is live and the stalled-descent / firm-ground paths judge the stillness as before (0.4 s). This is the case the rule of TakeoffLandingMgr::atRest() must NOT change (with the ground flag set, a hover that never left the floor is judged from the ToF readings: the host test
+# land_low_hover_with_a_held_estimate_ends_by_the_stalled_descent).
+#
+# ALT_HOLD の自動離陸で 0.5 m、その後スロットルスティックを中央より下に 3.7 s 保って、ホバーを 0.106 m（真の高さ。鉛直速度 -0.003 m/s）まで下げる。そこで機体は静止している。パイロットの DISARM（2 回目の押下）が、その低いホバーから自動着陸を始める。
+# 検証する仕様（detailed_design.md §3 注7）: 低いホバーで機体が静止したまま始まる LANDING は、有限の時間で、モータが床の上で止まって終わる: 接地フラグは解けている（機体は 0.15 m を超えたことがある）ので、推定の鉛直速度は有効で、
+# 降下停滞・確実な接地の経路は静止を従来どおり（0.4 s）判定する。これは TakeoffLandingMgr::atRest() の規則が「変えてはならない」場合（接地フラグが立っているときは、床を離れたことのないホバーを ToF の読みで判定する:
+# ホスト試験 land_low_hover_with_a_held_estimate_ends_by_the_stalled_descent）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/landing_low_hover.scn --target vehicle --duration 26000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD — auto-takeoff
+   +    rc   2048  2048   2048    2048  1     4000      50        1              # D: hover at 0.5 m
+   +    rc   1400  2048   2048    2048  1     3700      50        1              # E: throttle stick below the centre for 3.7 s: the hover is lowered to 0.106 m
+   +    rc   2048  2048   2048    2048  1     4000      50        1              # F: the stick centred: steady low hover, at rest
+   +    rc   2048  2048   2048    2048  0     500       50        1              # G: release the ARM button (so the next press is an edge)
+   +    rc   2048  2048   2048    2048  1     6000      50        1              # H: press DISARM in the low hover → auto-land
+   +    rc   2048  2048   2048    2048  0     600       50                       # I: settle (disarmed after touchdown)

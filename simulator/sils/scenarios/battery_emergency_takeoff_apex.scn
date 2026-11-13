@@ -1,0 +1,23 @@
+# battery_emergency_takeoff_apex.scn — the battery EMERGENCY comes at the top of the climb of an auto-takeoff: the LANDING ends on the floor, not in the air
+#                                     自動離陸の上昇の頂点で電池の EMERGENCY が出る: LANDING は空中でなく床の上で終わる
+#
+# The takeoff of battery_emergency_takeoff_airborne.scn with the hover-thrust estimate exact (hover.thrust_corr 1.0, learning off), the event 0.7 s after the TAKEOFF began: the LANDING begins at 0.135 m as the craft turns from climbing to sinking
+# (true vertical velocity +0.2 m/s, then -0.38 m/s 0.4 s later). The ground flag is still set and the estimate is held at 0; the SILS ToF reads 0.107-0.123 m for the whole 0.4 s (a spread of 0.016 m, inside the rest band), so the readings alone
+# were not enough: the stalled-descent path ended the LANDING 0.44 s later with the motors stopped at 0.086 m, in the air, sinking at 0.38 m/s. Spec under test (detailed_design.md §3 note 7): while the stillness is judged from readings at or above 0.05 m
+# with the estimate held, it must last kLandingRestHoldMs (1 s): the motors keep running until the floor.
+#
+# battery_emergency_takeoff_airborne.scn の離陸で、ホバー推力の見積もりは正確（hover.thrust_corr 1.0、学習なし）、事象は TAKEOFF の開始の 0.7 s 後: 機体が上昇から降下へ向きを変える 0.135 m で LANDING が始まる
+# （真の鉛直速度は +0.2 m/s、0.4 s 後に -0.38 m/s）。接地フラグはまだ立ち、推定は 0 に固定されている。SILS の ToF は 0.4 s の間ずっと 0.107〜0.123 m を読み（広がり 0.016 m で静止の幅の内側）、読みだけでは足りなかった:
+# 降下停滞の経路が 0.44 s 後に LANDING を終わらせ、モータは 0.086 m の空中で、0.38 m/s で沈みながら止まった。検証する仕様（detailed_design.md §3 注7）: 推定が固定されたまま、0.05 m 以上の読みから静止を判定する間は、
+# kLandingRestHoldMs（1 s）続かなければならない: モータは床まで回り続ける。
+#
+# Run: sf sils scenario simulator/sils/scenarios/battery_emergency_takeoff_apex.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    param      hover.thrust.learn 0                                                # the hover-thrust estimate stays wrong
+   +    param      hover.thrust_corr 1.0                                               # estimate equal to the setting that the loop settles on
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED (to 7.5 s)
+   +    rc         2048  2048   2048    2048  1     1020      50        1              # C: ARM in ALT_HOLD (7.5 s); the TAKEOFF begins at about 7.82 s; hold to 8.52 s
+   +    battery    2.99                                                                # D: the pack falls just below the critical voltage, craft in the air
+   +    rc         2048  2048   2048    2048  1     14000     50        1              # E: nothing more from the pilot

@@ -1267,7 +1267,8 @@ TEST(land_dead_zone_does_not_fire_without_the_evidence)
         sf::TakeoffLandingMgr mgr;
         mgr.init();
         feed(mgr, 0.08f, true, true, 0.0f, false, 3, 33);      // a low hover inside the band, not LANDING yet / 帯の中の低いホバー
-        feed(mgr, 0.0f, false, true, 0.28f, true, 1, 33);      // LANDING starts with an invalid sample (still descending, so not the stalled-descent path) / LANDING が無効サンプルで始まる（降下中なので降下停滞の経路ではない）
+        mgr.noteLandingDescent(true);                          // the notice ImuTask gives every cycle: the stillness seen before the LANDING is cleared with the rest / ImuTask が毎周期出す通知: LANDING の前に見た静止も他の証拠と一緒に消える
+        feed(mgr, 0.0f, false, true, 0.28f, true, 1, 33);      // LANDING starts with an invalid sample (no valid reading of this LANDING: not the stalled-descent path) / LANDING が無効サンプルで始まる（この LANDING の有効な読みが無い: 降下停滞の経路ではない）
         feed(mgr, 0.0f, false, true, 0.28f, true, 30, 33);
         ASSERT_TRUE(!mgr.isLandingDetected());
     }
@@ -1465,9 +1466,9 @@ TEST(land_after_the_notice_only_a_new_sample_ends_the_landing)
 {
     sf::TakeoffLandingMgr mgr;
     restedThenLowHover(mgr);
-    feedWithNotice(mgr, 0.10f, true, 10);                        // 330 ms of new samples < stall_hold_ms (400 ms) / 330 ms < 400 ms
+    feedWithNotice(mgr, 0.10f, true, 14);                        // 462 ms of new samples: more than stall_hold_ms (400 ms) but less than rest_hold_ms (1 s: the held estimate is no evidence, the readings are) / 新しいサンプル 462 ms: stall_hold_ms（400 ms）より長いが rest_hold_ms（1 s: 固定された推定は証拠でなく、読みが証拠）より短い
     ASSERT_TRUE(!mgr.isLandingDetected());                       // the verdict of before did not come back / 以前の判定は戻らない
-    feedWithNotice(mgr, 0.10f, true, 4);                         // 14 samples = 462 ms of a craft at rest at 0.10 m in the LANDING: touchdown / LANDING の中で 0.10 m に静止して 14 サンプル = 462 ms: 接地
+    feedWithNotice(mgr, 0.10f, true, 18);                        // 32 samples = 1.06 s of a craft at rest at 0.10 m in the LANDING: touchdown / LANDING の中で 0.10 m に静止して 32 サンプル = 1.06 s: 接地
     ASSERT_TRUE(mgr.isLandingDetected());
     mgr.noteLandingDescent(true);                                // the notice every cycle is NOT an edge: it must not clear a verdict made in the LANDING / 毎周期の通知は立ち上がりではない: LANDING の中の判定を消してはならない
     ASSERT_TRUE(mgr.isLandingDetected());
@@ -1477,7 +1478,7 @@ TEST(land_notice_judges_afresh_again_at_every_new_landing)
 {
     sf::TakeoffLandingMgr mgr;
     restedThenLowHover(mgr);
-    feedWithNotice(mgr, 0.10f, true, 14);
+    feedWithNotice(mgr, 0.10f, true, 32);
     ASSERT_TRUE(mgr.isLandingDetected());
     feedWithNotice(mgr, 0.10f, false, 40);                       // the LANDING ended (a take-off from it): the flag follows the level / LANDING が終わる: フラグは水準に従う
     ASSERT_TRUE(mgr.isLandingDetected());                        // ground flag still set in the band, at rest / 帯の中、静止で接地フラグが残る
@@ -1508,6 +1509,100 @@ TEST(land_notice_clears_the_dead_zone_evidence_of_before_the_landing)
     ASSERT_TRUE(!mgr.isLandingDetected());
 }
 
+// -----------------------------------------------------------------------------
+// At rest while the estimate is HELD at zero. While the ground flag is true (set below kTakeoffGroundBandM, kept up to kTakeoffAirborneBandM) ImuTask holds the vertical state at zero, so the
+// injected velocity is 0 whatever the craft does: a craft that climbs or descends between 0.05 and 0.15 m reports "at rest". The evidence of rest is then the ToF itself (rest_band_m).
+// 推定が 0 に「固定」されている間の静止。接地フラグが true の間（kTakeoffGroundBandM 未満で立ち、kTakeoffAirborneBandM まで保たれる）、ImuTask は鉛直状態を 0 に固定するので、機体が何をしても
+// 注入される速度は 0: 0.05〜0.15 m を上昇または降下する機体も「静止」と報告する。そのときの静止の証拠は ToF そのもの（rest_band_m）。
+// -----------------------------------------------------------------------------
+
+/// Feed a LANDING like ImuTask does (the notice first, then the sample), the ToF moving by step_m per sample, the velocity injected as the held zero.
+/// ImuTask と同じ形で LANDING を与える（先に通知、次にサンプル）。ToF は 1 サンプルごとに step_m ずつ動き、速度は固定された 0 として注入する。
+static void feedLandingToFRamp(sf::TakeoffLandingMgr& mgr, float from_m, float step_m, int n, float velocity)
+{
+    for (int i = 0; i < n; ++i) {
+        mgr.noteLandingDescent(true);
+        feed(mgr, from_m + step_m * static_cast<float>(i), true, true, velocity, true, 1, 33);
+    }
+}
+
+/// A craft that sat on the floor (ground flag true) and has lifted to 0.06 m: the state at which a LANDING can begin while the craft climbs.
+/// 床に置かれていた（接地フラグ true）機体が 0.06 m まで浮いた状態: 機体が上昇している間に LANDING が始まりうる状態。
+static void restedThenLiftedTo(sf::TakeoffLandingMgr& mgr, float height_m)
+{
+    mgr.init();
+    feedWithNotice(mgr, 0.04f, false, 10);
+    feed(mgr, height_m, true, true, 0.0f, false, 1, 33);
+    ASSERT_TRUE(mgr.isOnGround());   // the flag has not been released (it needs a reading above 0.15 m) / フラグは解けていない（0.15 m を超える読みが要る）
+}
+
+TEST(land_climbing_craft_with_a_held_estimate_is_not_at_rest)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLiftedTo(mgr, 0.06f);
+    feedLandingToFRamp(mgr, 0.06f, 0.0055f, 14, 0.0f);          // climbing at 0.17 m/s (0.0055 m per 33 ms) from 0.06 m to 0.13 m: 0.46 s, past stall_hold_ms, the ToF below near_ground_tof_m (0.15 m) all the time / 0.17 m/s で 0.06 m から 0.13 m へ上昇（33 ms に 0.0055 m）: 0.46 s で stall_hold_ms を超え、ToF はずっと near_ground_tof_m（0.15 m）未満
+    ASSERT_TRUE(!mgr.isLandingDetected());
+}
+
+TEST(land_descending_craft_with_a_held_estimate_is_not_at_rest)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLiftedTo(mgr, 0.14f);
+    feedLandingToFRamp(mgr, 0.14f, -0.0055f, 14, 0.0f);         // sinking at 0.17 m/s from 0.14 m to 0.07 m (0.46 s, past stall_hold_ms) / 0.14 m から 0.07 m へ 0.17 m/s で降下（0.46 s で stall_hold_ms を超える）
+    ASSERT_TRUE(!mgr.isLandingDetected());
+}
+
+TEST(land_low_hover_with_a_held_estimate_ends_by_the_stalled_descent)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLiftedTo(mgr, 0.10f);
+    static const float kNoise[] = {0.0f, 0.004f, -0.003f, 0.002f, -0.004f, 0.003f, -0.002f, 0.001f};   // +-4 mm: inside rest_band_m / rest_band_m の内側
+    for (int i = 0; i < 34; ++i) {                              // 1.12 s of a craft that holds 0.10 m: the LANDING never moves it / 0.10 m を保つ機体の 1.12 s: LANDING は機体を動かさない
+        mgr.noteLandingDescent(true);
+        feed(mgr, 0.10f + kNoise[i % 8], true, true, 0.0f, true, 1, 33);
+    }
+    ASSERT_TRUE(mgr.isLandingDetected());                       // ends in bounded time: a LANDING begun in a low hover is not endless / 有限の時間で終わる: 低いホバーで始まった LANDING は終わらないことはない
+    ASSERT_TRUE(mgr.isOnGround());
+}
+
+TEST(land_stalled_descent_needs_the_stillness_to_last_the_hold)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLiftedTo(mgr, 0.10f);
+    feedLandingToFRamp(mgr, 0.10f, 0.0f, 30, 0.0f);             // 0.99 s still: short of rest_hold_ms (1 s), the readings are in the 5-15 cm band with the estimate held / 0.99 s の静止: rest_hold_ms（1 s）に足りない。読みは推定が固定された 5〜15 cm の帯にある
+    ASSERT_TRUE(!mgr.isLandingDetected());
+    feedLandingToFRamp(mgr, 0.10f, 0.0f, 2, 0.0f);              // 1.05 s / 1.05 s
+    ASSERT_TRUE(mgr.isLandingDetected());
+}
+
+TEST(land_stillness_below_the_ground_band_keeps_the_base_hold)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLiftedTo(mgr, 0.04f);
+    feedLandingToFRamp(mgr, 0.04f, 0.0f, 22, 0.0f);             // on the floor (readings below kTakeoffGroundBandM): the base hold landing_hold_ms (0.7 s) applies, not rest_hold_ms / 床の上（読みが kTakeoffGroundBandM 未満）: rest_hold_ms でなく基本の landing_hold_ms（0.7 s）
+    ASSERT_TRUE(mgr.isLandingDetected());
+}
+
+TEST(land_held_estimate_without_a_valid_reading_is_not_at_rest)
+{
+    sf::TakeoffLandingMgr mgr;
+    restedThenLiftedTo(mgr, 0.10f);
+    mgr.noteLandingDescent(true);
+    feed(mgr, 0.0f, false, true, 0.0f, true, 30, 33);           // 1 s of invalid samples: no evidence either way (the dead-zone path needs its own valid reading in the band, which this LANDING has not seen) / 無効サンプルが 1 s: どちらの証拠でもない（不感帯の経路は帯の中の有効な読みを要し、この LANDING はそれを見ていない）
+    ASSERT_TRUE(!mgr.isLandingDetected());
+}
+
+TEST(land_live_estimate_that_still_climbs_is_not_at_rest)
+{
+    sf::TakeoffLandingMgr mgr;
+    mgr.init();
+    feed(mgr, 0.30f, true, true, 0.0f, false, 5, 33);           // above 0.15 m: the ground flag is released, the estimate is live / 0.15 m より上: 接地フラグは解け、推定は有効
+    ASSERT_TRUE(!mgr.isOnGround());
+    mgr.noteLandingDescent(true);
+    feed(mgr, 0.12f, true, true, -0.20f, true, 30, 33);         // near the floor, the estimate says 0.2 m/s up (NED down is negative): not at rest / 床の近く、推定は上向き 0.2 m/s（NED の下向きが正なので負）: 静止でない
+    ASSERT_TRUE(!mgr.isLandingDetected());
+}
+
 /// The [TakeoffLanding] group (ground contact, stalled descent, blind touchdown, markAirborne).
 /// [TakeoffLanding] のグループ（接地、降下停滞、ToF なし接地、markAirborne）。
 static void runTakeoffLandingTests()
@@ -1531,6 +1626,13 @@ static void runTakeoffLandingTests()
     run_land_notice_judges_afresh_again_at_every_new_landing();
     run_land_notice_without_a_landing_descent_changes_nothing();
     run_land_notice_clears_the_dead_zone_evidence_of_before_the_landing();
+    run_land_climbing_craft_with_a_held_estimate_is_not_at_rest();
+    run_land_descending_craft_with_a_held_estimate_is_not_at_rest();
+    run_land_low_hover_with_a_held_estimate_ends_by_the_stalled_descent();
+    run_land_stalled_descent_needs_the_stillness_to_last_the_hold();
+    run_land_stillness_below_the_ground_band_keeps_the_base_hold();
+    run_land_held_estimate_without_a_valid_reading_is_not_at_rest();
+    run_land_live_estimate_that_still_climbs_is_not_at_rest();
 }
 
 int main()

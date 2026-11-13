@@ -1,0 +1,21 @@
+# battery_emergency_takeoff_climbing_manual.scn — the battery EMERGENCY comes while the craft climbs low in a manual (STABILIZE) TAKEOFF: the LANDING ends on the floor, not in the air
+#                                                手動（STABILIZE）の TAKEOFF で、低い高さを上昇中に電池の EMERGENCY が出る: LANDING は空中でなく床の上で終わる
+#
+# The takeoff of battery_emergency_takeoff_airborne_manual.scn with the hover-thrust estimate 20 % high (hover.thrust_corr 1.2, learning off): the craft lifts faster, so 0.5 s after the TAKEOFF began the LANDING begins at 0.08 m with the craft climbing at
+# 0.3 m/s. The ground flag is still set and ImuTask holds the estimated vertical velocity at 0, so the stalled-descent path ended the LANDING 0.48 s later with the motors stopped at 0.14-0.16 m, in the air. Spec under test (detailed_design.md §3 note 7):
+# with the estimate held, the evidence of rest is the ToF itself (TakeoffLandingMgr::atRest()): the motors keep running and stop on the floor, in manual mode as in altitude mode.
+#
+# battery_emergency_takeoff_airborne_manual.scn の離陸で、ホバー推力の見積もりが 20 % 高い（hover.thrust_corr 1.2、学習なし）: 機体は速く浮くので、TAKEOFF の開始の 0.5 s 後、機体が 0.3 m/s で上昇中の 0.08 m で
+# LANDING が始まる。接地フラグはまだ立ち、ImuTask は推定の鉛直速度を 0 に固定しているので、降下停滞の経路が 0.48 s 後に LANDING を終わらせ、モータは 0.14〜0.16 m の空中で止まった。検証する仕様（detailed_design.md §3 注7）:
+# 推定が固定されている間、静止の証拠は ToF そのもの（TakeoffLandingMgr::atRest()）で、モータは回り続け、床の上で止まる。高度モードでも手動モードでも同じ。
+#
+# Run: sf sils scenario simulator/sils/scenarios/battery_emergency_takeoff_climbing_manual.scn --target vehicle --duration 14000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    param      hover.thrust.learn 0                                                # the hover-thrust estimate stays wrong
+   +    param      hover.thrust_corr 1.2                                               # estimate 20 % above the setting that the loop settles on
+   +    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  1     1000      50                       # B: ARM in STABILIZE (4.0 s), idle in ARMED_GROUND (to 5.0 s)
+   +    rc         3300  2048   2048    2048  1     500       50                       # C: throttle past the takeoff threshold (5.0 s): TAKEOFF, the craft lifts a few cm; hold to 5.5 s
+   +    battery    2.99                                                                # D: 5.5 s — the pack falls just below the critical voltage, craft a few cm up
+   +    rc         3300  2048   2048    2048  1     8000      50                       # E: the pilot keeps the throttle (to 13.5 s)

@@ -1,0 +1,23 @@
+# battery_emergency_takeoff_climbing.scn — the battery EMERGENCY comes while the craft climbs low in an auto-takeoff: the LANDING ends on the floor, not in the air
+#                                         低い高さを上昇中の自動離陸で電池の EMERGENCY が出る: LANDING は空中でなく床の上で終わる
+#
+# The takeoff of battery_emergency_takeoff_airborne.scn with the hover-thrust estimate 10 % high (hover.thrust_corr 1.1, learning off, the ToF dead zone on): 0.4 s after the TAKEOFF began the craft is at 0.08 m and climbing at 0.2 m/s
+# (the alert reaches the StateManager within 0.1 s: the LANDING begins at 0.083 m). The ground flag of the TakeoffLandingMgr is still set (it is released by a ToF reading above 0.15 m) and ImuTask holds the estimated vertical velocity at 0, so
+# the craft 'is at rest' for the estimate: the stalled-descent path ended the LANDING 0.44 s later with the motors stopped at 0.187 m, in the air. Spec under test (detailed_design.md §3 note 7): with the estimate held, the evidence of rest is
+# the ToF itself (TakeoffLandingMgr::atRest()), so a craft that moves is not at rest: the motors keep running and stop on the floor (the touchdown speed is low: the descent_speed_max bound).
+#
+# battery_emergency_takeoff_airborne.scn の離陸で、ホバー推力の見積もりが 10 % 高い（hover.thrust_corr 1.1、学習なし、ToF の不感帯あり）: TAKEOFF の開始の 0.4 s 後、機体は 0.08 m を 0.2 m/s で上昇中
+# （アラートは 0.1 s 以内に StateManager に届く: LANDING は 0.083 m で始まる）。TakeoffLandingMgr の接地フラグはまだ立ったまま（0.15 m を超える ToF の読みで解ける）で、ImuTask は推定の鉛直速度を 0 に固定しているので、
+# 推定にとって機体は「静止」している: 降下停滞の経路が 0.44 s 後に LANDING を終わらせ、モータは 0.187 m の空中で止まった。検証する仕様（detailed_design.md §3 注7）: 推定が固定されている間、静止の証拠は
+# ToF そのもの（TakeoffLandingMgr::atRest()）で、動く機体は静止ではない: モータは回り続け、床の上で止まる（接地速度は小さい: descent_speed_max の上限）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/battery_emergency_takeoff_climbing.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    param      hover.thrust.learn 0                                                # the hover-thrust estimate stays wrong
+   +    param      hover.thrust_corr 1.1                                               # estimate 10 % above the setting that the loop settles on
+   +    rc         2048  2048   2048    2048  0     6000      50                       # A: boot at rest — calibration completes
+   +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED (to 7.5 s)
+   +    rc         2048  2048   2048    2048  1     720       50        1              # C: ARM in ALT_HOLD (7.5 s); the TAKEOFF begins at about 7.82 s; hold to 8.22 s
+   +    battery    2.99                                                                # D: the pack falls just below the critical voltage, craft in the air
+   +    rc         2048  2048   2048    2048  1     14000     50        1              # E: nothing more from the pilot

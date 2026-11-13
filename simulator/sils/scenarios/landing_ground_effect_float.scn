@@ -1,0 +1,22 @@
+# landing_ground_effect_float.scn — a LANDING that the ground effect holds above the floor still ends: the stalled-descent verdict
+#                                   地面効果が床の上に留める LANDING も終わる: 降下停滞の判定
+#
+# The ALT_HOLD auto-land of alt_disarm_land.scn with the plant's ground-effect model on (--ground-effect: the rotors lift more near the floor, so the craft holds a low height on reduced thrust). The craft sinks to a float 0.045 m above the floor (true height of the body
+# centre; 0.021 m is the floor) at 15.6 s, with the ground flag clear (it has been above 0.15 m) and the estimated vertical velocity live. Spec under test (detailed_design.md §3 note 7): the stalled-descent path (2) ends the LANDING (the log line
+# "Landing detected (stalled descent / ground effect)"): the rest rule of TakeoffLandingMgr::atRest() does not change a craft that really holds still, 0.4 s after it stalls.
+#
+# alt_disarm_land.scn の ALT_HOLD の自動着陸を、プラントの地面効果モデルを入れて行う（--ground-effect: 床の近くでローターの揚力が増し、機体は低い推力で低い高さを保つ）。機体は 15.6 s に、床の 0.045 m 上（機体中心の真の高さ。
+# 床は 0.021 m）のフロートまで沈む。接地フラグは解けている（0.15 m を超えたことがある）ので、推定の鉛直速度は有効。検証する仕様（detailed_design.md §3 注7）: 降下停滞の経路 (2) が LANDING を終わらせる
+# （ログ「Landing detected (stalled descent / ground effect)」）: TakeoffLandingMgr::atRest() の静止の規則は、本当に静止している機体を変えない（停滞してから 0.4 s）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/landing_ground_effect_float.scn --target vehicle --duration 25000000 --ground-effect
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    tof_deadzone 0                                                             # 0: dead zone model OFF (the floor reads a valid distance, as in alt_disarm_land)
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (press) — props stop, spool, AUTO-takeoff fires
+   +    rc   2048  2048   2048    2048  1     4000      50        1              # D: throttle CENTER → climb to 0.5 m, reach Airborne, hover
+   +    rc   2048  2048   2048    2048  0     500       50        1              # E: release the ARM button (so the next press is an edge)
+   +    rc   2048  2048   2048    2048  1     6000      50        1              # F: press DISARM while FLYING → AUTO-LAND (gradual descent → touchdown → DISARM)
+   +    rc   2048  2048   2048    2048  0     600       50                       # G: settle (disarmed after touchdown)

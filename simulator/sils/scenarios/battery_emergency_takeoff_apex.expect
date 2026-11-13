@@ -1,0 +1,17 @@
+# battery_emergency_takeoff_apex.expect — a LANDING that begins at the top of the climb does not end in the air; the motors stop on the floor
+# 上昇の頂点で始まる LANDING は空中で終わらない。モータは床の上で止まる
+#
+exit 0
+log_contains any "Auto-takeoff engaged"
+log_contains any "Battery emergency → LANDING"
+log_contains any "Transition: TAKEOFF → LANDING"
+log_contains any "Transition: LANDING → IDLE_GROUND"
+log_absent any "Landing detected (stalled descent"
+log_absent any "Transition: TAKEOFF → IDLE_GROUND"
+log_absent any "Transition: TAKEOFF → FLYING"
+order "Battery emergency → LANDING" "Transition: LANDING → IDLE_GROUND"
+metric duty_max > 0.1 in 9.10 9.18
+metric alt_max < 0.6 in 7.0 22.0
+metric alt_max < 0.05 in 20.0 22.0
+metric duty_max < 0.01 in 20.0 22.0
+metric descent_speed_max < 0.7 in 8.5 22.0

@@ -1,21 +1,18 @@
-# landing_low_start.expect — a LANDING that begins low ends by a verdict made in the LANDING: the motors run on, then stop on the floor
-# 低い高さで始まる LANDING は、その LANDING の中で出た判定で終わる: モータは回り続け、床の上で止まる
+# landing_low_start.expect — a LANDING that begins low is judged from the samples of the LANDING: the motors run on and stop on the floor
+# 低い高さで始まる LANDING は、その LANDING のサンプルから判定される: モータは回り続け、床の上で止まる
 #
-# Measured: LANDING at 11.02 s (0.117 m), "Landing detected (stalled descent / ground effect)" at about 11.46 s, the motors stop at 0.042 m. Without the afresh judgement the SILS result is the same
-# (see the scenario file): this checks the behaviour, the host tests check the judgement.
-# 実測: LANDING は 11.02 s（0.117 m）、約 11.46 s に「Landing detected (stalled descent / ground effect)」、モータは 0.042 m で止まる。判定のやり直しが無くても SILS の結果は同じ
-# （シナリオファイル参照）: これは動作の確認で、判定そのものはホスト試験が検査する。
+# Measured: LANDING at 11.02 s (0.117 m), the craft turns round at 0.133 m and sinks at up to 0.58 m/s, the motors stop at 11.52 s by the impact cut at a true height of 0.017 m. The craft is not at rest, so no stalled-descent verdict is made.
+# Without the afresh judgement the SILS result is the same (see the scenario file): this checks the behaviour, the host tests check the judgement.
+# 実測: LANDING は 11.02 s（0.117 m）、機体は 0.133 m で向きを変え、最大 0.58 m/s で沈み、モータは 11.52 s に衝撃のカットで、真の高さ 0.017 m で止まる。機体は静止していないので、降下停滞の判定は出ない。
+# 判定のやり直しが無くても SILS の結果は同じ（シナリオファイル参照）: これは動作の確認で、判定そのものはホスト試験が検査する。
 exit 0
 log_contains any "Transition: TAKEOFF → LANDING"
-log_contains any "Landing detected (stalled descent / ground effect)"
 log_contains any "Transition: LANDING → IDLE_GROUND"
-order "Transition: TAKEOFF → LANDING" "Landing detected (stalled descent" "Transition: LANDING → IDLE_GROUND"
-# Not an impact cut or an emergency cut.
-# 衝撃カットでも緊急カットでもない。
-log_absent any "emergency DISARM"
-# The motors are still running 0.1-0.3 s after the LANDING began (a stop in the cycle it began would leave duty_max 0 from 11.04 s).
-# LANDING が始まって 0.1〜0.3 s の間、モータはまだ回っている（始まった周期に止まれば、11.04 s 以降 duty_max は 0）。
-metric duty_max > 0.1 in 11.1 11.3
+log_absent any "Landing detected (stalled descent"
+order "Transition: TAKEOFF → LANDING" "Transition: LANDING → IDLE_GROUND"
+# The motors are still running 0.1-0.4 s after the LANDING began (a stop in the cycle it began would leave duty_max 0 from 11.04 s; a stalled-descent verdict at 0.44 s, with the craft sinking, would stop them in the air).
+# LANDING が始まって 0.1〜0.4 s の間、モータはまだ回っている（始まった周期に止まれば、11.04 s 以降 duty_max は 0。0.44 s での降下停滞の判定は、沈んでいる機体のモータを空中で止める）。
+metric duty_max > 0.1 in 11.1 11.4
 # Down on the floor (below 5 cm) once the motors stopped.
 # モータが止まった後は床の上（5 cm 未満）。
 metric alt_max < 0.05 in 12.0 20.0
