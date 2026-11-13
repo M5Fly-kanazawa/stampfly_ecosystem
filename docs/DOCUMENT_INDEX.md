@@ -128,6 +128,7 @@
 | [firmware/vehicle/docs/coding_and_education.md](../firmware/vehicle/docs/coding_and_education.md) | コーディング方針・教育計画 |
 | [firmware/vehicle/docs/development_roadmap.md](../firmware/vehicle/docs/development_roadmap.md) | 開発ロードマップ・SILS→実機ワークフロー |
 | [firmware/vehicle/docs/hardware_init.md](../firmware/vehicle/docs/hardware_init.md) | ハードウェア初期化設計（BSP・起動シーケンス） |
+| [firmware/vehicle/docs/hardware_checkout.md](../firmware/vehicle/docs/hardware_checkout.md) | 実機確認手順（プロペラなしの机上から低空飛行までの段階別手順と結果表） |
 
 上記6文書に加え、`firmware/vehicle/docs/` にはフライト調査・不具合診断ノート（`poshold_journey.md`、`feature_status.md`、`operation_manual.md`、`topic_reference.md`、`control_theory_overview.md`、`yaw_axis_model.md` 等、計約28ファイル）が格納されている。
 
@@ -339,6 +340,7 @@ Full design document set for the current firmware. The six canonical documents:
 | [firmware/vehicle/docs/coding_and_education.md](../firmware/vehicle/docs/coding_and_education.md) | Coding policy and education plan |
 | [firmware/vehicle/docs/development_roadmap.md](../firmware/vehicle/docs/development_roadmap.md) | Development roadmap and SILS-to-real-hardware workflow |
 | [firmware/vehicle/docs/hardware_init.md](../firmware/vehicle/docs/hardware_init.md) | Hardware initialization design (BSP, boot sequence) |
+| [firmware/vehicle/docs/hardware_checkout.md](../firmware/vehicle/docs/hardware_checkout.md) | Hardware checkout procedure (staged, from the propeller-free bench to low flight, with a results sheet) |
 
 Beyond these six, `firmware/vehicle/docs/` also holds flight-investigation and debugging notes (`poshold_journey.md`, `feature_status.md`, `operation_manual.md`, `topic_reference.md`, `control_theory_overview.md`, `yaw_axis_model.md`, etc. — about 28 files total).
 
