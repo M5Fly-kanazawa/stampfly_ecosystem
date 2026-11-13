@@ -405,7 +405,7 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `checked_cycles` | int | count | 検査した ARM 中の制御周期の数。 |
 | `detected_cycles` | int | count | どれかの境界に有限でない値があった周期の数。 |
 | `estimate_input` | int | count | 推定値の入力（姿勢・位置・速度・角速度の 13 個）が有限でなかった周期の数。 |
-| `setpoint_input` | int | count | 目標値の入力（5 個）が有限でなかった周期の数。 |
+| `setpoint_input` | int | count | 目標値の入力（パイロットの目標値 5 個と誘導目標 9 個）が有限でなかった周期の数。 |
 | `control_reference` | int | count | 制御器の外側ループの出力（rate_ref・angle_ref の 5 個）が有限でなかった周期の数。 |
 | `control_output` | int | count | 制御器の出力（推力とトルク 3 軸の 4 個）が有限でなかった周期の数。 |
 | `mixer_output` | int | count | ミキサの出力（上下限の前の 4 モータの duty）が有限でなかった周期の数。 |
@@ -910,7 +910,7 @@ Source: Status v4 (0x4F, 224 B) / Nominal rate: 1 Hz / Required: no
 | `checked_cycles` | int | count | Armed control cycles checked. |
 | `detected_cycles` | int | count | Cycles in which any boundary held a non-finite value. |
 | `estimate_input` | int | count | Cycles in which the estimate input (13 values) was not finite. |
-| `setpoint_input` | int | count | Cycles in which the setpoint input (5 values) was not finite. |
+| `setpoint_input` | int | count | Cycles in which the setpoint input (5 pilot setpoint values and 9 guidance target values) was not finite. |
 | `control_reference` | int | count | Cycles in which the outer-loop output (rate_ref, angle_ref: 5 values) was not finite. |
 | `control_output` | int | count | Cycles in which the controller output (thrust and 3 torques: 4 values) was not finite. |
 | `mixer_output` | int | count | Cycles in which the mixer output (4 duties before the limits) was not finite. |

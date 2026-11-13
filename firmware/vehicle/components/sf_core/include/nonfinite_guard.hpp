@@ -30,9 +30,9 @@
  *                       触れない（ビット単位で不変）。
  *
  * Pure logic (no FreeRTOS, no ESP-IDF): runs in the host test (test_nonfinite_guard.cpp).
- * Cost per control cycle: one std::isfinite per checked value, 35 in all (see detailed_design.md §8).
+ * Cost per control cycle: one std::isfinite per checked value, 44 in all (see detailed_design.md §8).
  * 純粋なロジック（FreeRTOS・ESP-IDF なし）: ホスト試験（test_nonfinite_guard.cpp）で動く。
- * 1 制御周期あたりの費用: 検査する値 1 個につき std::isfinite 1 回、合計 35 回（detailed_design.md §8）。
+ * 1 制御周期あたりの費用: 検査する値 1 個につき std::isfinite 1 回、合計 44 回（detailed_design.md §8）。
  *
  * @design detailed_design.md §8 — Non-finite number monitor (nonfinite_status)  [OK]
  */
@@ -169,6 +169,71 @@ inline uint32_t guardMotorDuties(float duties[kMotorCount], uint32_t upstream_ma
         }
     }
     return replaced;
+}
+
+/// Check the estimate the controller reads (attitude 4, position 3, velocity 3, angular rate 3 = 13 values) and
+/// record it as EstimateInput. Only counts; no value is changed.
+/// 制御器が読む推定値（姿勢 4・位置 3・速度 3・角速度 3 = 13 個）を検査し、EstimateInput として記録する。
+/// 数えるだけで、値は変えない。
+///
+/// @design detailed_design.md §8 — Non-finite number monitor (nonfinite_status)  [OK]
+inline void checkEstimateInput(NonFiniteMonitor& monitor, const StateEstimate& state)
+{
+    const uint32_t estimate_bad = countNonFinite(state.attitude, 4)
+                                + countNonFinite(state.position, 3)
+                                + countNonFinite(state.velocity, 3)
+                                + countNonFinite(state.angular_rate, 3);
+    monitor.record(NonFiniteStage::EstimateInput, estimate_bad);
+}
+
+/// Check the targets the controller is given and record them as ONE boundary, SetpointInput: the pilot setpoint
+/// (throttle, throttle axis, roll, pitch, yaw = 5 values) and the guidance target of the API / Navigator (position 3,
+/// yaw, speed, velocity 3, yaw rate = 9 values). The guidance target is read as it stands in the topic, every armed
+/// cycle: a non-finite value that stays there is counted in every cycle it stays. Only counts; no value is changed.
+/// 制御器に与える目標を検査し、1 つの境界 SetpointInput として記録する: パイロットの目標値（スロットル・スロットル軸・
+/// ロール・ピッチ・ヨー = 5 個）と、API / ナビゲータの誘導目標（位置 3・ヨー・速度・速度指令 3・ヨーレート = 9 個）。
+/// 誘導目標はトピックにある値のまま、ARM 中の毎周期読む: 有限でない値が残っている間は、その周期ごとに数える。
+/// 数えるだけで、値は変えない。
+///
+/// @design detailed_design.md §8 — Non-finite number monitor (nonfinite_status)  [OK]
+inline void checkCommandInputs(NonFiniteMonitor& monitor, const CommandSetpoint& setpoint,
+                               const GuidanceTarget& guidance)
+{
+    const float setpoint_values[] = {setpoint.throttle, setpoint.throttle_axis, setpoint.roll,
+                                     setpoint.pitch, setpoint.yaw};
+    const float guidance_values[] = {guidance.position[0], guidance.position[1], guidance.position[2],
+                                     guidance.yaw, guidance.speed, guidance.vx, guidance.vy, guidance.vz,
+                                     guidance.vyaw};
+    const uint32_t command_bad = countNonFinite(setpoint_values, sizeof(setpoint_values) / sizeof(float))
+                               + countNonFinite(guidance_values, sizeof(guidance_values) / sizeof(float));
+    monitor.record(NonFiniteStage::SetpointInput, command_bad);
+}
+
+/// Check every input of the controller: the estimate, the pilot setpoint and the guidance target.
+/// 制御器の入力すべてを検査する: 推定値・パイロットの目標値・誘導目標。
+///
+/// @design detailed_design.md §8 — Non-finite number monitor (nonfinite_status)  [OK]
+inline void checkControllerInputs(NonFiniteMonitor& monitor, const StateEstimate& state,
+                                  const CommandSetpoint& setpoint, const GuidanceTarget& guidance)
+{
+    checkEstimateInput(monitor, state);
+    checkCommandInputs(monitor, setpoint, guidance);
+}
+
+/// The motor path of a control law that produces motor duties directly (the workshop): record the duties as MixerOutput
+/// (the values the law asked for, before any limit), turn every motor whose value is not finite into duty 0, and record the
+/// motors set to 0 as MotorCommand. The same two records and the same guard as Actuator::update().
+/// モータ duty を直接出す制御則（ワークショップ）のモータ経路: duty を MixerOutput（制御則が求めた、上下限の前の値）として
+/// 記録し、有限でない値のモータを duty 0 にし、0 にしたモータを MotorCommand として記録する。Actuator::update() と
+/// 同じ 2 つの記録と同じ保護。
+///
+/// @design detailed_design.md §8 — Non-finite number monitor (nonfinite_status)  [OK]
+inline void recordAndGuardMotorDuties(NonFiniteMonitor& monitor, float duties[kMotorCount])
+{
+    const uint32_t requested_mask = nonFiniteMask(duties, kMotorCount);
+    monitor.record(NonFiniteStage::MixerOutput, countMaskBits(requested_mask));
+    const uint32_t zeroed_mask = guardMotorDuties(duties, requested_mask);
+    monitor.record(NonFiniteStage::MotorCommand, countMaskBits(zeroed_mask));
 }
 
 }  // namespace sf

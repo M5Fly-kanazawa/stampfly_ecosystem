@@ -220,6 +220,115 @@ TEST(an_injected_nan_is_detected_and_every_motor_command_is_a_finite_integer_sou
     ASSERT_TRUE(monitor.result().first_us == 7777);
 }
 
+// The 14 values of the SetpointInput boundary, by field: the pilot setpoint (5) and the guidance target (9).
+// SetpointInput 境界の 14 個の値を、フィールドごとに: パイロットの目標値（5）と誘導目標（9）。
+static constexpr size_t kCommandFieldCount = 14;
+
+/// A pilot setpoint and a guidance target that are all finite, with field `index` (0..13) set to `bad`.
+/// すべて有限なパイロットの目標値と誘導目標の、フィールド `index`（0..13）だけを `bad` にしたもの。
+static void makeCommandInputs(size_t index, float bad, sf::CommandSetpoint& setpoint, sf::GuidanceTarget& guidance)
+{
+    setpoint = sf::CommandSetpoint{};
+    guidance = sf::GuidanceTarget{};
+    float* fields[kCommandFieldCount] = {
+        &setpoint.throttle, &setpoint.throttle_axis, &setpoint.roll, &setpoint.pitch, &setpoint.yaw,
+        &guidance.position[0], &guidance.position[1], &guidance.position[2], &guidance.yaw, &guidance.speed,
+        &guidance.vx, &guidance.vy, &guidance.vz, &guidance.vyaw,
+    };
+    *fields[index] = bad;
+}
+
+TEST(a_non_finite_guidance_target_or_setpoint_field_is_counted_at_the_setpoint_boundary)
+{
+    // Every field, NaN and both infinities: counted once at SetpointInput, nowhere else.
+    // 全フィールド・NaN と両方の無限大: SetpointInput で 1 回数え、他の境界には出ない。
+    const float bad_values[] = {kNan, kInf, -kInf};
+    for (size_t index = 0; index < kCommandFieldCount; ++index) {
+        for (float bad : bad_values) {
+            sf::CommandSetpoint setpoint;
+            sf::GuidanceTarget guidance;
+            makeCommandInputs(index, bad, setpoint, guidance);
+            sf::NonFiniteMonitor monitor;
+            monitor.beginCycle(0);
+            sf::checkCommandInputs(monitor, setpoint, guidance);
+            const sf::NonFiniteStatus& status = monitor.result();
+            ASSERT_TRUE(status.stage_count[static_cast<size_t>(sf::NonFiniteStage::SetpointInput)] == 1);
+            ASSERT_TRUE(status.detected_cycles == 1);
+            ASSERT_TRUE(status.first_stage == static_cast<uint8_t>(sf::NonFiniteStage::SetpointInput));
+            ASSERT_TRUE(status.stage_count[static_cast<size_t>(sf::NonFiniteStage::EstimateInput)] == 0);
+        }
+    }
+}
+
+TEST(finite_command_inputs_are_not_counted_including_the_default_idle_target)
+{
+    sf::CommandSetpoint setpoint = {};
+    sf::GuidanceTarget guidance = {};   // the idle topic value: all zero / 待機中のトピックの値: すべて 0
+    sf::NonFiniteMonitor monitor;
+    monitor.beginCycle(0);
+    sf::checkCommandInputs(monitor, setpoint, guidance);
+    guidance.vx = 3.4028234e38f;   // the largest finite value is finite / 最大の有限値は有限
+    guidance.position[2] = -3.4028234e38f;
+    sf::checkCommandInputs(monitor, setpoint, guidance);
+    ASSERT_TRUE(monitor.result().detected_cycles == 0);
+    ASSERT_TRUE(monitor.result().first_stage == sf::kNonFiniteNoStage);
+}
+
+TEST(a_standing_non_finite_target_is_counted_in_every_cycle_it_stays)
+{
+    sf::CommandSetpoint setpoint;
+    sf::GuidanceTarget guidance;
+    makeCommandInputs(10, kNan, setpoint, guidance);   // guidance.vx / 誘導目標の vx
+    sf::NonFiniteMonitor monitor;
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        monitor.beginCycle(static_cast<uint32_t>(cycle));
+        sf::checkCommandInputs(monitor, setpoint, guidance);
+    }
+    ASSERT_TRUE(monitor.result().detected_cycles == 3);
+    ASSERT_TRUE(monitor.result().stage_count[static_cast<size_t>(sf::NonFiniteStage::SetpointInput)] == 3);
+}
+
+TEST(controller_inputs_check_the_estimate_and_the_commands_and_count_a_cycle_once)
+{
+    sf::StateEstimate state = {};
+    state.velocity[1] = kNan;
+    sf::CommandSetpoint setpoint = {};
+    sf::GuidanceTarget guidance = {};
+    guidance.yaw = kInf;
+    sf::NonFiniteMonitor monitor;
+    monitor.beginCycle(55);
+    sf::checkControllerInputs(monitor, state, setpoint, guidance);
+    const sf::NonFiniteStatus& status = monitor.result();
+    ASSERT_TRUE(status.stage_count[static_cast<size_t>(sf::NonFiniteStage::EstimateInput)] == 1);
+    ASSERT_TRUE(status.stage_count[static_cast<size_t>(sf::NonFiniteStage::SetpointInput)] == 1);
+    ASSERT_TRUE(status.detected_cycles == 1);                                          // one cycle, two boundaries / 1 周期・2 境界
+    ASSERT_TRUE(status.first_stage == static_cast<uint8_t>(sf::NonFiniteStage::EstimateInput));   // the most upstream / 最も上流
+    ASSERT_TRUE(status.first_us == 55);
+}
+
+TEST(motor_request_helper_counts_the_request_and_zeroes_only_the_non_finite_motors)
+{
+    // The workshop path: a learner's duties, one NaN and one +infinity, two finite.
+    // ワークショップの経路: 学習者の duty。NaN 1 個・+無限大 1 個・有限 2 個。
+    sf::NonFiniteMonitor monitor;
+    monitor.beginCycle(9);
+    float duties[sf::kMotorCount] = {0.25f, kNan, 0.5f, kInf};
+    sf::recordAndGuardMotorDuties(monitor, duties);
+    ASSERT_TRUE(duties[0] == 0.25f && duties[2] == 0.5f);   // finite duties unchanged / 有限な duty は不変
+    ASSERT_TRUE(duties[1] == 0.0f && duties[3] == 0.0f);
+    const sf::NonFiniteStatus& status = monitor.result();
+    ASSERT_TRUE(status.stage_count[static_cast<size_t>(sf::NonFiniteStage::MixerOutput)] == 1);
+    ASSERT_TRUE(status.stage_count[static_cast<size_t>(sf::NonFiniteStage::MotorCommand)] == 1);
+    ASSERT_TRUE(status.first_stage == static_cast<uint8_t>(sf::NonFiniteStage::MixerOutput));
+
+    sf::NonFiniteMonitor clean;
+    clean.beginCycle(10);
+    float finite_duties[sf::kMotorCount] = {0.0f, 0.1f, 0.2f, 1.0f};
+    sf::recordAndGuardMotorDuties(clean, finite_duties);
+    ASSERT_TRUE(clean.result().detected_cycles == 0);
+    ASSERT_TRUE(finite_duties[1] == 0.1f && finite_duties[3] == 1.0f);
+}
+
 TEST(stage_names_cover_every_boundary_and_the_none_value)
 {
     ASSERT_TRUE(std::strcmp(sf::nonFiniteStageName(static_cast<uint8_t>(sf::NonFiniteStage::EstimateInput)), "estimate input") == 0);
@@ -246,6 +355,11 @@ int main()
     run_guard_drives_nan_and_infinities_as_zero_and_touches_only_those();
     run_guard_catches_a_value_the_limit_hid_through_the_upstream_mask();
     run_an_injected_nan_is_detected_and_every_motor_command_is_a_finite_integer_source();
+    run_a_non_finite_guidance_target_or_setpoint_field_is_counted_at_the_setpoint_boundary();
+    run_finite_command_inputs_are_not_counted_including_the_default_idle_target();
+    run_a_standing_non_finite_target_is_counted_in_every_cycle_it_stays();
+    run_controller_inputs_check_the_estimate_and_the_commands_and_count_a_cycle_once();
+    run_motor_request_helper_counts_the_request_and_zeroes_only_the_non_finite_motors();
     run_stage_names_cover_every_boundary_and_the_none_value();
 
     printf("\n=== Results: %d run, %d passed, %d failed ===\n",

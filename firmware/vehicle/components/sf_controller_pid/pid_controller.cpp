@@ -1827,9 +1827,9 @@ float PidController::brakeRiseInLanding(float thrust, float climb_rate) const
 /// altitude estimate is near the ground, the thrust CEILING is ramped down from hover toward kLandingSettleThrustFrac x hover over kLandingSettleRampS. The velocity loop still modulates within the ceiling (so a normal descent
 /// touches down gently before the ceiling bites), but if the craft is STILL floating the falling ceiling drops below what ground effect can support and the craft positively SETTLES: a bounded linger, no thrust-threshold
 /// guesswork, and no free fall (the floor is a fraction of hover, not 0). Only the vertical channel is shaped (INV-1); attitude is untouched. Returns the ceiling [N] (max_thrust_ away from the ground).
-/// 近地面の着地アシスト: 定速降下は接地近傍で地面効果（低推力でローター揚力増）と釣り合い、機体が粘って降下停滞する。高度推定が接地近傍に来たら、推力の上限を hover から
+/// 近地面の着地アシスト: 定速降下は接地近傍で地面効果（低推力でもローター揚力が増す）と釣り合い、機体が低い推力のまま高度を保って降下が止まる。高度推定が接地近傍に来たら、推力の上限を hover から
 /// kLandingSettleThrustFrac × hover へ kLandingSettleRampS かけて絞る。速度ループは上限内で調整（通常降下は上限が効く前に穏やかに接地）だが、まだ浮いていれば下がる上限が地面効果の支えを下回り機体は
-/// 確実に沈む — 粘りは有界、推力閾値の当て推量も自由落下もない（床は hover の一定割合で 0 でない）。鉛直チャネルのみ整形（INV-1）、姿勢は不変。上限 [N] を返す（地面から離れていれば max_thrust_）。
+/// 確実に降下する — 高度を保つ時間は有界、推力閾値の当て推量も自由落下もない（床は hover の一定割合で 0 でない）。鉛直チャネルのみ整形（INV-1）、姿勢は不変。上限 [N] を返す（地面から離れていれば max_thrust_）。
 /// @design detailed_design.md §3 注8 — near-ground settle assist: the thrust ceiling falls toward a fraction of the hover thrust [OK]
 /// @design architecture.md INV-1 — vertical channel only                                                                         [OK]
 float PidController::landingSettleCeiling(float altitude, float dt)

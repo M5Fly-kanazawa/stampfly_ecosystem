@@ -725,15 +725,16 @@ inline constexpr uint32_t kBlindLandingTimeoutUs = 10000000;   // 10 s
 /// Minimum time of the descent without a ToF before the time limit may cut the motors [us]: the landing is completed by time only when the state has
 /// been LANDING for kBlindLandingTimeoutUs AND the ToF has been continuously silent in it for this long. CANDIDATE. Basis: a LANDING with a live
 /// ToF can last longer than kBlindLandingTimeoutUs (a slow descent, ground effect); if the ToF then dies, the limit alone would stop the motors in the air at once.
-/// 5.5 s: the longest descent without a ToF measured, from the silence to the first contact, is 4.7 s (SILS, the 972-run ToF-silent matrix, a descent whose thrust ceiling is not limited by the support thrust; 4.0 s with the ceiling limited by it: 0.5 m hover 1.0-2.6 s,
-/// 1.2 m hover 1.4-2.8 s, API takeoff 0.5-2.4 s, auto-takeoff 0.5-3.6 s, ALT_HOLD stick climb 1.2-4.7 s, the longest with noise n0 and an accelerometer offset), so 5.5 s covers every one of them with 0.8 s
-/// to spare (1.5 s with the limited ceiling), and it is short of the 8.33 s at which the late fall brings the thrust to zero: the thrust has been falling for only 0.5 s (to 85 %) when the limit is reached, kBlindLandingLateStartS = 5 s
-/// being the start of that fall. A value of 4 s would cut the motors up to 0.7 s before the contact of the longest descents.
+/// 5.5 s: the longest descent without a ToF measured, from the silence to the first contact, is 4.7 s (SILS, the 972-run ToF-silent matrix, a descent whose thrust ceiling is not limited by the support thrust;
+/// per case: 0.5 m hover 1.0-2.6 s, 1.2 m hover 1.4-2.8 s, API takeoff 0.5-2.4 s, auto-takeoff 0.5-3.6 s, ALT_HOLD stick climb 1.2-4.7 s, the longest with noise n0 and an accelerometer offset). With the ceiling limited by the
+/// support thrust the longest is 4.0 s. So 5.5 s covers every one of them with 0.8 s to spare (1.5 s with the limited ceiling), and it is short of the 8.33 s at which the late fall brings the thrust to zero: the thrust
+/// has been falling for only 0.5 s (to 85 %) when the limit is reached, kBlindLandingLateStartS = 5 s being the start of that fall. A value of 4 s would cut the motors up to 0.7 s before the contact of the longest descents.
 /// 時間切れがモータを切ってよくなるまでの、ToF なしの降下の最低時間 [us]: 状態が kBlindLandingTimeoutUs の間 LANDING であり、「かつ」その中で ToF が
 /// この時間連続して出力停止しているときだけ、時間で着陸完了とする。候補値。根拠: ToF が動作している LANDING は kBlindLandingTimeoutUs より長く続くことが
 /// ある（ゆっくりした降下、地面効果）。その後に ToF が停止すると、上限だけでは空中で即座にモータを止めてしまう。
-/// 5.5 s: ToF なしの降下を、出力停止から最初の接触まで測った最長は 4.7 s（SILS の 972 本の ToF なしの評価表、推力の上限を支持推力で抑えない降下。抑える降下では 4.0 s: 0.5 m ホバー 1.0〜2.6 s、1.2 m ホバー 1.4〜2.8 s、
-/// API 離陸 0.5〜2.4 s、自動離陸 0.5〜3.6 s、ALT_HOLD のスティック上昇 1.2〜4.7 s。最長はノイズ n0 で加速度計のオフセットがある場合）なので、5.5 s は全てを 0.8 s の余裕（抑える降下では 1.5 s）で覆い、後半の低下が推力を
+/// 5.5 s: ToF なしの降下を、出力停止から最初の接触まで測った最長は 4.7 s（SILS の 972 本の ToF なしの評価表、推力の上限を支持推力で抑えない降下。
+/// 場合別: 0.5 m ホバー 1.0〜2.6 s、1.2 m ホバー 1.4〜2.8 s、API 離陸 0.5〜2.4 s、自動離陸 0.5〜3.6 s、ALT_HOLD のスティック上昇 1.2〜4.7 s。最長はノイズ n0 で加速度計のオフセットがある場合）。
+/// 推力の上限を支持推力で抑える降下では最長 4.0 s。よって 5.5 s は全てを 0.8 s の余裕（抑える降下では 1.5 s）で覆い、後半の低下が推力を
 /// ゼロにする 8.33 s より手前: 上限に達した時点で推力が下がり始めて 0.5 s（85 %まで）しか経っていない（後半の低下の開始は kBlindLandingLateStartS = 5 s）。4 s では、最長の降下で
 /// 接触の最大 0.7 s 前にモータを切ってしまう。
 inline constexpr uint32_t kBlindLandingMinSilentUs = 5500000;   // 5.5 s

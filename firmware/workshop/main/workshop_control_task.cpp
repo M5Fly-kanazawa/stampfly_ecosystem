@@ -25,8 +25,23 @@
  * 他の vehicle タスク（ImuTask、TelemetryTask、…）はこのパイプライン形状を前提に
  * 動いているため。
  *
+ * Non-finite monitor: the control path of this task is checked with the SAME monitor, scope and
+ * helpers as vehicle's ControlTask (nonfinite_scope.hpp, nonfinite_guard.hpp), so the CLI `status`
+ * `finite` line and the WiFi status packet show the counts here too. The boundaries are the estimate
+ * the learner reads (EstimateInput) and the motor request the learner's code produced (MixerOutput =
+ * the duties it asked for, MotorCommand = the motors turned into duty 0). A non-finite motor value
+ * from learner code is therefore counted and driven as 0. Pilot setpoint, guidance target and
+ * controller references do not exist in this task, so those boundaries stay 0.
+ * 非有限の監視: このタスクの制御経路を、vehicle の ControlTask と「同じ」監視器・スコープ・補助関数
+ * （nonfinite_scope.hpp、nonfinite_guard.hpp）で検査し、CLI `status` の `finite` 行と WiFi ステータス
+ * パケットにもここの数え上げを出す。境界は、学習者が読む推定値（EstimateInput）と、学習者のコードが
+ * 作ったモータ要求（MixerOutput = 求めた duty、MotorCommand = duty 0 にしたモータ）。学習者のコードが
+ * 出した有限でないモータの値は、数えた上で 0 で駆動する。パイロットの目標値・誘導目標・制御器の目標は
+ * このタスクに無いので、その境界は 0 のまま。
+ *
  * @subscriber controller_command, estimate_state, sensor_imu, actuator_motor, motor_test
- * @publisher  log_stream, actuator_motor (via sf::Actuator::applyTestDuties/disarm), motor_test
+ * @publisher  log_stream, actuator_motor (via sf::Actuator::applyTestDuties/disarm), motor_test, nonfinite_status
+ * @design detailed_design.md §8 — Non-finite number monitor (nonfinite_status)  [OK]
  * @design W1_SPEC.md §2-5 — workshop_control_task.cpp                  [OK]
  * @design architecture.md §5 — Main pipeline: Control + Actuation      [OK]
  */
@@ -41,6 +56,7 @@
 #include "sf_api.hpp"      // sf::api::is_armed()
 #include "actuator.hpp"
 #include "config.hpp"
+#include "nonfinite_scope.hpp"   // NonFiniteScope: the monitor + its nonfinite_status publish (shared with vehicle's ControlTask)
 
 #include "workshop_api.hpp"  // extern setup()/loop_400Hz() — learner code entry points
 #include "ws_internal.hpp"
@@ -215,6 +231,12 @@ void WorkshopControlTask(void* pvParameters)
     uint32_t stall_count = 0;
     bool imu_pipeline_seen = false;  // see vehicle control_task.cpp for rationale
 
+    // NaN / infinity check of the control path (nonfinite_status, read by the CLI `status`): counts in
+    // armed cycles only, same scope as vehicle's ControlTask.
+    // 制御経路の NaN・無限大の検査（nonfinite_status、CLI の `status` が読む）: ARM 中の周期だけ数える。
+    // vehicle の ControlTask と同じスコープ。
+    sf::tasks::NonFiniteScope nonfinite(sf::nonfinite_status);
+
     while (true) {
         // =====================================================================
         // Wait for IMU task notification (400Hz sync) — WITH TIMEOUT. Same
@@ -242,6 +264,15 @@ void WorkshopControlTask(void* pvParameters)
 
         const sf::SystemMode mode = sf::system_mode.latest();
 
+        // Same armed definition and same position in the cycle as vehicle's ControlTask: the monitor
+        // counts the cycles in which the craft is in an armed state.
+        // vehicle の ControlTask と同じ ARM の定義・周期内の位置: 機体が ARM 状態の周期を数える。
+        const bool counting = sf::isArmed(static_cast<sf::FlightState>(mode.state));
+        nonfinite.beginCycle(static_cast<uint32_t>(esp_timer_get_time()), counting);
+        if (counting) {
+            sf::checkEstimateInput(nonfinite.monitor(), sf::estimate_state.latest());
+        }
+
         // =====================================================================
         // Learner loop — runs EVERY cycle, armed or not (sensors/LED lessons
         // work while disarmed too). loop_400Hz() may call ws::motor_* — those
@@ -264,8 +295,15 @@ void WorkshopControlTask(void* pvParameters)
         // =====================================================================
         const bool armed = sf::api::is_armed() && !s_failsafe_latch;
         if (armed) {
-            float duties[4];
+            float duties[sf::kMotorCount];
             ws_internal::resolve_motor_request(duties);
+            if (counting) {
+                // Count the learner's request and turn a non-finite motor value into duty 0
+                // (the same helper Actuator::update() uses the primitives of).
+                // 学習者の要求を数え、有限でないモータの値を duty 0 にする（Actuator::update() が
+                // 使うのと同じ部品の補助関数）。
+                sf::recordAndGuardMotorDuties(nonfinite.monitor(), duties);
+            }
             actuator.applyTestDuties(duties);
         } else {
             applyBenchMotorTest(actuator);
@@ -274,5 +312,8 @@ void WorkshopControlTask(void* pvParameters)
         // Data Stream keeps recording while disarmed too (ground data matters).
         // disarmed 中も Data Stream は記録を続ける（地上データも解析に必要）。
         publishLogStream(mode.state, mode.sub_mode);
+        if (counting) {
+            nonfinite.endCycle();
+        }
     }
 }

@@ -23,7 +23,7 @@
  *  Mode arbitration, "API setting" column                api_takeoff_mode_is_applied_only_on_the_ground,
  *                                                        api_takeoff_refused_arm_restores_the_previous_mode,
  *                                                        api_takeoff_refused_arm_keeps_mode_when_the_switch_was_refused,
- *                                                        api_takeoff_in_flying_leaves_the_mode_alone (disabled)
+ *                                                        api_takeoff_in_flying_leaves_the_mode_alone
  *  Mode arbitration, "ground reset" column               returning_to_the_ground_resets_the_mode_to_stabilize
  *  Mode arbitration, "Flip request" column               flip_request_is_accepted_only_in_flying,
  *                                                        flip_direction_is_kept_for_the_enter_callback
@@ -594,10 +594,10 @@ TEST(api_takeoff_mode_is_applied_only_on_the_ground)
     ASSERT_MSG(armed.drainNotifyEvents().empty(), "an ARM was requested although the craft is armed already");
 }
 
-DISABLED_TEST(api_takeoff_in_flying_leaves_the_mode_alone,
-              "table cell is '(guidance target only)'; requestArmForTakeoff() applies the mode change in FLYING "
-              "(whether ApiTask keeps the call from FLYING is not checked here)")
+TEST(api_takeoff_in_flying_leaves_the_mode_alone)
 {
+    // Table cell "(guidance target only)": in FLYING the API takeoff request does not change the mode.
+    // 表のセル「（誘導目標のみ）」: FLYING では API の離陸要求はモードを変えない。
     Fixture fixture;
     fixture.driveTo(FlightState::FLYING);
     ASSERT_TRUE(!fixture.manager.requestArmForTakeoff(FlightMode::ALT_HOLD));

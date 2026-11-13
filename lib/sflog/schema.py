@@ -1764,9 +1764,11 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                      {   'name': 'setpoint_input',
                          'type': 'int',
                          'unit': 'count',
-                         'description_ja': '目標値の入力（5 個）が有限でなかった周期の数。',
+                         'description_ja': '目標値の入力（パイロットの目標値 5 個と誘導目標 9 '
+                                           '個）が有限でなかった周期の数。',
                          'description_en': 'Cycles in which the setpoint input (5 '
-                                           'values) was not finite.'},
+                                           'pilot setpoint values and 9 guidance '
+                                           'target values) was not finite.'},
                      {   'name': 'control_reference',
                          'type': 'int',
                          'unit': 'count',

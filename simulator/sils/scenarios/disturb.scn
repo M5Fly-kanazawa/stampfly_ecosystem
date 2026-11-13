@@ -33,7 +33,7 @@
    +    rc    2048  2048   2048    2048  1     1500      50        1      # F: hover UNDER lateral gust 1.5 s → drifts +x, altitude/attitude held
    +    wind  0.0   0.0    0.0                                           # G: gust OFF
    +    rc    2048  2048   2048    2048  1     3000      50        1      # H: coast/settle 3 s (level, altitude held)
-#  --- Disturbance 2: motor 0 (M1 FR) degraded to 70% thrust (THE attitude recovery test) ---
+#  --- Disturbance 2: motor 0 (M1 FR) degraded to 75% thrust (THE attitude recovery test) ---
 #  Asymmetric thrust applies a roll/pitch torque; the mixer raises the other motors and
 #  the attitude loop returns the craft to level (recovery), altitude held by the mixer.
 #  非対称推力がロール/ピッチトルクを与える→ミキサーが他モータを上げ姿勢ループが水平へ復帰、
@@ -54,9 +54,9 @@
 #   F: a downward+fwd wind makes alt dip briefly, then ALT_HOLD raises thrust and holds
 #      (alt returns to within a few cm of the ~0.62 m setpoint); craft drifts in +x (no
 #      position hold) but altitude & attitude stay bounded.
-#   J: motor 0 at 70% unbalances the quad; the mixer raises the other motors and the
+#   J: motor 0 at 75% unbalances the quad; the mixer raises the other motors and the
 #      attitude loop keeps tilt bounded (no flip), altitude held. Motor duties stay < 1
 #      (G4: no sustained saturation).
 # 期待: F で下向き風により高度が一瞬沈むが ALT_HOLD が推力を上げ保持（数 cm 以内に復帰）、
-#   水平は +x にドリフト（位置保持なし）だが高度・姿勢は有界。J でモータ0=70% の不均衡を
+#   水平は +x にドリフト（位置保持なし）だが高度・姿勢は有界。J でモータ0=75% の不均衡を
 #   ミキサーが他モータ増で補償し傾きは有界（転倒なし）、高度保持、duty<1（G4 飽和なし）。

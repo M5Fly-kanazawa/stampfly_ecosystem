@@ -17,15 +17,15 @@
 # 離陸時に ToF innovation 判定を超え推定が発散する（imu_task の鉛直ハンドオフ参照）。
 #
 # Sticks are raw 12-bit ADC, centre 2048. STABILIZE thrust = clamp((raw-2048)/2048,0,1)
-# * max_thrust; as of 2026-08-22 (Plant thrust_efficiency=0.7133, firmware static
-# motor curve folding in hover.thrust_corr=1.12), hover sits near raw 3154
-# (norm 0.540, = mg/max_thrust).
+# * max_thrust; in the present plant (firmware static motor curve folding in
+# hover.thrust_corr) the open-loop hover sits near raw 3088 (norm 0.508): the zero of
+# the climb acceleration found by sweeping the raw stick in SILS at 3.87 V, +-5 raw.
 # In ALT_HOLD the throttle stick is the SYMMETRIC climb/descend command (controller
 # convention: raw 2048 = centre = 0 = HOLD, up>2048 = climb, down<2048 = descend).
 # roll/pitch angle = norm * 30°.
-# スティックは raw 12bit ADC（中央2048）。STABILIZE 推力は norm×max_thrust。2026-08-22
-# 時点（Plant の thrust_efficiency=0.7133、ファーム静的モータ曲線への
-# hover.thrust_corr=1.12 畳み込み）でホバーは raw≈3154（norm 0.540, = mg/max_thrust）。
+# スティックは raw 12bit ADC（中央2048）。STABILIZE 推力は norm×max_thrust。現在のプラント
+# （ファーム静的モータ曲線への hover.thrust_corr 畳み込み）で開ループのホバーは
+# raw≈3088（norm 0.508）: SILS で電池 3.87 V のまま raw を掃引して求めた上昇加速度が 0 になる点（±5 raw）。
 # ALT_HOLD ではスロットルは対称な上昇/降下指令
 # （raw 2048=中央=0=ホールド、上>2048=上昇、下<2048=降下）。
 #

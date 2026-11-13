@@ -663,7 +663,7 @@ private:
     // works under the ceiling) yet decisive (the ceiling falls below ground-effect lift).
     // landing_settle_t_ accumulates time spent below the altitude trigger (reset by
     // onLanding / reset()). See pid_controller.cpp Landing branch + detailed_design §3 注8.
-    // 近地面の着地アシスト（Landing）。定速降下は接地近傍で地面効果と釣り合い機体が粘る。
+    // 近地面の着地アシスト（Landing）。定速降下は接地近傍で地面効果と釣り合い、機体が低い推力のまま高度を保つ。
     // kLandingSettleAltM 未満で推力上限を hover→kLandingSettleThrustFrac·hover へ
     // kLandingSettleRampS かけて絞り、まだ浮く機体を有界時間で確実に沈める（速度ループは上限内
     // で動くので穏やか、上限が地面効果揚力を下回るので確実）。landing_settle_t_ は高度トリガ未満で

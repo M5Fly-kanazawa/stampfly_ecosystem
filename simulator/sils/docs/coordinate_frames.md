@@ -217,7 +217,7 @@ Both NED and ENU are right-handed, so a proper rotation (det=+1) exists between 
 
 - **Accelerometer (driver-normalized):** the driver returns body-FRD acceleration with gravity as −9.8: `out_frd = R_bn·(a_world − g_ned)`, `[0,0,−9.81]` at rest. MuJoCo's built-in `<accelerometer>` (a−g, FLU) matches directly after FLU→FRD — same sign. No `ba_z≈+2g` startup compensation is needed (per the driver-normalization decision, 論点2).
 - **Gyro:** MuJoCo `<gyro>` (FLU) → FRD via `M_bf`.
-- **BMI270 sensor frame:** SILS returns sensor-frame data = `(body.y, body.x, −body.z)` so `imu_task`'s fixed remap recovers body FRD (Code Identity).
+- **BMI270 axes:** the chip → body-FRD remap is done in the BMI270 driver (`toBodyFrame()` in `bmi270_wrapper.cpp`), not in `imu_task` (which only converts units). The SILS driver stub replaces that driver on the host and returns body-FRD data directly, so the firmware above the driver is the same code as on the craft (Code Identity).
 - **ToF/Baro/Flow/Mag/Mixer:** see Japanese §4.4–4.5. Motor: duty→thrust `k·duty²` up = −Z_frd, applied at motor positions with yaw reaction κ, then FRD→FLU into MuJoCo.
 
 ## 5. Verification

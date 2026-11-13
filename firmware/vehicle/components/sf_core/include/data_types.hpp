@@ -627,7 +627,7 @@ struct LoopTiming {
 /// NonFiniteStatus::stage_count の添字。
 enum class NonFiniteStage : uint8_t {
     EstimateInput    = 0,   // estimate_state: attitude, position, velocity, angular rate (13 values) / 推定値の入力（姿勢・位置・速度・角速度の 13 個）
-    SetpointInput    = 1,   // command_setpoint: throttle, throttle axis, roll, pitch, yaw (5 values) / 目標値の入力（スロットル・スロットル軸・ロール・ピッチ・ヨーの 5 個）
+    SetpointInput    = 1,   // command_setpoint (throttle, throttle axis, roll, pitch, yaw = 5 values) and command_target (guidance: position 3, yaw, speed, velocity 3, yaw rate = 9 values) / 目標値の入力（command_setpoint のスロットル・スロットル軸・ロール・ピッチ・ヨーの 5 個と、command_target の誘導目標: 位置 3・ヨー・速度・速度指令 3・ヨーレートの 9 個）
     ControlReference = 2,   // controller outer-loop output: rate_ref[3], angle_ref[2] (5 values) / 制御器の外側ループの出力（rate_ref・angle_ref の 5 個）
     ControlOutput    = 3,   // controller output (the rate PID output): thrust and torque[3] (4 values) / 制御器の出力（レート PID の出力）: 推力とトルク 3 軸の 4 個
     MixerOutput      = 4,   // mixer output before the limits: 4 motor duties / 上下限の前のミキサの出力: 4 モータの duty

@@ -115,27 +115,6 @@ static void publishLogStream(const sf::ControlOutput& control, uint8_t state,
 /// 配線するだけ（下の Step 4 参照）。
 static sf::Actuator actuator;
 
-/// Check the inputs of the controller for NaN / infinity: the estimate (attitude, position, velocity,
-/// angular rate) and the pilot setpoint. Only counts into the scope's monitor; no value is changed.
-/// 制御器への入力の NaN・無限大を検査する: 推定値（姿勢・位置・速度・角速度）とパイロットの目標値。
-/// 監視器へ数えるだけで、値は変えない。
-///
-/// @design detailed_design.md §8 — Non-finite number monitor (nonfinite_status)  [OK]
-static void checkControllerInputs(sf::NonFiniteMonitor& monitor, const sf::StateEstimate& state,
-                                  const sf::CommandSetpoint& setpoint)
-{
-    const uint32_t estimate_bad = sf::countNonFinite(state.attitude, 4)
-                                + sf::countNonFinite(state.position, 3)
-                                + sf::countNonFinite(state.velocity, 3)
-                                + sf::countNonFinite(state.angular_rate, 3);
-    monitor.record(sf::NonFiniteStage::EstimateInput, estimate_bad);
-
-    const float setpoint_values[] = {setpoint.throttle, setpoint.throttle_axis, setpoint.roll,
-                                     setpoint.pitch, setpoint.yaw};
-    monitor.record(sf::NonFiniteStage::SetpointInput,
-                   sf::countNonFinite(setpoint_values, sizeof(setpoint_values) / sizeof(float)));
-}
-
 /// Check the outputs of the controller for NaN / infinity: the cascade references (outer-loop output)
 /// and the thrust / torque (the rate PID output). Only counts; no value is changed.
 /// 制御器の出力の NaN・無限大を検査する: カスケードの目標（外側ループの出力）と推力・トルク（レート PID の
@@ -413,6 +392,7 @@ void ControlTask(void* pvParameters)
 
         sf::StateEstimate state = sf::estimate_state.latest();
         sf::CommandSetpoint setpoint = sf::command_setpoint.latest();
+        const sf::GuidanceTarget guidance = sf::command_target.latest();   // read once: checked below, handed over in Step 3 / 1 回だけ読む（下で検査し、Step 3 で渡す）
 
         // Inject the two facts the estimator itself does not populate
         // (core components — the controller — may not touch Pub-Sub topics)
@@ -501,7 +481,7 @@ void ControlTask(void* pvParameters)
         // 経由で行い、上の processControllerCommands() が消費する（architecture §4）— ここでの
         // prev_armed エッジ検出はここにはない。
         actuator.arm();
-        checkControllerInputs(nonfinite.monitor(), state, setpoint);
+        sf::checkControllerInputs(nonfinite.monitor(), state, setpoint, guidance);
 
         // =====================================================================
         // Step 3: Compute control output. The flight mode is applied by the onModeChange
@@ -520,10 +500,9 @@ void ControlTask(void* pvParameters)
         // 解除則は制御器が所有する。
         {
             static uint32_t last_guidance_ts = 0;
-            const sf::GuidanceTarget target = sf::command_target.latest();
-            if (target.timestamp != 0 && target.timestamp != last_guidance_ts) {
-                last_guidance_ts = target.timestamp;
-                controller.setGuidanceTarget(target, setpoint);
+            if (guidance.timestamp != 0 && guidance.timestamp != last_guidance_ts) {
+                last_guidance_ts = guidance.timestamp;
+                controller.setGuidanceTarget(guidance, setpoint);
             }
         }
 

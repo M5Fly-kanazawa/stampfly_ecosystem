@@ -260,8 +260,13 @@ bool StateManager::requestArm()
 /// @design detailed_design.md §3.1 — API takeoff: mode change + ARM        [OK]
 bool StateManager::requestArmForTakeoff(FlightMode takeoff_mode)
 {
+    // The mode column of the "API setting" cell is applied on the ground only; in FLYING the request
+    // is a guidance target only and the mode stays as the pilot's switch left it (§3.1 table).
+    // 「API設定」列のモードは地上でのみ適用する。FLYING では誘導目標だけの要求で、モードは
+    // パイロットのスイッチが決めたまま（§3.1 の表）。
     const FlightMode previous_mode = mode_;
-    if (previous_mode != takeoff_mode) {
+    const bool on_ground = state_ == FlightState::IDLE_GROUND || state_ == FlightState::ARMED_GROUND;
+    if (on_ground && previous_mode != takeoff_mode) {
         requestModeChange(takeoff_mode);
     }
     if (state_ != FlightState::IDLE_GROUND) {

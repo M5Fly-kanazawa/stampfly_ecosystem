@@ -20,3 +20,4 @@ test_nonfinite_guard
 test_param_range
 test_log_sink
 test_barometric_height
+test_failsafe
