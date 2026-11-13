@@ -31,8 +31,17 @@
  * 呼ぶ。update() はリングを排出し 8 サンプル/パケットでバッチし、50Hz・低レートの
  * センサエントリを付加する。
  *
+ * Besides the unified packets the same cycle sends (1) the 1 Hz status packet v4 (v3 + ToF
+ * diagnostics, loop timing, non-finite counters, log-path loss counters) and (2) the text-log
+ * packet 0x51 (the ESP_LOG lines of the log sink; only while a capture is active and a line waits;
+ * at most every kTextLogSendPeriodCycles-th cycle). Neither changes the unified packet.
+ * 統合パケットのほかに、同じ周期が (1) 1 Hz のステータスパケット v4（v3＋ToF の診断値・ループ周期・有限でない数・
+ * ログ経路の欠落の計数）と (2) テキストログのパケット 0x51（ログシンクの ESP_LOG の行。取得中で行が待っている
+ * ときだけ、最大 kTextLogSendPeriodCycles 周期に 1 回）を送る。どちらも統合パケットは変えない。
+ *
  * @design requirements.md §7 — Data Stream（解析用・全レート・UDP）       [OK]
  * @design architecture.md §5 — ログフロー: Data Stream                    [OK]
+ * @design detailed_design.md §8 — Log sink: WiFi exit (text log), status packet v4  [OK]
  */
 
 #pragma once
@@ -77,7 +86,9 @@ private:
     void appendPilotAndReferenceEntries(datastream::UnifiedPacketBuilder& builder);   // pilot input, control references, flow / パイロット入力、制御目標、フロー
     void appendAbsoluteSensorEntries(datastream::UnifiedPacketBuilder& builder);   // low-rate absolute sensors, on change / 低レートの絶対量センサ（更新時のみ）
     void appendToFSilenceEntry(datastream::UnifiedPacketBuilder& builder);   // 50Hz ToF-silence facts (0x4E) / 50Hz ToF 出力停止の事実
+    void emitTextLog();   // ESP_LOG text lines from the log sink, packet 0x51 (every kTextLogSendPeriodCycles-th cycle, <= kTextLogBytesPerPacket) / ログシンクの ESP_LOG の行を送る（パケット 0x51。kTextLogSendPeriodCycles 周期に 1 回、kTextLogBytesPerPacket 以下）
     void sendStatus();
+    datastream::WireStatusV4Extension buildStatusExtension() const;   // v4 part of the status packet / ステータスパケットの v4 部分
     void sendDatagram(const uint8_t* data, size_t length);
     void countDrop(bool added);   // entry-overflow accounting / エントリ溢れの計数
 
@@ -94,6 +105,9 @@ private:
 
     uint16_t unified_seq_ = 0;         // loss-detection counter / 欠落検出カウンタ
     uint16_t status_seq_  = 0;
+    uint16_t text_seq_    = 0;
+    int      text_cycle_  = 0;         // 50Hz cycles since the last text-log send opportunity / 前回のテキストログ送信の機会からの 50Hz 周期数         // text-log packet counter (own, loss detection) / テキストログのパケット通し番号（専用。欠落検出）
+    uint32_t log_stream_overflow_base_ = 0;   // log_stream overflow count at the capture start / 取得開始時の log_stream 溢れ数
     uint32_t update_count_ = 0;        // 1Hz status divider / 1Hz ステータス分周
 
     // Last-seen per-sensor stamps (new-sample detection for low-rate entries).

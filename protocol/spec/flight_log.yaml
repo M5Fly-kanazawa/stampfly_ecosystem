@@ -22,11 +22,15 @@ version: 1
 # `version` is bumped only for a change that breaks existing readers (renaming
 # or retyping a column, changing a unit). Streams added after v1.0:
 #   flight_phase (400 Hz), flight_flags (50 Hz) -- 2026-10-02; tof_silence (50 Hz) -- 2026-11-09.
+# Streams added with the status packet v4 and the text-log packet (no date: they are part of the current design):
+#   tof_diagnostics, loop_timing, nonfinite, link_health (1 Hz each), text_log (event-driven).
 # 任意ストリーム（または末尾の任意列）の追加は後方互換で `version: 1` のまま:
 # 読み込み側は未知のストリームを無視し、旧ファームの一式は新ファイルを
 # 単に持たない（「無いものは無い」）。`version` を上げるのは既存の読み込み側を
 # 壊す変更（列名・型・単位の変更）のときだけ。v1.0 以後に追加したストリーム:
 #   flight_phase（400 Hz）, flight_flags（50 Hz）-- 2026-10-02。tof_silence（50 Hz）-- 2026-11-09。
+# ステータスパケット v4 とテキストログのパケットで加えたストリーム（日付なし: 現行の設計の一部）:
+#   tof_diagnostics・loop_timing・nonfinite・link_health（各 1 Hz）、text_log（イベント駆動）。
 
 # =============================================================================
 # Container (plan section 2.1)
@@ -1159,6 +1163,436 @@ streams:
         unit: "s"
         description_ja: ヨーレート PID の微分時間。
         description_en: "Yaw-rate PID derivative time."
+
+  - name: tof_diagnostics
+    file: tof_diagnostics.csv
+    source: "Status v4 (0x4F, 224 B)"
+    nominal_rate_hz: 1
+    required: false
+    # Optional stream added with the status packet v4: the latest sample of each ToF sensor as the VL53L3CX driver
+    # reports it, once per second (the 30 Hz distance stays in tof_bottom / tof_front). Absent on firmware that
+    # sends the status packet only up to v3. All zero for a sensor that never produced a sample (front: not fitted).
+    # ステータスパケット v4 で加えた任意のストリーム: 各 ToF センサの最新サンプルを VL53L3CX ドライバが報告するまま 1 秒に
+    # 1 回（30 Hz の距離は tof_bottom / tof_front に残る）。ステータスパケットを v3 までしか送らないファームには無い。
+    # 一度もサンプルを出していないセンサ（前方: 未搭載）はすべて 0。
+    columns:
+      - name: timestamp_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。
+        description_en: >-
+          Vehicle boot-relative microsecond timestamp. The status packet only carries uptime_ms, so timestamp_us = uptime_ms * 1000.
+      - name: bottom_range_status
+        type: int
+        unit: "enum"
+        description_ja: >-
+          下向き ToF の最新サンプルの VL53LX range status。0 = 有効、254 = 全ターゲット無効、255 = ターゲットなし、その他はドライバのコード（たとえば 1 = シグマ不良、2 = 信号不良、4 = 範囲外）。
+        description_en: >-
+          VL53LX range status of the latest downward ToF sample. 0 = valid, 254 = every target invalid, 255 = no target, others are the driver's codes (for example 1 = sigma failure, 2 = signal failure, 4 = out of range).
+      - name: bottom_signal_rate
+        type: float
+        unit: "Mcps"
+        description_ja: >-
+          下向き ToF の反射信号レート（メガカウント毎秒）。小さいほど反射が弱く（遠い・暗色・斜めの面）、測距が不安定になる。ターゲットなしのとき 0。
+        description_en: >-
+          Return signal rate of the downward ToF in megacounts per second. The smaller it is, the weaker the reflection (far, dark or slanted surface) and the less stable the range. 0 when there is no target.
+      - name: bottom_ambient_rate
+        type: float
+        unit: "Mcps"
+        description_ja: >-
+          下向き ToF の環境光レート（メガカウント毎秒）。日光や強い照明で大きくなり、信号レートに対して大きいと測距が乱れる。
+        description_en: >-
+          Ambient light rate of the downward ToF in megacounts per second. Grows in sunlight or strong lighting; a large value against the signal rate disturbs the range.
+      - name: bottom_sigma_mm
+        type: float
+        unit: "mm"
+        description_ja: >-
+          下向き ToF の距離の標準偏差の推定。大きいほど測距の不確かさが大きい。ターゲットなしのとき 0。
+        description_en: >-
+          Estimated standard deviation of the downward ToF range. The larger, the more uncertain the range. 0 when there is no target.
+      - name: front_range_status
+        type: int
+        unit: "enum"
+        description_ja: >-
+          前方 ToF の最新サンプルの VL53LX range status。0 = 有効、254 = 全ターゲット無効、255 = ターゲットなし、その他はドライバのコード（たとえば 1 = シグマ不良、2 = 信号不良、4 = 範囲外）。前方センサが無いときは 0 のまま（有効の意味ではない。sensor_health の bit6 で有無を判断する）。
+        description_en: >-
+          VL53LX range status of the latest front ToF sample. 0 = valid, 254 = every target invalid, 255 = no target, others are the driver's codes (for example 1 = sigma failure, 2 = signal failure, 4 = out of range). Stays 0 when the front sensor is absent (that does not mean valid; judge presence by sensor_health bit6).
+      - name: front_signal_rate
+        type: float
+        unit: "Mcps"
+        description_ja: >-
+          前方 ToF の反射信号レート（メガカウント毎秒）。小さいほど反射が弱く（遠い・暗色・斜めの面）、測距が不安定になる。ターゲットなしのとき 0。
+        description_en: >-
+          Return signal rate of the front ToF in megacounts per second. The smaller it is, the weaker the reflection (far, dark or slanted surface) and the less stable the range. 0 when there is no target.
+      - name: front_ambient_rate
+        type: float
+        unit: "Mcps"
+        description_ja: >-
+          前方 ToF の環境光レート（メガカウント毎秒）。日光や強い照明で大きくなり、信号レートに対して大きいと測距が乱れる。
+        description_en: >-
+          Ambient light rate of the front ToF in megacounts per second. Grows in sunlight or strong lighting; a large value against the signal rate disturbs the range.
+      - name: front_sigma_mm
+        type: float
+        unit: "mm"
+        description_ja: >-
+          前方 ToF の距離の標準偏差の推定。大きいほど測距の不確かさが大きい。ターゲットなしのとき 0。
+        description_en: >-
+          Estimated standard deviation of the front ToF range. The larger, the more uncertain the range. 0 when there is no target.
+
+  - name: loop_timing
+    file: loop_timing.csv
+    source: "Status v4 (0x4F, 224 B)"
+    nominal_rate_hz: 1
+    required: false
+    # Optional stream added with the status packet v4: how well the two 400 Hz tasks keep their period, one row per
+    # second with both tasks side by side (counts are since boot, see detailed_design.md section 8). The control_*
+    # columns are all 0 in the workshop firmware (its ControlTask does not publish). Absent on firmware that sends
+    # the status packet only up to v3.
+    # ステータスパケット v4 で加えた任意のストリーム: 2 つの 400 Hz タスクが周期をどれだけ守れているか。1 秒に 1 行で 2 つの
+    # タスクを横に並べる（数え方は起動以降の累計。detailed_design.md §8）。control_* の列は講習用ファーム（ControlTask が
+    # 発行しない）ではすべて 0。ステータスパケットを v3 までしか送らないファームには無い。
+    columns:
+      - name: timestamp_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。
+        description_en: >-
+          Vehicle boot-relative microsecond timestamp. The status packet only carries uptime_ms, so timestamp_us = uptime_ms * 1000.
+      - name: imu_cycles
+        type: int
+        unit: "count"
+        description_ja: >-
+          ImuTask: 数えた起床の回数。
+        description_en: >-
+          ImuTask: Wakes counted.
+      - name: imu_period_max_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ImuTask: 連続する 2 回の起床の間隔の最大。400 Hz の周期は 2500 us で、約 5000 us なら 400 Hz のティックを 1 つ取りこぼした。
+        description_en: >-
+          ImuTask: Longest interval between two wakes. The 400 Hz period is 2500 us; about 5000 us means one 400 Hz tick was missed.
+      - name: imu_late_count
+        type: int
+        unit: "count"
+        description_ja: >-
+          ImuTask: 間隔が 1.5 周期（3750 us）を超えた回数（ティックの取りこぼし）。
+        description_en: >-
+          ImuTask: Intervals longer than 1.5 periods (3750 us), i.e. missed ticks.
+      - name: imu_busy_max_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ImuTask: 起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。
+        description_en: >-
+          ImuTask: Longest time from a wake to the next wait (preemption by higher-priority tasks included).
+      - name: imu_over_budget_count
+        type: int
+        unit: "count"
+        description_ja: >-
+          ImuTask: 処理が 1 周期（2500 us）を超えた周期の数。
+        description_en: >-
+          ImuTask: Cycles whose busy time exceeded one period (2500 us).
+      - name: imu_last_late_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ImuTask: 最後に遅れた起床の時刻（機体起動基準。0 = まだ無い）。
+        description_en: >-
+          ImuTask: Time of the latest late wake (vehicle boot-relative; 0 = none yet).
+      - name: imu_armed_cycles
+        type: int
+        unit: "count"
+        description_ja: >-
+          ImuTask: ARM 中に始まった周期の数。
+        description_en: >-
+          ImuTask: Cycles that began while armed.
+      - name: imu_armed_period_max_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ImuTask: ARM 中の起床間隔の最大。
+        description_en: >-
+          ImuTask: Longest wake interval while armed.
+      - name: imu_armed_late_count
+        type: int
+        unit: "count"
+        description_ja: >-
+          ImuTask: ARM 中に遅れた回数。
+        description_en: >-
+          ImuTask: Late wakes while armed.
+      - name: imu_armed_busy_max_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ImuTask: ARM 中の処理時間の最大。
+        description_en: >-
+          ImuTask: Longest busy time while armed.
+      - name: imu_armed_over_budget_count
+        type: int
+        unit: "count"
+        description_ja: >-
+          ImuTask: ARM 中に処理が 1 周期を超えた周期の数。
+        description_en: >-
+          ImuTask: Over-budget cycles while armed.
+      - name: control_cycles
+        type: int
+        unit: "count"
+        description_ja: >-
+          ControlTask: 数えた起床の回数。
+        description_en: >-
+          ControlTask: Wakes counted.
+      - name: control_period_max_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ControlTask: 連続する 2 回の起床の間隔の最大。400 Hz の周期は 2500 us で、約 5000 us なら 400 Hz のティックを 1 つ取りこぼした。
+        description_en: >-
+          ControlTask: Longest interval between two wakes. The 400 Hz period is 2500 us; about 5000 us means one 400 Hz tick was missed.
+      - name: control_late_count
+        type: int
+        unit: "count"
+        description_ja: >-
+          ControlTask: 間隔が 1.5 周期（3750 us）を超えた回数（ティックの取りこぼし）。
+        description_en: >-
+          ControlTask: Intervals longer than 1.5 periods (3750 us), i.e. missed ticks.
+      - name: control_busy_max_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ControlTask: 起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。
+        description_en: >-
+          ControlTask: Longest time from a wake to the next wait (preemption by higher-priority tasks included).
+      - name: control_over_budget_count
+        type: int
+        unit: "count"
+        description_ja: >-
+          ControlTask: 処理が 1 周期（2500 us）を超えた周期の数。
+        description_en: >-
+          ControlTask: Cycles whose busy time exceeded one period (2500 us).
+      - name: control_last_late_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ControlTask: 最後に遅れた起床の時刻（機体起動基準。0 = まだ無い）。
+        description_en: >-
+          ControlTask: Time of the latest late wake (vehicle boot-relative; 0 = none yet).
+      - name: control_armed_cycles
+        type: int
+        unit: "count"
+        description_ja: >-
+          ControlTask: ARM 中に始まった周期の数。
+        description_en: >-
+          ControlTask: Cycles that began while armed.
+      - name: control_armed_period_max_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ControlTask: ARM 中の起床間隔の最大。
+        description_en: >-
+          ControlTask: Longest wake interval while armed.
+      - name: control_armed_late_count
+        type: int
+        unit: "count"
+        description_ja: >-
+          ControlTask: ARM 中に遅れた回数。
+        description_en: >-
+          ControlTask: Late wakes while armed.
+      - name: control_armed_busy_max_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          ControlTask: ARM 中の処理時間の最大。
+        description_en: >-
+          ControlTask: Longest busy time while armed.
+      - name: control_armed_over_budget_count
+        type: int
+        unit: "count"
+        description_ja: >-
+          ControlTask: ARM 中に処理が 1 周期を超えた周期の数。
+        description_en: >-
+          ControlTask: Over-budget cycles while armed.
+
+  - name: nonfinite
+    file: nonfinite.csv
+    source: "Status v4 (0x4F, 224 B)"
+    nominal_rate_hz: 1
+    required: false
+    # Optional stream added with the status packet v4: the non-finite number (NaN, infinity) counters of the control
+    # path, once per second (ControlTask checks armed cycles only; counts are since boot; detection never stops the
+    # flight). All 0 in the workshop firmware. Absent on firmware that sends the status packet only up to v3.
+    # ステータスパケット v4 で加えた任意のストリーム: 制御経路の有限でない数（NaN・無限大）の数え上げを 1 秒に 1 回
+    # （ControlTask は ARM 中の周期だけを検査。数え方は起動以降の累計。検出は飛行を止めない）。講習用ファームではすべて 0。
+    # ステータスパケットを v3 までしか送らないファームには無い。
+    columns:
+      - name: timestamp_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。
+        description_en: >-
+          Vehicle boot-relative microsecond timestamp. The status packet only carries uptime_ms, so timestamp_us = uptime_ms * 1000.
+      - name: checked_cycles
+        type: int
+        unit: "count"
+        description_ja: >-
+          検査した ARM 中の制御周期の数。
+        description_en: >-
+          Armed control cycles checked.
+      - name: detected_cycles
+        type: int
+        unit: "count"
+        description_ja: >-
+          どれかの境界に有限でない値があった周期の数。
+        description_en: >-
+          Cycles in which any boundary held a non-finite value.
+      - name: estimate_input
+        type: int
+        unit: "count"
+        description_ja: >-
+          推定値の入力（姿勢・位置・速度・角速度の 13 個）が有限でなかった周期の数。
+        description_en: >-
+          Cycles in which the estimate input (13 values) was not finite.
+      - name: setpoint_input
+        type: int
+        unit: "count"
+        description_ja: >-
+          目標値の入力（5 個）が有限でなかった周期の数。
+        description_en: >-
+          Cycles in which the setpoint input (5 values) was not finite.
+      - name: control_reference
+        type: int
+        unit: "count"
+        description_ja: >-
+          制御器の外側ループの出力（rate_ref・angle_ref の 5 個）が有限でなかった周期の数。
+        description_en: >-
+          Cycles in which the outer-loop output (rate_ref, angle_ref: 5 values) was not finite.
+      - name: control_output
+        type: int
+        unit: "count"
+        description_ja: >-
+          制御器の出力（推力とトルク 3 軸の 4 個）が有限でなかった周期の数。
+        description_en: >-
+          Cycles in which the controller output (thrust and 3 torques: 4 values) was not finite.
+      - name: mixer_output
+        type: int
+        unit: "count"
+        description_ja: >-
+          ミキサの出力（上下限の前の 4 モータの duty）が有限でなかった周期の数。
+        description_en: >-
+          Cycles in which the mixer output (4 duties before the limits) was not finite.
+      - name: motor_command
+        type: int
+        unit: "count"
+        description_ja: >-
+          モータへ渡す直前の duty が有限でなかった周期の数（そのモータには 0 を渡す）。
+        description_en: >-
+          Cycles in which a duty about to go to a motor was not finite (that motor gets 0).
+      - name: first_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          最初の検出の時刻（機体起動基準。0 = まだ無い）。
+        description_en: >-
+          Time of the first detection (vehicle boot-relative; 0 = none yet).
+      - name: first_stage
+        type: int
+        unit: "enum"
+        description_ja: >-
+          最初の検出の境界（0 = estimate_input、1 = setpoint_input、2 = control_reference、3 = control_output、4 = mixer_output、5 = motor_command、255 = まだ無い）。
+        description_en: >-
+          Boundary of the first detection (0 = estimate_input, 1 = setpoint_input, 2 = control_reference, 3 = control_output, 4 = mixer_output, 5 = motor_command, 255 = none yet).
+
+  - name: link_health
+    file: link_health.csv
+    source: "Status v4 (0x4F, 224 B)"
+    nominal_rate_hz: 1
+    required: false
+    # Optional stream added with the status packet v4: the loss counters of the log paths themselves, once per second.
+    # The four counts are since the capture started. Absent on firmware that sends the status packet only up to v3.
+    # ステータスパケット v4 で加えた任意のストリーム: ログ経路そのものの欠落の計数を 1 秒に 1 回。4 つの数は取得の開始以降。
+    # ステータスパケットを v3 までしか送らないファームには無い。
+    columns:
+      - name: timestamp_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。
+        description_en: >-
+          Vehicle boot-relative microsecond timestamp. The status packet only carries uptime_ms, so timestamp_us = uptime_ms * 1000.
+      - name: log_stream_overflow
+        type: int
+        unit: "count"
+        description_ja: >-
+          log_stream リングが落とした 400 Hz サンプル数（Data Stream が間に合って取り出せなかった）。0 でなければ 400 Hz ストリームに seq の飛びがある。
+        description_en: >-
+          400 Hz samples the log_stream ring dropped (the Data Stream did not drain it in time). When not 0 the 400 Hz streams have seq gaps.
+      - name: send_drops
+        type: int
+        unit: "count"
+        description_ja: >-
+          sendto の失敗数（機体の送信側の数え方。PC は通し番号の飛びとして欠落を見る）。
+        description_en: >-
+          sendto failures counted on the vehicle (the PC sees the loss as a sequence jump).
+      - name: entry_drops
+        type: int
+        unit: "count"
+        description_ja: >-
+          統合パケットが満杯で棄却したエントリ数。0 でなければ一部のストリームにサンプルが抜けている。
+        description_en: >-
+          Entries the unified packet refused because it was full. When not 0 some stream is missing samples.
+      - name: text_dropped_lines
+        type: int
+        unit: "count"
+        description_ja: >-
+          テキストログ用リングが断った行数の合計（正確。text_log の dropped_before の総和より大きいことがある: 1 行が運べる数は 255 まで）。
+        description_en: >-
+          Total of text lines the text-log ring refused (exact; can exceed the sum of text_log.dropped_before, which one line carries up to 255).
+
+  - name: text_log
+    file: text_log.csv
+    source: "TextLog (0x51)"
+    nominal_rate_hz: null
+    required: false
+    # Optional, event-driven stream added with the text-log packet: the ESP_LOG lines of the vehicle (what the USB
+    # console shows), one row per line, in order, with the vehicle time at which the line entered the log sink.
+    # Lines logged while no capture was active are not in it. A cell of `text` is one line without its trailing
+    # newline. Not an analysis signal: aligned tables leave it out. Absent on firmware without the text-log packet.
+    # テキストログのパケットで加えた任意・イベント駆動のストリーム: 機体の ESP_LOG の行（USB コンソールに出るもの）を 1 行
+    # 1 行、順序どおりに、行がログシンクに入った機体時刻つきで。取得が無かった間のログは載らない。`text` の 1 セルは
+    # 末尾の改行を除いた 1 行。解析用の信号ではなく、整列表には含めない。テキストログのパケットを持たないファームには無い。
+    columns:
+      - name: timestamp_us
+        type: int
+        unit: "us"
+        description_ja: >-
+          行がログシンクに入った機体起動基準のマイクロ秒時刻（他のストリームと同じ時計。32 ビットで巻き戻る）。
+          行の順序はパケットの通し番号とパケット内の順序で復元済みで、時刻は同値の連続を含みうる。
+        description_en: >-
+          Vehicle boot-relative microsecond time at which the line entered the log sink (the same clock as the other
+          streams; 32 bits, wraps). The order of the rows is restored from the packet sequence and the order inside
+          the packet; consecutive equal times are possible.
+      - name: truncated
+        type: int
+        unit: "0/1"
+        description_ja: 1 は行が機体で 1 行の上限（384 バイト）に切り詰められたこと（切った行も改行で終わる）。
+        description_en: "1 when the vehicle cut the line to its limit of 384 bytes (a cut line still ends with a newline)."
+      - name: dropped_before
+        type: int
+        unit: "count"
+        description_ja: この行の直前に機体のログシンクが断った（満杯で入れなかった）行数。0 以外のとき、その位置で行が抜けている。255 で飽和する（正確な合計は link_health.text_dropped_lines）。
+        description_en: "Lines the vehicle's log sink refused (ring full) just before this line. When not 0 lines are missing at this place. Saturates at 255 (the exact total is link_health.text_dropped_lines)."
+      - name: text
+        type: str
+        unit: "text"
+        description_ja: >-
+          ESP_LOG の 1 行（末尾の改行を除く。「I (12345) Tag: message」の形。括弧内は機体のミリ秒）。
+          UTF-8 として読めないバイトは置換文字になる。
+        description_en: >-
+          One ESP_LOG line without its trailing newline, as "I (12345) Tag: message" (the number in
+          parentheses is vehicle milliseconds). Bytes that are not UTF-8 become replacement characters.
 
   - name: eskf_cov
     file: eskf_cov.csv

@@ -457,6 +457,9 @@ static bool consumeToFSamples(bool armed, bool in_landing_descent, sf::SensorSna
         snap.tof_status    = tof.status;
         snap.tof_valid     = tof.valid;
         snap.tof_timestamp = tof.timestamp;   // per-sensor stamp for the Data Stream / Data Stream 用センサ別時刻
+        snap.tof_signal_rate  = tof.signal_rate;    // quality diagnostics for the status packet / ステータスパケット用の品質診断値
+        snap.tof_ambient_rate = tof.ambient_rate;
+        snap.tof_sigma_mm     = tof.sigma_mm;
     }
     if (consumed) {
         publishToFHealth();   // BEFORE the snapshot is published, so a new stamp never meets old facts / スナップショットの発行より「前」に（新しい時刻印が古い事実と出会わない）
@@ -478,6 +481,9 @@ static bool consumeFrontToFSamples(sf::SensorSnapshot& snap)
         snap.tof_front_distance  = tof_front.distance;
         snap.tof_front_status    = tof_front.status;
         snap.tof_front_timestamp = tof_front.timestamp;
+        snap.tof_front_signal_rate  = tof_front.signal_rate;    // quality diagnostics for the status packet / ステータスパケット用の品質診断値
+        snap.tof_front_ambient_rate = tof_front.ambient_rate;
+        snap.tof_front_sigma_mm     = tof_front.sigma_mm;
         snap_dirty = true;
     }
     return snap_dirty;

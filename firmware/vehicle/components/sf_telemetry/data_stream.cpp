@@ -65,6 +65,7 @@
 #include "topics.hpp"
 #include "params.hpp"
 #include "failsafe_status_guard.hpp"   // isFailsafeStatusStaleForDisplay()
+#include "log_sink.hpp"   // text-log exit of the log sink / ログシンクのテキストログ側の出口
 
 static const char* TAG = "DataStream";
 
@@ -146,8 +147,13 @@ void DataStream::update()
         }
     }
 
-    // 1Hz status (uptime, battery, rate-PID gains for PC-side reconstruction).
-    // 1Hz ステータス（稼働時間・電池・PC 側再構成用レート PID ゲイン）。
+    // ESP_LOG text lines from the log sink: at most every kTextLogSendPeriodCycles-th cycle, bounded bytes per
+    // packet (non-blocking sendto).
+    // ログシンクの ESP_LOG の行。kTextLogSendPeriodCycles 周期に 1 回まで、1 パケットのバイト数に上限（ノンブロッキングの sendto）。
+    emitTextLog();
+
+    // 1Hz status (uptime, battery, rate-PID gains, ToF / loop-timing / non-finite / loss diagnostics).
+    // 1Hz ステータス（稼働時間・電池・レート PID ゲイン・ToF・ループ周期・有限でない数・欠落の診断値）。
     if ((++update_count_ % 50) == 0) {
         sendStatus();
     }
@@ -200,6 +206,8 @@ void DataStream::startStream(const sockaddr_in& client)
     batch_count_       = 0;
     send_drops_        = 0;
     entry_drops_       = 0;
+    text_seq_          = 0;
+    text_cycle_        = 0;
 
     // Reset-on-start (loss-prevention #2): discard the ring backlog so the
     // capture starts at "now", not with however many stale samples piled up.
@@ -211,6 +219,14 @@ void DataStream::startStream(const sockaddr_in& client)
     FlowData flow_discard;
     while (log_flow.read(flow_discard)) {
     }
+    // The ring counts overflow even while nobody drains it (no capture): report only what is lost from here.
+    // リングは誰も排出しない間（取得なし）も溢れを数える: ここから先の欠落だけを報告する。
+    log_stream_overflow_base_ = log_stream.overflowCount();
+
+    // The WiFi exit of the log sink starts empty, BEFORE the next line is logged, so the capture's
+    // first text line is the one below.
+    // ログシンクの WiFi 側の出口は空から始める。次の行を出す「前」に行うので、取得の最初のテキスト行は下の行になる。
+    log_sink::setWifiCapture(true);
 
     ESP_LOGI(TAG, "Capture START → client registered (50 pkt/s, ~48 KB/s)");
 }
@@ -224,6 +240,7 @@ void DataStream::stopStream(const char* reason)
     ESP_LOGI(TAG, "Capture STOP (%s) — %lu sendto drops, %lu entry drops",
              reason, static_cast<unsigned long>(send_drops_),
              static_cast<unsigned long>(entry_drops_));
+    log_sink::setWifiCapture(false);   // after the line above, which the capture no longer carries / 上の行の後（その行は取得にはもう載らない）
 }
 
 // -----------------------------------------------------------------------------
@@ -523,8 +540,8 @@ void DataStream::appendToFSilenceEntry(datastream::UnifiedPacketBuilder& builder
 }
 
 // -----------------------------------------------------------------------------
-// sendStatus — standalone 1Hz status packet (0x4F).
-// sendStatus — 単独 1Hz ステータスパケット（0x4F）。
+// sendStatus — standalone 1Hz status packet (0x4F, v4: v3 + diagnostics).
+// sendStatus — 単独 1Hz ステータスパケット（0x4F、v4: v3＋診断値）。
 // -----------------------------------------------------------------------------
 void DataStream::sendStatus()
 {
@@ -557,10 +574,85 @@ void DataStream::sendStatus()
         params::get_float(names[i], payload.pid_gains[i]);
     }
 
-    uint8_t buffer[64];
+    const datastream::WireStatusV4Extension extension = buildStatusExtension();
+    uint8_t buffer[datastream::kStatusV4PacketSize];
     const size_t length =
-        datastream::buildStatusPacket(buffer, status_seq_++, payload);
+        datastream::buildStatusPacketV4(buffer, status_seq_++, payload, extension);
     sendDatagram(buffer, length);
+}
+
+// -----------------------------------------------------------------------------
+// buildStatusExtension — the v4 part of the status packet: ToF diagnostics, loop timing of both
+// 400 Hz tasks, non-finite counters and the loss counters of the log paths. Every value is a fact
+// another task published (latest()) or a counter of this class; nothing is computed here.
+// buildStatusExtension — ステータスパケットの v4 部分: ToF の診断値、2 つの 400 Hz タスクのループ周期、有限で
+// ない数の数え上げ、ログ経路の欠落の計数。どの値も他のタスクが発行した事実（latest()）かこのクラスの
+// 計数で、ここで計算するものはない。
+//
+// @design requirements.md §7 — Data Stream; protocol/spec/flight_log.yaml streams tof_diagnostics, loop_timing, nonfinite, link_health [OK]
+// -----------------------------------------------------------------------------
+datastream::WireStatusV4Extension DataStream::buildStatusExtension() const
+{
+    const SensorSnapshot snap = sensor_snapshot.latest();
+
+    datastream::WireStatusV4Extension extension = {};
+    extension.tof_bottom = datastream::toWireToFDiagnostic(snap.tof_status, snap.tof_signal_rate,
+                                                           snap.tof_ambient_rate, snap.tof_sigma_mm);
+    // An absent front sensor keeps timestamp 0 and status 0 (a zero status would read as "valid"): send zeros only.
+    // 前方センサが無ければ timestamp 0・status 0 のまま（status 0 は「有効」に見えてしまう）: すべて 0 のまま送る。
+    if (snap.tof_front_timestamp != 0) {
+        extension.tof_front = datastream::toWireToFDiagnostic(snap.tof_front_status, snap.tof_front_signal_rate,
+                                                              snap.tof_front_ambient_rate, snap.tof_front_sigma_mm);
+    }
+    extension.imu_loop     = datastream::toWire(imu_loop_timing.latest());
+    extension.control_loop = datastream::toWire(control_loop_timing.latest());
+    extension.nonfinite    = datastream::toWire(nonfinite_status.latest());
+    extension.link.log_stream_overflow_count = log_stream.overflowCount() - log_stream_overflow_base_;
+    extension.link.send_drops         = send_drops_;
+    extension.link.entry_drops        = entry_drops_;
+    extension.link.text_dropped_lines = log_sink::wifiDroppedTotal();
+    return extension;
+}
+
+// -----------------------------------------------------------------------------
+// emitTextLog — send the ESP_LOG lines the log sink holds for the capture, as one text packet (0x51).
+// Called every 50 Hz cycle; it acts on every kTextLogSendPeriodCycles-th call only (10 packets/s at most, because the
+// WiFi radio is charged per sendto() call: data_stream_wire.hpp gives the basis), and sends nothing when no line is
+// waiting. At most kTextLogBytesPerPacket bytes of records per packet. The lines are taken out under the sink's
+// spin lock one by one; the send happens outside it, so no ESP_LOG caller ever waits for the network.
+// emitTextLog — ログシンクがこの取得のために持つ ESP_LOG の行を、テキストパケット（0x51）1 個で送る。
+// 50 Hz の周期ごとに呼ばれ、kTextLogSendPeriodCycles 回に 1 回だけ動く（毎秒最大 10 パケット。WiFi の電波は sendto() の呼び出し
+// ごとに費用がかかるため。根拠は data_stream_wire.hpp）。待つ行が無ければ何も送らない。1 パケットのレコードは最大
+// kTextLogBytesPerPacket バイト。行はシンクのスピンロックの下で 1 行ずつ取り出し、送信はその外で行うので、ESP_LOG の呼び出し側が
+// ネットワークを待つことはない。
+//
+// @design detailed_design.md §8 — Log sink: 400 Hz tasks never wait for the console or the network [OK]
+// -----------------------------------------------------------------------------
+void DataStream::emitTextLog()
+{
+    if (++text_cycle_ < datastream::kTextLogSendPeriodCycles) {
+        return;
+    }
+    text_cycle_ = 0;
+
+    datastream::TextLogPacketBuilder builder;
+    builder.begin(text_seq_);
+    char text[log_sink::kMaxLineBytes];
+    log_sink::WifiLineInfo info;
+    while (true) {
+        const size_t length = log_sink::takeWifiLine(text, sizeof(text), &info, builder.remainingTextBytes());
+        if (length == 0) {
+            break;   // ring empty, or the next line waits for the next packet / リングが空、または次の行は次のパケットを待つ
+        }
+        const uint8_t flags = info.truncated ? datastream::kTextFlagTruncated : 0;
+        builder.addLine(info.timestamp_us, flags, static_cast<uint8_t>(info.dropped_before), text, length);
+    }
+    if (builder.recordCount() == 0) {
+        return;
+    }
+    ++text_seq_;
+    const size_t packet_length = builder.finish();
+    sendDatagram(builder.buffer(), packet_length);
 }
 
 // -----------------------------------------------------------------------------

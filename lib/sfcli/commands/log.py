@@ -16,7 +16,7 @@ Subcommands:
     wifi     - Capture telemetry via WiFi UDP, saved as a bundle
     check    - Validate a bundle's structure/units (lib/sflog.check_bundle)
     convert  - Convert JSONL<->bundle, or a bundle -> aligned/JSONL CSV
-    info     - Show a bundle's summary (meta.json + per-stream stats)
+    info     - Show a bundle summary (meta.json + per-stream stats + status-v4 diagnostics); --text: the text log
     analyze  - Analyze a bundle (gyro PSD, hover stats; --health: motor-fault report)
     viz      - Visualize a bundle (every stream at its native rate; -i: Plotly)
     video    - Render a flight log as an mp4 (3D StampFly flies the logged path)
@@ -192,13 +192,45 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     info_parser = log_subparsers.add_parser(
         "info",
         help="Show flight-log bundle information",
-        description="Display a bundle's meta.json summary and per-stream stats.",
+        description="Display a bundle's meta.json summary and per-stream stats, "
+                     "the status-v4 diagnostics (loop timing, non-finite counters, ToF "
+                     "diagnostics, log-path losses) and, with --text, the vehicle's text log "
+                     "(the ESP_LOG lines of the WiFi capture).",
     )
     info_parser.add_argument(
         "bundle",
         nargs="?",
         help="Bundle path, .sflog.zip or directory (default: newest in logs/; "
              "extension may be omitted; also searched in logs/)",
+    )
+    info_parser.add_argument(
+        "--text",
+        action="store_true",
+        help="Print the vehicle's text log (the ESP_LOG lines delivered during the "
+             "capture, with vehicle time) instead of the summary",
+    )
+    info_parser.add_argument(
+        "--grep",
+        metavar="TEXT",
+        help="With --text: only the lines containing TEXT (a plain substring; "
+             "a loss marker is always shown)",
+    )
+    info_parser.add_argument(
+        "-I", "--ignore-case",
+        action="store_true",
+        help="With --text --grep: ignore case",
+    )
+    info_parser.add_argument(
+        "--since",
+        type=float,
+        metavar="SECONDS",
+        help="With --text: only lines at or after this vehicle time (seconds since boot)",
+    )
+    info_parser.add_argument(
+        "--until",
+        type=float,
+        metavar="SECONDS",
+        help="With --text: only lines at or before this vehicle time (seconds since boot)",
     )
     info_parser.set_defaults(func=run_info)
 
@@ -346,7 +378,7 @@ def run_help(args: argparse.Namespace) -> int:
     console.print("  wifi      Capture telemetry via WiFi UDP (-> bundle)")
     console.print("  check     Validate a flight-log bundle")
     console.print("  convert   Convert JSONL<->bundle, or bundle->aligned/JSONL CSV")
-    console.print("  info      Show flight-log bundle information")
+    console.print("  info      Show flight-log bundle information (--text: the vehicle text log)")
     console.print("  analyze   Analyze a bundle (--health: motor-health report)")
     console.print("  viz       Visualize a bundle (-i: interactive Plotly)")
     console.print("  video     Render a flight log as an mp4 (3D StampFly)")
@@ -613,6 +645,9 @@ def run_info(args: argparse.Namespace) -> int:
     if bundle_path is None:
         return 1
 
+    if getattr(args, "text", False):
+        return _run_info_text(bundle_path, args)
+
     meta = _read_bundle_meta(bundle_path)
     if meta is None:
         console.error(f"Failed to read meta.json from: {bundle_path}")
@@ -651,6 +686,64 @@ def run_info(args: argparse.Namespace) -> int:
     for name in sorted(streams):
         console.print(_stream_info_row(name, streams[name]))
 
+    _print_diagnostics(bundle_path, streams, capture)
+    return 0
+
+
+#: Streams `sf log info` reads (besides meta.json) for its diagnostics block.
+#: `sf log info` が診断値のブロックのために（meta.json のほかに）読むストリーム。
+_DIAGNOSTIC_STREAMS = ("loop_timing", "nonfinite", "tof_diagnostics", "link_health", "text_log")
+
+
+def _print_diagnostics(bundle_path: Path, streams: dict, capture: dict) -> None:
+    """Print the status-v4 diagnostics block (the last values of the capture) and the text-log loss of a
+    bundle; nothing for a bundle without those streams (older firmware / no log line during the capture).
+    一式のステータス v4 の診断値のブロック（取得の最後の値）とテキストログの欠落を表示する。それらのストリームを持たない
+    一式（旧ファーム・取得中にログの行がない）では何も表示しない。
+    """
+    if not any(name in streams for name in _DIAGNOSTIC_STREAMS):
+        return
+    try:
+        log = sflog.load(bundle_path)
+    except Exception as e:  # noqa: BLE001 - a summary must not fail the command / 要約でコマンドを失敗させない
+        console.warning(f"Could not read the diagnostics streams: {e}")
+        return
+    lines = sflog.diagnostics_summary(log)
+    if capture and "text_packets_lost" in capture:
+        lines.append(
+            f"text log : {capture['text_packets_lost']} packets lost on the way, "
+            f"{capture.get('text_lines_dropped_by_vehicle', 0)} lines dropped by the vehicle"
+        )
+    if lines:
+        console.print()
+        console.print("  Diagnostics (status v4 and text log):")
+        for line in lines:
+            console.print(f"    {line}")
+
+
+def _run_info_text(bundle_path: Path, args: argparse.Namespace) -> int:
+    """`sf log info --text`: print the vehicle's text log of a bundle, filtered by --grep / --since /
+    --until. A bundle without a text log is not an error: it says why there may be none.
+    `sf log info --text`: 一式の機体のテキストログを、--grep / --since / --until で絞って表示する。テキストログを持たない
+    一式はエラーではなく、無い理由の候補を知らせる。
+    """
+    try:
+        log = sflog.load(bundle_path)
+    except Exception as e:  # noqa: BLE001
+        console.error(f"Failed to read bundle {bundle_path}: {e}")
+        return 1
+    if not sflog.has_text_log(log):
+        console.warning(
+            "This bundle has no text log: no ESP_LOG line was delivered during the capture, the vehicle "
+            "firmware predates the text-log packet, or the bundle is not a WiFi capture (SILS bundles "
+            "carry it too)."
+        )
+        return 0
+    lines = sflog.format_text_log(
+        log, grep=args.grep, ignore_case=args.ignore_case, since_s=args.since, until_s=args.until
+    )
+    for line in lines:
+        console.print(line)
     return 0
 
 

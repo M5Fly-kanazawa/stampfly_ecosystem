@@ -215,6 +215,80 @@ STREAMS = {   'imu': {   'file': 'imu.csv',
                                  ('pid_yaw_kp', 'float', 'unitless (gain)'),
                                  ('pid_yaw_ti', 'float', 's'),
                                  ('pid_yaw_td', 'float', 's'))},
+    'tof_diagnostics': {   'file': 'tof_diagnostics.csv',
+                           'source': 'Status v4 (0x4F, 224 B)',
+                           'nominal_rate_hz': 1,
+                           'required': False,
+                           'columns': (   ('timestamp_us', 'int', 'us'),
+                                          ('bottom_range_status', 'int', 'enum'),
+                                          ('bottom_signal_rate', 'float', 'Mcps'),
+                                          ('bottom_ambient_rate', 'float', 'Mcps'),
+                                          ('bottom_sigma_mm', 'float', 'mm'),
+                                          ('front_range_status', 'int', 'enum'),
+                                          ('front_signal_rate', 'float', 'Mcps'),
+                                          ('front_ambient_rate', 'float', 'Mcps'),
+                                          ('front_sigma_mm', 'float', 'mm'))},
+    'loop_timing': {   'file': 'loop_timing.csv',
+                       'source': 'Status v4 (0x4F, 224 B)',
+                       'nominal_rate_hz': 1,
+                       'required': False,
+                       'columns': (   ('timestamp_us', 'int', 'us'),
+                                      ('imu_cycles', 'int', 'count'),
+                                      ('imu_period_max_us', 'int', 'us'),
+                                      ('imu_late_count', 'int', 'count'),
+                                      ('imu_busy_max_us', 'int', 'us'),
+                                      ('imu_over_budget_count', 'int', 'count'),
+                                      ('imu_last_late_us', 'int', 'us'),
+                                      ('imu_armed_cycles', 'int', 'count'),
+                                      ('imu_armed_period_max_us', 'int', 'us'),
+                                      ('imu_armed_late_count', 'int', 'count'),
+                                      ('imu_armed_busy_max_us', 'int', 'us'),
+                                      ('imu_armed_over_budget_count', 'int', 'count'),
+                                      ('control_cycles', 'int', 'count'),
+                                      ('control_period_max_us', 'int', 'us'),
+                                      ('control_late_count', 'int', 'count'),
+                                      ('control_busy_max_us', 'int', 'us'),
+                                      ('control_over_budget_count', 'int', 'count'),
+                                      ('control_last_late_us', 'int', 'us'),
+                                      ('control_armed_cycles', 'int', 'count'),
+                                      ('control_armed_period_max_us', 'int', 'us'),
+                                      ('control_armed_late_count', 'int', 'count'),
+                                      ('control_armed_busy_max_us', 'int', 'us'),
+                                      (   'control_armed_over_budget_count',
+                                          'int',
+                                          'count'))},
+    'nonfinite': {   'file': 'nonfinite.csv',
+                     'source': 'Status v4 (0x4F, 224 B)',
+                     'nominal_rate_hz': 1,
+                     'required': False,
+                     'columns': (   ('timestamp_us', 'int', 'us'),
+                                    ('checked_cycles', 'int', 'count'),
+                                    ('detected_cycles', 'int', 'count'),
+                                    ('estimate_input', 'int', 'count'),
+                                    ('setpoint_input', 'int', 'count'),
+                                    ('control_reference', 'int', 'count'),
+                                    ('control_output', 'int', 'count'),
+                                    ('mixer_output', 'int', 'count'),
+                                    ('motor_command', 'int', 'count'),
+                                    ('first_us', 'int', 'us'),
+                                    ('first_stage', 'int', 'enum'))},
+    'link_health': {   'file': 'link_health.csv',
+                       'source': 'Status v4 (0x4F, 224 B)',
+                       'nominal_rate_hz': 1,
+                       'required': False,
+                       'columns': (   ('timestamp_us', 'int', 'us'),
+                                      ('log_stream_overflow', 'int', 'count'),
+                                      ('send_drops', 'int', 'count'),
+                                      ('entry_drops', 'int', 'count'),
+                                      ('text_dropped_lines', 'int', 'count'))},
+    'text_log': {   'file': 'text_log.csv',
+                    'source': 'TextLog (0x51)',
+                    'nominal_rate_hz': None,
+                    'required': False,
+                    'columns': (   ('timestamp_us', 'int', 'us'),
+                                   ('truncated', 'int', '0/1'),
+                                   ('dropped_before', 'int', 'count'),
+                                   ('text', 'str', 'text'))},
     'eskf_cov': {   'file': 'eskf_cov.csv',
                     'source': 'ESKF P-diag (0x49)',
                     'nominal_rate_hz': None,
@@ -1339,6 +1413,432 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                       'unit': 's',
                       'description_ja': 'ヨーレート PID の微分時間。',
                       'description_en': 'Yaw-rate PID derivative time.'}],
+    'tof_diagnostics': [   {   'name': 'timestamp_us',
+                               'type': 'int',
+                               'unit': 'us',
+                               'description_ja': '機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは '
+                                                 'uptime_ms しか持たないため timestamp_us = '
+                                                 'uptime_ms * 1000。',
+                               'description_en': 'Vehicle boot-relative microsecond '
+                                                 'timestamp. The status packet only '
+                                                 'carries uptime_ms, so timestamp_us = '
+                                                 'uptime_ms * 1000.'},
+                           {   'name': 'bottom_range_status',
+                               'type': 'int',
+                               'unit': 'enum',
+                               'description_ja': '下向き ToF の最新サンプルの VL53LX range '
+                                                 'status。0 = 有効、254 = 全ターゲット無効、255 = '
+                                                 'ターゲットなし、その他はドライバのコード（たとえば 1 = '
+                                                 'シグマ不良、2 = 信号不良、4 = 範囲外）。',
+                               'description_en': 'VL53LX range status of the latest '
+                                                 'downward ToF sample. 0 = valid, 254 '
+                                                 '= every target invalid, 255 = no '
+                                                 "target, others are the driver's "
+                                                 'codes (for example 1 = sigma '
+                                                 'failure, 2 = signal failure, 4 = out '
+                                                 'of range).'},
+                           {   'name': 'bottom_signal_rate',
+                               'type': 'float',
+                               'unit': 'Mcps',
+                               'description_ja': '下向き ToF '
+                                                 'の反射信号レート（メガカウント毎秒）。小さいほど反射が弱く（遠い・暗色・斜めの面）、測距が不安定になる。ターゲットなしのとき '
+                                                 '0。',
+                               'description_en': 'Return signal rate of the downward '
+                                                 'ToF in megacounts per second. The '
+                                                 'smaller it is, the weaker the '
+                                                 'reflection (far, dark or slanted '
+                                                 'surface) and the less stable the '
+                                                 'range. 0 when there is no target.'},
+                           {   'name': 'bottom_ambient_rate',
+                               'type': 'float',
+                               'unit': 'Mcps',
+                               'description_ja': '下向き ToF '
+                                                 'の環境光レート（メガカウント毎秒）。日光や強い照明で大きくなり、信号レートに対して大きいと測距が乱れる。',
+                               'description_en': 'Ambient light rate of the downward '
+                                                 'ToF in megacounts per second. Grows '
+                                                 'in sunlight or strong lighting; a '
+                                                 'large value against the signal rate '
+                                                 'disturbs the range.'},
+                           {   'name': 'bottom_sigma_mm',
+                               'type': 'float',
+                               'unit': 'mm',
+                               'description_ja': '下向き ToF '
+                                                 'の距離の標準偏差の推定。大きいほど測距の不確かさが大きい。ターゲットなしのとき '
+                                                 '0。',
+                               'description_en': 'Estimated standard deviation of the '
+                                                 'downward ToF range. The larger, the '
+                                                 'more uncertain the range. 0 when '
+                                                 'there is no target.'},
+                           {   'name': 'front_range_status',
+                               'type': 'int',
+                               'unit': 'enum',
+                               'description_ja': '前方 ToF の最新サンプルの VL53LX range '
+                                                 'status。0 = 有効、254 = 全ターゲット無効、255 = '
+                                                 'ターゲットなし、その他はドライバのコード（たとえば 1 = '
+                                                 'シグマ不良、2 = 信号不良、4 = 範囲外）。前方センサが無いときは '
+                                                 '0 のまま（有効の意味ではない。sensor_health の bit6 '
+                                                 'で有無を判断する）。',
+                               'description_en': 'VL53LX range status of the latest '
+                                                 'front ToF sample. 0 = valid, 254 = '
+                                                 'every target invalid, 255 = no '
+                                                 "target, others are the driver's "
+                                                 'codes (for example 1 = sigma '
+                                                 'failure, 2 = signal failure, 4 = out '
+                                                 'of range). Stays 0 when the front '
+                                                 'sensor is absent (that does not mean '
+                                                 'valid; judge presence by '
+                                                 'sensor_health bit6).'},
+                           {   'name': 'front_signal_rate',
+                               'type': 'float',
+                               'unit': 'Mcps',
+                               'description_ja': '前方 ToF '
+                                                 'の反射信号レート（メガカウント毎秒）。小さいほど反射が弱く（遠い・暗色・斜めの面）、測距が不安定になる。ターゲットなしのとき '
+                                                 '0。',
+                               'description_en': 'Return signal rate of the front ToF '
+                                                 'in megacounts per second. The '
+                                                 'smaller it is, the weaker the '
+                                                 'reflection (far, dark or slanted '
+                                                 'surface) and the less stable the '
+                                                 'range. 0 when there is no target.'},
+                           {   'name': 'front_ambient_rate',
+                               'type': 'float',
+                               'unit': 'Mcps',
+                               'description_ja': '前方 ToF '
+                                                 'の環境光レート（メガカウント毎秒）。日光や強い照明で大きくなり、信号レートに対して大きいと測距が乱れる。',
+                               'description_en': 'Ambient light rate of the front ToF '
+                                                 'in megacounts per second. Grows in '
+                                                 'sunlight or strong lighting; a large '
+                                                 'value against the signal rate '
+                                                 'disturbs the range.'},
+                           {   'name': 'front_sigma_mm',
+                               'type': 'float',
+                               'unit': 'mm',
+                               'description_ja': '前方 ToF '
+                                                 'の距離の標準偏差の推定。大きいほど測距の不確かさが大きい。ターゲットなしのとき '
+                                                 '0。',
+                               'description_en': 'Estimated standard deviation of the '
+                                                 'front ToF range. The larger, the '
+                                                 'more uncertain the range. 0 when '
+                                                 'there is no target.'}],
+    'loop_timing': [   {   'name': 'timestamp_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': '機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms '
+                                             'しか持たないため timestamp_us = uptime_ms * '
+                                             '1000。',
+                           'description_en': 'Vehicle boot-relative microsecond '
+                                             'timestamp. The status packet only '
+                                             'carries uptime_ms, so timestamp_us = '
+                                             'uptime_ms * 1000.'},
+                       {   'name': 'imu_cycles',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ImuTask: 数えた起床の回数。',
+                           'description_en': 'ImuTask: Wakes counted.'},
+                       {   'name': 'imu_period_max_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ImuTask: 連続する 2 回の起床の間隔の最大。400 Hz の周期は '
+                                             '2500 us で、約 5000 us なら 400 Hz のティックを 1 '
+                                             'つ取りこぼした。',
+                           'description_en': 'ImuTask: Longest interval between two '
+                                             'wakes. The 400 Hz period is 2500 us; '
+                                             'about 5000 us means one 400 Hz tick was '
+                                             'missed.'},
+                       {   'name': 'imu_late_count',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ImuTask: 間隔が 1.5 周期（3750 '
+                                             'us）を超えた回数（ティックの取りこぼし）。',
+                           'description_en': 'ImuTask: Intervals longer than 1.5 '
+                                             'periods (3750 us), i.e. missed ticks.'},
+                       {   'name': 'imu_busy_max_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ImuTask: '
+                                             '起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。',
+                           'description_en': 'ImuTask: Longest time from a wake to the '
+                                             'next wait (preemption by higher-priority '
+                                             'tasks included).'},
+                       {   'name': 'imu_over_budget_count',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ImuTask: 処理が 1 周期（2500 us）を超えた周期の数。',
+                           'description_en': 'ImuTask: Cycles whose busy time exceeded '
+                                             'one period (2500 us).'},
+                       {   'name': 'imu_last_late_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ImuTask: 最後に遅れた起床の時刻（機体起動基準。0 = まだ無い）。',
+                           'description_en': 'ImuTask: Time of the latest late wake '
+                                             '(vehicle boot-relative; 0 = none yet).'},
+                       {   'name': 'imu_armed_cycles',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ImuTask: ARM 中に始まった周期の数。',
+                           'description_en': 'ImuTask: Cycles that began while armed.'},
+                       {   'name': 'imu_armed_period_max_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ImuTask: ARM 中の起床間隔の最大。',
+                           'description_en': 'ImuTask: Longest wake interval while '
+                                             'armed.'},
+                       {   'name': 'imu_armed_late_count',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ImuTask: ARM 中に遅れた回数。',
+                           'description_en': 'ImuTask: Late wakes while armed.'},
+                       {   'name': 'imu_armed_busy_max_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ImuTask: ARM 中の処理時間の最大。',
+                           'description_en': 'ImuTask: Longest busy time while armed.'},
+                       {   'name': 'imu_armed_over_budget_count',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ImuTask: ARM 中に処理が 1 周期を超えた周期の数。',
+                           'description_en': 'ImuTask: Over-budget cycles while '
+                                             'armed.'},
+                       {   'name': 'control_cycles',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ControlTask: 数えた起床の回数。',
+                           'description_en': 'ControlTask: Wakes counted.'},
+                       {   'name': 'control_period_max_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ControlTask: 連続する 2 回の起床の間隔の最大。400 Hz '
+                                             'の周期は 2500 us で、約 5000 us なら 400 Hz '
+                                             'のティックを 1 つ取りこぼした。',
+                           'description_en': 'ControlTask: Longest interval between '
+                                             'two wakes. The 400 Hz period is 2500 us; '
+                                             'about 5000 us means one 400 Hz tick was '
+                                             'missed.'},
+                       {   'name': 'control_late_count',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ControlTask: 間隔が 1.5 周期（3750 '
+                                             'us）を超えた回数（ティックの取りこぼし）。',
+                           'description_en': 'ControlTask: Intervals longer than 1.5 '
+                                             'periods (3750 us), i.e. missed ticks.'},
+                       {   'name': 'control_busy_max_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ControlTask: '
+                                             '起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。',
+                           'description_en': 'ControlTask: Longest time from a wake to '
+                                             'the next wait (preemption by '
+                                             'higher-priority tasks included).'},
+                       {   'name': 'control_over_budget_count',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ControlTask: 処理が 1 周期（2500 us）を超えた周期の数。',
+                           'description_en': 'ControlTask: Cycles whose busy time '
+                                             'exceeded one period (2500 us).'},
+                       {   'name': 'control_last_late_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ControlTask: 最後に遅れた起床の時刻（機体起動基準。0 = '
+                                             'まだ無い）。',
+                           'description_en': 'ControlTask: Time of the latest late '
+                                             'wake (vehicle boot-relative; 0 = none '
+                                             'yet).'},
+                       {   'name': 'control_armed_cycles',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ControlTask: ARM 中に始まった周期の数。',
+                           'description_en': 'ControlTask: Cycles that began while '
+                                             'armed.'},
+                       {   'name': 'control_armed_period_max_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ControlTask: ARM 中の起床間隔の最大。',
+                           'description_en': 'ControlTask: Longest wake interval while '
+                                             'armed.'},
+                       {   'name': 'control_armed_late_count',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ControlTask: ARM 中に遅れた回数。',
+                           'description_en': 'ControlTask: Late wakes while armed.'},
+                       {   'name': 'control_armed_busy_max_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': 'ControlTask: ARM 中の処理時間の最大。',
+                           'description_en': 'ControlTask: Longest busy time while '
+                                             'armed.'},
+                       {   'name': 'control_armed_over_budget_count',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'ControlTask: ARM 中に処理が 1 周期を超えた周期の数。',
+                           'description_en': 'ControlTask: Over-budget cycles while '
+                                             'armed.'}],
+    'nonfinite': [   {   'name': 'timestamp_us',
+                         'type': 'int',
+                         'unit': 'us',
+                         'description_ja': '機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms '
+                                           'しか持たないため timestamp_us = uptime_ms * 1000。',
+                         'description_en': 'Vehicle boot-relative microsecond '
+                                           'timestamp. The status packet only carries '
+                                           'uptime_ms, so timestamp_us = uptime_ms * '
+                                           '1000.'},
+                     {   'name': 'checked_cycles',
+                         'type': 'int',
+                         'unit': 'count',
+                         'description_ja': '検査した ARM 中の制御周期の数。',
+                         'description_en': 'Armed control cycles checked.'},
+                     {   'name': 'detected_cycles',
+                         'type': 'int',
+                         'unit': 'count',
+                         'description_ja': 'どれかの境界に有限でない値があった周期の数。',
+                         'description_en': 'Cycles in which any boundary held a '
+                                           'non-finite value.'},
+                     {   'name': 'estimate_input',
+                         'type': 'int',
+                         'unit': 'count',
+                         'description_ja': '推定値の入力（姿勢・位置・速度・角速度の 13 個）が有限でなかった周期の数。',
+                         'description_en': 'Cycles in which the estimate input (13 '
+                                           'values) was not finite.'},
+                     {   'name': 'setpoint_input',
+                         'type': 'int',
+                         'unit': 'count',
+                         'description_ja': '目標値の入力（5 個）が有限でなかった周期の数。',
+                         'description_en': 'Cycles in which the setpoint input (5 '
+                                           'values) was not finite.'},
+                     {   'name': 'control_reference',
+                         'type': 'int',
+                         'unit': 'count',
+                         'description_ja': '制御器の外側ループの出力（rate_ref・angle_ref の 5 '
+                                           '個）が有限でなかった周期の数。',
+                         'description_en': 'Cycles in which the outer-loop output '
+                                           '(rate_ref, angle_ref: 5 values) was not '
+                                           'finite.'},
+                     {   'name': 'control_output',
+                         'type': 'int',
+                         'unit': 'count',
+                         'description_ja': '制御器の出力（推力とトルク 3 軸の 4 個）が有限でなかった周期の数。',
+                         'description_en': 'Cycles in which the controller output '
+                                           '(thrust and 3 torques: 4 values) was not '
+                                           'finite.'},
+                     {   'name': 'mixer_output',
+                         'type': 'int',
+                         'unit': 'count',
+                         'description_ja': 'ミキサの出力（上下限の前の 4 モータの duty）が有限でなかった周期の数。',
+                         'description_en': 'Cycles in which the mixer output (4 duties '
+                                           'before the limits) was not finite.'},
+                     {   'name': 'motor_command',
+                         'type': 'int',
+                         'unit': 'count',
+                         'description_ja': 'モータへ渡す直前の duty が有限でなかった周期の数（そのモータには 0 '
+                                           'を渡す）。',
+                         'description_en': 'Cycles in which a duty about to go to a '
+                                           'motor was not finite (that motor gets 0).'},
+                     {   'name': 'first_us',
+                         'type': 'int',
+                         'unit': 'us',
+                         'description_ja': '最初の検出の時刻（機体起動基準。0 = まだ無い）。',
+                         'description_en': 'Time of the first detection (vehicle '
+                                           'boot-relative; 0 = none yet).'},
+                     {   'name': 'first_stage',
+                         'type': 'int',
+                         'unit': 'enum',
+                         'description_ja': '最初の検出の境界（0 = estimate_input、1 = '
+                                           'setpoint_input、2 = control_reference、3 = '
+                                           'control_output、4 = mixer_output、5 = '
+                                           'motor_command、255 = まだ無い）。',
+                         'description_en': 'Boundary of the first detection (0 = '
+                                           'estimate_input, 1 = setpoint_input, 2 = '
+                                           'control_reference, 3 = control_output, 4 = '
+                                           'mixer_output, 5 = motor_command, 255 = '
+                                           'none yet).'}],
+    'link_health': [   {   'name': 'timestamp_us',
+                           'type': 'int',
+                           'unit': 'us',
+                           'description_ja': '機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms '
+                                             'しか持たないため timestamp_us = uptime_ms * '
+                                             '1000。',
+                           'description_en': 'Vehicle boot-relative microsecond '
+                                             'timestamp. The status packet only '
+                                             'carries uptime_ms, so timestamp_us = '
+                                             'uptime_ms * 1000.'},
+                       {   'name': 'log_stream_overflow',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'log_stream リングが落とした 400 Hz サンプル数（Data '
+                                             'Stream が間に合って取り出せなかった）。0 でなければ 400 Hz '
+                                             'ストリームに seq の飛びがある。',
+                           'description_en': '400 Hz samples the log_stream ring '
+                                             'dropped (the Data Stream did not drain '
+                                             'it in time). When not 0 the 400 Hz '
+                                             'streams have seq gaps.'},
+                       {   'name': 'send_drops',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'sendto の失敗数（機体の送信側の数え方。PC '
+                                             'は通し番号の飛びとして欠落を見る）。',
+                           'description_en': 'sendto failures counted on the vehicle '
+                                             '(the PC sees the loss as a sequence '
+                                             'jump).'},
+                       {   'name': 'entry_drops',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': '統合パケットが満杯で棄却したエントリ数。0 '
+                                             'でなければ一部のストリームにサンプルが抜けている。',
+                           'description_en': 'Entries the unified packet refused '
+                                             'because it was full. When not 0 some '
+                                             'stream is missing samples.'},
+                       {   'name': 'text_dropped_lines',
+                           'type': 'int',
+                           'unit': 'count',
+                           'description_ja': 'テキストログ用リングが断った行数の合計（正確。text_log の '
+                                             'dropped_before の総和より大きいことがある: 1 行が運べる数は '
+                                             '255 まで）。',
+                           'description_en': 'Total of text lines the text-log ring '
+                                             'refused (exact; can exceed the sum of '
+                                             'text_log.dropped_before, which one line '
+                                             'carries up to 255).'}],
+    'text_log': [   {   'name': 'timestamp_us',
+                        'type': 'int',
+                        'unit': 'us',
+                        'description_ja': '行がログシンクに入った機体起動基準のマイクロ秒時刻（他のストリームと同じ時計。32 '
+                                          'ビットで巻き戻る）。 '
+                                          '行の順序はパケットの通し番号とパケット内の順序で復元済みで、時刻は同値の連続を含みうる。',
+                        'description_en': 'Vehicle boot-relative microsecond time at '
+                                          'which the line entered the log sink (the '
+                                          'same clock as the other streams; 32 bits, '
+                                          'wraps). The order of the rows is restored '
+                                          'from the packet sequence and the order '
+                                          'inside the packet; consecutive equal times '
+                                          'are possible.'},
+                    {   'name': 'truncated',
+                        'type': 'int',
+                        'unit': '0/1',
+                        'description_ja': '1 は行が機体で 1 行の上限（384 '
+                                          'バイト）に切り詰められたこと（切った行も改行で終わる）。',
+                        'description_en': '1 when the vehicle cut the line to its '
+                                          'limit of 384 bytes (a cut line still ends '
+                                          'with a newline).'},
+                    {   'name': 'dropped_before',
+                        'type': 'int',
+                        'unit': 'count',
+                        'description_ja': 'この行の直前に機体のログシンクが断った（満杯で入れなかった）行数。0 '
+                                          '以外のとき、その位置で行が抜けている。255 で飽和する（正確な合計は '
+                                          'link_health.text_dropped_lines）。',
+                        'description_en': "Lines the vehicle's log sink refused (ring "
+                                          'full) just before this line. When not 0 '
+                                          'lines are missing at this place. Saturates '
+                                          'at 255 (the exact total is '
+                                          'link_health.text_dropped_lines).'},
+                    {   'name': 'text',
+                        'type': 'str',
+                        'unit': 'text',
+                        'description_ja': 'ESP_LOG の 1 行（末尾の改行を除く。「I (12345) Tag: '
+                                          'message」の形。括弧内は機体のミリ秒）。 UTF-8 '
+                                          'として読めないバイトは置換文字になる。',
+                        'description_en': 'One ESP_LOG line without its trailing '
+                                          'newline, as "I (12345) Tag: message" (the '
+                                          'number in parentheses is vehicle '
+                                          'milliseconds). Bytes that are not UTF-8 '
+                                          'become replacement characters.'}],
     'eskf_cov': [   {   'name': 'timestamp_us',
                         'type': 'int',
                         'unit': 'us',

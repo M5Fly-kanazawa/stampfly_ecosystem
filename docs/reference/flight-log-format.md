@@ -67,6 +67,11 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `flow` | `flow.csv` | Flow (0x43) | 100 Hz | - |
 | `mag` | `mag.csv` | Mag (0x46) | 25 Hz | - |
 | `status` | `status.csv` | Status (0x4F) | 1 Hz | - |
+| `tof_diagnostics` | `tof_diagnostics.csv` | Status v4 (0x4F, 224 B) | 1 Hz | - |
+| `loop_timing` | `loop_timing.csv` | Status v4 (0x4F, 224 B) | 1 Hz | - |
+| `nonfinite` | `nonfinite.csv` | Status v4 (0x4F, 224 B) | 1 Hz | - |
+| `link_health` | `link_health.csv` | Status v4 (0x4F, 224 B) | 1 Hz | - |
+| `text_log` | `text_log.csv` | TextLog (0x51) | (可変/事象駆動) | - |
 | `eskf_cov` | `eskf_cov.csv` | ESKF P-diag (0x49) | (可変/事象駆動) | - |
 | `truth` | `truth.csv` | sils/sim | (可変/事象駆動) | - |
 | `events` | `events.csv` | sils | (可変/事象駆動) | - |
@@ -330,6 +335,93 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `pid_yaw_ti` | float | s | ヨーレート PID の積分時間。 |
 | `pid_yaw_td` | float | s | ヨーレート PID の微分時間。 |
 
+#### tof_diagnostics（`tof_diagnostics.csv`）
+
+由来: Status v4 (0x4F, 224 B) ／ 公称レート: 1 Hz ／ 必須: 任意
+
+| 列名 | 型 | 単位 | 説明 |
+|---|---|---|---|
+| `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。 |
+| `bottom_range_status` | int | enum | 下向き ToF の最新サンプルの VL53LX range status。0 = 有効、254 = 全ターゲット無効、255 = ターゲットなし、その他はドライバのコード（たとえば 1 = シグマ不良、2 = 信号不良、4 = 範囲外）。 |
+| `bottom_signal_rate` | float | Mcps | 下向き ToF の反射信号レート（メガカウント毎秒）。小さいほど反射が弱く（遠い・暗色・斜めの面）、測距が不安定になる。ターゲットなしのとき 0。 |
+| `bottom_ambient_rate` | float | Mcps | 下向き ToF の環境光レート（メガカウント毎秒）。日光や強い照明で大きくなり、信号レートに対して大きいと測距が乱れる。 |
+| `bottom_sigma_mm` | float | mm | 下向き ToF の距離の標準偏差の推定。大きいほど測距の不確かさが大きい。ターゲットなしのとき 0。 |
+| `front_range_status` | int | enum | 前方 ToF の最新サンプルの VL53LX range status。0 = 有効、254 = 全ターゲット無効、255 = ターゲットなし、その他はドライバのコード（たとえば 1 = シグマ不良、2 = 信号不良、4 = 範囲外）。前方センサが無いときは 0 のまま（有効の意味ではない。sensor_health の bit6 で有無を判断する）。 |
+| `front_signal_rate` | float | Mcps | 前方 ToF の反射信号レート（メガカウント毎秒）。小さいほど反射が弱く（遠い・暗色・斜めの面）、測距が不安定になる。ターゲットなしのとき 0。 |
+| `front_ambient_rate` | float | Mcps | 前方 ToF の環境光レート（メガカウント毎秒）。日光や強い照明で大きくなり、信号レートに対して大きいと測距が乱れる。 |
+| `front_sigma_mm` | float | mm | 前方 ToF の距離の標準偏差の推定。大きいほど測距の不確かさが大きい。ターゲットなしのとき 0。 |
+
+#### loop_timing（`loop_timing.csv`）
+
+由来: Status v4 (0x4F, 224 B) ／ 公称レート: 1 Hz ／ 必須: 任意
+
+| 列名 | 型 | 単位 | 説明 |
+|---|---|---|---|
+| `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。 |
+| `imu_cycles` | int | count | ImuTask: 数えた起床の回数。 |
+| `imu_period_max_us` | int | us | ImuTask: 連続する 2 回の起床の間隔の最大。400 Hz の周期は 2500 us で、約 5000 us なら 400 Hz のティックを 1 つ取りこぼした。 |
+| `imu_late_count` | int | count | ImuTask: 間隔が 1.5 周期（3750 us）を超えた回数（ティックの取りこぼし）。 |
+| `imu_busy_max_us` | int | us | ImuTask: 起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。 |
+| `imu_over_budget_count` | int | count | ImuTask: 処理が 1 周期（2500 us）を超えた周期の数。 |
+| `imu_last_late_us` | int | us | ImuTask: 最後に遅れた起床の時刻（機体起動基準。0 = まだ無い）。 |
+| `imu_armed_cycles` | int | count | ImuTask: ARM 中に始まった周期の数。 |
+| `imu_armed_period_max_us` | int | us | ImuTask: ARM 中の起床間隔の最大。 |
+| `imu_armed_late_count` | int | count | ImuTask: ARM 中に遅れた回数。 |
+| `imu_armed_busy_max_us` | int | us | ImuTask: ARM 中の処理時間の最大。 |
+| `imu_armed_over_budget_count` | int | count | ImuTask: ARM 中に処理が 1 周期を超えた周期の数。 |
+| `control_cycles` | int | count | ControlTask: 数えた起床の回数。 |
+| `control_period_max_us` | int | us | ControlTask: 連続する 2 回の起床の間隔の最大。400 Hz の周期は 2500 us で、約 5000 us なら 400 Hz のティックを 1 つ取りこぼした。 |
+| `control_late_count` | int | count | ControlTask: 間隔が 1.5 周期（3750 us）を超えた回数（ティックの取りこぼし）。 |
+| `control_busy_max_us` | int | us | ControlTask: 起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。 |
+| `control_over_budget_count` | int | count | ControlTask: 処理が 1 周期（2500 us）を超えた周期の数。 |
+| `control_last_late_us` | int | us | ControlTask: 最後に遅れた起床の時刻（機体起動基準。0 = まだ無い）。 |
+| `control_armed_cycles` | int | count | ControlTask: ARM 中に始まった周期の数。 |
+| `control_armed_period_max_us` | int | us | ControlTask: ARM 中の起床間隔の最大。 |
+| `control_armed_late_count` | int | count | ControlTask: ARM 中に遅れた回数。 |
+| `control_armed_busy_max_us` | int | us | ControlTask: ARM 中の処理時間の最大。 |
+| `control_armed_over_budget_count` | int | count | ControlTask: ARM 中に処理が 1 周期を超えた周期の数。 |
+
+#### nonfinite（`nonfinite.csv`）
+
+由来: Status v4 (0x4F, 224 B) ／ 公称レート: 1 Hz ／ 必須: 任意
+
+| 列名 | 型 | 単位 | 説明 |
+|---|---|---|---|
+| `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。 |
+| `checked_cycles` | int | count | 検査した ARM 中の制御周期の数。 |
+| `detected_cycles` | int | count | どれかの境界に有限でない値があった周期の数。 |
+| `estimate_input` | int | count | 推定値の入力（姿勢・位置・速度・角速度の 13 個）が有限でなかった周期の数。 |
+| `setpoint_input` | int | count | 目標値の入力（5 個）が有限でなかった周期の数。 |
+| `control_reference` | int | count | 制御器の外側ループの出力（rate_ref・angle_ref の 5 個）が有限でなかった周期の数。 |
+| `control_output` | int | count | 制御器の出力（推力とトルク 3 軸の 4 個）が有限でなかった周期の数。 |
+| `mixer_output` | int | count | ミキサの出力（上下限の前の 4 モータの duty）が有限でなかった周期の数。 |
+| `motor_command` | int | count | モータへ渡す直前の duty が有限でなかった周期の数（そのモータには 0 を渡す）。 |
+| `first_us` | int | us | 最初の検出の時刻（機体起動基準。0 = まだ無い）。 |
+| `first_stage` | int | enum | 最初の検出の境界（0 = estimate_input、1 = setpoint_input、2 = control_reference、3 = control_output、4 = mixer_output、5 = motor_command、255 = まだ無い）。 |
+
+#### link_health（`link_health.csv`）
+
+由来: Status v4 (0x4F, 224 B) ／ 公称レート: 1 Hz ／ 必須: 任意
+
+| 列名 | 型 | 単位 | 説明 |
+|---|---|---|---|
+| `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。 |
+| `log_stream_overflow` | int | count | log_stream リングが落とした 400 Hz サンプル数（Data Stream が間に合って取り出せなかった）。0 でなければ 400 Hz ストリームに seq の飛びがある。 |
+| `send_drops` | int | count | sendto の失敗数（機体の送信側の数え方。PC は通し番号の飛びとして欠落を見る）。 |
+| `entry_drops` | int | count | 統合パケットが満杯で棄却したエントリ数。0 でなければ一部のストリームにサンプルが抜けている。 |
+| `text_dropped_lines` | int | count | テキストログ用リングが断った行数の合計（正確。text_log の dropped_before の総和より大きいことがある: 1 行が運べる数は 255 まで）。 |
+
+#### text_log（`text_log.csv`）
+
+由来: TextLog (0x51) ／ 公称レート: (可変/事象駆動) ／ 必須: 任意
+
+| 列名 | 型 | 単位 | 説明 |
+|---|---|---|---|
+| `timestamp_us` | int | us | 行がログシンクに入った機体起動基準のマイクロ秒時刻（他のストリームと同じ時計。32 ビットで巻き戻る）。 行の順序はパケットの通し番号とパケット内の順序で復元済みで、時刻は同値の連続を含みうる。 |
+| `truncated` | int | 0/1 | 1 は行が機体で 1 行の上限（384 バイト）に切り詰められたこと（切った行も改行で終わる）。 |
+| `dropped_before` | int | count | この行の直前に機体のログシンクが断った（満杯で入れなかった）行数。0 以外のとき、その位置で行が抜けている。255 で飽和する（正確な合計は link_health.text_dropped_lines）。 |
+| `text` | str | text | ESP_LOG の 1 行（末尾の改行を除く。「I (12345) Tag: message」の形。括弧内は機体のミリ秒）。 UTF-8 として読めないバイトは置換文字になる。 |
+
 #### eskf_cov（`eskf_cov.csv`）
 
 由来: ESKF P-diag (0x49) ／ 公称レート: (可変/事象駆動) ／ 必須: 任意
@@ -466,6 +558,11 @@ Encoding utf-8, header row, no comment rows. Column 1 is always `timestamp_us` (
 | `flow` | `flow.csv` | Flow (0x43) | 100 Hz | - |
 | `mag` | `mag.csv` | Mag (0x46) | 25 Hz | - |
 | `status` | `status.csv` | Status (0x4F) | 1 Hz | - |
+| `tof_diagnostics` | `tof_diagnostics.csv` | Status v4 (0x4F, 224 B) | 1 Hz | - |
+| `loop_timing` | `loop_timing.csv` | Status v4 (0x4F, 224 B) | 1 Hz | - |
+| `nonfinite` | `nonfinite.csv` | Status v4 (0x4F, 224 B) | 1 Hz | - |
+| `link_health` | `link_health.csv` | Status v4 (0x4F, 224 B) | 1 Hz | - |
+| `text_log` | `text_log.csv` | TextLog (0x51) | (variable / event-driven) | - |
 | `eskf_cov` | `eskf_cov.csv` | ESKF P-diag (0x49) | (variable / event-driven) | - |
 | `truth` | `truth.csv` | sils/sim | (variable / event-driven) | - |
 | `events` | `events.csv` | sils | (variable / event-driven) | - |
@@ -728,6 +825,93 @@ Source: Status (0x4F) / Nominal rate: 1 Hz / Required: no
 | `pid_yaw_kp` | float | unitless (gain) | Yaw-rate PID proportional gain. |
 | `pid_yaw_ti` | float | s | Yaw-rate PID integral time. |
 | `pid_yaw_td` | float | s | Yaw-rate PID derivative time. |
+
+#### tof_diagnostics (`tof_diagnostics.csv`)
+
+Source: Status v4 (0x4F, 224 B) / Nominal rate: 1 Hz / Required: no
+
+| Column | Type | Unit | Description |
+|---|---|---|---|
+| `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp. The status packet only carries uptime_ms, so timestamp_us = uptime_ms * 1000. |
+| `bottom_range_status` | int | enum | VL53LX range status of the latest downward ToF sample. 0 = valid, 254 = every target invalid, 255 = no target, others are the driver's codes (for example 1 = sigma failure, 2 = signal failure, 4 = out of range). |
+| `bottom_signal_rate` | float | Mcps | Return signal rate of the downward ToF in megacounts per second. The smaller it is, the weaker the reflection (far, dark or slanted surface) and the less stable the range. 0 when there is no target. |
+| `bottom_ambient_rate` | float | Mcps | Ambient light rate of the downward ToF in megacounts per second. Grows in sunlight or strong lighting; a large value against the signal rate disturbs the range. |
+| `bottom_sigma_mm` | float | mm | Estimated standard deviation of the downward ToF range. The larger, the more uncertain the range. 0 when there is no target. |
+| `front_range_status` | int | enum | VL53LX range status of the latest front ToF sample. 0 = valid, 254 = every target invalid, 255 = no target, others are the driver's codes (for example 1 = sigma failure, 2 = signal failure, 4 = out of range). Stays 0 when the front sensor is absent (that does not mean valid; judge presence by sensor_health bit6). |
+| `front_signal_rate` | float | Mcps | Return signal rate of the front ToF in megacounts per second. The smaller it is, the weaker the reflection (far, dark or slanted surface) and the less stable the range. 0 when there is no target. |
+| `front_ambient_rate` | float | Mcps | Ambient light rate of the front ToF in megacounts per second. Grows in sunlight or strong lighting; a large value against the signal rate disturbs the range. |
+| `front_sigma_mm` | float | mm | Estimated standard deviation of the front ToF range. The larger, the more uncertain the range. 0 when there is no target. |
+
+#### loop_timing (`loop_timing.csv`)
+
+Source: Status v4 (0x4F, 224 B) / Nominal rate: 1 Hz / Required: no
+
+| Column | Type | Unit | Description |
+|---|---|---|---|
+| `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp. The status packet only carries uptime_ms, so timestamp_us = uptime_ms * 1000. |
+| `imu_cycles` | int | count | ImuTask: Wakes counted. |
+| `imu_period_max_us` | int | us | ImuTask: Longest interval between two wakes. The 400 Hz period is 2500 us; about 5000 us means one 400 Hz tick was missed. |
+| `imu_late_count` | int | count | ImuTask: Intervals longer than 1.5 periods (3750 us), i.e. missed ticks. |
+| `imu_busy_max_us` | int | us | ImuTask: Longest time from a wake to the next wait (preemption by higher-priority tasks included). |
+| `imu_over_budget_count` | int | count | ImuTask: Cycles whose busy time exceeded one period (2500 us). |
+| `imu_last_late_us` | int | us | ImuTask: Time of the latest late wake (vehicle boot-relative; 0 = none yet). |
+| `imu_armed_cycles` | int | count | ImuTask: Cycles that began while armed. |
+| `imu_armed_period_max_us` | int | us | ImuTask: Longest wake interval while armed. |
+| `imu_armed_late_count` | int | count | ImuTask: Late wakes while armed. |
+| `imu_armed_busy_max_us` | int | us | ImuTask: Longest busy time while armed. |
+| `imu_armed_over_budget_count` | int | count | ImuTask: Over-budget cycles while armed. |
+| `control_cycles` | int | count | ControlTask: Wakes counted. |
+| `control_period_max_us` | int | us | ControlTask: Longest interval between two wakes. The 400 Hz period is 2500 us; about 5000 us means one 400 Hz tick was missed. |
+| `control_late_count` | int | count | ControlTask: Intervals longer than 1.5 periods (3750 us), i.e. missed ticks. |
+| `control_busy_max_us` | int | us | ControlTask: Longest time from a wake to the next wait (preemption by higher-priority tasks included). |
+| `control_over_budget_count` | int | count | ControlTask: Cycles whose busy time exceeded one period (2500 us). |
+| `control_last_late_us` | int | us | ControlTask: Time of the latest late wake (vehicle boot-relative; 0 = none yet). |
+| `control_armed_cycles` | int | count | ControlTask: Cycles that began while armed. |
+| `control_armed_period_max_us` | int | us | ControlTask: Longest wake interval while armed. |
+| `control_armed_late_count` | int | count | ControlTask: Late wakes while armed. |
+| `control_armed_busy_max_us` | int | us | ControlTask: Longest busy time while armed. |
+| `control_armed_over_budget_count` | int | count | ControlTask: Over-budget cycles while armed. |
+
+#### nonfinite (`nonfinite.csv`)
+
+Source: Status v4 (0x4F, 224 B) / Nominal rate: 1 Hz / Required: no
+
+| Column | Type | Unit | Description |
+|---|---|---|---|
+| `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp. The status packet only carries uptime_ms, so timestamp_us = uptime_ms * 1000. |
+| `checked_cycles` | int | count | Armed control cycles checked. |
+| `detected_cycles` | int | count | Cycles in which any boundary held a non-finite value. |
+| `estimate_input` | int | count | Cycles in which the estimate input (13 values) was not finite. |
+| `setpoint_input` | int | count | Cycles in which the setpoint input (5 values) was not finite. |
+| `control_reference` | int | count | Cycles in which the outer-loop output (rate_ref, angle_ref: 5 values) was not finite. |
+| `control_output` | int | count | Cycles in which the controller output (thrust and 3 torques: 4 values) was not finite. |
+| `mixer_output` | int | count | Cycles in which the mixer output (4 duties before the limits) was not finite. |
+| `motor_command` | int | count | Cycles in which a duty about to go to a motor was not finite (that motor gets 0). |
+| `first_us` | int | us | Time of the first detection (vehicle boot-relative; 0 = none yet). |
+| `first_stage` | int | enum | Boundary of the first detection (0 = estimate_input, 1 = setpoint_input, 2 = control_reference, 3 = control_output, 4 = mixer_output, 5 = motor_command, 255 = none yet). |
+
+#### link_health (`link_health.csv`)
+
+Source: Status v4 (0x4F, 224 B) / Nominal rate: 1 Hz / Required: no
+
+| Column | Type | Unit | Description |
+|---|---|---|---|
+| `timestamp_us` | int | us | Vehicle boot-relative microsecond timestamp. The status packet only carries uptime_ms, so timestamp_us = uptime_ms * 1000. |
+| `log_stream_overflow` | int | count | 400 Hz samples the log_stream ring dropped (the Data Stream did not drain it in time). When not 0 the 400 Hz streams have seq gaps. |
+| `send_drops` | int | count | sendto failures counted on the vehicle (the PC sees the loss as a sequence jump). |
+| `entry_drops` | int | count | Entries the unified packet refused because it was full. When not 0 some stream is missing samples. |
+| `text_dropped_lines` | int | count | Total of text lines the text-log ring refused (exact; can exceed the sum of text_log.dropped_before, which one line carries up to 255). |
+
+#### text_log (`text_log.csv`)
+
+Source: TextLog (0x51) / Nominal rate: (variable / event-driven) / Required: no
+
+| Column | Type | Unit | Description |
+|---|---|---|---|
+| `timestamp_us` | int | us | Vehicle boot-relative microsecond time at which the line entered the log sink (the same clock as the other streams; 32 bits, wraps). The order of the rows is restored from the packet sequence and the order inside the packet; consecutive equal times are possible. |
+| `truncated` | int | 0/1 | 1 when the vehicle cut the line to its limit of 384 bytes (a cut line still ends with a newline). |
+| `dropped_before` | int | count | Lines the vehicle's log sink refused (ring full) just before this line. When not 0 lines are missing at this place. Saturates at 255 (the exact total is link_health.text_dropped_lines). |
+| `text` | str | text | One ESP_LOG line without its trailing newline, as "I (12345) Tag: message" (the number in parentheses is vehicle milliseconds). Bytes that are not UTF-8 become replacement characters. |
 
 #### eskf_cov (`eskf_cov.csv`)
 

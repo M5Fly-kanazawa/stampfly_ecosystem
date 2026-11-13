@@ -95,6 +95,7 @@ PKT_TOF_SILENCE     = 0x4E  # 50Hz downward-ToF silence facts (vertical velocity
 PKT_RATE_REF  = 0x99  # virtual ID for 400Hz rate_ref (fixed part of unified packet)
 PKT_STATUS    = 0x4F
 PKT_UNIFIED   = 0x50  # 8x IMU+ESKF + 8x PosVel + 8x RateRef + variable entries
+PKT_TEXT_LOG  = 0x51  # ESP_LOG text lines of the vehicle: [header 4B][record 8B + text]...[checksum 1B]
 
 # Packet types whose 8 sub-samples per PKT_UNIFIED datagram get a v1
 # flight-log `seq` (protocol/spec/flight_log.yaml): unwrapped unified-packet
@@ -240,6 +241,37 @@ assert struct.calcsize(FMT_FLIGHT_FLAGS) == 8
 FMT_TOF_SILENCE = '<I3f3B'
 assert struct.calcsize(FMT_TOF_SILENCE) == 19
 
+# Text-log packet 0x51 (data_stream_wire.hpp WireTextRecord): one record header per line, then `length` bytes of text.
+# テキストログのパケット 0x51（data_stream_wire.hpp の WireTextRecord）: 行ごとに 1 つのレコードヘッダ、続いて本文 length バイト。
+TEXT_ORDER_STRIDE = 1000   # > the most records one text packet can hold (1029 B / 9 B), so (sequence, index) sorts as one number / 1 パケットが持てるレコード数（517 B / 9 B）より大きいので、（通し番号, 位置）が 1 つの数として並ぶ
+FMT_TEXT_RECORD = '<I B B H'   # timestamp_us, flags, dropped_before, length
+assert struct.calcsize(FMT_TEXT_RECORD) == 8
+TEXT_FLAG_TRUNCATED = 0x01
+
+# Status packet v4 extension (data_stream_wire.hpp WireStatusV4Extension), appended at buffer offset 56 (after the
+# v3 payload); the version is chosen by the TOTAL datagram length: 17 (v1), 53 (v2), 57 (v3), 224 (v4).
+# ステータスパケット v4 の拡張部（data_stream_wire.hpp の WireStatusV4Extension）。v3 のペイロードの後ろ、バッファ
+# offset 56 から追記する。バージョンはデータグラムの全長で選ぶ: 17（v1）、53（v2）、57（v3）、224（v4）。
+STATUS_V3_LENGTH = 57
+STATUS_V4_LENGTH = 224
+STATUS_V4_OFFSET = 56
+FMT_TOF_DIAGNOSTIC = '<B 3f'    # range_status, signal_rate [Mcps], ambient_rate [Mcps], sigma_mm [mm]  (13 B)
+FMT_LOOP_TIMING = '<11I'        # 11 x uint32 (44 B), the order of LOOP_TIMING_FIELDS
+FMT_NONFINITE = '<9I B'         # checked, detected, 6 stages, first_us, first_stage (37 B)
+FMT_LINK_HEALTH = '<4I'         # log_stream_overflow, send_drops, entry_drops, text_dropped_lines (16 B)
+assert struct.calcsize(FMT_TOF_DIAGNOSTIC) == 13
+assert struct.calcsize(FMT_LOOP_TIMING) == 44
+assert struct.calcsize(FMT_NONFINITE) == 37
+assert struct.calcsize(FMT_LINK_HEALTH) == 16
+assert STATUS_V4_OFFSET + 2 * 13 + 2 * 44 + 37 + 16 + 1 == STATUS_V4_LENGTH
+LOOP_TIMING_FIELDS = ('cycles', 'period_max_us', 'late_count', 'busy_max_us', 'over_budget_count', 'last_late_us',
+                      'armed_cycles', 'armed_period_max_us', 'armed_late_count', 'armed_busy_max_us',
+                      'armed_over_budget_count')
+NONFINITE_FIELDS = ('checked_cycles', 'detected_cycles', 'estimate_input', 'setpoint_input', 'control_reference',
+                    'control_output', 'mixer_output', 'motor_command', 'first_us')
+LINK_HEALTH_FIELDS = ('log_stream_overflow', 'send_drops', 'entry_drops', 'text_dropped_lines')
+TOF_DIAGNOSTIC_FIELDS = ('range_status', 'signal_rate', 'ambient_rate', 'sigma_mm')
+
 # Header: 4 bytes
 FMT_HEADER = '<B H B'
 assert struct.calcsize(FMT_HEADER) == 4
@@ -330,6 +362,70 @@ def verify_checksum(data: bytes) -> bool:
     for b in data[:-1]:
         xor_val ^= b
     return xor_val == data[-1]
+
+
+def _parse_text_log_packet(data: bytes, count: int) -> list:
+    """Parse a text-log packet (0x51) into one (PKT_TEXT_LOG, sample) per line, in the packet's order.
+    The records must account for every byte of the datagram and `count` must match: anything else is
+    rejected as a whole (a damaged packet that passed the XOR checksum must not yield half a line).
+    `_idx` is the record's index in the packet (the order key); `text` still ends with its newline.
+    テキストログのパケット（0x51）を、パケット内の順序で行ごとの (PKT_TEXT_LOG, sample) にパースする。レコードは
+    データグラムの全バイトを使い切り、`count` と一致しなければならない。そうでなければパケット全体を拒否する（XOR
+    チェックサムを通り抜けた壊れたパケットが、行の半分を出してはならない）。`_idx` はパケット内の位置（順序のキー）、
+    `text` は改行を含んだまま。
+    """
+    header_size = struct.calcsize(FMT_HEADER)
+    record_size = struct.calcsize(FMT_TEXT_RECORD)
+    end = len(data) - 1   # the last byte is the checksum / 最後の 1 バイトはチェックサム
+    offset = header_size
+    results = []
+    for index in range(count):
+        if offset + record_size > end:
+            return []
+        timestamp_us, flags, dropped_before, length = struct.unpack_from(FMT_TEXT_RECORD, data, offset)
+        offset += record_size
+        if offset + length > end:
+            return []
+        text = data[offset:offset + length].decode('utf-8', errors='replace')
+        offset += length
+        results.append((PKT_TEXT_LOG, {
+            'timestamp_us': timestamp_us,
+            'truncated': 1 if flags & TEXT_FLAG_TRUNCATED else 0,
+            'dropped_before': dropped_before,
+            'text': text,
+            '_idx': index,
+        }))
+    if offset != end or not results:
+        return []
+    return results
+
+
+def _parse_status_v4_extension(data: bytes) -> dict:
+    """Decode the v4 part of a 224-byte status packet into sample keys named like the bundle columns
+    (tof_diagnostics, loop_timing, nonfinite, link_health streams of protocol/spec/flight_log.yaml).
+    224 バイトのステータスパケットの v4 部分を、一式の列名と同じ名前のサンプルのキーへデコードする
+    （protocol/spec/flight_log.yaml の tof_diagnostics・loop_timing・nonfinite・link_health ストリーム）。
+    """
+    sample = {}
+    offset = STATUS_V4_OFFSET
+    for side in ('bottom', 'front'):
+        values = struct.unpack_from(FMT_TOF_DIAGNOSTIC, data, offset)
+        offset += struct.calcsize(FMT_TOF_DIAGNOSTIC)
+        for field, value in zip(TOF_DIAGNOSTIC_FIELDS, values):
+            sample[f'{side}_{field}'] = value
+    for task in ('imu', 'control'):
+        values = struct.unpack_from(FMT_LOOP_TIMING, data, offset)
+        offset += struct.calcsize(FMT_LOOP_TIMING)
+        for field, value in zip(LOOP_TIMING_FIELDS, values):
+            sample[f'{task}_{field}'] = value
+    values = struct.unpack_from(FMT_NONFINITE, data, offset)
+    offset += struct.calcsize(FMT_NONFINITE)
+    for field, value in zip(NONFINITE_FIELDS + ('first_stage',), values):
+        sample[field] = value
+    values = struct.unpack_from(FMT_LINK_HEALTH, data, offset)
+    for field, value in zip(LINK_HEALTH_FIELDS, values):
+        sample[field] = value
+    return sample
 
 
 def parse_packet(data: bytes) -> list:
@@ -531,6 +627,9 @@ def parse_packet(data: bytes) -> list:
 
         return results
 
+    if pkt_id == PKT_TEXT_LOG:
+        return _parse_text_log_packet(data, count)
+
     if pkt_id not in SAMPLE_INFO:
         # Status packet (0x4F) — parse fields
         # StatusPacket v2: [header 4B][uptime_ms 4B][voltage 4B][flight_state 1B]
@@ -539,8 +638,9 @@ def parse_packet(data: bytes) -> list:
         #   [checksum 1B] = 53B
         # StatusPacket v3: v2 + [current_ma 4B][checksum 1B] = 57B (battery current,
         #   appended AFTER pid_gains — see data_stream_wire.hpp WireStatusPayload)
+        # StatusPacket v4: v3 + the 167B WireStatusV4Extension = 224B (see _parse_status_v4_extension())
         # Legacy (17B) also supported for backward compatibility
-        if pkt_id == PKT_STATUS and len(data) in (17, 53, 57):
+        if pkt_id == PKT_STATUS and len(data) in (17, 53, 57, STATUS_V4_LENGTH):
             uptime_ms, voltage, flight_state, sensor_health, eskf_status, reset_reason = \
                 struct.unpack_from('<IfBBBB', data, 4)
             # esp_reset_reason() names — read a crash cause over WiFi (no serial).
@@ -557,8 +657,8 @@ def parse_packet(data: bytes) -> list:
                 'reset_reason': reset_reason,
                 'reset_reason_name': _RST.get(reset_reason, str(reset_reason)),
             }
-            # Parse PID gains if present (v2/v3, 53B or 57B)
-            if len(data) in (53, 57):
+            # Parse PID gains if present (v2/v3/v4, 53B, 57B or 224B)
+            if len(data) in (53, 57, STATUS_V4_LENGTH):
                 pid_vals = struct.unpack_from('<9f', data, 16)
                 sample['pid_roll_kp']  = pid_vals[0]
                 sample['pid_roll_ti']  = pid_vals[1]
@@ -571,8 +671,11 @@ def parse_packet(data: bytes) -> list:
                 sample['pid_yaw_td']   = pid_vals[8]
             # Parse battery current if present (v3, 57B) — appended after pid_gains
             # at payload offset 48 (buffer offset 4 + 48 = 52).
-            if len(data) == 57:
+            if len(data) in (57, STATUS_V4_LENGTH):
                 sample['current_ma'] = struct.unpack_from('<f', data, 52)[0]
+            # v4 (224B): ToF diagnostics, loop timing of both 400 Hz tasks, non-finite counters, log-path losses
+            if len(data) == STATUS_V4_LENGTH:
+                sample.update(_parse_status_v4_extension(data))
             return [(PKT_STATUS, sample)]
         return []
 
@@ -789,6 +892,56 @@ def _status_row(sample: dict) -> dict:
     return row
 
 
+def _tof_diagnostics_row(sample: dict) -> dict:
+    """Status v4 sample -> v1 tof_diagnostics.csv row. / ステータス v4 のサンプル -> tof_diagnostics.csv の行。"""
+    row = {'timestamp_us': sample['timestamp_us']}
+    for side in ('bottom', 'front'):
+        for field in TOF_DIAGNOSTIC_FIELDS:
+            row[f'{side}_{field}'] = sample[f'{side}_{field}']
+    return row
+
+
+def _loop_timing_row(sample: dict) -> dict:
+    """Status v4 sample -> v1 loop_timing.csv row (both tasks side by side). / ステータス v4 のサンプル -> loop_timing.csv の行（2 タスクを横に並べる）。"""
+    row = {'timestamp_us': sample['timestamp_us']}
+    for task in ('imu', 'control'):
+        for field in LOOP_TIMING_FIELDS:
+            row[f'{task}_{field}'] = sample[f'{task}_{field}']
+    return row
+
+
+def _nonfinite_row(sample: dict) -> dict:
+    """Status v4 sample -> v1 nonfinite.csv row. / ステータス v4 のサンプル -> nonfinite.csv の行。"""
+    row = {'timestamp_us': sample['timestamp_us']}
+    for field in NONFINITE_FIELDS + ('first_stage',):
+        row[field] = sample[field]
+    return row
+
+
+def _link_health_row(sample: dict) -> dict:
+    """Status v4 sample -> v1 link_health.csv row. / ステータス v4 のサンプル -> link_health.csv の行。"""
+    row = {'timestamp_us': sample['timestamp_us']}
+    for field in LINK_HEALTH_FIELDS:
+        row[field] = sample[field]
+    return row
+
+
+def _text_log_row(sample: dict) -> dict:
+    """Text-log sample -> v1 text_log.csv row. The line's trailing newline is dropped (one cell = one line).
+    テキストログのサンプル -> text_log.csv の行。行末の改行は落とす（1 セル = 1 行）。
+    """
+    text = sample['text']
+    if text.endswith('\n'):
+        text = text[:-1]
+    return {
+        'timestamp_us': sample['timestamp_us'],
+        'truncated': sample['truncated'],
+        'dropped_before': sample['dropped_before'],
+        'text': text,
+    }
+
+
+
 # =============================================================================
 # UDP Capture class
 # UDP キャプチャクラス
@@ -828,6 +981,18 @@ class UDPTelemetryCapture:
         # 状態 -- _unwrap_unified_seq() 参照。最初の統合パケット受信までは None。
         self._unified_seq_last_raw = None
         self._unified_seq_wrap_offset = 0
+
+        # Text-log packets (0x51) carry their own 16-bit sequence. Unlike the unified packet it is unwrapped
+        # relative to the HIGHEST sequence seen (a signed 16-bit difference), so a packet delivered late (out of
+        # order) is placed before its neighbours instead of being mistaken for a wrap. Duplicated datagrams are
+        # dropped; the packets the vehicle sent but we never saw are counted by text_packets_lost().
+        # テキストログのパケット（0x51）は専用の 16 ビットの通し番号を持つ。統合パケットと違い、見た「最大」の通し番号を
+        # 基準に（16 ビットの符号付き差で）展開するので、遅れて届いたパケット（順序の入れ替わり）は巻き戻りと取り違えず
+        # 近傍の手前に置く。重複して届いたデータグラムは捨てる。機体が送ったのに見ていないパケットは text_packets_lost()
+        # で数える。
+        self._text_seq_highest = None
+        self._text_seq_seen = set()
+        self.text_duplicate_packets = 0
 
     def start(self):
         """Create socket, send start command, begin capture."""
@@ -918,6 +1083,45 @@ class UDPTelemetryCapture:
         self._unified_seq_last_raw = raw_seq
         return self._unified_seq_wrap_offset + raw_seq
 
+    def _unwrap_text_seq(self, raw_seq: int) -> int:
+        """Unwrap a text-log packet's 16-bit sequence relative to the highest sequence seen so far
+        (see __init__): the signed 16-bit difference to it, so late packets get a smaller number than
+        the highest one and a real wrap gets a larger one. The vehicle starts at 0 with every capture.
+        テキストログのパケットの 16 ビットの通し番号を、ここまでに見た最大の通し番号を基準に展開する
+        （__init__ 参照）: それとの符号付き 16 ビット差を使うので、遅れたパケットは最大より小さく、本当の巻き戻りは
+        大きい番号になる。機体は取得のたびに 0 から始める。
+        """
+        if self._text_seq_highest is None:
+            self._text_seq_highest = raw_seq
+            return raw_seq
+        difference = ((raw_seq - self._text_seq_highest + 0x8000) & 0xFFFF) - 0x8000
+        unwrapped = self._text_seq_highest + difference
+        if unwrapped > self._text_seq_highest:
+            self._text_seq_highest = unwrapped
+        return unwrapped
+
+    def text_packets_lost(self) -> int:
+        """Text-log packets the vehicle sent that never arrived: the sequence range 0..highest (the
+        vehicle starts every capture at 0) minus the distinct sequences seen.
+        機体が送ったのに届かなかったテキストログのパケット数: 通し番号の範囲 0〜最大（機体は取得のたびに 0 から始める）から、
+        届いた異なる通し番号の数を引いたもの。
+        """
+        if not self._text_seq_seen:
+            return 0
+        return max(self._text_seq_seen) + 1 - len(self._text_seq_seen)
+
+    def text_lines_dropped_by_vehicle(self) -> int:
+        """Lines the vehicle's log sink refused (ring full), the exact total from the latest status v4
+        packet; falls back to the sum of the per-line `dropped_before` (saturating at 255) when no v4
+        status arrived.
+        機体のログシンクが断った（リングが満杯）行数。最新のステータス v4 パケットの正確な合計。v4 のステータスが届いて
+        いなければ、行ごとの `dropped_before`（255 で飽和）の総和で代える。
+        """
+        for sample in reversed(self.samples.get(PKT_STATUS, [])):
+            if 'text_dropped_lines' in sample:
+                return sample['text_dropped_lines']
+        return sum(s['dropped_before'] for s in self.samples.get(PKT_TEXT_LOG, []))
+
     def _process_datagram(self, data: bytes) -> None:
         """Handle one received UDP datagram: parse it, store its samples,
         and update packet-level statistics (bytes, sample/packet counts,
@@ -956,6 +1160,21 @@ class UDPTelemetryCapture:
         unwrapped_seq = None
         if pkt_id == PKT_UNIFIED:
             unwrapped_seq = self._unwrap_unified_seq(header_seq)
+
+        # Text-log packet (0x51): its own sequence. A duplicate datagram is dropped; every line gets an
+        # order key (unwrapped sequence, index in the packet) so save_bundle() restores the vehicle's order
+        # even when packets arrived out of order.
+        # テキストログのパケット（0x51）: 専用の通し番号。重複したデータグラムは捨てる。各行には順序のキー
+        # （展開した通し番号、パケット内の位置）を付け、パケットが順序を崩して届いても save_bundle() が機体の
+        # 順序を復元できるようにする。
+        if pkt_id == PKT_TEXT_LOG:
+            text_seq = self._unwrap_text_seq(header_seq)
+            if text_seq in self._text_seq_seen:
+                self.text_duplicate_packets += 1
+                return
+            self._text_seq_seen.add(text_seq)
+            for _sub_pkt_id, sample in results:
+                sample['_order'] = text_seq * TEXT_ORDER_STRIDE + sample.pop('_idx')
 
         for sub_pkt_id, sample in results:
             if unwrapped_seq is not None and sub_pkt_id in UNIFIED_SEQ_PACKET_TYPES:
@@ -1154,7 +1373,44 @@ class UDPTelemetryCapture:
         else:
             print("  1Hz Status (0x4F): NOT present -- "
                   "`sf sysid fit --mixer vehicle` falls back to nominal battery voltage")
+        self._print_diagnostics_stats()
         print()
+
+    def _print_diagnostics_stats(self):
+        """Print the status v4 diagnostics (the last 1 Hz values) and the text-log summary: the loop-timing
+        counters of both 400 Hz tasks, the non-finite counters, the loss counters of the log paths, and how many
+        text lines arrived and were lost. Prints a one-line hint instead when the vehicle sends no v4 status.
+        ステータス v4 の診断値（最後の 1 Hz の値）とテキストログの要約を表示する: 2 つの 400 Hz タスクのループ周期の数え上げ、
+        有限でない数の数え上げ、ログ経路の欠落の計数、届いたテキストの行数と失われた行数。機体が v4 のステータスを送らない
+        ときは 1 行の案内を出す。
+        """
+        v4_samples = [s for s in self.samples.get(PKT_STATUS, []) if 'imu_cycles' in s]
+        if not v4_samples:
+            print("  Diagnostics (status v4, 0x4F 224B): NOT present (older firmware)")
+        else:
+            last = v4_samples[-1]
+            for task in ('imu', 'control'):
+                print(f"  {task:<7s} loop: cycles={last[task + '_cycles']} late={last[task + '_late_count']} "
+                      f"period_max={last[task + '_period_max_us']}us busy_max={last[task + '_busy_max_us']}us "
+                      f"over_budget={last[task + '_over_budget_count']} | armed: late={last[task + '_armed_late_count']} "
+                      f"period_max={last[task + '_armed_period_max_us']}us "
+                      f"busy_max={last[task + '_armed_busy_max_us']}us")
+            print(f"  nonfinite: detected={last['detected_cycles']} of {last['checked_cycles']} armed cycles "
+                  f"(first stage {last['first_stage']}, 255 = none)")
+            print(f"  log paths: log_stream_overflow={last['log_stream_overflow']} send_drops={last['send_drops']} "
+                  f"entry_drops={last['entry_drops']} text_dropped_lines={last['text_dropped_lines']}")
+            for side in ('bottom', 'front'):
+                print(f"  ToF {side:<6s}: range_status={last[side + '_range_status']} "
+                      f"signal={last[side + '_signal_rate']:.2f}Mcps ambient={last[side + '_ambient_rate']:.2f}Mcps "
+                      f"sigma={last[side + '_sigma_mm']:.1f}mm")
+        lines = self.sample_count.get(PKT_TEXT_LOG, 0)
+        if lines or self.packet_count.get(PKT_TEXT_LOG):
+            print(f"  Text log (0x51): {lines} lines in {self.packet_count.get(PKT_TEXT_LOG, 0)} packets, "
+                  f"{self.text_packets_lost()} packets lost on the way, "
+                  f"{self.text_lines_dropped_by_vehicle()} lines dropped by the vehicle, "
+                  f"{self.text_duplicate_packets} duplicate packets")
+        else:
+            print("  Text log (0x51): NOT present (no line logged during the capture, or older firmware)")
 
     def save_bundle(
         self,
@@ -1268,6 +1524,23 @@ class UDPTelemetryCapture:
         if self.samples.get(PKT_STATUS):
             streams['status'] = self._build_stream(
                 [_status_row(s) for s in self.samples[PKT_STATUS]], 'timestamp_us')
+            # The status packet v4 carries four more streams; a bundle from a v1-v3 vehicle simply lacks them.
+            # ステータスパケット v4 は 4 つのストリームを運ぶ。v1〜v3 の機体の一式にはそれらが単に無い。
+            v4_samples = [s for s in self.samples[PKT_STATUS] if 'imu_cycles' in s]
+            if v4_samples:
+                streams['tof_diagnostics'] = self._build_stream(
+                    [_tof_diagnostics_row(s) for s in v4_samples], 'timestamp_us')
+                streams['loop_timing'] = self._build_stream(
+                    [_loop_timing_row(s) for s in v4_samples], 'timestamp_us')
+                streams['nonfinite'] = self._build_stream(
+                    [_nonfinite_row(s) for s in v4_samples], 'timestamp_us')
+                streams['link_health'] = self._build_stream(
+                    [_link_health_row(s) for s in v4_samples], 'timestamp_us')
+        if self.samples.get(PKT_TEXT_LOG):
+            # Vehicle order: (unwrapped packet sequence, index in the packet), not arrival order, not time.
+            # 機体の順序: （展開した通し番号, パケット内の位置）。到着順でも時刻順でもない。
+            text_rows = [dict(_text_log_row(s), _order=s['_order']) for s in self.samples[PKT_TEXT_LOG]]
+            streams['text_log'] = self._build_stream(text_rows, '_order').drop(columns='_order')
         if self.samples.get(PKT_ESKF_PDIAG):
             streams['eskf_cov'] = self._build_stream(
                 [_select(s, _ESKF_COV_KEYS) for s in self.samples[PKT_ESKF_PDIAG]], 'timestamp_us')
@@ -1279,6 +1552,11 @@ class UDPTelemetryCapture:
             'packets_received': sum(self.packet_count.values()),
             'packets_lost': self.seq_gaps.get(PKT_UNIFIED, 0),
         }
+        if self.packet_count.get(PKT_TEXT_LOG):
+            # What the text log lost on the way and at the vehicle (see print_stats()).
+            # テキストログが途中と機体で失った分（print_stats() 参照）。
+            merged_capture['text_packets_lost'] = self.text_packets_lost()
+            merged_capture['text_lines_dropped_by_vehicle'] = self.text_lines_dropped_by_vehicle()
         if capture_info:
             merged_capture.update(capture_info)
 

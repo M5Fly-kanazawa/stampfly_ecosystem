@@ -18,3 +18,4 @@ test_api_arguments
 test_rotate_guidance
 test_nonfinite_guard
 test_param_range
+test_log_sink

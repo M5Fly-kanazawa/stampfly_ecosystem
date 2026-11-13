@@ -1,0 +1,24 @@
+# diagnostics_log.scn — one ALT_HOLD flight whose flight-log bundle must carry the vehicle's text log and
+#                       the status v4 diagnostics (loop timing, non-finite counters, ToF diagnostics, log-path losses)
+#                       1 回の ALT_HOLD 飛行。フライトログ一式が機体のテキストログとステータス v4 の診断値
+#                       （ループ周期・有限でない数・ToF の診断値・ログ経路の欠落）を運ぶこと
+#
+# What this guards: the WiFi exit of the log sink and the 1 Hz diagnostics streams reach the bundle during a real
+# flight (ARM, auto-takeoff, hover, DISARM-to-auto-land, touchdown), so a hardware capture over WiFi carries the same
+# facts. The scenario is the flight of alt_disarm_land.scn (the same pilot input); the assertions are in
+# diagnostics_log.expect.
+# 守るもの: 実際の飛行（ARM・自動離陸・ホバー・DISARM→自動着陸・接地）の間に、ログシンクの WiFi 側の出口と 1 Hz の診断値の
+# ストリームが一式に届くこと。これにより、WiFi 経由の実機取得も同じ事実を運ぶ。シナリオは alt_disarm_land.scn の飛行
+# （同じ操縦入力）。判定は diagnostics_log.expect。
+#
+# Run: sf sils scenario simulator/sils/scenarios/diagnostics_log.scn --target vehicle
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    tof_deadzone 0                                                             # 0: dead zone model OFF (as alt_disarm_land.scn)
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration completes (~4 s)
+   +    rc   2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED → ground mode change
+   +    rc   2048  2048   2048    2048  1     1000      50        1              # C: ARM in ALT_HOLD (press) — props stop, spool, AUTO-takeoff fires
+   +    rc   2048  2048   2048    2048  1     4000      50        1              # D: throttle CENTER → climb to 0.5 m, reach Airborne, hover
+   +    rc   2048  2048   2048    2048  0     500       50        1              # E: release the ARM button (so the next press is an edge)
+   +    rc   2048  2048   2048    2048  1     6000      50        1              # F: press DISARM while FLYING → AUTO-LAND (gradual descent → touchdown → DISARM)
+   +    rc   2048  2048   2048    2048  0     600       50                       # G: settle (disarmed after touchdown)

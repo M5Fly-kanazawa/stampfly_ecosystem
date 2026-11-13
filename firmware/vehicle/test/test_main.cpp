@@ -21,6 +21,7 @@
  */
 
 #include <cstdio>
+#include <vector>
 #include <cmath>
 #include <cassert>
 
@@ -1065,6 +1066,249 @@ TEST(wire_tof_silence_entry)
     ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
 }
 
+
+// Status packet v4: v3 prefix byte-identical (an older reader decodes it), the extension appended at offset 56,
+// total 224 B, every field at the offset udp_capture.py's struct format reads it from.
+// ステータスパケット v4: v3 の先頭部分はバイト単位で同一（旧い読み手がデコードできる）、拡張部は offset 56 から、
+// 全長 224 B、各項目は udp_capture.py の struct 書式が読む offset にある。
+TEST(wire_status_packet_v4)
+{
+    using namespace sf::datastream;
+    WireStatusPayload payload = {};
+    payload.uptime_ms    = 5000;
+    payload.voltage      = 4.1f;
+    payload.current_ma   = 612.5f;
+    WireStatusV4Extension extension = {};
+    extension.tof_bottom = toWireToFDiagnostic(0, 2.5f, 0.125f, 3.0f);
+    extension.tof_front  = toWireToFDiagnostic(255, 0.0f, 0.0f, 0.0f);
+    sf::LoopTiming imu_timing = {};
+    imu_timing.cycles = 1000; imu_timing.period_max_us = 2600; imu_timing.late_count = 2;
+    imu_timing.busy_max_us = 900; imu_timing.over_budget_count = 1; imu_timing.last_late_us = 777;
+    imu_timing.armed_cycles = 400; imu_timing.armed_period_max_us = 2550; imu_timing.armed_late_count = 1;
+    imu_timing.armed_busy_max_us = 800; imu_timing.armed_over_budget_count = 0;
+    extension.imu_loop = toWire(imu_timing);
+    sf::LoopTiming control_timing = {};
+    control_timing.cycles = 999;
+    extension.control_loop = toWire(control_timing);
+    sf::NonFiniteStatus nonfinite = {};
+    nonfinite.checked_cycles = 400; nonfinite.detected_cycles = 3; nonfinite.first_us = 123456; nonfinite.first_stage = 2;
+    for (size_t stage = 0; stage < sf::kNonFiniteStageCount; ++stage) {
+        nonfinite.stage_count[stage] = static_cast<uint32_t>(10 + stage);
+    }
+    extension.nonfinite = toWire(nonfinite);
+    extension.link.log_stream_overflow_count = 11;
+    extension.link.send_drops = 12;
+    extension.link.entry_drops = 13;
+    extension.link.text_dropped_lines = 14;
+
+    uint8_t v3[64];
+    const size_t v3_length = buildStatusPacket(v3, 7, payload);
+    uint8_t v4[kStatusV4PacketSize];
+    const size_t length = buildStatusPacketV4(v4, 7, payload, extension);
+    ASSERT_TRUE(length == 224 && length == kStatusV4PacketSize);
+    ASSERT_TRUE(xorChecksum(v4, length - 1) == v4[length - 1]);
+    // v1-v3 compatibility: the first 56 bytes (header + payload) equal the v3 packet's.
+    // v1〜v3 との互換: 先頭 56 バイト（ヘッダ＋ペイロード）は v3 パケットと同じ。
+    ASSERT_TRUE(v3_length == 57);
+    ASSERT_TRUE(memcmp(v4, v3, 56) == 0);
+
+    // Offsets the PC decodes (udp_capture.py): extension at 56; ToF 13 B x 2; loop timing 44 B x 2; non-finite 37 B; link 16 B.
+    // PC がデコードする offset: 拡張部は 56、ToF 13 B × 2、ループ周期 44 B × 2、有限でない数 37 B、欠落 16 B。
+    ASSERT_TRUE(v4[56] == 0);                                   // bottom range status / 底面の range status
+    float signal;
+    memcpy(&signal, &v4[57], 4);
+    ASSERT_NEAR(signal, 2.5f, 1e-6f);
+    ASSERT_TRUE(v4[56 + 13] == 255);                            // front range status / 前方の range status
+    uint32_t value;
+    memcpy(&value, &v4[56 + 26], 4);                            // imu_loop.cycles
+    ASSERT_TRUE(value == 1000);
+    memcpy(&value, &v4[56 + 26 + 20], 4);                       // imu_loop.last_late_us (6th field)
+    ASSERT_TRUE(value == 777);
+    memcpy(&value, &v4[56 + 26 + 44], 4);                       // control_loop.cycles
+    ASSERT_TRUE(value == 999);
+    memcpy(&value, &v4[56 + 26 + 88], 4);                       // nonfinite.checked_cycles
+    ASSERT_TRUE(value == 400);
+    memcpy(&value, &v4[56 + 26 + 88 + 8 + 5 * 4], 4);           // nonfinite.stage_count[5]
+    ASSERT_TRUE(value == 15);
+    ASSERT_TRUE(v4[56 + 26 + 88 + 36] == 2);                    // nonfinite.first_stage
+    memcpy(&value, &v4[56 + 26 + 88 + 37 + 12], 4);             // link.text_dropped_lines (last field)
+    ASSERT_TRUE(value == 14);
+    ASSERT_TRUE(56 + 26 + 88 + 37 + 16 + 1 == static_cast<int>(length));
+}
+
+// The v4 extension adds only facts a task published; the front sensor that is absent stays all zero.
+// v4 の拡張部が足すのは他のタスクが発行した事実だけ。無い前方センサはすべて 0 のまま。
+TEST(wire_status_v4_conversions_copy_every_field)
+{
+    using namespace sf::datastream;
+    sf::LoopTiming timing = {};
+    uint32_t* fields[] = {&timing.cycles, &timing.period_max_us, &timing.late_count, &timing.busy_max_us,
+                          &timing.over_budget_count, &timing.last_late_us, &timing.armed_cycles,
+                          &timing.armed_period_max_us, &timing.armed_late_count, &timing.armed_busy_max_us,
+                          &timing.armed_over_budget_count};
+    uint32_t next = 1;
+    for (uint32_t* field : fields) {
+        *field = next++;
+    }
+    timing.timestamp = 99999;   // not on the wire / 電文には載らない
+    const WireLoopTiming wire = toWire(timing);
+    const uint32_t* wire_fields = reinterpret_cast<const uint32_t*>(&wire);
+    for (uint32_t i = 0; i < 11; ++i) {
+        ASSERT_TRUE(wire_fields[i] == i + 1);   // same order as sf::LoopTiming without the time stamp / タイムスタンプを除いて sf::LoopTiming と同じ順
+    }
+    static_assert(sizeof(WireLoopTiming) == 11 * sizeof(uint32_t), "every counter is one uint32_t");
+}
+
+// Text-log packet 0x51: layout, the per-cycle byte budget, the longest line, and what does not fit stays out.
+// テキストログのパケット 0x51: レイアウト、1 周期のバイト数の予算、最長の行、収まらないものは入れない。
+TEST(wire_text_log_packet)
+{
+    using namespace sf::datastream;
+    TextLogPacketBuilder builder;
+    builder.begin(0xABCD);
+    ASSERT_TRUE(builder.remainingTextBytes() == kTextLogBytesPerPacket - kTextRecordHeaderBytes);
+    ASSERT_TRUE(builder.addLine(0x01020304u, kTextFlagTruncated, 5, "hello\n", 6));
+    ASSERT_TRUE(builder.addLine(0x0A0B0C0Du, 0, 0, "x", 1));
+    ASSERT_TRUE(builder.recordCount() == 2);
+    const size_t length = builder.finish();
+    const uint8_t* buf = builder.buffer();
+    ASSERT_TRUE(length == 4 + (8 + 6) + (8 + 1) + 1);
+    ASSERT_TRUE(buf[0] == kPktTextLog && buf[1] == 0xCD && buf[2] == 0xAB && buf[3] == 2);   // id, sequence (LE), record count
+    ASSERT_TRUE(buf[4] == 0x04 && buf[7] == 0x01);                                           // timestamp LE
+    ASSERT_TRUE(buf[8] == kTextFlagTruncated && buf[9] == 5 && buf[10] == 6 && buf[11] == 0);   // flags, dropped_before, length LE
+    ASSERT_TRUE(memcmp(&buf[12], "hello\n", 6) == 0);
+    ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
+}
+
+TEST(wire_text_log_budget_and_longest_line)
+{
+    using namespace sf::datastream;
+    char longest[sf::log_sink::kMaxLineBytes];
+    memset(longest, 'L', sizeof(longest));
+
+    // The longest lines always fit an empty packet, two of them at least; the packet never exceeds
+    // kTextLogPacketMaxSize, which is far under the datagram cap. A line that does not fit is refused and nothing is written.
+    // 最長の行は空のパケットに必ず収まり、少なくとも 2 つ入る。パケットは kTextLogPacketMaxSize を超えず、それはデータ
+    // グラムの上限よりはるかに小さい。収まらない行は断り、何も書かない。
+    TextLogPacketBuilder builder;
+    builder.begin(0);
+    ASSERT_TRUE(builder.remainingTextBytes() >= sizeof(longest));
+    size_t longest_lines = 0;
+    while (builder.addLine(1, 0, 0, longest, sizeof(longest))) {
+        ++longest_lines;
+    }
+    ASSERT_TRUE(longest_lines >= 2);
+    ASSERT_TRUE(builder.recordCount() == longest_lines);
+    ASSERT_TRUE(!builder.addLine(2, 0, 0, longest, sizeof(longest)));   // refused again, nothing written / もう一度断る。何も書かない
+    ASSERT_TRUE(builder.recordCount() == longest_lines);
+
+    // A shorter line that fits the rest is accepted, and the budget then reads zero.
+    // 残りに収まる、より短い行は受け付け、その後の予算は 0 になる。
+    const size_t rest = builder.remainingTextBytes();
+    ASSERT_TRUE(rest < sizeof(longest));
+    ASSERT_TRUE(builder.addLine(3, 0, 0, longest, rest));
+    ASSERT_TRUE(builder.remainingTextBytes() == 0);
+    ASSERT_TRUE(!builder.addLine(4, 0, 0, "y", 1));
+    const size_t length = builder.finish();
+    ASSERT_TRUE(length == kTextLogPacketMaxSize);   // the budget is used up exactly / 予算をちょうど使い切る
+    ASSERT_TRUE(length == 1029 && length <= kUnifiedMaxSize);
+    printf("\n    text-log packet: at most %zu B (cap %zu B), at most %d packets/s (every %dth 50 Hz cycle) = %zu B/s\n",
+           length, kUnifiedMaxSize, 50 / kTextLogSendPeriodCycles, kTextLogSendPeriodCycles,
+           length * (50 / kTextLogSendPeriodCycles));
+    // At most one sendto per kTextLogSendPeriodCycles cycles: 10/s, a fifth of the 50/s of the unified packet.
+    // kTextLogSendPeriodCycles 周期に高々 1 回の sendto: 毎秒 10 回で、統合パケットの毎秒 50 回の 5 分の 1。
+    static_assert(50 / kTextLogSendPeriodCycles == 10, "text packets per second");
+}
+
+// Text packets and unified packets use different ids and their own sequence counters; a unified packet never
+// grows because of the text exit (its worst case is asserted in wire_unified_worst_case_fits).
+// テキストパケットと統合パケットは別の id と専用の通し番号を使う。テキスト側の出口で統合パケットが大きくなることはない
+// （その最悪値は wire_unified_worst_case_fits で検査する）。
+TEST(wire_text_log_id_is_distinct)
+{
+    using namespace sf::datastream;
+    static_assert(kPktTextLog != kPktUnified && kPktTextLog != kPktStatus, "ids");
+    static_assert(kPktTextLog > kPktUnified, "0x51 follows the highest id in use / 0x51 は使用中の最大 id の次");
+    ASSERT_TRUE(kPktTextLog == 0x51);
+}
+
+// The same packets as the Python side builds independently (tools/log_analyzer/test_udp_capture_text_log.py), compared
+// byte for byte with the golden files both sides share (firmware/vehicle/test/golden/). A drift of the C++ builders or of
+// the Python mirror fails this test or the Python one. Run from firmware/vehicle/test (make test does).
+// Python 側が独立に組むのと同じパケット（tools/log_analyzer/test_udp_capture_text_log.py）を、両側が共有する基準ファイル
+// （firmware/vehicle/test/golden/）とバイト単位で比較する。C++ のビルダーか Python の写しのどちらかがずれれば、この試験
+// か Python 側の試験が落ちる。firmware/vehicle/test から実行する（make test はそうする）。
+static std::vector<uint8_t> readHexFile(const char* path)
+{
+    std::vector<uint8_t> bytes;
+    FILE* file = fopen(path, "r");
+    if (file == nullptr) {
+        return bytes;
+    }
+    unsigned value = 0;
+    char pair[3] = {0, 0, 0};
+    while (fread(pair, 1, 2, file) == 2) {
+        if (sscanf(pair, "%2x", &value) != 1) {
+            break;
+        }
+        bytes.push_back(static_cast<uint8_t>(value));
+    }
+    fclose(file);
+    return bytes;
+}
+
+TEST(wire_golden_vectors_match_the_python_side)
+{
+    using namespace sf::datastream;
+
+    // Status v4: values 100 + i / 200 + i per loop-timing field, the patterns of golden_status_v4_values().
+    // ステータス v4: ループ周期の各項目は 100 + i / 200 + i。golden_status_v4_values() と同じ並び。
+    WireStatusPayload payload = {};
+    payload.uptime_ms = 123456; payload.voltage = 3.75f; payload.flight_state = 5; payload.sensor_health = 0x7F;
+    payload.eskf_status = 1; payload.reset_reason = 3; payload.current_ma = 1500.5f;
+    for (int i = 0; i < 9; ++i) {
+        payload.pid_gains[i] = 0.5f * static_cast<float>(i + 1);
+    }
+    WireStatusV4Extension extension = {};
+    extension.tof_bottom = toWireToFDiagnostic(0, 2.5f, 0.125f, 1.75f);
+    extension.tof_front  = toWireToFDiagnostic(255, 0.0f, 0.0f, 0.0f);
+    uint32_t* imu_fields = reinterpret_cast<uint32_t*>(&extension.imu_loop);
+    uint32_t* control_fields = reinterpret_cast<uint32_t*>(&extension.control_loop);
+    for (uint32_t i = 0; i < 11; ++i) {
+        imu_fields[i] = 100 + i;
+        control_fields[i] = 200 + i;
+    }
+    extension.nonfinite.checked_cycles = 400;
+    extension.nonfinite.detected_cycles = 3;
+    const uint32_t stage_counts[sf::kNonFiniteStageCount] = {0, 0, 3, 3, 3, 3};
+    for (size_t i = 0; i < sf::kNonFiniteStageCount; ++i) {
+        extension.nonfinite.stage_count[i] = stage_counts[i];
+    }
+    extension.nonfinite.first_us = 1234567;
+    extension.nonfinite.first_stage = 2;
+    extension.link.log_stream_overflow_count = 11;
+    extension.link.send_drops = 12;
+    extension.link.entry_drops = 13;
+    extension.link.text_dropped_lines = 14;
+    uint8_t status[kStatusV4PacketSize];
+    const size_t status_length = buildStatusPacketV4(status, 42, payload, extension);
+    const std::vector<uint8_t> golden_status = readHexFile("golden/status_v4.golden");
+    ASSERT_TRUE(golden_status.size() == status_length);
+    ASSERT_TRUE(memcmp(golden_status.data(), status, status_length) == 0);
+
+    // Text-log packet: three lines, one truncated with a loss, one with the time at the 32-bit limit, UTF-8.
+    // テキストログのパケット: 3 行。1 行は切り詰めと欠落つき、1 行は時刻が 32 ビットの上限、UTF-8 を含む。
+    TextLogPacketBuilder builder;
+    builder.begin(513);
+    ASSERT_TRUE(builder.addLine(1000000u, 0, 0, "I (1000) Test: hello\n", 21));
+    ASSERT_TRUE(builder.addLine(1000500u, kTextFlagTruncated, 7, "W (1000) Test: cut line\n", 24));
+    ASSERT_TRUE(builder.addLine(4294967295u, 0, 0, "E (4294967) Test: non-ASCII \xc3\xa9\n", 31));
+    const size_t text_length = builder.finish();
+    const std::vector<uint8_t> golden_text = readHexFile("golden/text_log.golden");
+    ASSERT_TRUE(golden_text.size() == text_length);
+    ASSERT_TRUE(memcmp(golden_text.data(), builder.buffer(), text_length) == 0);
+}
+
 // =============================================================================
 // TakeoffLandingMgr tests — touchdown detection (firm ground + stalled descent)
 // 離着陸マネージャ — 接地検出（確実な接地＋降下停滞）
@@ -1681,6 +1925,12 @@ int main()
     run_wire_flight_phase_and_flags_entries();
     run_wire_quantize_flip_phi_saturation();
     run_wire_tof_silence_entry();
+    run_wire_status_packet_v4();
+    run_wire_status_v4_conversions_copy_every_field();
+    run_wire_text_log_packet();
+    run_wire_text_log_budget_and_longest_line();
+    run_wire_text_log_id_is_distinct();
+    run_wire_golden_vectors_match_the_python_side();
     run_wire_unified_worst_case_fits();
 
     printf("\n[Tello state]\n");

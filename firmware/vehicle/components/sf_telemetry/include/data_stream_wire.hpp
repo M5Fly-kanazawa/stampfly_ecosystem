@@ -24,7 +24,11 @@
  *       [Header 4B][ImuEskf 80B x8][PosVel 28B x8][RateRef 6B x8]
  *       [entry_count 1B][SensorEntry...][XOR checksum 1B]
  *     SensorEntry = [sensor_id 1B][data_size 1B][payload data_size B].
- *   - Status packet 0x4F (57B) at 1 Hz: battery (V+mA), state, rate-PID gains.
+ *   - Status packet 0x4F at 1 Hz: battery (V+mA), state, rate-PID gains (57B, v3), and since v4
+ *     (224B) the ToF diagnostics, the loop-timing counters of both 400 Hz tasks, the non-finite
+ *     counters and the loss counters of the log paths.
+ *   - Text-log packet 0x51 (at most 1029B, at most every 100 ms and only while text lines are waiting):
+ *     the ESP_LOG lines of the vehicle with their vehicle time, in order.
  *   - XOR checksum over every preceding byte of the datagram.
  *
  * This header is dependency-free (cstdint/cstring + LogStreamSample) so the
@@ -44,6 +48,7 @@
 #include <cstring>
 
 #include "data_types.hpp"   // LogStreamSample
+#include "log_sink.hpp"     // log_sink::kMaxLineBytes (line limit; the header itself has no FreeRTOS) / 1 行の上限（このヘッダ自体は FreeRTOS を使わない）
 
 namespace sf {
 namespace datastream {
@@ -92,6 +97,8 @@ inline constexpr uint8_t kPktToFSilence      = 0x4E;  // 50Hz downward-ToF silen
                                                       // ToF の健全状態、モード拒否
 inline constexpr uint8_t kPktStatus    = 0x4F;  // standalone 1Hz packet
 inline constexpr uint8_t kPktUnified   = 0x50;  // 50Hz batched packet
+inline constexpr uint8_t kPktTextLog   = 0x51;  // ESP_LOG text lines (separate packet, sent only while lines wait)
+                                                // ESP_LOG の文字列の行（別パケット。行が待っている間だけ送る）
 
 /// 8 control cycles (400 Hz) per unified packet → 50 sendto()/s, ≈48 KB/s.
 /// The packet rate, not the sample rate, is what the WiFi stack pays for —
@@ -127,6 +134,49 @@ inline constexpr int    kSamplesPerPacket = 8;
 /// wire_unified_worst_case_fits が、実際のビルダでこの最悪ケースを組み、全エントリが
 /// 受理されることを検査する）。
 inline constexpr size_t kUnifiedMaxSize   = 1400;
+
+/// Budget of the text-log exit. Two constants bound its cost:
+///   kTextLogSendPeriodCycles = 5: at most one text packet every 5th 50 Hz cycle = 10 packets/s. Basis: the
+///     cost of the WiFi radio is per sendto() call, about 2.5 ms each (udp-telemetry-design.md), and the
+///     unified packet already takes 50 calls/s = 12.5 % of the radio time that ESP-NOW (the pilot's control
+///     link) shares. 10 more calls/s add at most 2.5 %, and none while no line is waiting (a typical flight
+///     logs about 2 lines/s). A line then waits at most 100 ms, which a text log can afford.
+///   kTextLogBytesPerPacket = 1024: at most this many bytes of RECORDS (an 8-byte record header plus the text)
+///     per packet. Basis: it must hold the longest record (8 + the 384-byte line limit of the log sink = 392 B,
+///     asserted below) twice over, and the packet (4 + 1024 + 1 = 1029 B) stays under the 1400 B datagram cap.
+///     The wire cost of the text exit is therefore bounded by 1029 B x 10 packets/s = 10.3 KB/s (about a fifth
+///     of the numeric stream) even in a log storm, and the 4 KB WiFi ring holds four packets' worth (400 ms) of it.
+///     An ARM-transition burst of about 600 bytes goes out in one packet.
+/// Lines that do not fit wait in the WiFi ring for the next packet; what the ring cannot hold is counted as
+/// dropped (never silent).
+/// テキストログの出口の予算。2 つの定数が費用を抑える:
+///   kTextLogSendPeriodCycles = 5: テキストパケットは 50 Hz の周期 5 回につき最大 1 個 = 毎秒 10 個まで。根拠: WiFi の
+///     電波の費用は sendto() の呼び出し 1 回ごとにかかり、約 2.5 ms（udp-telemetry-design.md）。統合パケットは既に毎秒 50 回で、
+///     ESP-NOW（操縦者の制御リンク）と共有する電波時間の 12.5 % を使う。追加の毎秒 10 回は最大 2.5 %、待つ行が無ければ 0
+///     （普通の飛行のログは毎秒 2 行ほど）。行は最大 100 ms 待つが、文字列のログには許せる遅れ。
+///   kTextLogBytesPerPacket = 1024: 1 パケットのレコード（8 バイトのレコードヘッダ＋本文）はこのバイト数まで。根拠: 最長の
+///     レコード（8＋シンクの 1 行の上限 384 バイト＝392 B。下で static_assert）を 2 つ収められ、パケット（4＋1024＋1＝1029 B）が
+///     データグラムの上限 1400 B の内に収まる。テキスト側の WiFi の負担はログの嵐でも 1029 B × 毎秒 10 パケット = 10.3 KB/s
+///     （数値ストリームの約 5 分の 1）で抑えられ、4 KB の WiFi 用リングはその 4 パケット分（400 ms）を抱える。ARM の遷移の
+///     バースト（約 600 バイト）は 1 パケットで出る。
+/// 収まらない行は次のパケットまで WiFi 用リングで待つ。リングが抱えきれない分は欠落として数える（黙って落とさない）。
+inline constexpr size_t kTextLogBytesPerPacket   = 1024;
+inline constexpr int    kTextLogSendPeriodCycles = 5;
+
+/// Size of the record header in front of each text line (WireTextRecord). / 各テキストの行の前のレコードヘッダの大きさ。
+inline constexpr size_t kTextRecordHeaderBytes = 8;
+
+/// Largest text-log datagram: header 4 B + records + checksum 1 B. / テキストログのデータグラムの最大: ヘッダ 4 B＋レコード＋チェックサム 1 B。
+inline constexpr size_t kTextLogPacketMaxSize = 4 + kTextLogBytesPerPacket + 1;
+
+/// WireTextRecord::flags bit: the text was cut to the sink's line limit (it ends with a newline all the same).
+/// WireTextRecord::flags のビット: 本文がシンクの 1 行の上限で切り詰められた（それでも改行で終わる）。
+inline constexpr uint8_t kTextFlagTruncated = 0x01;
+
+static_assert(2 * (kTextRecordHeaderBytes + log_sink::kMaxLineBytes) <= kTextLogBytesPerPacket,
+              "two longest text records must fit in one packet's budget / 最長のレコードが 2 つ 1 パケットの予算に収まること");
+static_assert(kTextLogPacketMaxSize <= kUnifiedMaxSize,
+              "a text packet never exceeds the datagram cap of the unified packet / テキストパケットは統合パケットの上限を超えない");
 
 // Quantization scales (PC side divides by these to restore physical units)
 // 量子化スケール（PC 側はこれで割って物理量に復元する）
@@ -407,7 +457,106 @@ struct WireStatusPayload {
 };
 static_assert(sizeof(WireStatusPayload) == 52, "wire drift");
 
+
+/// Text-log record header (packet 0x51; the text follows, `length` bytes, no terminator, with the
+/// trailing newline of the ESP_LOG line). A packet is [WireHeader][record header + text]...[checksum];
+/// WireHeader::sample_count is the number of records and WireHeader::sequence counts text packets
+/// (loss detection, own counter). The PC restores the order of records from the packet sequence and the
+/// order inside the packet.
+/// テキストログのレコードヘッダ（パケット 0x51。この後に本文が `length` バイト続く。終端文字なし、ESP_LOG の行の
+/// 末尾の改行を含む）。パケットは [WireHeader][レコードヘッダ＋本文]...[チェックサム]。WireHeader::sample_count は
+/// レコード数、WireHeader::sequence はテキストパケットの通し番号（欠落検出。専用のカウンタ）。PC はパケットの
+/// 通し番号とパケット内の順序でレコードの順序を復元する。
+/// @design requirements.md §7 — Data Stream; protocol/spec/flight_log.yaml stream text_log [OK]
+struct WireTextRecord {
+    uint32_t timestamp_us;      // [us] vehicle esp_timer time (low 32 bits) when the line entered the sink / 行がシンクに入った時刻（esp_timer の下位 32 ビット）
+    uint8_t  flags;             // kTextFlag* bits / kTextFlag* のビット
+    uint8_t  dropped_before;    // lines the sink refused just before this one (saturates at 255; the exact total is in the status packet) / 直前にシンクが断った行数（255 で飽和。正確な合計はステータスパケット）
+    uint16_t length;            // bytes of text that follow / 続く本文のバイト数
+};
+static_assert(sizeof(WireTextRecord) == kTextRecordHeaderBytes, "wire drift");
+
+/// ToF measurement-quality diagnostics of one sensor, in the status packet v4 (the latest sample of the
+/// sensor as the VL53L3CX driver reports it). All zero when the sensor never produced a sample.
+/// ステータスパケット v4 の、センサ 1 個の ToF の測定品質の診断値（VL53L3CX ドライバが報告する、そのセンサの
+/// 最新サンプル）。センサが一度もサンプルを出していなければすべて 0。
+struct WireToFDiagnostic {
+    uint8_t range_status;   // VL53LX range status of the latest sample: 0 = valid, 254 = every target invalid, 255 = no target; others are the driver's codes / 最新サンプルの VL53LX range status: 0 = 有効、254 = 全ターゲット無効、255 = ターゲットなし、その他はドライバのコード
+    float   signal_rate;    // [Mcps] return signal rate (megacounts per second) / 反射信号レート
+    float   ambient_rate;   // [Mcps] ambient light rate / 環境光レート
+    float   sigma_mm;       // [mm] range standard deviation estimate / 距離の標準偏差の推定
+};
+static_assert(sizeof(WireToFDiagnostic) == 13, "wire drift");
+
+/// Loop-timing counters of one 400 Hz task in the status packet v4 — the fields of sf::LoopTiming (see
+/// data_types.hpp for their meaning) without the publish time stamp. Counts are since boot.
+/// ステータスパケット v4 の、400 Hz タスク 1 本の周期の数え上げ — sf::LoopTiming の項目（意味は data_types.hpp）から
+/// 発行時刻を除いたもの。数え方は起動以降の累計。
+struct WireLoopTiming {
+    uint32_t cycles;                    // wakes counted / 数えた起床の回数
+    uint32_t period_max_us;             // [us] longest interval between two wakes / 連続する 2 回の起床の間隔の最大
+    uint32_t late_count;                // intervals longer than 1.5 periods / 間隔が 1.5 周期を超えた回数
+    uint32_t busy_max_us;               // [us] longest wake-to-wait time / 起床から次の待ちまでの最大
+    uint32_t over_budget_count;         // cycles whose busy time exceeded one period / 処理が 1 周期を超えた周期の数
+    uint32_t last_late_us;              // [us] esp_timer time of the latest late wake (0 = none) / 最後に遅れた起床の時刻（0 = なし）
+    uint32_t armed_cycles;              // the same counts, armed cycles only: / 同じ数え上げ（ARM 中の周期だけ）:
+    uint32_t armed_period_max_us;       // [us]
+    uint32_t armed_late_count;
+    uint32_t armed_busy_max_us;         // [us]
+    uint32_t armed_over_budget_count;
+};
+static_assert(sizeof(WireLoopTiming) == 44, "wire drift");
+
+/// Non-finite counters of the control path in the status packet v4 — the fields of sf::NonFiniteStatus (see
+/// data_types.hpp) without the publish time stamp. stage_count is indexed by NonFiniteStage.
+/// ステータスパケット v4 の、制御経路の有限でない数の数え上げ — sf::NonFiniteStatus の項目（data_types.hpp）から
+/// 発行時刻を除いたもの。stage_count は NonFiniteStage で引く。
+struct WireNonFinite {
+    uint32_t checked_cycles;                         // armed control cycles checked / 検査した ARM 中の制御周期の数
+    uint32_t detected_cycles;                        // cycles in which any boundary was non-finite / どれかの境界が有限でなかった周期の数
+    uint32_t stage_count[kNonFiniteStageCount];      // per boundary / 境界ごとの周期数
+    uint32_t first_us;                               // [us] esp_timer time of the first detection / 最初の検出の時刻
+    uint8_t  first_stage;                            // NonFiniteStage of the first detection, 0xFF = none / 最初の検出の境界。0xFF = なし
+};
+static_assert(sizeof(WireNonFinite) == 37, "wire drift");
+
+/// Loss counters of the log paths in the status packet v4. The first three count since the capture
+/// started; log_stream_overflow_count too (it is the ring's own counter minus its value at the start).
+/// ステータスパケット v4 の、ログ経路の欠落の計数。取得の開始以降の数（log_stream_overflow_count もリング自身の
+/// 計数から開始時の値を引いたもの）。
+struct WireLinkHealth {
+    uint32_t log_stream_overflow_count;   // 400 Hz samples the log_stream ring dropped (the Data Stream did not drain it in time) / log_stream リングが落とした 400 Hz サンプル数（Data Stream が間に合って取り出せなかった）
+    uint32_t send_drops;                  // sendto failures (the PC sees the gap as a sequence jump) / sendto の失敗数（PC は通し番号の飛びとして見る）
+    uint32_t entry_drops;                 // entries the unified packet refused because it was full / 統合パケットが満杯で棄却したエントリ数
+    uint32_t text_dropped_lines;          // text lines the WiFi ring refused (exact; the per-line count saturates at 255) / WiFi 用リングが断ったテキストの行数（正確。行ごとの数は 255 で飽和）
+};
+static_assert(sizeof(WireLinkHealth) == 16, "wire drift");
+
+/// Status packet v4 extension — appended after the v3 payload (WireStatusPayload), so a reader that
+/// knows only the v1 to v3 lengths still decodes the prefix. 167 B; the whole packet is 4 + 52 + 167 + 1 =
+/// 224 B (kStatusV4PacketSize). The PC picks the version by the TOTAL length: 17, 53, 57, 224.
+/// ステータスパケット v4 の拡張部 — v3 のペイロード（WireStatusPayload）の後ろに追記する。v1〜v3 の長さしか知らない
+/// 読み手も先頭部をデコードできる。167 B。パケット全体は 4 + 52 + 167 + 1 = 224 B（kStatusV4PacketSize）。
+/// PC は全長でバージョンを選ぶ: 17、53、57、224。
+/// @design requirements.md §7 — Data Stream; protocol/spec/flight_log.yaml streams tof_diagnostics, loop_timing, nonfinite, link_health [OK]
+struct WireStatusV4Extension {
+    WireToFDiagnostic tof_bottom;       // downward ToF / 下向き ToF
+    WireToFDiagnostic tof_front;        // front ToF (all zero when the sensor is absent) / 前方 ToF（センサなしならすべて 0）
+    WireLoopTiming    imu_loop;         // ImuTask (imu_loop_timing)
+    WireLoopTiming    control_loop;     // ControlTask (control_loop_timing; all zero in the workshop firmware) / ControlTask（control_loop_timing。講習用ファームではすべて 0）
+    WireNonFinite     nonfinite;        // ControlTask's non-finite counters / ControlTask の有限でない数の数え上げ
+    WireLinkHealth    link;             // loss counters of the log paths / ログ経路の欠落の計数
+};
+static_assert(sizeof(WireStatusV4Extension) == 167, "wire drift");
+
 #pragma pack(pop)
+
+/// Total sizes of the status packet by version (header 4 B + payload + checksum 1 B).
+/// ステータスパケットのバージョン別の全長（ヘッダ 4 B＋ペイロード＋チェックサム 1 B）。
+inline constexpr size_t kStatusV3PacketSize = 4 + sizeof(WireStatusPayload) + 1;
+inline constexpr size_t kStatusV4PacketSize = kStatusV3PacketSize + sizeof(WireStatusV4Extension);
+static_assert(kStatusV3PacketSize == 57, "wire drift");
+static_assert(kStatusV4PacketSize == 224, "wire drift");
 
 // =============================================================================
 // Packing helpers (pure functions — host-unit-testable)
@@ -458,6 +607,54 @@ inline uint8_t xorChecksum(const uint8_t* data, size_t length)
         sum ^= data[i];
     }
     return sum;
+}
+
+
+/// sf::LoopTiming -> status packet v4 block (the publish time stamp is dropped).
+/// sf::LoopTiming -> ステータスパケット v4 のブロック（発行時刻は落とす）。
+inline WireLoopTiming toWire(const LoopTiming& timing)
+{
+    WireLoopTiming wire = {};
+    wire.cycles                   = timing.cycles;
+    wire.period_max_us            = timing.period_max_us;
+    wire.late_count               = timing.late_count;
+    wire.busy_max_us              = timing.busy_max_us;
+    wire.over_budget_count        = timing.over_budget_count;
+    wire.last_late_us             = timing.last_late_us;
+    wire.armed_cycles             = timing.armed_cycles;
+    wire.armed_period_max_us      = timing.armed_period_max_us;
+    wire.armed_late_count         = timing.armed_late_count;
+    wire.armed_busy_max_us        = timing.armed_busy_max_us;
+    wire.armed_over_budget_count  = timing.armed_over_budget_count;
+    return wire;
+}
+
+/// sf::NonFiniteStatus -> status packet v4 block (the publish time stamp is dropped).
+/// sf::NonFiniteStatus -> ステータスパケット v4 のブロック（発行時刻は落とす）。
+inline WireNonFinite toWire(const NonFiniteStatus& status)
+{
+    WireNonFinite wire = {};
+    wire.checked_cycles  = status.checked_cycles;
+    wire.detected_cycles = status.detected_cycles;
+    for (size_t stage = 0; stage < kNonFiniteStageCount; ++stage) {
+        wire.stage_count[stage] = status.stage_count[stage];
+    }
+    wire.first_us    = status.first_us;
+    wire.first_stage = status.first_stage;
+    return wire;
+}
+
+/// The four ToF diagnostic values of one sensor -> status packet v4 block.
+/// センサ 1 個の ToF の 4 つの診断値 -> ステータスパケット v4 のブロック。
+inline WireToFDiagnostic toWireToFDiagnostic(uint8_t range_status, float signal_rate, float ambient_rate,
+                                             float sigma_mm)
+{
+    WireToFDiagnostic wire = {};
+    wire.range_status = range_status;
+    wire.signal_rate  = signal_rate;
+    wire.ambient_rate = ambient_rate;
+    wire.sigma_mm     = sigma_mm;
+    return wire;
 }
 
 /// Incremental builder for the unified packet 0x50. Usage:
@@ -570,6 +767,97 @@ inline size_t buildStatusPacket(uint8_t* buffer, uint16_t sequence,
     buffer[body] = xorChecksum(buffer, body);
     return body + 1;
 }
+
+
+/// Build the status packet v4 (v3 + WireStatusV4Extension) into `buffer` (>= kStatusV4PacketSize B);
+/// returns the length. The v3 prefix is byte-identical to buildStatusPacket().
+/// ステータスパケット v4（v3＋WireStatusV4Extension）を buffer（kStatusV4PacketSize B 以上）へ構築し、長さを返す。
+/// 先頭の v3 部分は buildStatusPacket() とバイト単位で同一。
+inline size_t buildStatusPacketV4(uint8_t* buffer, uint16_t sequence, const WireStatusPayload& payload,
+                                  const WireStatusV4Extension& extension)
+{
+    WireHeader header = {};
+    header.packet_id    = kPktStatus;
+    header.sequence     = sequence;
+    header.sample_count = 1;
+    std::memcpy(buffer, &header, sizeof(header));
+    std::memcpy(buffer + sizeof(header), &payload, sizeof(payload));
+    std::memcpy(buffer + sizeof(header) + sizeof(payload), &extension, sizeof(extension));
+    const size_t body = sizeof(header) + sizeof(payload) + sizeof(extension);
+    buffer[body] = xorChecksum(buffer, body);
+    return body + 1;
+}
+
+/// Incremental builder of the text-log packet 0x51. Usage: begin(seq) → addLine()... → finish() → send
+/// buffer()/length(). The records of one packet never exceed kTextLogBytesPerPacket bytes.
+/// テキストログのパケット 0x51 のビルダ。begin(seq) → addLine()... → finish() の順に使う。1 パケットのレコードは
+/// kTextLogBytesPerPacket バイトを超えない。
+class TextLogPacketBuilder {
+public:
+    /// Start a packet: write the header (no record yet). / パケットを始める: ヘッダを書く（レコードはまだ無い）。
+    void begin(uint16_t sequence)
+    {
+        WireHeader header = {};
+        header.packet_id    = kPktTextLog;
+        header.sequence     = sequence;
+        header.sample_count = 0;
+        std::memcpy(buffer_, &header, sizeof(header));
+        length_      = sizeof(header);
+        record_bytes_ = 0;
+        record_count_ = 0;
+    }
+
+    /// Longest text the next record can still carry within the budget (0 = the packet is full).
+    /// 予算の範囲で次のレコードが運べる本文の最大長（0 = パケットは満杯）。
+    size_t remainingTextBytes() const
+    {
+        const size_t left = kTextLogBytesPerPacket - record_bytes_;
+        return (left > kTextRecordHeaderBytes) ? left - kTextRecordHeaderBytes : 0;
+    }
+
+    /// Append one record. False when it does not fit in the budget (nothing is written).
+    /// レコードを 1 つ追加する。予算に収まらなければ false（何も書かない）。
+    bool addLine(uint32_t timestamp_us, uint8_t flags, uint8_t dropped_before, const char* text, size_t text_length)
+    {
+        if (text_length > remainingTextBytes()) {
+            return false;
+        }
+        WireTextRecord record = {};
+        record.timestamp_us  = timestamp_us;
+        record.flags         = flags;
+        record.dropped_before = dropped_before;
+        record.length        = static_cast<uint16_t>(text_length);
+        std::memcpy(&buffer_[length_], &record, sizeof(record));
+        length_ += sizeof(record);
+        std::memcpy(&buffer_[length_], text, text_length);
+        length_ += text_length;
+        record_bytes_ += sizeof(record) + text_length;
+        ++record_count_;
+        ++buffer_[3];   // WireHeader::sample_count = number of records / レコード数
+        return true;
+    }
+
+    /// Number of records in the packet. / パケット内のレコード数。
+    size_t recordCount() const { return record_count_; }
+
+    /// Append the XOR checksum; returns the final datagram length.
+    /// XOR チェックサムを付け、最終データグラム長を返す。
+    size_t finish()
+    {
+        buffer_[length_] = xorChecksum(buffer_, length_);
+        ++length_;
+        return length_;
+    }
+
+    const uint8_t* buffer() const { return buffer_; }
+    size_t length() const { return length_; }
+
+private:
+    uint8_t buffer_[kTextLogPacketMaxSize] = {};
+    size_t  length_       = 0;
+    size_t  record_bytes_ = 0;   // bytes of records so far (the budget counts these) / ここまでのレコードのバイト数（予算はこれを数える）
+    size_t  record_count_ = 0;
+};
 
 }  // namespace datastream
 }  // namespace sf

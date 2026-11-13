@@ -48,9 +48,17 @@ struct ImuData {
 /// ToF距離データ — VL53L3CX（30Hz）
 struct TofData {
     float distance;       // Distance [m]          / 距離
-    uint8_t status;       // Sensor status code    / センサステータス
+    uint8_t status;       // Sensor status code (VL53LX range status; 0 = valid, 254 = every target invalid, 255 = no target) / センサステータス（VL53LX の range status。0 = 有効、254 = 全ターゲット無効、255 = ターゲットなし）
     bool valid;           // Data validity flag    / データ有効フラグ
     uint32_t timestamp;   // [us]
+    // Measurement-quality diagnostics the driver reports with each sample (log only; no consumer
+    // decides on them). 0 when there is no target (status 255) and for a sample that did not come from the
+    // driver (the plant model of the host simulation).
+    // ドライバがサンプルごとに返す測定品質の診断値（ログ専用。これで判断する側はいない）。ターゲットなし
+    // （status 255）のときと、ドライバ由来でないサンプル（ホストのシミュレーションの力学モデル）では 0。
+    float signal_rate;    // Return signal rate [Mcps] (megacounts per second) / 反射信号レート [Mcps]（メガカウント毎秒）
+    float ambient_rate;   // Ambient light rate [Mcps]                        / 環境光レート [Mcps]
+    float sigma_mm;       // Range standard deviation estimate [mm]           / 距離の標準偏差の推定 [mm]
 };
 
 /// Optical flow data from PMW3901 (100Hz)
@@ -106,6 +114,16 @@ struct SensorSnapshot {
     uint8_t  flow_squal;      // Flow surface quality     / フロー品質
     float    tof_front_distance;   // Front ToF distance [m]   / 前方 ToF 距離
     uint8_t  tof_front_status;     // Front ToF status code    / 前方 ToF ステータス
+    // ToF measurement-quality diagnostics (TofData::signal_rate / ambient_rate / sigma_mm of the latest
+    // sample of each sensor), for the 1 Hz status packet.
+    // ToF の測定品質の診断値（各センサの最新サンプルの TofData::signal_rate / ambient_rate / sigma_mm）。
+    // 1 Hz のステータスパケット用。
+    float    tof_signal_rate;      // [Mcps] bottom / 底面
+    float    tof_ambient_rate;     // [Mcps] bottom / 底面
+    float    tof_sigma_mm;         // [mm]   bottom / 底面
+    float    tof_front_signal_rate;   // [Mcps] front / 前方
+    float    tof_front_ambient_rate;  // [Mcps] front / 前方
+    float    tof_front_sigma_mm;      // [mm]   front / 前方
     // Per-sensor sample timestamps (the producing sensor's own stamp). The Data
     // Stream uses a CHANGE in these to detect "new sample" per sensor — the
     // shared snapshot timestamp below cannot tell which sensor updated.

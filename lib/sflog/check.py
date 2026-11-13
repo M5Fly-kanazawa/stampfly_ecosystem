@@ -41,6 +41,12 @@ VOLTAGE_LO = 2.5
 VOLTAGE_HI = 5.0
 RATE_TOLERANCE_FRACTION = 0.30  # +-30% of nominal_rate_hz
 
+# Streams in which several rows may legitimately carry the same timestamp_us (text_log: several lines logged within
+# the same microsecond, or at one step of the virtual clock in SILS); only a decrease is an error there.
+# 同じ timestamp_us を持つ行が複数あってよいストリーム（text_log: 同じマイクロ秒の間、または SILS の仮想時計の 1 ステップ
+# に複数の行が出る）。ここでは減少だけがエラー。
+_REPEATED_TIMESTAMPS_NORMAL = ("text_log",)
+
 
 @dataclass
 class Finding:
@@ -277,7 +283,7 @@ def _check_timestamp(name: str, df: pd.DataFrame) -> list:
         ]
 
     n_repeated = int((diffs == 0).sum())
-    if n_repeated > 0:
+    if n_repeated > 0 and name not in _REPEATED_TIMESTAMPS_NORMAL:
         # The IMU-reuse explanation only applies to the 400 Hz lockstep
         # streams (plan section 7); other streams just report the count.
         # 「IMU 標本の再利用」の説明は 400 Hz ロックステップ系だけに当てはまる

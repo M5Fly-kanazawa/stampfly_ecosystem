@@ -104,12 +104,13 @@ TEST(wrap_around_keeps_every_line_whole)
 TEST(length_prefix_split_by_the_buffer_end_is_read_back)
 {
     SmallRing ring;
-    // An entry of 101 bytes (3 + 98) is coprime with the 1024-byte buffer, so over 1100 lines
-    // the three prefix bytes land on every possible position, including 1023 | 0 (split by the end).
-    // 101 バイトの項目（3 + 98）は 1024 バイトのバッファと互いに素なので、1100 行の間に接頭辞の 3 バイトは
-    // あらゆる位置（末尾で割れる 1023 | 0 を含む）に来る。
+    // An entry of 101 bytes (8 + 93) is coprime with the 1024-byte buffer, so over 1100 lines
+    // the eight prefix bytes land on every possible position, including a split by the end.
+    // 101 バイトの項目（8 + 93）は 1024 バイトのバッファと互いに素なので、1100 行の間に接頭辞の 8 バイトは
+    // あらゆる位置（末尾で割れる場合を含む）に来る。
+    static_assert(SmallRing::kPrefixBytes == 8, "the entry size below assumes the 8-byte prefix");
     for (int i = 0; i < 1100; ++i) {
-        const std::string text(98, static_cast<char>('A' + i % 26));
+        const std::string text(93, static_cast<char>('A' + i % 26));
         ASSERT_TRUE(pushText(ring, text));
         ASSERT_TRUE(popText(ring) == text);
     }
@@ -122,8 +123,8 @@ TEST(a_line_that_does_not_fit_is_dropped_and_counted)
     const std::string text(300, 'x');
     ASSERT_TRUE(pushText(ring, text));
     ASSERT_TRUE(pushText(ring, text));
-    ASSERT_TRUE(pushText(ring, text));          // 3 x 303 = 909 bytes used
-    ASSERT_TRUE(!pushText(ring, text));         // 1208 > 1024: refused
+    ASSERT_TRUE(pushText(ring, text));          // 3 x 308 = 924 bytes used
+    ASSERT_TRUE(!pushText(ring, text));         // 1232 > 1024: refused
     ASSERT_TRUE(!pushText(ring, text));
     ASSERT_TRUE(ring.takeDropped() == 2);
     ASSERT_TRUE(ring.takeDropped() == 0);       // reading clears the count / 読むと数は 0 に戻る
@@ -195,6 +196,104 @@ TEST(text_with_zero_bytes_and_newlines_round_trips)
     ASSERT_TRUE(popText(ring) == text);
 }
 
+// The time stamp and the truncation flag travel with the line (the WiFi exit sends them), also across the
+// end of the buffer.
+// 時刻と切り詰めのフラグは行と一緒に運ばれる（WiFi 側の出口が送る）。バッファの末尾をまたいでも同じ。
+TEST(time_stamp_and_truncation_flag_travel_with_the_line)
+{
+    SmallRing ring;
+    for (int i = 0; i < 1100; ++i) {
+        const std::string text(93, static_cast<char>('A' + i % 26));
+        const uint32_t stamp = 0xFFFFFF00u + static_cast<uint32_t>(i);   // crosses the 32-bit wrap / 32 ビットの桁あふれをまたぐ
+        const bool truncated = (i % 3) == 0;
+        ASSERT_TRUE(ring.push(text.c_str(), text.size(), stamp, truncated));
+        char buffer[SmallRing::kMaxLineBytes + 1];
+        uint32_t dropped_before = 99;
+        SmallRing::LineInfo info;
+        ASSERT_TRUE(ring.pop(buffer, SmallRing::kMaxLineBytes, &dropped_before, &info) == text.size());
+        ASSERT_TRUE(info.timestamp_us == stamp);
+        ASSERT_TRUE(info.truncated == truncated);
+        ASSERT_TRUE(dropped_before == 0);
+    }
+}
+
+// oldestLength() answers without removing the line, so a reader with a byte budget can leave a long
+// line for the next cycle.
+// oldestLength() は行を取り出さずに答えるので、バイト数の予算を持つ読み手は長い行を次の周期に残せる。
+TEST(oldest_length_is_seen_without_removing_the_line)
+{
+    SmallRing ring;
+    ASSERT_TRUE(ring.oldestLength() == 0);
+    ASSERT_TRUE(pushText(ring, "short\n"));
+    ASSERT_TRUE(pushText(ring, std::string(300, 'q')));
+    ASSERT_TRUE(ring.oldestLength() == 6);
+    ASSERT_TRUE(ring.oldestLength() == 6);      // asking twice changes nothing / 2 回聞いても変わらない
+    ASSERT_TRUE(popText(ring) == "short\n");
+    ASSERT_TRUE(ring.oldestLength() == 300);
+    ASSERT_TRUE(popText(ring).size() == 300);
+    ASSERT_TRUE(ring.oldestLength() == 0);
+}
+
+// The running total counts every refused line exactly, also past the 255 that one stored line can carry
+// (the remainder stays pending for the next line), and is not reduced by reading.
+// 累計は断った行をすべて正確に数える。1 行が運べる 255 を超えても同じ（残りは次の行へ持ち越す）。読んでも減らない。
+TEST(total_dropped_is_exact_beyond_the_per_line_limit)
+{
+    SmallRing ring;
+    const std::string text(300, 'x');
+    ASSERT_TRUE(pushText(ring, text));
+    ASSERT_TRUE(pushText(ring, text));
+    ASSERT_TRUE(pushText(ring, text));
+    for (int i = 0; i < 300; ++i) {
+        ASSERT_TRUE(!pushText(ring, text));
+    }
+    ASSERT_TRUE(ring.totalDropped() == 300);
+    for (int i = 0; i < 3; ++i) {
+        ASSERT_TRUE(popText(ring) == text);
+    }
+    ASSERT_TRUE(pushText(ring, "first after the loss\n"));
+    ASSERT_TRUE(pushText(ring, "second after the loss\n"));
+    char buffer[SmallRing::kMaxLineBytes + 1];
+    uint32_t dropped_before = 0;
+    ASSERT_TRUE(ring.pop(buffer, SmallRing::kMaxLineBytes, &dropped_before) > 0);
+    ASSERT_TRUE(dropped_before == SmallRing::kMaxDroppedBefore);   // 255 carried by the first line / 最初の行が 255 を運ぶ
+    ASSERT_TRUE(ring.pop(buffer, SmallRing::kMaxLineBytes, &dropped_before) > 0);
+    ASSERT_TRUE(dropped_before == 45);                                // the remainder by the next one / 残りは次の行
+    ASSERT_TRUE(ring.totalDropped() == 300);                          // reading does not reduce it / 読んでも減らない
+}
+
+// clear() starts a capture from "now": stored lines, pending drops and the total are all forgotten, and the
+// ring works as new afterwards.
+// clear() は取得を「今」から始める: 格納済みの行・持ち越しの落とし・累計をすべて忘れ、その後は新品と同じに動く。
+TEST(clear_forgets_lines_and_counts)
+{
+    SmallRing ring;
+    const std::string text(300, 'x');
+    ASSERT_TRUE(pushText(ring, text));
+    ASSERT_TRUE(pushText(ring, text));
+    ASSERT_TRUE(pushText(ring, text));
+    ASSERT_TRUE(!pushText(ring, text));
+    ring.clear();
+    ASSERT_TRUE(ring.empty());
+    ASSERT_TRUE(ring.totalDropped() == 0);
+    ASSERT_TRUE(ring.takeDropped() == 0);
+    ASSERT_TRUE(pushText(ring, "new\n"));
+    char buffer[SmallRing::kMaxLineBytes + 1];
+    uint32_t dropped_before = 99;
+    ASSERT_TRUE(ring.pop(buffer, SmallRing::kMaxLineBytes, &dropped_before) == 4);
+    ASSERT_TRUE(dropped_before == 0);
+}
+
+// One longest line (prefix included) always fits the budget constant the sender uses.
+// 最長の 1 行（接頭辞を含む）は、送信側が使う予算の定数に必ず収まる。
+TEST(longest_stored_line_size_is_the_prefix_plus_the_line_limit)
+{
+    static_assert(SmallRing::kMaxStoredLineBytes == SmallRing::kPrefixBytes + SmallRing::kMaxLineBytes, "size");
+    SmallRing ring;
+    ASSERT_TRUE(pushText(ring, std::string(SmallRing::kMaxLineBytes, 'm')));
+    ASSERT_TRUE(ring.usedBytes() == SmallRing::kMaxStoredLineBytes);
+}
+
 int main()
 {
     printf("=== LogRing unit tests ===\n");
@@ -208,6 +307,11 @@ int main()
     run_empty_line_is_ignored_and_not_counted_as_a_drop();
     run_small_output_buffer_leaves_the_line_in_place();
     run_text_with_zero_bytes_and_newlines_round_trips();
+    run_time_stamp_and_truncation_flag_travel_with_the_line();
+    run_oldest_length_is_seen_without_removing_the_line();
+    run_total_dropped_is_exact_beyond_the_per_line_limit();
+    run_clear_forgets_lines_and_counts();
+    run_longest_stored_line_size_is_the_prefix_plus_the_line_limit();
 
     printf("\n=== Results: %d run, %d passed, %d failed ===\n",
            tests_run, tests_passed, tests_failed);

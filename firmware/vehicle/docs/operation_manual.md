@@ -350,6 +350,18 @@ TAB で補完。
 | `finite  : NON-FINITE in D of N armed cycles; first at <境界>, T s after boot` | N 周期のうち D 周期に NaN・無限大があった。`<境界>` は最初に見つかった場所（`estimate input` 推定値の入力、`setpoint input` 目標値の入力、`control reference` 制御器の外側ループの出力、`control output` 制御器の出力（レート PID の出力）、`mixer output` ミキサの出力、`motor command` モータ指令）で、T はその起動からの時刻 | 飛行ログと突き合わせて原因を調べる。`<境界>` が上流ほど原因に近い |
 | `cycles per boundary: estimate …, setpoint …, reference …, controller …, mixer …, motor …` | 境界ごとの、有限でない値があった周期の数 | 0 でない最も上流の境界が発生箇所の手がかり（NaN は下流の境界すべてに伝わる） |
 
+**USB ケーブルなしで診断を読む（WiFi 取得）**: 飛行中は USB ケーブルを付けないので、`status` の `loop` 行・`finite` 行も、USB コンソールのログ（状態遷移・「Landing detected (...)」・フェイルセーフ・拒否の理由）も見えない。同じ内容は WiFi 取得（`sf log wifi`）の一式に入る。飛ばす前に飛行時間より長い取得を始め（`sf log wifi -d 120 -o flight1`）、着陸後に次のように読む。
+
+| 読みたいもの | 読み方 | 見方 |
+|-------------|--------|------|
+| 400Hz ループの周期 | `sf log info flight1` の「Diagnostics」の `imu loop:`・`control loop:` 行（取得の最後の値）。時系列は一式の `loop_timing`（1 Hz、列 `imu_*`・`control_*`） | `status` の `loop` 行と同じ項目: `late` が遅れた回数、`period_max` が起床間隔の最大 [µs]（2500 付近が健全）、`busy_max` が処理時間の最大 [µs]、`over_budget` が 2500 µs を超えた周期。`armed:` 以下は ARM 中だけの値で、飛行の評価にはこちらを見る。数え方は起動以降の累計なので、取得の前に動かしていたぶんを含む。増えた時刻を見るには `loop_timing` の行の差を取る |
+| 制御値の有限性 | 同じ欄の `nonfinite:` 行。時系列は一式の `nonfinite` | `detected D of N armed cycles`。D が 0 でなければ、`first boundary` の番号が最初に見つかった場所（0 推定値の入力、1 目標値の入力、2 制御器の外側ループの出力、3 制御器の出力、4 ミキサの出力、5 モータ指令。255 は検出なし）。境界ごとの数は `nonfinite` の列 |
+| ToF の測定品質 | 同じ欄の `ToF bottom`・`ToF front` 行（最後の 1 Hz の値）。時系列は一式の `tof_diagnostics` | `signal` は反射信号（小さいほど反射が弱く測距が不安定）、`ambient` は環境光、`sigma` は距離の標準偏差の推定 [mm]、`range_status` は 0 が有効・254 が全ターゲット無効・255 がターゲットなし。ToF が途切れた飛行では、途切れる直前に `signal` が落ち `ambient` や `sigma` が増えていないかを見る（`tof_bottom` の距離・`tof_silence` と合わせる）。前方センサが無いときは `front` がすべて 0。実機の健全な値の目安は取得を重ねて決める |
+| ログ経路の欠落 | 同じ欄の `log paths:` 行。時系列は一式の `link_health` | `log_stream_overflow`・`send_drops`・`entry_drops` が 0 でなければ、数値ストリームのどこかに欠け（`sf log check` の `seq` の飛び）がある。`text_dropped_lines` は機体が断ったテキストログの行数 |
+| ログの行 | `sf log info flight1 --text`。絞り込みは `--grep "Landing detected"`・`--since 12 --until 18` | `[機体時刻 s] 本文` の形で、機体時刻は他のストリームの `timestamp_us` と同じ時計（秒に直したもの）。`*** N lines dropped here ***` はその位置でログの行が抜けたこと、`[truncated]` は 1 行が長すぎて切れたこと。取得を始める前に出た行（起動時のログなど）は届かない |
+
+取得中は 50Hz のモニタ用テレメトリ（:5005）が止まる（解析ストリームが帯域を専有する）。ログの行は、行が出たときだけ最大 100 ms ごとに送られる（普通の飛行で毎秒 2 行ほど）。短時間に大量のログが出ると行が抜けうるが、抜けたことは `dropped_before` と `text_dropped_lines` で分かる。
+
 **テレメトリの受信**: 機体は 50Hz のモニタ用テレメトリ（104B バイナリ、UDP ブロードキャスト :5005）を常時放送している。機体と同一ネットワークの PC で:
 
 ```bash
@@ -679,6 +691,18 @@ How to check: (1) After boot, run `status` and see that `late` of `imu all` and 
 | `finite  : all control values finite (N armed cycles checked)` | healthy: every value was finite in the N cycles checked | none |
 | `finite  : NON-FINITE in D of N armed cycles; first at <boundary>, T s after boot` | D of the N cycles held a NaN / infinity. `<boundary>` is where it was first seen (`estimate input`, `setpoint input`, `control reference` = outer-loop output of the controller, `control output` = controller output (the rate PID output), `mixer output`, `motor command`) and T is the time since boot | compare with the flight log to find the cause; the more upstream the boundary, the closer to the cause |
 | `cycles per boundary: estimate ..., setpoint ..., reference ..., controller ..., mixer ..., motor ...` | per boundary, the number of cycles that held a non-finite value | the most upstream boundary that is not 0 points to where it came from (a NaN travels to every boundary downstream) |
+
+**Reading the diagnostics without a USB cable (WiFi capture):** in flight there is no USB cable, so neither the `loop` and `finite` lines of `status` nor the USB console log (state transitions, "Landing detected (...)", failsafe, reasons for refusals) can be seen. The same content is in the bundle of a WiFi capture (`sf log wifi`). Before the flight start a capture longer than the flight (`sf log wifi -d 120 -o flight1`) and read it after landing as follows.
+
+| What to read | How | How to interpret |
+|--------------|-----|------------------|
+| 400 Hz loop period | The `imu loop:` and `control loop:` lines of the "Diagnostics" block of `sf log info flight1` (the last values of the capture). The time series is the `loop_timing` stream of the bundle (1 Hz, columns `imu_*`, `control_*`) | The same items as the `loop` lines of `status`: `late` is the number of late wakes, `period_max` the longest wake interval [us] (about 2500 is healthy), `busy_max` the longest busy time [us], `over_budget` the cycles longer than 2500 us. Everything after `armed:` counts armed cycles only; use it to judge a flight. The counts are totals since boot, so they include what ran before the capture. To see when a count grew, take the difference of the rows of `loop_timing` |
+| Finiteness of the control values | The `nonfinite:` line of the same block. The time series is the `nonfinite` stream | `detected D of N armed cycles`. When D is not 0, the number after `first boundary` is where it was first seen (0 estimate input, 1 setpoint input, 2 outer-loop output of the controller, 3 controller output, 4 mixer output, 5 motor command; 255 = none). The counts per boundary are columns of `nonfinite` |
+| ToF measurement quality | The `ToF bottom` and `ToF front` lines of the same block (the last 1 Hz values). The time series is the `tof_diagnostics` stream | `signal` is the return signal (the smaller, the weaker the reflection and the less stable the range), `ambient` the ambient light, `sigma` the estimated standard deviation of the range [mm], `range_status` 0 = valid, 254 = every target invalid, 255 = no target. In a flight where the ToF dropped out, look at whether `signal` fell and `ambient` or `sigma` grew just before it (together with the distance in `tof_bottom` and `tof_silence`). `front` is all 0 when the front sensor is absent. Reference values for healthy hardware are to be set from repeated captures |
+| Loss in the log paths | The `log paths:` line of the same block. The time series is the `link_health` stream | When `log_stream_overflow`, `send_drops` or `entry_drops` is not 0, a numeric stream has a gap somewhere (a `seq` jump in `sf log check`). `text_dropped_lines` is the number of text-log lines the vehicle refused |
+| Log lines | `sf log info flight1 --text`. Filter with `--grep "Landing detected"`, `--since 12 --until 18` | As `[vehicle time s] text`; the vehicle time is the clock of `timestamp_us` of the other streams (in seconds). `*** N lines dropped here ***` means log lines are missing at that place, `[truncated]` that a line was too long and cut. Lines logged before the capture started (the boot log, for example) do not arrive |
+
+During a capture the 50 Hz monitoring telemetry (:5005) stops (the analysis stream owns the bandwidth). Log lines are sent at most every 100 ms and only when a line was logged (about 2 lines/s in a typical flight). A burst of many lines in a short time can lose lines, but the loss is visible in `dropped_before` and `text_dropped_lines`.
 
 Every command publishes a FACT on a topic and the owning task applies it (e.g. `motor` → `motor_test`
 → ControlTask; `sound`/`led` → `ui_command` → NotifyTask; `unpair` → `button_event` → StateTask). So a

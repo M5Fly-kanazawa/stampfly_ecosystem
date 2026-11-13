@@ -64,6 +64,7 @@ if(SILS_BUILD_CORES_SMOKE OR SILS_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_calibration/calibration.cpp           # boot gyro/accel bias calib (imu_task)
     ${VN}/components/sf_failsafe/failsafe.cpp                 # ImuAnomalyDetector (imu_task, 400Hz impact/gyro)
     ${VN}/components/sf_core/params.cpp
+    ${VN}/components/sf_core/log_sink.cpp                       # the log sink: the flight-log glue (emu_flightlog_vehicle.cpp) reads its WiFi exit as the text_log stream
     ${SILS_COMPAT}/nvs_shim.cpp
     ${SILS_COMPAT}/clock_shim.cpp
     ${SILS_COMPAT}/log_shim.cpp

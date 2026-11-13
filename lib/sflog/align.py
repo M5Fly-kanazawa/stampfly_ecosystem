@@ -23,6 +23,13 @@ from . import schema
 
 _VALID_METHODS = ("hold", "nearest")
 
+# Streams that are not analysis signals and so are left out of the default stream list of aligned():
+# text_log is event-driven text (holding the last text line across hundreds of rows would be meaningless).
+# Name it in `streams=` to merge it anyway.
+# 解析用の信号ではないので、aligned() の既定のストリーム一覧から外すストリーム: text_log はイベント駆動の文字列
+# （最後の文字列の行を何百行にもわたって保持しても意味がない）。それでも結合するなら `streams=` に名前を挙げる。
+_NOT_ALIGNED_BY_DEFAULT = ("text_log",)
+
 # Internal-only column used to restore `result`'s row order after a `pandas
 # .merge()` on "seq" -- merge's row-order guarantee for a left join is an
 # implementation detail we do not want to depend on, so we pin the order
@@ -110,7 +117,8 @@ def aligned(log, base: str = "imu", streams=None, method: str = "hold") -> pd.Da
             index/first column. Must be present in `log.streams`.
         streams: iterable of stream names to merge in, in order. Defaults
             to every other stream present in `log.streams`, in
-            `schema.STREAMS` order.
+            `schema.STREAMS` order, except the streams that are not
+            analysis signals (text_log).
         method: "hold" (merge_asof backward) or "nearest" (merge_asof
             nearest).
 
@@ -129,7 +137,10 @@ def aligned(log, base: str = "imu", streams=None, method: str = "hold") -> pd.Da
     result = log.streams[base].sort_values("timestamp_us", kind="stable").reset_index(drop=True).copy()
 
     if streams is None:
-        streams = [name for name in schema.STREAMS if name != base and name in log.streams]
+        streams = [
+            name for name in schema.STREAMS
+            if name != base and name in log.streams and name not in _NOT_ALIGNED_BY_DEFAULT
+        ]
 
     direction = "backward" if method == "hold" else "nearest"
 

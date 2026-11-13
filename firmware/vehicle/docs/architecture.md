@@ -560,7 +560,14 @@ sensor.power ──→ PowerTask [フェイルセーフ]
                    ├── Telemetry: UDP送信（50Hz間引き）
                    ├── Data Stream: UDP/USB送信（全レート）
                    └── Blackbox: Flash書き込み（リングバッファ）
+
+ESP_LOG（どのタスクでも）──→ ログシンク（sf_core/log_sink.cpp。呼び出し側はコピーだけ）
+                              ├── コンソール用リング ──→ LogTask ──→ USB コンソール
+                              └── WiFi 用リング（取得中だけ）──→ TelemetryTask（Data Stream）
+                                                                 ──→ テキストパケット 0x51（最大 100 ms ごと、1 パケット最大 1024 バイト）
 ```
+
+数値のストリーム（Data Stream の統合パケット 0x50・ステータス 0x4F）と文字列のログ（0x51）は、同じ UDP ソケット・同じ TelemetryTask の別のパケットで届く。ステータスパケット（v4）は ToF の診断値・ループ周期・有限でない数・ログ経路の欠落の計数も運ぶ（`docs/architecture/udp-telemetry-design.md`）。ログの機構は 1 つ（シンク）で、コンソールと WiFi はその 2 つの出口である。
 
 ## 6. タスク設計
 
@@ -607,9 +614,9 @@ sensor.power ──→ PowerTask [フェイルセーフ]
 
 `ESP_LOG` の出力先は USB コンソールで、書き込みは呼び出し側を待たせうる（送信バッファは小さく、USB のホストが取り出しを止めると最大 50 ms）。400Hz の ImuTask・ControlTask は周期が 2.5 ms なので、1 行のログで周期を落とす。ARM の遷移では ControlTask が「PID controller reset」「Mode: …」「Actuator armed …」「Motors armed」を、ImuTask が「Calibration re-seeded …」を出す。
 
-そこで **`ESP_LOG` の出力関数を LogTask が差し替える（ログシンク: 出力の待ちを呼び出し側から切り離す受け渡しの仕組み）**。呼び出し側（どのタスクでも）は行を整形して固定長のリング（円環状に使い回すバッファ。`sf::LogRing`、4 KB）へ数 µs でコピーするだけで、コンソールには触れない。リングをコンソールへ書くのは LogTask（優先度 5、締切なし）だけ。メッセージの文言・出る条件は変わらず、`ESP_LOG` どうしの順序も保つ。`printf`（CLI の応答・プロンプト）との前後は変わりうる（ログは最大 10 ms 程度遅れる）。TCP の CLI では `CLITask` が `stdout` をソケットへ差し替えているので、`CLITask` が出す `ESP_LOG` はリングを通さずそのソケットへ直接書く（USB には出ない）。リングが満ちたときは行を捨て、捨てた直後に入った最初の行の前に「log sink full: N lines dropped」を出す。LogTask 自身がコンソールで最大 50 ms 待ちうるため、Blackbox 有効時はその間の記録が抜けうる。LogTask の起動前（起動シーケンス）のログは直接コンソールへ出る。`reboot` は直前のログを失わないよう `sf::tasks::flush_log_sink()` で出し切ってから再起動する。
+そこで **`ESP_LOG` の出力関数を LogTask が差し替える（ログシンク: 出力の待ちを呼び出し側から切り離す受け渡しの仕組み）**。呼び出し側（どのタスクでも）は行を整形して固定長のリング（円環状に使い回すバッファ。`sf::LogRing`、4 KB）へ数 µs でコピーするだけで、コンソールには触れない。リングをコンソールへ書くのは LogTask（優先度 5、締切なし）だけ。WiFi 取得（`sf log wifi`）の間は、同じクリティカルセクションの中でもう 1 本のリング（WiFi 用、4 KB）へもコピーし、TelemetryTask が Data Stream の既存の経路（ノンブロッキング `sendto`）でテキストパケット（0x51）として最大 100 ms ごと・1 パケット最大 1024 バイトで送る（`ログフロー` 参照）。コンソールと WiFi は同じシンクの 2 つの出口で、ログの機構は 1 つ。取得が無い間は WiFi 用リングへ書かない。メッセージの文言・出る条件は変わらず、`ESP_LOG` どうしの順序も保つ。`printf`（CLI の応答・プロンプト）との前後は変わりうる（ログは最大 10 ms 程度遅れる）。TCP の CLI では `CLITask` が `stdout` をソケットへ差し替えているので、`CLITask` が出す `ESP_LOG` はリングを通さずそのソケットへ直接書く（USB には出ない）。リングが満ちたときは行を捨て、捨てた直後に入った最初の行の前に「log sink full: N lines dropped」を出す。LogTask 自身がコンソールで最大 50 ms 待ちうるため、Blackbox 有効時はその間の記録が抜けうる。LogTask の起動前（起動シーケンス）のログは直接コンソールへ出る。`reboot` は直前のログを失わないよう `sf::tasks::flush_log_sink()` で出し切ってから再起動する。
 
-周期が守れているかは `sf::LoopTimingMonitor` が測る（ImuTask は `imu_loop_timing`、ControlTask は `control_loop_timing`、毎秒発行。CLI の `status` が表示する）。詳細は `detailed_design.md` §8。 制御経路の NaN・無限大は `sf::NonFiniteMonitor` が境界ごとに数え（ControlTask が `nonfinite_status` を発行し、CLI の `status` が表示する）、モータ指令の出口で有限でない値のモータを duty 0 にする（`detailed_design.md` §8）。
+周期が守れているかは `sf::LoopTimingMonitor` が測る（ImuTask は `imu_loop_timing`、ControlTask は `control_loop_timing`、毎秒発行。CLI の `status` が表示し、WiFi 取得ではステータスパケット v4 が運ぶ）。詳細は `detailed_design.md` §8。 制御経路の NaN・無限大は `sf::NonFiniteMonitor` が境界ごとに数え（ControlTask が `nonfinite_status` を発行し、CLI の `status` が表示し、WiFi 取得ではステータスパケット v4 が運ぶ）、モータ指令の出口で有限でない値のモータを duty 0 にする（`detailed_design.md` §8）。
 
 ### タスク非割当のコンポーネント
 
@@ -873,6 +880,17 @@ Motor output
 - **Other sensors → Estimation**: Asynchronous. Observation update only when data arrives
 - **All data → Logger**: Lock-free Ring Buffer retains all samples
 
+### Log Flow
+
+```
+ESP_LOG (any task) ──→ log sink (sf_core/log_sink.cpp; the caller only copies)
+                         ├── console ring ──→ LogTask ──→ USB console
+                         └── WiFi ring (only while a capture is active) ──→ TelemetryTask (Data Stream)
+                                                                        ──→ text-log packet 0x51 (at most every 100 ms, at most 1024 bytes per packet)
+```
+
+The numeric streams (the unified packet 0x50 and the status packet 0x4F of the Data Stream) and the text log (0x51) travel as separate packets over the same UDP socket from the same TelemetryTask. The status packet (v4) also carries the ToF diagnostics, the loop-timing counters, the non-finite counters and the loss counters of the log paths (`docs/architecture/udp-telemetry-design.md`). There is one logging mechanism (the sink); the console and the WiFi capture are its two exits.
+
 ## 6. Task Design
 
 ### Task List
@@ -900,9 +918,9 @@ Motor output
 
 `ESP_LOG` writes to the USB console, and the write can make the caller wait (small transmit buffer; up to 50 ms when the USB host stops taking data). ImuTask and ControlTask run at 400 Hz (2.5 ms period), so one log line can cost a whole cycle. At the ARM transition ControlTask logs "PID controller reset", "Mode: ...", "Actuator armed ..." and "Motors armed", and ImuTask logs "Calibration re-seeded ...".
 
-So **LogTask replaces the output function of `ESP_LOG` (the log sink)**. A caller (any task) formats the line and copies it into a fixed-size ring (`sf::LogRing`, 4 KB) in a few microseconds without touching the console; only LogTask (priority 5, no deadline) writes the ring to the console. The wording and conditions of every message are not altered by the sink, and `ESP_LOG` lines keep their order among themselves. Their order relative to `printf` (CLI replies and prompts) can change (logs are up to about 10 ms late). In the TCP CLI, `CLITask` redirects `stdout` to the socket, so the `ESP_LOG` lines of `CLITask` bypass the ring and are written straight to that socket (not to USB). When the ring is full the line is dropped, and "log sink full: N lines dropped" is printed before the first line stored after the loss. LogTask itself can wait up to 50 ms on the console, so Blackbox records can be missed during that wait when Blackbox is enabled. Logs before LogTask starts (the boot sequence) still go straight to the console. `reboot` drains the ring with `sf::tasks::flush_log_sink()` before restarting so the last messages are not lost.
+So **LogTask replaces the output function of `ESP_LOG` (the log sink)**. A caller (any task) formats the line and copies it into a fixed-size ring (`sf::LogRing`, 4 KB) in a few microseconds without touching the console; only LogTask (priority 5, no deadline) writes the ring to the console. During a WiFi capture (`sf log wifi`) the same critical section also copies the line into a second ring (for WiFi, 4 KB), and TelemetryTask sends it through the existing Data Stream path (non-blocking `sendto`) as the text-log packet (0x51), at most every 100 ms and at most 1024 bytes per packet (see the log flow). The console and the WiFi capture are two exits of the same sink: there is one logging mechanism. While no capture is active the WiFi ring is not written. The wording and conditions of every message are not altered by the sink, and `ESP_LOG` lines keep their order among themselves. Their order relative to `printf` (CLI replies and prompts) can change (logs are up to about 10 ms late). In the TCP CLI, `CLITask` redirects `stdout` to the socket, so the `ESP_LOG` lines of `CLITask` bypass the ring and are written straight to that socket (not to USB). When the ring is full the line is dropped, and "log sink full: N lines dropped" is printed before the first line stored after the loss. LogTask itself can wait up to 50 ms on the console, so Blackbox records can be missed during that wait when Blackbox is enabled. Logs before LogTask starts (the boot sequence) still go straight to the console. `reboot` drains the ring with `sf::tasks::flush_log_sink()` before restarting so the last messages are not lost.
 
-Whether the period is kept is measured by `sf::LoopTimingMonitor` (`imu_loop_timing` from ImuTask, `control_loop_timing` from ControlTask, published every second and shown by the CLI `status`). See `detailed_design.md` §8. NaN and infinity on the control path are counted per boundary by `sf::NonFiniteMonitor` (ControlTask publishes `nonfinite_status`, shown by the CLI `status`), and at the motor command exit a motor whose value is not finite gets duty 0 (`detailed_design.md` §8).
+Whether the period is kept is measured by `sf::LoopTimingMonitor` (`imu_loop_timing` from ImuTask, `control_loop_timing` from ControlTask, published every second, shown by the CLI `status` and carried by the status packet v4 of the WiFi capture). See `detailed_design.md` §8. NaN and infinity on the control path are counted per boundary by `sf::NonFiniteMonitor` (ControlTask publishes `nonfinite_status`, shown by the CLI `status` and carried by the status packet v4 of the WiFi capture), and at the motor command exit a motor whose value is not finite gets duty 0 (`detailed_design.md` §8).
 
 ### Components Without Dedicated Tasks
 

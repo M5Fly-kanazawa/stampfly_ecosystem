@@ -1261,10 +1261,62 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
     return None  # unknown metric name / 未知のメトリクス名
 
 
+def _bundle_value(bundle_path: Optional[Path], stream: str, column: str, how: str, t0=None, t1=None):
+    """One number from any numeric column of any stream of the scenario's flight-log bundle, for the
+    `bundle_value` assertion: `how` is max, min or last (the value of the latest row). Optional [t0, t1]
+    SECONDS restrict the rows by `timestamp_us` like the `metric` window. Returns None when there is no
+    bundle, no such stream or column, a non-numeric column, or no row in the window ("absent, not
+    invented": the assertion then fails, it never passes on a missing stream).
+    シナリオのフライトログ一式の、任意のストリームの任意の数値列から数を 1 つ取り出す（`bundle_value` 検査用）。
+    `how` は max・min・last（最新の行の値）。[t0, t1] は秒で、`metric` の窓と同じく timestamp_us で行を絞る。
+    一式・ストリーム・列が無いとき、数値でない列のとき、窓に行が無いときは None（「無いものは無い」: 検査は
+    ストリームが無いことで通ることはなく、失敗する）。
+    """
+    if bundle_path is None or how not in ("max", "min", "last"):
+        return None
+    import pandas as pd
+
+    log = _load_bundle_for_metric(bundle_path)
+    if log is None or stream not in log.streams or column not in log.streams[stream].columns:
+        return None
+    df = log.streams[stream]
+    if t0 is not None and t1 is not None:
+        df = df[(df["timestamp_us"] >= t0 * 1e6) & (df["timestamp_us"] <= t1 * 1e6)]
+    values = df[column]
+    if df.empty or not pd.api.types.is_numeric_dtype(values):
+        return None
+    values = values.dropna()
+    if values.empty:
+        return None
+    if how == "max":
+        return float(values.max())
+    if how == "min":
+        return float(values.min())
+    return float(values.iloc[-1])
+
+
+def _bundle_text_lines(bundle_path: Optional[Path]):
+    """The text_log lines (strings) of the scenario's flight-log bundle, or None when the bundle or the
+    stream is absent (the `bundle_text` assertion then fails; "absent" never passes `contains`).
+    シナリオのフライトログ一式の text_log の行（文字列）。一式かストリームが無ければ None（`bundle_text` 検査は
+    失敗する。無いことで `contains` が通ることはない）。
+    """
+    if bundle_path is None:
+        return None
+    log = _load_bundle_for_metric(bundle_path)
+    if log is None or "text_log" not in log.streams:
+        return None
+    return [str(t) for t in log.streams["text_log"]["text"]]
+
+
 _METRIC_OPS = {
     "<":  lambda a, b: a < b,   "<=": lambda a, b: a <= b,
     ">":  lambda a, b: a > b,   ">=": lambda a, b: a >= b,
 }
+
+# `bundle_value` also compares for equality (a counter that must be exactly 0).
+# `bundle_value` は等号でも比べる（ちょうど 0 であるべき計数のため）。
+_BUNDLE_VALUE_OPS = dict(_METRIC_OPS, **{"==": lambda a, b: a == b})
 
 
 def _read_xfail(expect_path: Path) -> Optional[str]:
@@ -1365,6 +1417,17 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               flip_pitch_deg, flip_gyro_abort_phi_deg,
                                               flip_gyro_abort_after_spin_s, alt_drop_max,
                                               alt_rise_max, descent_speed_max, settle_time_s
+      bundle_text <contains|absent> "<text>"  the text_log stream of the bundle (the ESP_LOG lines
+                                              the firmware's log sink delivered, one per row) has /
+                                              has no line containing the text. A bundle without
+                                              text_log fails `contains`.
+      bundle_value <stream>.<column> <max|min|last> <op> <value> [in <t0> <t1>]
+                                              one number from any numeric column of any stream of
+                                              the bundle (e.g. loop_timing.control_cycles last > 1000,
+                                              nonfinite.detected_cycles max == 0,
+                                              tof_diagnostics.bottom_signal_rate max > 0.5);
+                                              op ∈ < <= > >= == ; optional "in t0 t1" in seconds.
+                                              A missing stream / column fails the check.
     """
     merged = out_text + err_text
     streams = {"out": out_text, "err": err_text, "any": merged}
@@ -1419,6 +1482,46 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
         elif kind == "nonfinite_cycles" and len(toks) >= 3 and toks[1] in _NONFINITE_OPS \
                 and toks[2].isdigit():
             nonfinite_limit = (toks[1], int(toks[2]))   # evaluated after the loop / ループの後で評価
+        elif kind == "bundle_text" and len(toks) >= 3 and toks[1] in ("contains", "absent"):
+            # bundle_text <contains|absent> "<text>" -- the firmware's own log lines as the bundle carries them
+            # バンドルが運ぶ、ファーム自身のログの行。
+            mode_word, text = toks[1], toks[2]
+            lines = _bundle_text_lines(bundle_path)
+            name = f"bundle_text {mode_word} {text!r}"
+            if lines is None:
+                checks.append({"name": name, "pass": False, "detail": "no flight-log bundle / no text_log stream"})
+            else:
+                found = any(text in line for line in lines)
+                checks.append({"name": name, "pass": bool(found if mode_word == "contains" else not found),
+                               "detail": f"{'found' if found else 'absent'} in {len(lines)} lines"})
+        elif kind == "bundle_value" and len(toks) >= 5 and "." in toks[1]:
+            # bundle_value <stream>.<column> <max|min|last> <op> <value> [in <t0> <t1>]
+            stream_name, _, column_name = toks[1].partition(".")
+            how, op, valstr = toks[2], toks[3], toks[4]
+            t0 = t1 = None
+            if len(toks) >= 8 and toks[5] == "in":
+                try:
+                    t0, t1 = float(toks[6]), float(toks[7])
+                except ValueError:
+                    checks.append({"name": f"bad assertion: {stripped!r}", "pass": False,
+                                   "detail": "non-numeric window"}); continue
+            try:
+                want = float(valstr)
+            except ValueError:
+                checks.append({"name": f"bad assertion: {stripped!r}", "pass": False,
+                               "detail": "non-numeric threshold"}); continue
+            if op not in _BUNDLE_VALUE_OPS or how not in ("max", "min", "last"):
+                checks.append({"name": f"bad assertion: {stripped!r}", "pass": False,
+                               "detail": f"unknown op {op!r} or statistic {how!r}"}); continue
+            got = _bundle_value(bundle_path, stream_name, column_name, how, t0, t1)
+            win = f" in [{t0},{t1}]" if t0 is not None else ""
+            name = f"bundle_value {stream_name}.{column_name} {how} {op} {want}{win}"
+            if got is None:
+                checks.append({"name": name, "pass": False,
+                               "detail": "no flight-log bundle / no such stream or column / empty window"})
+            else:
+                checks.append({"name": name, "pass": bool(_BUNDLE_VALUE_OPS[op](got, want)),
+                               "detail": f"{how}={got:.6g}"})
         elif kind == "metric" and len(toks) >= 4:
             # metric <name> <op> <value> [in <t0> <t1>]
             # Numerical physical-truth gate from the flight-log bundle (G2/G3/G4).

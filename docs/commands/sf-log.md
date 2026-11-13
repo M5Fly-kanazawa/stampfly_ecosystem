@@ -23,7 +23,7 @@ JSON レコードを並べたテキスト形式）は、一式から必要なと
 |-------------|------|
 | `wifi` | WiFi UDP でテレメトリを取得し、一式として保存 |
 | `list` | `logs/` 配下の一式を一覧表示 |
-| `info` | 一式の `meta.json` 要約とストリームごとの統計を表示 |
+| `info` | 一式の `meta.json` 要約・ストリームごとの統計・診断値（ループ周期・有限でない数・ToF・ログ経路の欠落）を表示。`--text` で機体のテキストログ（`ESP_LOG` の行）を表示 |
 | `check` | 一式の構造・単位・時刻整合性を検査 |
 | `convert` | 旧 `.jsonl` → 一式、または 一式 → 派生の整列/JSONL CSV |
 | `viz` | 一式を可視化（各信号を原レートのまま描画） |
@@ -78,6 +78,18 @@ sf log wifi -i 192.168.10.5 --port 8890
 保存した直後に `sf log check`（後述）が自動実行され、電文の解析エラーや構造の異常があれば
 その場でエラーとして報告します（壊れた取得結果を解析に持ち込まないための確認です）。
 
+### 数値のほかに取得するもの（診断値とテキストログ）
+
+数値の 400Hz ストリームのほかに、次の 2 つが同じ取得（同じ UDP ポート）で一式に入ります。
+
+| 内容 | 一式のストリーム | 読み方 |
+|------|-----------------|--------|
+| 1 Hz の診断値（ステータスパケット v4）: ToF の測定品質（range status・信号レート・環境光レート・σ）、2 つの 400Hz タスクのループ周期の数え上げ、有限でない数の数え上げ、ログ経路の欠落の計数 | `tof_diagnostics`・`loop_timing`・`nonfinite`・`link_health` | `sf log info`（最後の値を表示）。時系列は `sf log viz`・解析スクリプトで列を読む |
+| 機体の `ESP_LOG` の行（USB コンソールに出るもの。状態遷移・「Landing detected (...)」・フェイルセーフ・拒否の理由）。機体時刻つき・順序どおり | `text_log` | `sf log info --text`（下記） |
+
+取得の終わりに、`print_stats` が診断値の最後の値と、テキストログの行数・途中で失われたパケット数・機体で断った行数を表示します。
+取得が始まる前に機体が出したログは届きません（取得は「今」から始まります）。旧ファーム（ステータスが v3 まで・テキストパケットなし）の取得では、これらのストリームは単に一式にありません。
+
 ## 4. sf log list
 
 `logs/` 配下の一式（`*.sflog.zip` ファイルおよびフォルダ形式の一式）を、更新日時の新しい順に
@@ -117,11 +129,29 @@ sf log info
 sf log info logs/flight_20260911T121243.sflog.zip
 ```
 
+```bash
+sf log info --text
+```
+
+```bash
+sf log info --text --grep "Landing detected"
+```
+
+```bash
+sf log info --text --since 12.0 --until 18.5
+```
+
+診断値のストリーム（`loop_timing`・`nonfinite`・`tof_diagnostics`・`link_health`）や `text_log` を持つ一式では、ストリームの表の後に「Diagnostics」の欄を表示します（取得の最後の値。ループ周期は `late` が遅れた回数・`period_max` が起床間隔の最大・`busy_max` が処理時間の最大、`armed:` は ARM 中だけの値。読み方は `firmware/vehicle/docs/operation_manual.md`）。持たない一式（旧ファームの取得・診断値のないログ）には何も加えず、そのまま動きます。
+
 ### オプション
 
 | 引数 | 説明 | 既定値 |
 |------|------|-------|
 | `bundle`（位置引数、省略可） | 一式のパス（`.sflog.zip` またはフォルダ） | `logs/` 内の最新の一式 |
+| `--text` | 要約の代わりに、機体のテキストログを `[機体時刻 s] 本文` の形で 1 行ずつ表示する。機体が 1 行の上限で切り詰めた行は末尾に `[truncated]`、機体のログシンクが行を断った位置には `*** N lines dropped here ***` を出す（欠落は `--grep` で隠れない）。テキストログを持たない一式は警告を出して終了コード 0 | - |
+| `--grep TEXT` | `--text` と併用。TEXT を含む行だけ（部分文字列。パターンではない） | - |
+| `-I, --ignore-case` | `--text --grep` と併用。大文字小文字を区別しない | - |
+| `--since SECONDS`、`--until SECONDS` | `--text` と併用。機体時刻（起動からの秒）が範囲内の行だけ（両端を含む） | - |
 
 ## 6. sf log check
 
@@ -174,7 +204,7 @@ sf log convert logs/flight_20260911T121243.sflog.zip --jsonl
 |----------------|------|-------|
 | `input`（位置引数） | 旧 `.jsonl` ログ、または一式（`.sflog.zip`/フォルダ） | 必須 |
 | `-o, --output` | 出力パス | 入力名から自動生成 |
-| `--aligned` | 一式 → 派生の `<名前>_aligned<レート>.csv`（1 行 = `--base` の 1 サンプル。他のストリームは前方値保持または最近傍で結合） | - |
+| `--aligned` | 一式 → 派生の `<名前>_aligned<レート>.csv`（1 行 = `--base` の 1 サンプル。他のストリームは前方値保持または最近傍で結合。解析用の信号でない `text_log` は表に入れない） | - |
 | `--base` | `--aligned` 時の基準ストリーム（この時刻列が整列表の行になる） | `imu` |
 | `--method` | `--aligned` 時の結合方法（`hold`=前方値保持、`nearest`=最近傍） | `hold` |
 | `--jsonl` | 一式 → 派生の旧形式 `.jsonl`（`lib/sflog` 未対応の `analysis/scripts/` 向け） | - |
@@ -381,7 +411,7 @@ newest bundle in `logs/` when none is given. A bundle name's extension may be om
 |------------|-------------|
 | `wifi` | Capture telemetry via WiFi UDP, saved as a bundle |
 | `list` | List bundles under `logs/` |
-| `info` | Show a bundle's `meta.json` summary and per-stream stats |
+| `info` | Show a bundle's `meta.json` summary, per-stream stats and diagnostics (loop timing, non-finite counters, ToF, log-path losses); `--text` prints the vehicle's text log (the `ESP_LOG` lines) |
 | `check` | Validate a bundle's structure, units, and timing |
 | `convert` | Convert a legacy `.jsonl` to a bundle, or a bundle to a derived aligned/JSONL CSV |
 | `viz` | Visualize a bundle (every stream plotted at its own native rate) |
@@ -437,6 +467,17 @@ Right after saving, `sf log check` (below) runs automatically and reports any wi
 error or structural problem immediately — so a broken capture is caught before it reaches
 analysis.
 
+### What is captured besides the numbers (diagnostics and the text log)
+
+Besides the numeric 400Hz streams, the same capture (the same UDP port) puts two more things into the bundle.
+
+| Content | Bundle streams | How to read |
+|---------|----------------|-------------|
+| 1 Hz diagnostics (status packet v4): ToF measurement quality (range status, signal rate, ambient rate, sigma), the loop-timing counters of both 400Hz tasks, the non-finite counters, the loss counters of the log paths | `tof_diagnostics`, `loop_timing`, `nonfinite`, `link_health` | `sf log info` (prints the last values); read the columns of the time series with `sf log viz` or analysis scripts |
+| The `ESP_LOG` lines of the vehicle (what the USB console shows: state transitions, "Landing detected (...)", failsafe, reasons for refusals), in order with the vehicle time | `text_log` | `sf log info --text` (below) |
+
+At the end of the capture `print_stats` prints the last diagnostics and, for the text log, the number of lines, of packets lost on the way and of lines refused by the vehicle. Logs the vehicle emitted before the capture started do not arrive (a capture starts from "now"). A capture from older firmware (status up to v3, no text packet) simply lacks these streams.
+
 ## 4. sf log list
 
 Lists bundles under `logs/` (`*.sflog.zip` files and directory-form bundles), newest first.
@@ -476,11 +517,29 @@ sf log info
 sf log info logs/flight_20260911T121243.sflog.zip
 ```
 
+```bash
+sf log info --text
+```
+
+```bash
+sf log info --text --grep "Landing detected"
+```
+
+```bash
+sf log info --text --since 12.0 --until 18.5
+```
+
+For a bundle with the diagnostics streams (`loop_timing`, `nonfinite`, `tof_diagnostics`, `link_health`) or a `text_log`, a "Diagnostics" block follows the stream table (the last values of the capture; for the loop timing `late` is the number of late wakes, `period_max` the longest wake interval, `busy_max` the longest busy time, and `armed:` the values for armed cycles only; how to read them: `firmware/vehicle/docs/operation_manual.md`). A bundle without them (a capture from older firmware, a log without diagnostics) gets nothing added and works as before.
+
 ### Options
 
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `bundle` (positional, optional) | Bundle path (`.sflog.zip` or directory) | Newest bundle in `logs/` |
+| `--text` | Print the vehicle's text log one line at a time as `[vehicle time s] text` instead of the summary. A line the vehicle cut at its line limit ends with `[truncated]`; where the vehicle's log sink refused lines, `*** N lines dropped here ***` is printed (a loss is never hidden by `--grep`). A bundle without a text log gets a warning and exit code 0 | - |
+| `--grep TEXT` | With `--text`: only the lines containing TEXT (a plain substring, not a pattern) | - |
+| `-I, --ignore-case` | With `--text --grep`: ignore case | - |
+| `--since SECONDS`, `--until SECONDS` | With `--text`: only the lines whose vehicle time (seconds since boot) is in range (both ends included) | - |
 
 ## 6. sf log check
 
@@ -534,7 +593,7 @@ sf log convert logs/flight_20260911T121243.sflog.zip --jsonl
 |-----------------|-------------|---------|
 | `input` (positional) | A legacy `.jsonl` log, or a bundle (`.sflog.zip`/directory) | Required |
 | `-o, --output` | Output path | Derived from the input name |
-| `--aligned` | Bundle -> a derived `<stem>_aligned<rate>.csv` (one row per `--base` sample; other streams held/nearest-matched) | - |
+| `--aligned` | Bundle -> a derived `<stem>_aligned<rate>.csv` (one row per `--base` sample; other streams held/nearest-matched; `text_log`, which is not an analysis signal, is left out of the table) | - |
 | `--base` | With `--aligned`: base stream whose timestamps become the aligned table's rows | `imu` |
 | `--method` | With `--aligned`: match method (`hold`=forward-fill, `nearest`) | `hold` |
 | `--jsonl` | Bundle -> a derived legacy-format `.jsonl` (for `analysis/scripts/` not yet on `lib/sflog`) | - |

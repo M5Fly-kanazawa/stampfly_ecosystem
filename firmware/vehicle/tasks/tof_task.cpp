@@ -105,6 +105,9 @@ static sf::TofData buildTofTopic(const stampfly::DistanceData& src,
     out.distance  = static_cast<float>(src.distance_mm) * 1e-3f;
     out.status    = src.range_status;
     out.valid     = (src.range_status == 0);
+    out.signal_rate  = src.signal_rate;    // [Mcps] diagnostics for the log / ログ用の診断値
+    out.ambient_rate = src.ambient_rate;   // [Mcps]
+    out.sigma_mm     = src.sigma_mm;       // [mm]
     return out;
 }
 

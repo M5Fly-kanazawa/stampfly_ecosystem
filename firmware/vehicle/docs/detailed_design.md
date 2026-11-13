@@ -872,11 +872,31 @@ storage,   data, spiffs,  0x310000, 0x200000,          # 2MB  — Blackbox
 |------|------|
 | 症状 | ARM の瞬間に ControlTask・ImuTask の 400Hz の周期が 5〜50 ms 止まる |
 | 原因 | ARM の遷移で両タスクが `ESP_LOG` を数行出す。`ESP_LOG` は USB コンソールへ書き、送信バッファが満ちると書き手を待たせる（USB のホストが取り出しを止めると最大 50 ms） |
-| 対策 | `ESP_LOG` の出力関数を LogTask が差し替える（ログシンク: 出力の待ちを呼び出し側から切り離す受け渡しの仕組み）。呼び出し側は行をリング（円環状に使い回すバッファ。`sf::LogRing`、`log_ring.hpp`、4 KB、1 行は最大 384 文字）へコピーするだけで待たない。コンソールへ書くのは LogTask だけ |
+| 対策 | `ESP_LOG` の出力関数を LogTask が差し替える（ログシンク: 出力の待ちを呼び出し側から切り離す受け渡しの仕組み。`sf_core/log_sink.cpp`）。呼び出し側は行をリング（円環状に使い回すバッファ。`sf::LogRing`、`log_ring.hpp`、4 KB、1 行は最大 384 文字）へコピーするだけで待たない。コンソールへ書くのは LogTask だけ。同じシンクにもう 1 つの出口（WiFi 取得）がある（下の「WiFi 取得への出口」） |
 | 変わらないもの | メッセージの文言・出る条件。`ESP_LOG` どうしの順序も保つ |
 | 変わるもの（順序・時刻） | `printf`（CLI の応答・プロンプト）との前後は変わりうる（ログは最大 10 ms 程度遅れる）。TCP の CLI では、`CLITask` が `stdout` をソケットへ差し替えているので、`CLITask` が出す `ESP_LOG`（コマンド処理中の警告など）はリングを通さず、そのソケットへ直接書く（`CLITask` は締切を持たないので待ってよい）。この行は USB には出ない。それ以外のタスクのログは USB へ出る |
-| 変わるもの | 満杯で行を捨てたときは、捨てた直後に入った最初の行の前に「log sink full: N lines dropped」を出す（どこで抜けたか分かる）。LogTask 自身がコンソールで最大 50 ms 待ちうるので、その間 Blackbox 有効時の記録が 1 周期抜けうる。リングの取り出しは排他（`reboot` の出し切りと LogTask が同時に取り出しても順序は入れ替わらない）。LogTask のスタックは 6 KB（コンソールの `printf` が約 1.5 KB 要る）。クリティカルセクションはリングへのコピーの間だけ（数 µs）。`reboot` の出し切りは、TCP の CLI セッションから打たれてもコンソールへ書く（取り出しの間だけ stdout をコンソールに向ける）。異常停止（panic・abort）のときは出し切らない: 停止の直前、最大で LogTask の 1 周期（10 ms）ぶんの行はリングに残ったまま失われる（異常停止の原因そのものは ESP-IDF がリングを通さずに出す）。ログを出す各タスクのスタックは、行の整形用に 385 バイト多く使う |
+| 変わるもの | 満杯で行を捨てたときは、捨てた直後に入った最初の行の前に「log sink full: N lines dropped」を出す（どこで抜けたか分かる）。LogTask 自身がコンソールで最大 50 ms 待ちうるので、その間 Blackbox 有効時の記録が 1 周期抜けうる。リングの取り出しは排他（`reboot` の出し切りと LogTask が同時に取り出しても順序は入れ替わらない）。LogTask のスタックは 6 KB（コンソールの `printf` が約 1.5 KB 要る）。クリティカルセクションはリングへのコピー（取得中は WiFi 用リングへのコピーも）の間だけ（数 µs）。`reboot` の出し切りは、TCP の CLI セッションから打たれてもコンソールへ書く（取り出しの間だけ stdout をコンソールに向ける）。異常停止（panic・abort）のときは出し切らない: 停止の直前、最大で LogTask の 1 周期（10 ms）ぶんの行はリングに残ったまま失われる（異常停止の原因そのものは ESP-IDF がリングを通さずに出す）。ログを出す各タスクのスタックは、行の整形用に 385 バイト多く使う |
 | 範囲 | どのタスクの `ESP_LOG` も対象（400Hz の ImuTask・ControlTask が呼ぶ推定器・制御器・校正・離着陸判定・アクチュエータ・モータ HAL の各ログを含む）。呼び出し側のコードは変えない |
+
+#### WiFi 取得への出口（テキストログ）
+
+ログシンクの入口は 1 つ（`ESP_LOG` の出力関数 `sinkVprintf`）で、出口は 2 つある。コンソールへ書く LogTask と、WiFi 取得（`sf log wifi`）へ送る TelemetryTask である。2 つは同じシンクの出口であって、別々のログ機構ではない（アーキテクチャ不変条件 INV の照合: ログの経路は 1 本）。
+
+| 項目 | 内容 |
+|------|------|
+| 入口 | `sinkVprintf`。呼び出し側のスタックで行を整形し、1 つのクリティカルセクション（スピンロック。ミューテックスではない）の中で、時刻（`esp_timer` の下位 32 ビット）を 1 回読み、コンソール用リングへ、取得が有効な間は WiFi 用リング（`sf::LogRing`、4 KB）へもコピーする。リングの行は「接頭辞 8 バイト（長さ・直前に断った行数・フラグ・時刻）＋本文」 |
+| 呼び出し側に足す時間 | 最悪は、最大 392 バイト（本文 384＋接頭辞 8）の `memcpy` をもう 1 回と `esp_timer_get_time` を 1 回。ESP32-S3 のコピー速度（約 200 MB/s）で約 2 µs（推定値。実機では未測定）、普通の 100 バイトの行なら 1 µs を下回る。行の長さの上限（384）で抑えられ、行の整形（`vsnprintf`。数十 µs）の 1 割に満たない。取得が無い間に足されるのは真偽値の読み出し 1 回だけ（コピーしない） |
+| 呼び出し側が待たないもの | ネットワーク（`sendto` は TelemetryTask だけが呼ぶ）。送信側が保持するロックは無い: 送信側はスピンロックの下で 1 行ずつ取り出して手元へコピーし、ロックを離してから送る。呼び出し側が待ちうるのは、取り出し 1 行分のコピーの間（約 2 µs 以下）だけ |
+| 送る側 | TelemetryTask の `DataStream::emitTextLog()`（既存のノンブロッキング `sendto` の経路）。50 Hz の周期 5 回に 1 回（`kTextLogSendPeriodCycles` = 5）だけ動き、待つ行が無ければ送らない。つまりテキストパケットは毎秒最大 10 個。根拠: WiFi の電波の費用は `sendto()` の呼び出し 1 回ごとにかかり（約 2.5 ms。`docs/architecture/udp-telemetry-design.md`）、統合パケットが既に毎秒 50 回で ESP-NOW（操縦者の制御リンク）と共有する電波時間の 12.5 % を使うので、追加は最大 2.5 %（普通の飛行のログは毎秒 2 行ほどで、実際はほぼ 0）。行は最大 100 ms 待つ。1 パケットのレコード（8 バイトのヘッダ＋本文）は最大 `kTextLogBytesPerPacket` = 1024 バイト（根拠: 最長のレコード 392 バイトを 2 つ収め、パケットが最大 1029 バイトで統合パケットの上限 1400 バイトの内）。テキスト側の WiFi の負担は、ログの嵐でも 1029 B × 10 = 10.3 KB/s（数値ストリームの約 5 分の 1）で抑えられる。収まらない行は次のパケットまで WiFi 用リング（4 KB = 最大のパケット 4 個分、400 ms）で待つ |
+| パケットの種類 | 統合パケット（0x50）のエントリにしない。統合パケットの最悪値は 1317 バイトで上限 1400 バイトまで 83 バイトしか余裕が無く、1 行（最大 392 バイト）が入らない。別のパケット 0x51（`data_stream_wire.hpp` の `TextLogPacketBuilder`）にすると、数値ストリームの大きさも欠落の起き方も変わらない |
+| 取得が無い間 | WiFi 用リングへ書かない（コピーも計数もしない）。送信もしない（`DataStream::update()` は取得が無ければ早期に戻る）。取得は「今」から始まる: `setWifiCapture(true)` がリングを空にして数を 0 に戻すので、取得の前に出たログは届かず、欠落としても報告されない。取得開始の通知「Capture START」が取得で最初の行になる |
+| 欠落 | WiFi 用リングが満杯で断った行は数え（`totalDropped`）、次にリングへ入る行の `dropped_before`（255 で飽和）としてその位置で伝える。正確な合計はステータスパケット v4 の `text_dropped_lines`。PC 側で届かなかったパケットは通し番号の飛びから数える。新しい行を断る（古い行を残す）のはコンソール用リングと同じ |
+| 切り詰め | 1 行が 384 バイトを超えるとシンクが切り、改行で終える。切った行はレコードの `flags` の `kTextFlagTruncated` で伝わり、PC のバンドルの `truncated` 列が 1 になる。黙って切ることはない |
+| スタック | 呼び出し側は変わらない（行の整形用の 385 バイトは従来どおり。コピーの関数の枠が数バイト増えるだけ）。TelemetryTask では `emitTextLog` の枠（ビルダ 1029 バイト＋行 384 バイト）が `emitUnified`（1400 バイト超）より小さく、同じ深さで呼ばれるので、最大のスタック使用量は変わらない。スタックの大きさは変えない |
+
+#### ステータスパケット v4（診断値の WiFi 取得）
+
+1 Hz のステータスパケット（0x4F）は v3（57 バイト）の後ろに診断値 167 バイトを追記して 224 バイトになる（v1〜v3 の先頭部分の並びは不変で、PC は全長で版を選ぶ）。追記の内容は、下向き・前方 ToF の測定品質（range status・信号レート・環境光レート・σ。`TofData` が運び、`SensorSnapshot` にミラーする）、2 つの 400 Hz タスクのループ周期の数え上げ（`imu_loop_timing`・`control_loop_timing` の全項目）、有限でない数の数え上げ（`nonfinite_status`）、ログ経路の欠落の計数（`log_stream` リングの溢れ・`sendto` の失敗・統合パケットのエントリ棄却・テキストログの断った行数）。バイトの並びは `data_stream_wire.hpp`（`WireStatusV4Extension`）と `tools/log_analyzer/udp_capture.py`、バンドルの列は `protocol/spec/flight_log.yaml`（`tof_diagnostics`・`loop_timing`・`nonfinite`・`link_health`・`text_log`）が基準。詳細は `docs/architecture/udp-telemetry-design.md`。
 
 #### ループ周期の監視
 
@@ -889,7 +909,7 @@ storage,   data, spiffs,  0x310000, 0x200000,          # 2MB  — Blackbox
 | `busy_max_us`、`over_budget_count` | 起床から次の待ちまでの時間（壁時計。上位タスクに割り込まれた時間を含む）の最大と、1 周期（2500 µs）を超えた回数 |
 | `armed_*` | 上の 5 項目を ARM 中に始まった周期だけで数えたもの。飛行前の地上待機で薄まらない |
 
-数え方は起動以降の累計。ControlTask の起床は ImuTask の通知に同期するので、ImuTask が遅れると ControlTask の間隔も伸びる（両方に出る）。ControlTask だけに出るなら、制御の計算が 1 周期を超えているか、BMI270 の読み出しに失敗して ImuTask が通知を飛ばした（ControlTask は起こされない）。`imu` の遅れには 400Hz の合図を出す `esp_timer` タスクの遅れも含む。ホスト試験は `test/test_log_ring.cpp`・`test/test_loop_timing.cpp`。
+数え方は起動以降の累計。ControlTask の起床は ImuTask の通知に同期するので、ImuTask が遅れると ControlTask の間隔も伸びる（両方に出る）。ControlTask だけに出るなら、制御の計算が 1 周期を超えているか、BMI270 の読み出しに失敗して ImuTask が通知を飛ばした（ControlTask は起こされない）。`imu` の遅れには 400Hz の合図を出す `esp_timer` タスクの遅れも含む。WiFi 取得でも読める: 毎秒のステータスパケット v4 が全項目を運び、バンドルの `loop_timing` ストリーム（`sf log info` が最後の値を表示）になる。ホスト試験は `test/test_log_ring.cpp`・`test/test_log_sink.cpp`・`test/test_loop_timing.cpp`。
 
 対象外（未解決）: ARM 中に 13〜22% の周期で続く 5 ms 級の遅れが実機ログ（front_tof_poshold_yaw4x90・yaw360）にある。大半は IMU 標本の時刻が前の行と同じ、つまり標本の取り違えである。ログシンクが直す ARM の瞬間の 50 ms 級の停止とは別の現象で、候補は、400Hz の合図を出す `esp_timer` タスクがコア 0 で Wi-Fi のタスクより低い優先度であること、または ARM 中の処理時間が 2.5 ms 近いことである。別件として扱い、この症状の対策の範囲に含めない。
 
@@ -900,7 +920,7 @@ storage,   data, spiffs,  0x310000, 0x200000,          # 2MB  — Blackbox
 | 問題 | 制御経路の上下限は比較式（`if (x > max) x = max`）である。NaN（非数）との比較は常に偽なので、NaN はどの上下限もそのまま通る。PID の積分器に入ると以後の出力がすべて NaN になる。最後のモータ出力で NaN を整数（PWM の duty）へ変換するのは C++ の未定義動作である |
 | 行うこと | ① 制御経路の 6 つの境界（下表）で NaN・±無限大を**数える**（値は書き換えない）。② モータ指令の出口で、有限でない値のモータの duty を 0 にする。それ以外は変えない（有限な duty は上下限・丸めの結果がビット単位で同じ） |
 | 行わないこと | 積分器・推定器の内部状態の修復、入口での値の置き換え、停止（DISARM）。検出は飛行を止めない |
-| 検出器 | `sf::NonFiniteMonitor`（`nonfinite_guard.hpp`、純粋なロジック）。境界ごとに「有限でない値があった周期」を数え、最初に検出した境界と時刻を覚える。タスク側の包み（`tasks/nonfinite_scope.hpp`）が ControlTask の周期の頭と終わりに呼び、`nonfinite_status`（型 `NonFiniteStatus`）へ発行する: ARM 中の 1 秒ごと、検出した周期ごと、ARM でなくなった時。発行は Latest トピックのコピー 1 回で待たない。400Hz のタスクからはログを出さない。CLI の `status` が `finite` 行に表示する |
+| 検出器 | `sf::NonFiniteMonitor`（`nonfinite_guard.hpp`、純粋なロジック）。境界ごとに「有限でない値があった周期」を数え、最初に検出した境界と時刻を覚える。タスク側の包み（`tasks/nonfinite_scope.hpp`）が ControlTask の周期の頭と終わりに呼び、`nonfinite_status`（型 `NonFiniteStatus`）へ発行する: ARM 中の 1 秒ごと、検出した周期ごと、ARM でなくなった時。発行は Latest トピックのコピー 1 回で待たない。400Hz のタスクからはログを出さない。CLI の `status` が `finite` 行に表示する。WiFi 取得ではステータスパケット v4 とバンドルの `nonfinite` ストリームでも読める |
 | 検査する周期 | ARM 中の制御周期だけ。数え方は起動以降の累計 |
 
 制御経路の境界（`NonFiniteStage`、入力からモータの順。1 周期の中で上流から記録するので、その周期で最初に記録された境界が最も上流）:
@@ -1304,10 +1324,30 @@ Total task stacks: ~104KB out of 512KB RAM (LogTask 6KB, since it writes the log
 |------|---------|
 | Symptom | At the ARM instant the 400 Hz period of ControlTask and ImuTask stops for 5-50 ms |
 | Cause | At the ARM transition both tasks emit several `ESP_LOG` lines. `ESP_LOG` writes to the USB console, which makes the writer wait once the transmit buffer (256 bytes) is full (the host takes 64 bytes per millisecond; up to 50 ms when the host has stalled) |
-| Fix | LogTask replaces the output function of `ESP_LOG` (the log sink). A caller only copies its line into a ring (`sf::LogRing`, `log_ring.hpp`, 4 KB, at most 384 characters per line) and never waits; only LogTask writes to the console |
+| Fix | LogTask replaces the output function of `ESP_LOG` (the log sink, `sf_core/log_sink.cpp`). A caller only copies its line into a ring (`sf::LogRing`, `log_ring.hpp`, 4 KB, at most 384 characters per line) and never waits; only LogTask writes to the console. The same sink has a second exit (the WiFi capture, below) |
 | Unchanged | The wording, order and conditions of every message; the console output is up to 10 ms later |
-| Changed | When a full ring drops a line, "log sink full: N lines dropped" is printed once. LogTask stack 6 KB (the console `printf` needs about 1.5 KB). The critical section lasts only for the copy into the ring (a few microseconds). The drain before `reboot` writes to the console even when typed on a TCP CLI session (stdout points at the console while draining). A crash (panic, abort) does not drain: the lines logged in the last LogTask period (up to 10 ms) before it stay in the ring and are lost (the crash report itself is printed by ESP-IDF without the ring). Each task that logs uses 385 more bytes of stack to format its line |
+| Changed | When a full ring drops a line, "log sink full: N lines dropped" is printed once. LogTask stack 6 KB (the console `printf` needs about 1.5 KB). The critical section lasts only for the copy into the ring (and, during a capture, into the WiFi ring; a few microseconds). The drain before `reboot` writes to the console even when typed on a TCP CLI session (stdout points at the console while draining). A crash (panic, abort) does not drain: the lines logged in the last LogTask period (up to 10 ms) before it stay in the ring and are lost (the crash report itself is printed by ESP-IDF without the ring). Each task that logs uses 385 more bytes of stack to format its line |
 | Scope | The `ESP_LOG` of every task, including the logs of the estimator, controller, calibration, takeoff/landing detector, actuator and motor HAL called from the 400 Hz ImuTask and ControlTask. The calling code is unchanged |
+
+#### The WiFi exit (text log)
+
+The log sink has one entry (the `ESP_LOG` output function `sinkVprintf`) and two exits: LogTask, which writes the console, and TelemetryTask, which sends the WiFi capture (`sf log wifi`). They are two exits of the same sink, not two logging mechanisms (check against the architecture invariants INV: there is one log path).
+
+| Item | Content |
+|------|---------|
+| Entry | `sinkVprintf`. The caller formats the line on its own stack and, inside one critical section (a spin lock, not a mutex), reads the time once (low 32 bits of `esp_timer`) and copies the line into the console ring and, while a capture is active, into the WiFi ring (`sf::LogRing`, 4 KB). A ring line is "8-byte prefix (length, lines dropped before it, flags, time) + text" |
+| Time added to the caller | Worst case: one more `memcpy` of at most 392 bytes (384 text + 8 prefix) and one `esp_timer_get_time`. About 2 microseconds at the ESP32-S3 copy speed (about 200 MB/s; an estimate, not measured on the vehicle), below 1 microsecond for a typical 100-byte line. Bounded by the line limit (384) and under a tenth of the line formatting (`vsnprintf`, tens of microseconds). While no capture is active the only addition is one read of a boolean (no copy) |
+| What the caller never waits for | The network (`sendto` is called by TelemetryTask only). The sender holds no lock across anything: it takes one line at a time out under the spin lock into its own buffer, releases the lock, then sends. A caller can wait only for the copy of one line out (about 2 microseconds or less) |
+| Sender | `DataStream::emitTextLog()` in TelemetryTask (the existing non-blocking `sendto` path). It acts on every 5th 50 Hz cycle only (`kTextLogSendPeriodCycles` = 5) and sends nothing when no line is waiting: at most 10 text packets per second. Basis: the WiFi radio is charged per `sendto()` call (about 2.5 ms; `docs/architecture/udp-telemetry-design.md`) and the unified packet already takes 50 calls/s = 12.5 % of the radio time shared with ESP-NOW (the pilot's control link), so the addition is at most 2.5 % (a typical flight logs about 2 lines/s, so in practice almost none). A line waits at most 100 ms. The records per packet (8-byte header + text) are at most `kTextLogBytesPerPacket` = 1024 bytes (basis: two longest records of 392 bytes fit, and the packet is at most 1029 bytes, under the 1400-byte cap of the unified packet). The WiFi cost of the text exit is bounded by 1029 B x 10 = 10.3 KB/s (about a fifth of the numeric stream) even in a log storm. Lines that do not fit wait in the WiFi ring (4 KB = four of the largest packets, 400 ms) for the next packet |
+| Packet kind | Not an entry of the unified packet (0x50): its worst case is 1317 bytes, only 83 bytes under the 1400-byte cap, and one line (up to 392 bytes) does not fit. A separate packet 0x51 (`TextLogPacketBuilder` in `data_stream_wire.hpp`) changes neither the size of the numeric stream nor how it loses data |
+| No capture | The WiFi ring is not written (no copy, no count) and nothing is sent (`DataStream::update()` returns early without a capture). A capture starts from "now": `setWifiCapture(true)` empties the ring and zeroes its counts, so lines logged before the capture are not delivered and are not reported as lost. The "Capture START" notice is the first line of the capture |
+| Loss | A line the full WiFi ring refuses is counted (`totalDropped`) and reported at its place as the `dropped_before` (saturating at 255) of the next line that enters the ring. The exact total is the status packet v4 field `text_dropped_lines`. Packets that never reached the PC are counted from jumps of the packet sequence. Refusing the newest line (keeping the old ones) is the same as the console ring |
+| Truncation | A line longer than 384 bytes is cut by the sink and ends with a newline. The cut is carried by `kTextFlagTruncated` in the record `flags`, and the `truncated` column of the bundle is 1. Nothing is cut silently |
+| Stack | Unchanged for the callers (the 385 bytes to format a line are as before; the copy function frame grows by a few bytes). In TelemetryTask the frame of `emitTextLog` (builder 1029 bytes + line 384 bytes) is smaller than that of `emitUnified` (over 1400 bytes) and is called at the same depth, so the peak stack use is unchanged. No stack size is changed |
+
+#### Status packet v4 (diagnostics over the WiFi capture)
+
+The 1 Hz status packet (0x4F) grows from v3 (57 bytes) to 224 bytes by appending 167 bytes of diagnostics after the v3 payload (the v1 to v3 prefix layout is unchanged; the PC picks the version by the total length). The appended part holds the ToF measurement quality of the downward and front sensors (range status, signal rate, ambient rate, sigma; carried by `TofData` and mirrored into `SensorSnapshot`), the loop-timing counters of both 400 Hz tasks (every field of `imu_loop_timing` and `control_loop_timing`), the non-finite counters (`nonfinite_status`), and the loss counters of the log paths (overflow of the `log_stream` ring, `sendto` failures, entries refused by the unified packet, lines refused by the text-log ring). The byte layout is defined by `data_stream_wire.hpp` (`WireStatusV4Extension`) and `tools/log_analyzer/udp_capture.py`, the bundle columns by `protocol/spec/flight_log.yaml` (`tof_diagnostics`, `loop_timing`, `nonfinite`, `link_health`, `text_log`). Details: `docs/architecture/udp-telemetry-design.md`.
 
 #### Loop timing monitor
 
@@ -1320,7 +1360,7 @@ Total task stacks: ~104KB out of 512KB RAM (LogTask 6KB, since it writes the log
 | `busy_max_us`, `over_budget_count` | Longest time from a wake to the next wait (wall clock, preemption by higher-priority tasks included) and the number of cycles longer than one period (2500 us) |
 | `armed_*` | The five items above, counted only for cycles that began while armed, so the ground idle before the flight does not dilute them |
 
-Counts are since boot. ControlTask wakes on ImuTask's notification, so a late ImuTask lengthens ControlTask's interval too (both show it). If only ControlTask shows it, the control computation takes longer than one period. Host tests: `test/test_log_ring.cpp`, `test/test_loop_timing.cpp`.
+Counts are since boot. ControlTask wakes on ImuTask's notification, so a late ImuTask lengthens ControlTask's interval too (both show it). If only ControlTask shows it, the control computation takes longer than one period. The WiFi capture carries them too: the 1 Hz status packet v4 holds every field and becomes the `loop_timing` stream of the bundle (`sf log info` prints the last values). Host tests: `test/test_log_ring.cpp`, `test/test_log_sink.cpp`, `test/test_loop_timing.cpp`.
 
 #### Non-finite numbers (NaN, infinity)
 
@@ -1329,7 +1369,7 @@ Counts are since boot. ControlTask wakes on ImuTask's notification, so a late Im
 | Problem | The limits of the control path are comparisons (`if (x > max) x = max`). A comparison with NaN is false, so NaN passes every limit unchanged; once it enters a PID integrator every later output is NaN. Converting NaN to an integer (the PWM duty) at the last motor output is undefined behaviour in C++ |
 | What it does | (1) **Counts** NaN / +-infinity at six boundaries of the control path (table below); no value is rewritten. (2) At the motor command exit, a motor whose value is not finite is driven with duty 0. Nothing else changes (a finite duty is bit for bit the same, limits and rounding included) |
 | What it does not do | Repair of integrator / estimator state, replacement at an input, stopping (DISARM). A detection never stops the flight |
-| Detector | `sf::NonFiniteMonitor` (`nonfinite_guard.hpp`, pure logic). Per boundary it counts the cycles that held a non-finite value and remembers the first boundary and time. A task-side wrapper (`tasks/nonfinite_scope.hpp`) is called at the start and end of the ControlTask cycle and publishes `nonfinite_status` (type `NonFiniteStatus`): every second of armed cycles, at every detecting cycle, and when the craft stops being armed. The publish is one Latest-topic copy and never waits; the 400 Hz task writes no log. The CLI `status` shows it on the `finite` line |
+| Detector | `sf::NonFiniteMonitor` (`nonfinite_guard.hpp`, pure logic). Per boundary it counts the cycles that held a non-finite value and remembers the first boundary and time. A task-side wrapper (`tasks/nonfinite_scope.hpp`) is called at the start and end of the ControlTask cycle and publishes `nonfinite_status` (type `NonFiniteStatus`): every second of armed cycles, at every detecting cycle, and when the craft stops being armed. The publish is one Latest-topic copy and never waits; the 400 Hz task writes no log. The CLI `status` shows it on the `finite` line; the WiFi capture carries it too (status packet v4, `nonfinite` stream of the bundle) |
 | Checked cycles | Only ARMED control cycles. Counts are since boot |
 
 Boundaries (`NonFiniteStage`, from input to motor; they are recorded upstream first within a cycle, so the first one recorded in a cycle is the most upstream):

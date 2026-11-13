@@ -54,6 +54,7 @@
 #include "params.hpp"       // sf::params::get_float — SSOT rate-loop gains
 #include "flight_state.hpp" // sf::isArmed — controller_status is only live while armed
 #include "failsafe_status_guard.hpp"   // sf::isFailsafeStatusStaleForDisplay — same test as the Data Stream's status_stale bit
+#include "log_sink.hpp"      // the WiFi exit of the log sink -> text_log.csv (the recorder is the capture here)
 
 namespace {
 
@@ -410,11 +411,135 @@ void write_sensor_snapshot_rows()
     }
 }
 
+// --- tof_diagnostics / loop_timing / nonfinite / link_health (1Hz, the status packet v4's streams) ---
+// The same facts the vehicle's Data Stream sends in the status packet v4 (data_stream.cpp
+// buildStatusExtension()), read from the same topics. In the host simulation: the ToF signal / ambient /
+// sigma values come from the chip model's synthesized histogram (see TofData in data_types.hpp), the front
+// ToF is not fitted (all zero, like an absent sensor on the vehicle), and send_drops / entry_drops /
+// log_stream_overflow are 0 because this recorder, not a socket, is the consumer.
+// 車両の Data Stream がステータスパケット v4 で送るのと同じ事実を、同じトピックから読む（data_stream.cpp の
+// buildStatusExtension()）。ホストのシミュレーションでは、ToF の signal / ambient / sigma はチップモデルが合成した
+// ヒストグラム由来（data_types.hpp の TofData 参照）、前方 ToF は搭載なし（機体で無いセンサと同じくすべて 0）、
+// send_drops / entry_drops / log_stream_overflow は消費者がソケットではなくこの記録器なので 0。
+
+void write_tof_diagnostics_row(int64_t ts)
+{
+    std::FILE* f = sils_emu_flightlog_stream("tof_diagnostics",
+        "timestamp_us,bottom_range_status,bottom_signal_rate,bottom_ambient_rate,bottom_sigma_mm,"
+        "front_range_status,front_signal_rate,front_ambient_rate,front_sigma_mm");
+    if (f == nullptr) return;
+    const sf::SensorSnapshot snap = sf::sensor_snapshot.latest();
+    const bool front_fitted = snap.tof_front_timestamp != 0;
+    std::fprintf(f, "%lld,%d,%.7g,%.7g,%.7g,%d,%.7g,%.7g,%.7g\n", (long long)ts,
+        (int)snap.tof_status, (double)snap.tof_signal_rate, (double)snap.tof_ambient_rate, (double)snap.tof_sigma_mm,
+        front_fitted ? (int)snap.tof_front_status : 0,
+        front_fitted ? (double)snap.tof_front_signal_rate : 0.0,
+        front_fitted ? (double)snap.tof_front_ambient_rate : 0.0,
+        front_fitted ? (double)snap.tof_front_sigma_mm : 0.0);
+}
+
+// The eleven sf::LoopTiming counters of one task, in the column order of flight_log.yaml's loop_timing stream.
+// 1 タスクの sf::LoopTiming の 11 個の数え上げ。flight_log.yaml の loop_timing ストリームの列順。
+void write_loop_timing_columns(std::FILE* f, const sf::LoopTiming& t)
+{
+    std::fprintf(f, ",%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u",
+        (unsigned)t.cycles, (unsigned)t.period_max_us, (unsigned)t.late_count, (unsigned)t.busy_max_us,
+        (unsigned)t.over_budget_count, (unsigned)t.last_late_us, (unsigned)t.armed_cycles,
+        (unsigned)t.armed_period_max_us, (unsigned)t.armed_late_count, (unsigned)t.armed_busy_max_us,
+        (unsigned)t.armed_over_budget_count);
+}
+
+#define SILS_LOOP_TIMING_HEADER(task) \
+    task "_cycles," task "_period_max_us," task "_late_count," task "_busy_max_us," \
+    task "_over_budget_count," task "_last_late_us," task "_armed_cycles," task "_armed_period_max_us," \
+    task "_armed_late_count," task "_armed_busy_max_us," task "_armed_over_budget_count"
+
+void write_loop_timing_row(int64_t ts)
+{
+    std::FILE* f = sils_emu_flightlog_stream("loop_timing",
+        "timestamp_us," SILS_LOOP_TIMING_HEADER("imu") "," SILS_LOOP_TIMING_HEADER("control"));
+    if (f == nullptr) return;
+    std::fprintf(f, "%lld", (long long)ts);
+    write_loop_timing_columns(f, sf::imu_loop_timing.latest());
+    write_loop_timing_columns(f, sf::control_loop_timing.latest());
+    std::fprintf(f, "\n");
+}
+
+void write_nonfinite_row(int64_t ts)
+{
+    std::FILE* f = sils_emu_flightlog_stream("nonfinite",
+        "timestamp_us,checked_cycles,detected_cycles,estimate_input,setpoint_input,control_reference,"
+        "control_output,mixer_output,motor_command,first_us,first_stage");
+    if (f == nullptr) return;
+    const sf::NonFiniteStatus n = sf::nonfinite_status.latest();
+    std::fprintf(f, "%lld,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d\n", (long long)ts, (unsigned)n.checked_cycles,
+        (unsigned)n.detected_cycles, (unsigned)n.stage_count[0], (unsigned)n.stage_count[1],
+        (unsigned)n.stage_count[2], (unsigned)n.stage_count[3], (unsigned)n.stage_count[4],
+        (unsigned)n.stage_count[5], (unsigned)n.first_us, (int)n.first_stage);
+}
+
+void write_link_health_row(int64_t ts)
+{
+    std::FILE* f = sils_emu_flightlog_stream("link_health",
+        "timestamp_us,log_stream_overflow,send_drops,entry_drops,text_dropped_lines");
+    if (f == nullptr) return;
+    std::fprintf(f, "%lld,0,0,0,%u\n", (long long)ts, (unsigned)sf::log_sink::wifiDroppedTotal());
+}
+
+void write_diagnostics_rows(int64_t ts)
+{
+    write_tof_diagnostics_row(ts);
+    write_loop_timing_row(ts);
+    write_nonfinite_row(ts);
+    write_link_health_row(ts);
+}
+
+// --- text_log.csv (event-driven): the ESP_LOG lines, taken from the WiFi exit of the log sink ---
+// The recorder plays the part of the capture client: it switches the exit on at the first call and drains it
+// at every step, exactly as the Data Stream does on the vehicle (but without a byte budget: a file has no
+// bandwidth limit). Every line of the log sink therefore appears in the bundle, in order, with its time.
+// ESP_LOG の行を、ログシンクの WiFi 側の出口から取る。記録器が取得クライアントの役を務める: 最初の呼び出しで出口を
+// 有効にし、毎ステップ排出する。機体の Data Stream と同じ動き（ただしバイト数の予算はない: ファイルに帯域の
+// 上限はない）。ログシンクの行はすべて、順序どおりに時刻つきで一式に載る。
+
+void write_text_log_row(const sf::log_sink::WifiLineInfo& info, const char* text, size_t length)
+{
+    std::FILE* f = sils_emu_flightlog_stream("text_log", "timestamp_us,truncated,dropped_before,text");
+    if (f == nullptr) return;
+    if (length > 0 && text[length - 1] == '\n') --length;   // one cell = one line, without its newline / 1 セル = 1 行（改行なし）
+    std::fprintf(f, "%u,%d,%u,\"", (unsigned)info.timestamp_us, info.truncated ? 1 : 0, (unsigned)info.dropped_before);
+    for (size_t i = 0; i < length; ++i) {
+        if (text[i] == '"') std::fputc('"', f);   // CSV: a quote is doubled / CSV: 引用符は重ねる
+        std::fputc(text[i], f);
+    }
+    std::fputs("\"\n", f);
+}
+
+void drain_text_log()
+{
+    static bool started = false;
+    if (!started) {
+        started = true;
+        sf::log_sink::setWifiCapture(true);
+    }
+    char text[sf::log_sink::kMaxLineBytes];
+    sf::log_sink::WifiLineInfo info;
+    while (true) {
+        const size_t length = sf::log_sink::takeWifiLine(text, sizeof(text), &info, sf::log_sink::kMaxLineBytes);
+        if (length == 0) break;
+        write_text_log_row(info, text, length);
+    }
+}
+
 }  // namespace
 
 extern "C" void sils_emu_flightlog_firmware_sample(int64_t now_us)
 {
     (void)now_us;   // rows are timestamped from each topic's OWN timestamp field, not the caller's clock
+
+    // The text log is event-driven, so it is drained at every step, before the IMU-edge early return below.
+    // テキストログはイベント駆動なので、下の IMU エッジの早期 return より前に、毎ステップ排出する。
+    drain_text_log();
 
     // Edge-detect a NEW IMU sample -- the same discipline emu_rate_stream.cpp
     // used for control_output (0 doubles as "no sample yet"; the virtual
@@ -453,7 +578,10 @@ extern "C" void sils_emu_flightlog_firmware_sample(int64_t now_us)
     }
 
     write_pilot_row_if_new();
-    if (seq % kStatusDecimation == 0) write_status_row(ts);
+    if (seq % kStatusDecimation == 0) {
+        write_status_row(ts);
+        write_diagnostics_rows(ts);   // the status packet v4's four streams, with the same 1Hz rhythm / ステータスパケット v4 の 4 ストリーム。同じ 1Hz の拍で
+    }
 
     write_sensor_snapshot_rows();
 }

@@ -322,7 +322,7 @@ class FlightLog:
         for stream_name, info in schema.STREAMS.items():
             file_name = info["file"]
             if file_name in names:
-                streams[stream_name] = pd.read_csv(path / file_name)
+                streams[stream_name] = _read_stream_csv(stream_name, path / file_name)
         return cls(meta=meta, schema=schema_json, streams=streams)
 
     @classmethod
@@ -337,7 +337,7 @@ class FlightLog:
             for stream_name, info in schema.STREAMS.items():
                 file_name = info["file"]
                 if file_name in names:
-                    streams[stream_name] = pd.read_csv(io.BytesIO(zf.read(file_name)))
+                    streams[stream_name] = _read_stream_csv(stream_name, io.BytesIO(zf.read(file_name)))
         return cls(meta=meta, schema=schema_json, streams=streams)
 
     # ---- saving --------------------------------------------------------
@@ -386,6 +386,18 @@ class FlightLog:
         """
         info = schema.STREAMS.get(stream_name)
         return info["file"] if info else f"{stream_name}.csv"
+
+
+def _read_stream_csv(stream_name: str, source) -> pd.DataFrame:
+    """Read one stream CSV. Numeric streams use pandas' defaults (an empty cell is NaN: "absent, not invented").
+    The text_log stream keeps its `text` cells as written: a line such as "NA" or "null" is text, not a missing
+    value, and an empty line stays the empty string.
+    ストリーム 1 本の CSV を読む。数値のストリームは pandas の既定（空セルは NaN: 「無いものは無い」）。text_log
+    ストリームは `text` のセルを書かれたとおりに保つ: 「NA」「null」のような行は欠損値ではなく文字列で、空行は空文字列のまま。
+    """
+    if stream_name == "text_log":
+        return pd.read_csv(source, keep_default_na=False, dtype={"text": str})
+    return pd.read_csv(source)
 
 
 def _read_json_file(path: Path) -> dict:

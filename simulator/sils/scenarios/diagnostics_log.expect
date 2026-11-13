@@ -1,0 +1,30 @@
+# diagnostics_log.expect — the flight-log bundle carries the text log and the status v4 diagnostics
+# フライトログ一式がテキストログとステータス v4 の診断値を運ぶ
+#
+# bundle_text: the firmware's own ESP_LOG lines, as the log sink's WiFi exit delivered them (one row per line).
+# bundle_value: one number from a column of a diagnostics stream (the facts the status packet v4 sends over WiFi).
+#   • text_log: the lines of the ARM and landing transitions arrive, and nothing was lost (no "log sink full")
+#   • loop_timing: both 400 Hz tasks counted their cycles, and the armed cycles are counted separately
+#   • nonfinite: the armed control cycles were checked, none was non-finite
+#   • tof_diagnostics: the downward ToF reports a plausible return signal while flying
+#   • link_health: the text-log ring refused no line
+# bundle_text: ファーム自身の ESP_LOG の行（ログシンクの WiFi 側の出口が届けたもの。1 行 1 行が 1 行）。
+# bundle_value: 診断値のストリームの列から取る 1 つの数（ステータスパケット v4 が WiFi で送る事実）。
+exit 0
+log_contains any "ARM accepted"                                  # the console exit still works
+bundle_text contains "ARM accepted"                              # the same line through the WiFi exit
+bundle_text contains "Takeoff complete"
+bundle_text contains "Transition: FLYING → LANDING"
+bundle_text contains "Transition: LANDING → IDLE_GROUND"
+bundle_text absent   "log sink full"                             # nothing lost on the console path
+bundle_value text_log.dropped_before max == 0                    # nothing lost on the WiFi path
+bundle_value link_health.text_dropped_lines last == 0
+bundle_value loop_timing.imu_cycles last > 9000                  # 24 s at 400 Hz = 9600 wakes
+bundle_value loop_timing.control_cycles last > 9000
+bundle_value loop_timing.imu_armed_cycles last > 3000            # armed from about 11.5 s (ARM) to touchdown
+bundle_value loop_timing.imu_armed_cycles last < 8000            # and not counted while disarmed on the ground
+bundle_value nonfinite.checked_cycles last > 3000
+bundle_value nonfinite.detected_cycles max == 0
+bundle_value nonfinite.first_stage last == 255                   # 255 = no detection
+bundle_value tof_diagnostics.bottom_signal_rate max > 0.5 in 5 20
+bundle_value tof_diagnostics.bottom_sigma_mm max > 0 in 5 20
