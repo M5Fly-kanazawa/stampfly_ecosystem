@@ -1097,6 +1097,17 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
         # 継ぎ目で隠れないようアンラップする。
         yaw_unwrapped = np.unwrap(yaw)
         return float(np.max(yaw_unwrapped) - np.min(yaw_unwrapped))
+    if name == "yaw_turn_deg":            # signed total heading change over the window [deg]
+        # True heading (clockwise = +, NED) at the window's end minus at its start, unwrapped so a
+        # turn across the +-pi seam or of 360 degrees counts in full. Already in degrees (the
+        # "_deg" name) -- NOT added to _ANGULAR_METRICS. Used to gate `cw` / `ccw` (the commanded
+        # angle in the commanded direction).
+        # 窓の終わりの真値方位（時計回り＋、NED）から始めの値を引いた、符号付きの総変化 [deg]。
+        # ±π の継ぎ目をまたぐ回頭や 360 度の回頭も全量数えるようアンラップする。既に度単位
+        # （"_deg" の名の通り）— _ANGULAR_METRICS には加えない。`cw` / `ccw` が指令の向きに
+        # 指令の角度だけ回ったかの判定に使う。
+        yaw_unwrapped = np.unwrap(yaw)
+        return float(np.degrees(yaw_unwrapped[-1] - yaw_unwrapped[0]))
     if name == "duty_max":                # G4: peak motor duty (saturation guard)
         motor = log.streams.get("motor")
         if motor is None:
@@ -1350,7 +1361,7 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               horizontal_drift_max, roll_rmse,
                                               pitch_rmse, att_rmse, alt_rmse, tilt_max,
                                               alt_band, alt_mean, alt_min, alt_max,
-                                              duty_max, duty_spread_max, yaw_band, flip_roll_deg,
+                                              duty_max, duty_spread_max, yaw_band, yaw_turn_deg, flip_roll_deg,
                                               flip_pitch_deg, flip_gyro_abort_phi_deg,
                                               flip_gyro_abort_after_spin_s, alt_drop_max,
                                               alt_rise_max, descent_speed_max, settle_time_s

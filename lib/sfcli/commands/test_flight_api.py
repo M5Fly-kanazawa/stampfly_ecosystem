@@ -13,6 +13,8 @@ Usage:
 
 from __future__ import annotations
 
+import math
+import re
 import socket
 import sys
 import threading
@@ -261,6 +263,22 @@ def test_ceiling_in_python_matches_firmware_header():
     assert vehicle_api.ALTITUDE_CEILING_CM == 120
 
 
+def test_rotate_timeout_in_python_matches_firmware_headers():
+    # Ties rotate_timeout_s to the firmware: yaw rate limit (flight_limits.hpp) and the wait margin
+    # (rotate_guidance.hpp). / rotate_timeout_s をファームの定数に結びつける。
+    root = Path(__file__).resolve().parents[3] / "firmware/vehicle/components"
+    limits = (root / "sf_core/include/flight_limits.hpp").read_text(encoding="utf-8")
+    guidance = (root / "sf_command/include/rotate_guidance.hpp").read_text(encoding="utf-8")
+    rate = re.search(r"kGuidanceYawRateMaxRadPerSec\s*=\s*([0-9.]+)f", limits)
+    margin = re.search(r"kRotateMarginMs\s*=\s*([0-9]+)", guidance)
+    assert rate and margin
+    assert vehicle_api.YAW_RATE_LIMIT_DEG_PER_S == pytest.approx(math.degrees(float(rate.group(1))))
+    assert vehicle_api.ROTATE_EXTRA_S == pytest.approx(int(margin.group(1)) / 1000.0)
+    firmware_ms = 360.0 * math.pi / 180.0 / float(rate.group(1)) * 1000.0 + int(margin.group(1))
+    assert vehicle_api.rotate_timeout_s(360) == pytest.approx(
+        firmware_ms / 1000.0 + vehicle_api.NETWORK_MARGIN_S)
+
+
 def test_rc_value_out_of_range_is_rejected(vehicle):
     fake = vehicle({})
     assert main(["rc", "0", "101", "0", "0", "--ip", HOST]) == 1
@@ -365,5 +383,9 @@ def test_classify_reply():
 def test_timeouts_follow_the_firmware_timeouts():
     assert vehicle_api.TAKEOFF_TIMEOUT_S > 12.0     # kTakeoffTimeoutMs
     assert vehicle_api.LAND_TIMEOUT_S > 12.0 + 20.0  # kTakeoffTimeoutMs + kLandTimeoutMs
-    assert vehicle_api.ROTATE_TIMEOUT_S > 8.0       # kRotateTimeoutMs
+    # rotateTimeoutMs(angle) = angle / 1 rad/s + 6000 ms: 90 deg = 7571 ms, 360 deg = 12283 ms
+    # rotateTimeoutMs(角度) = 角度 / 1 rad/s + 6000 ms: 90 度 = 7571 ms、360 度 = 12283 ms
+    assert vehicle_api.rotate_timeout_s(90) > 7.571
+    assert vehicle_api.rotate_timeout_s(360) > 12.283
+    assert vehicle_api.rotate_timeout_s(360) > vehicle_api.rotate_timeout_s(90) + 4.7
     assert flight.move_timeout_s(300) > 300 / 10.0 + 6.0

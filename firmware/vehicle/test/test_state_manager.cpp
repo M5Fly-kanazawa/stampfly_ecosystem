@@ -1461,6 +1461,18 @@ TEST(system_mode_publishes_state_mode_and_entry_time)
     ASSERT_TRUE(published.state_since_us == armed_at_us);
 }
 
+/// CLI `reboot` column: accepted only in a state where the motors cannot spin (every state checked
+/// against the independent list of armed states in this file).
+/// CLI `reboot` の列: モータが回りえない状態でのみ受理（全ての状態を、この試験の独立な武装状態の
+/// 一覧と照合）。
+TEST(reboot_is_refused_in_every_armed_state_and_accepted_otherwise)
+{
+    for (FlightState state : kAllStates) {
+        ASSERT_MSG(isRebootAllowed(state) == !isArmedState(state), "reboot in %s: allowed=%d",
+                   flightStateName(state), isRebootAllowed(state) ? 1 : 0);
+    }
+}
+
 // =============================================================================
 // Runner
 // 実行部

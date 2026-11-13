@@ -74,6 +74,7 @@
 #include "autotune.hpp"      // onboard fit + tune / オンボード同定＋設計
 #include "tello_state.hpp"   // UDP:8890 state-string builder / 状態文字列ビルダ
 #include "api_arguments.hpp" // range checks of the parsed numbers / 解析した数の範囲検査
+#include "rotate_guidance.hpp" // guidance yaw target and wait of cw / ccw / cw・ccw の誘導ヨー目標と待ち時間
 #include "sf_math.hpp"       // sf::math::wrapAngleRad, kPi
 
 static const char* TAG = "ApiTask";
@@ -124,9 +125,7 @@ constexpr float    kDefaultSpeed   = 0.3f;    // [m/s] guidance approach / 既�
 // sf::limits::kAutoTakeoffTargetAltitudeM まで上昇し、cmdTakeoff は誘導目標をその高度で
 // 初期化する。上昇が目標に届かないまま時間切れで完了した場合も、機体はその高度を保持する。
 constexpr float    kReachRadiusM   = 0.15f;   // move "reached" tolerance / 到達判定半径
-constexpr float    kReachYawRad    = 0.17f;   // ~10 deg yaw tolerance / ヨー到達判定
 constexpr uint32_t kTakeoffTimeoutMs = 12000;
-constexpr uint32_t kRotateTimeoutMs  = 8000;     // `cw` / `ccw` wait / 回頭の待ち時間
 constexpr uint32_t kLandTimeoutMs    = 20000;
 constexpr uint32_t kLandConfirmMs    = 500;     // wait for a land from ARMED_GROUND to take effect / ARMED_GROUND からの着陸が効くのを待つ上限
 // Reply for a command whose number is not finite or outside its range.
@@ -153,7 +152,7 @@ constexpr float    kBattFullV      = 4.2f;
 constexpr float    kRcHorizVelDef  = 0.4f;    // [m/s] fallback if param missing / param 既定
 constexpr float    kRcClimbRateDef = 0.5f;    // [m/s] up   fallback / 上昇 既定
 constexpr float    kRcDescentRateDef = 0.5f;  // [m/s] down fallback / 降下 既定
-constexpr float    kRcYawRateMax   = 1.0f;    // [rad/s] at ±100 (= guide_yaw_rate_max_)
+constexpr float    kRcYawRateMax   = sf::rotate_guidance::kYawRateLimitRadPerSec;  // [rad/s] at ±100 (= guide_yaw_rate_max_, one constant)
 
 // =============================================================================
 // SILS / test injection — a tiny critical-section FIFO of command lines.
@@ -367,17 +366,26 @@ void publishApiVerb(sf::ApiCmd verb, sf::FlightMode mode = sf::FlightMode::POS_H
                              0});
 }
 
-void publishGuidance(float speed)
+// Publish the guidance target with the heading `yaw_rad` (the final goal, or a point on the way to
+// it during a turn — see cmdRotate).
+// 誘導目標を向き `yaw_rad`（最終の目標、または回頭中はそこへ向かう途中の点 — cmdRotate 参照）で
+// publish する。
+void publishGuidanceYaw(float speed, float yaw_rad)
 {
     sf::GuidanceTarget t{};
     t.position[0] = g_target_ned[0];
     t.position[1] = g_target_ned[1];
     t.position[2] = g_target_ned[2];
-    t.yaw         = g_target_yaw;
+    t.yaw         = yaw_rad;
     t.speed       = speed;
     t.mode        = 1;
     t.timestamp   = static_cast<uint32_t>(esp_timer_get_time());
     sf::command_target.publish(t);
+}
+
+void publishGuidance(float speed)
+{
+    publishGuidanceYaw(speed, g_target_yaw);
 }
 
 // True while the craft is still in the flight a move / rotate / flip / excitation belongs to
@@ -712,6 +720,35 @@ void cmdMove(float fwd_cm, float left_cm, float up_cm, float speed_mps)
     reply(waitTargetReached(timeout_ms) ? "ok" : waitFailureText("error move timeout"));
 }
 
+// Wait for the turn to `goal_rad` (unwrapped heading), moving the guidance target ahead of the
+// craft as it turns (rotate_guidance.hpp). Returns true when the turn completed. `published_rad`
+// is the unwrapped target last handed to the controller; it ends at the goal unless the wait
+// was cut short.
+// `goal_rad`（アンラップした向き）への回頭を待ち、機体が回るにつれて誘導目標をその前へ進める
+// （rotate_guidance.hpp）。回頭が完了したら true。`published_rad` は最後に制御器へ渡した
+// アンラップ済みの目標で、待機が途中で打ち切られない限り最終の向きで終わる。
+bool waitTurnComplete(float goal_rad, float start_heading_rad, float& published_rad)
+{
+    float heading_rad = start_heading_rad;
+    const uint32_t timeout_ms = sf::rotate_guidance::rotateTimeoutMs(goal_rad - start_heading_rad);
+    return waitUntil(timeout_ms, [&] {
+        heading_rad = sf::rotate_guidance::unwrapHeading(
+            heading_rad, estimateYaw(sf::estimate_state.latest()));
+        const float next_rad = sf::rotate_guidance::nextGuidanceYaw(goal_rad, heading_rad, published_rad);
+        if (next_rad != published_rad) {
+            published_rad = next_rad;
+            publishGuidanceYaw(g_default_speed, sf::math::wrapAngleRad(published_rad));
+        }
+        return sf::rotate_guidance::isYawTurnComplete(goal_rad, heading_rad);
+    }, true);
+}
+
+// `cw` / `ccw`: turn by `delta_yaw_rad` (cw = +) from the previous TARGET heading, so repeated
+// turns accumulate on the target and not on the estimate. The turn is a full `delta` in the
+// commanded direction for every angle up to 360 degrees; replies "ok" when it is complete.
+// `cw` / `ccw`: 直前の「目標」の向きから `delta_yaw_rad`（cw = +）だけ回る。連続した回頭は
+// 推定値でなく目標に累積する。回頭は 360 度までのどの角度でも、指令の向きに `delta` ちょうど。
+// 完了したら "ok" を返す。
 void cmdRotate(float delta_yaw_rad, float speed_unused)
 {
     (void)speed_unused;
@@ -723,13 +760,24 @@ void cmdRotate(float delta_yaw_rad, float speed_unused)
         reply(kOutOfRangeReply);
         return;
     }
-    g_target_yaw = sf::math::wrapAngleRad(g_target_yaw + delta_yaw_rad);
-    publishGuidance(g_default_speed);
+    // The final heading, unwrapped around the measured one: the previous target is at most the
+    // tolerance away from the heading, so the turn is counted from where the craft is.
+    // 最終の向き。測った向きのまわりでアンラップする: 直前の目標は向きから高々許容差しか
+    // 離れていないので、回頭は機体のいる向きから数える。
+    const float start_heading_rad = estimateYaw(sf::estimate_state.latest());
+    const float goal_rad = sf::rotate_guidance::composeFinalHeading(start_heading_rad, g_target_yaw,
+                                                                    delta_yaw_rad);
+    g_target_yaw = sf::math::wrapAngleRad(goal_rad);
 
-    const bool reached = waitUntil(kRotateTimeoutMs, [] {
-        const float err = sf::math::wrapAngleRad(g_target_yaw - estimateYaw(sf::estimate_state.latest()));
-        return fabsf(err) < kReachYawRad;
-    }, true);
+    float published_rad = start_heading_rad;
+    const bool reached = waitTurnComplete(goal_rad, start_heading_rad, published_rad);
+    // A turn that timed out leaves the controller on the point it was last given, so the target
+    // bookkeeping follows it (a stop or emergency has already set its own).
+    // 時間切れの回頭では制御器は最後に渡された点に居るので、目標の帳簿もそれに合わせる
+    // （stop・emergency は既に自分の値を設定済み）。
+    if (!reached && g_wait_interrupt == WaitInterrupt::None) {
+        g_target_yaw = sf::math::wrapAngleRad(published_rad);
+    }
     reply(reached ? "ok" : waitFailureText("error rotate timeout"));
 }
 

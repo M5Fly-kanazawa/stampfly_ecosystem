@@ -1,0 +1,23 @@
+# api_rotate_ok_when_complete.expect — `cw 360` answers "ok" only when the craft has gone round
+# `cw 360` は機体が 1 周してはじめて "ok" を返す
+#
+# `down 30` is parked behind `cw 360` and runs at its "ok". The turn takes 6.3 s at the yaw rate limit
+# (t=22 to 28.3 s). While it lasts the craft must keep its altitude (no descent has started: the
+# lowest altitude of the window t=23-29 s stays above 1.10 m; before the fix the "ok" came at once and
+# the craft descended to 0.9 m during the turn), the heading must have gone round, and after the turn
+# the parked descent must run (mean altitude 33-38 s below 1.0 m: the command was not lost).
+# `down 30` は `cw 360` の後ろに置かれ、その "ok" で実行される。回頭はヨーレート上限で 6.3 s
+# （t=22〜28.3 s）かかる。その間は高度を保つ（降下は始まっていない: t=23〜29 s の窓の最低高度が
+# 1.10 m を上回る。修正前は "ok" が直ちに返り、機体は回頭中に 0.9 m まで降りた）。方位は 1 周して
+# いる。回頭の後には、後ろに置かれた降下が実行される（t=33〜38 s の平均高度が 1.0 m 未満:
+# コマンドは失われていない）。
+exit 0
+log_contains any "cmd: cw 360"
+log_contains any "cmd: down 30"
+log_absent  any "error rotate timeout"
+order "cmd: cw 360" "cmd: down 30"
+metric alt_min > 1.10 in 23.0 29.0
+metric yaw_turn_deg > 351 in 22.0 30.0
+metric yaw_turn_deg < 369 in 22.0 30.0
+metric alt_mean < 1.00 in 33.0 38.0
+metric alt_min > 0.8 in 22.0 38.0

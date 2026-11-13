@@ -1,0 +1,21 @@
+# api_rotate_land_midturn.scn — `land` in the middle of `ccw 270`
+#                                `ccw 270` の途中の `land`
+#
+# A `land` read while a turn waits is parked behind it (like for every blocking command in FLYING): the
+# turn runs on to its end and replies "ok", then the landing starts. The same holds for `cw 90`.
+# 回頭の待機中に読んだ `land` は回頭の後ろに置かれる（FLYING のブロックするコマンドと同じ）:
+# 回頭は最後まで続いて "ok" を返し、その後に着陸が始まる。`cw 90` でも同じ。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_rotate_land_midturn.scn --target vehicle --duration 44000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     6000      50      # boot at rest — calibration completes
+   +    api  "command"                                          # enter SDK mode (t=6)
+   +    api  "takeoff"                                          # take off -> hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50      # the takeoff finishes (to t=18)
+   +    api  "up 70"                                            # climb to ~1.2 m BEFORE the turns (see api_flight.scn)
+   +    rc   2048  2048   2048    2048  0     4000      50      # settle (to t=22)
+   +    api  "ccw 270"                                          # t=22 s: 4.7 s turn
+   +    rc   2048  2048   2048    2048  0     2000     50
+   +    api  "land"                                             # t=24 s: mid-turn, parked behind the turn
+   +    rc   2048  2048   2048    2048  0     20000     50

@@ -55,11 +55,11 @@ from ..utils.vehicle_api import (
     MOVE_MIN_CM,
     ROTATE_MAX_DEG,
     ROTATE_MIN_DEG,
-    ROTATE_TIMEOUT_S,
     TAKEOFF_TIMEOUT_S,
     ApiResult,
     VehicleApi,
     move_timeout_s,
+    rotate_timeout_s,
 )
 
 EXIT_OK = 0
@@ -356,7 +356,7 @@ def run_rotate(args: argparse.Namespace, verb: str) -> int:
         console.error(reason)
         return EXIT_ERROR
     return _send_waiting(args, verb.upper(), f"{verb} {args.angle}",
-                         ROTATE_TIMEOUT_S, _stop_on_interrupt)
+                         rotate_timeout_s(args.angle), _stop_on_interrupt)
 
 
 def run_stop(args: argparse.Namespace) -> int:

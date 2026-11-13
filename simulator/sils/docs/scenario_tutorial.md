@@ -131,6 +131,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `att_rmse` | rad | roll_rmse と pitch_rmse を合成した姿勢誤差の大きさ（`hypot`） |
 | `tilt_max` | rad | 窓内の真値の傾き `hypot(roll, pitch)` の最大値（転倒していないことの確認） |
 | `yaw_band` | rad | 窓内の真値方位（クォータニオンから算出、±180°の継ぎ目でアンラップ済み）のピークtoピーク |
+| `yaw_turn_deg` | deg（**度**） | 窓の終わりの真値方位から始めの値を引いた符号付きの総変化（時計回りが正、±180° の継ぎ目や 360° の回頭もアンラップして全量数える）。`cw` / `ccw` が指令の向きに指令の角度だけ回ったかの確認用 |
 | `duty_max` | 比（0〜1） | 窓内の4モータ duty の最大値（飽和していないことの確認） |
 | `duty_spread_max` | 比（0〜1） | 窓内で、同時刻の4モータ duty の（最大−最小）の最大値（モータ間の偏り。地上での積分巻き上がり検出に使う） |
 | `horizontal_drift_max` | m | 窓の**開始時点**からの水平面内の最大距離（位置保持の逸脱量） |
@@ -411,6 +412,7 @@ Computed from the streams inside the run's flight-log bundle (the zip-format log
 | `att_rmse` | rad | combined attitude error magnitude (`hypot` of the two RMSEs above) |
 | `tilt_max` | rad | max true tilt magnitude `hypot(roll, pitch)` over the window (no-tumble check) |
 | `yaw_band` | rad | peak-to-peak true heading (from the truth quaternion, unwrapped across the ±180° seam) over the window |
+| `yaw_turn_deg` | deg (**degrees**) | signed total change of the true heading from the start to the end of the window (clockwise = +; unwrapped, so a turn across the ±180° seam or of 360° counts in full). Checks that `cw` / `ccw` turned the commanded angle in the commanded direction |
 | `duty_max` | ratio (0..1) | max of the four motors' duty over the window (saturation check) |
 | `duty_spread_max` | ratio (0..1) | max over the window of (max − min) across the four motors' duty at the same instant (imbalance; used to catch integrator windup on the ground) |
 | `horizontal_drift_max` | m | max planar distance from the window's **start** point |

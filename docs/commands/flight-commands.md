@@ -31,8 +31,8 @@
 | `sf back <cm>` | `back <cm>` | 10〜300 cm | 到達したとき |
 | `sf left <cm>` | `left <cm>` | 10〜300 cm | 到達したとき |
 | `sf right <cm>` | `right <cm>` | 10〜300 cm | 到達したとき |
-| `sf cw <deg>` | `cw <deg>` | 1〜360 度 | 向きが揃ったとき（最大 8 秒） |
-| `sf ccw <deg>` | `ccw <deg>` | 1〜360 度 | 向きが揃ったとき（最大 8 秒） |
+| `sf cw <deg>` | `cw <deg>` | 1〜360 度 | 指令の向き（時計回り）に <deg> 度回って向きが揃ったとき（最大 <deg> / 57.3 度毎秒 + 6 秒。360 度で約 12 秒） |
+| `sf ccw <deg>` | `ccw <deg>` | 1〜360 度 | 指令の向き（反時計回り）に <deg> 度回って向きが揃ったとき（最大 <deg> / 57.3 度毎秒 + 6 秒。360 度で約 12 秒） |
 | `sf stop` | `stop` | 引数なし | すぐ（現在位置を保持） |
 | `sf emergency` | `emergency` | 引数なし | すぐ（全モータ停止） |
 
@@ -122,8 +122,8 @@ flight commands).
 | `sf back <cm>` | `back <cm>` | 10-300 cm | on arrival |
 | `sf left <cm>` | `left <cm>` | 10-300 cm | on arrival |
 | `sf right <cm>` | `right <cm>` | 10-300 cm | on arrival |
-| `sf cw <deg>` | `cw <deg>` | 1-360 deg | when the heading is reached (up to 8 s) |
-| `sf ccw <deg>` | `ccw <deg>` | 1-360 deg | when the heading is reached (up to 8 s) |
+| `sf cw <deg>` | `cw <deg>` | 1-360 deg | when the craft has turned <deg> degrees clockwise and the heading is reached (up to <deg> / 57.3 deg/s + 6 s; about 12 s for 360 degrees) |
+| `sf ccw <deg>` | `ccw <deg>` | 1-360 deg | when the craft has turned <deg> degrees counter-clockwise and the heading is reached (up to <deg> / 57.3 deg/s + 6 s; about 12 s for 360 degrees) |
 | `sf stop` | `stop` | no argument | at once (holds the current position) |
 | `sf emergency` | `emergency` | no argument | at once (all motors off) |
 

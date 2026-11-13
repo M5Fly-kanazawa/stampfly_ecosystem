@@ -29,6 +29,7 @@ How a command is sent / コマンドの送り方:
 
 from __future__ import annotations
 
+import math
 import socket
 import time
 from dataclasses import dataclass
@@ -61,7 +62,12 @@ TAKEOFF_TIMEOUT_S = 12.0 + NETWORK_MARGIN_S         # kTakeoffTimeoutMs = 12000
 # land: up to kTakeoffTimeoutMs to leave TAKEOFF, then kLandTimeoutMs = 20000
 # land: TAKEOFF を抜けるまで最大 kTakeoffTimeoutMs、その後 kLandTimeoutMs = 20000
 LAND_TIMEOUT_S = 12.0 + 20.0 + NETWORK_MARGIN_S
-ROTATE_TIMEOUT_S = 8.0 + NETWORK_MARGIN_S           # kRotateTimeoutMs = 8000
+# A turn waits angle / yaw rate limit + 6 s (rotate_guidance.hpp: rotateTimeoutMs). The limit is
+# 1.0 rad/s (kYawRateLimitRadPerSec) = 57.3 deg/s; the margin is kRotateMarginMs = 6000.
+# 回頭は 角度 / ヨーレート上限 + 6 s 待つ（rotate_guidance.hpp の rotateTimeoutMs）。上限は
+# 1.0 rad/s（kYawRateLimitRadPerSec）= 57.3 deg/s、余裕は kRotateMarginMs = 6000。
+YAW_RATE_LIMIT_DEG_PER_S = math.degrees(1.0)
+ROTATE_EXTRA_S = 6.0
 # A move waits distance / speed + 6 s (cmdMove). The cruise speed is settable by another
 # client (`speed`, minimum 10 cm/s = kSpeedMinCmPerSec), so the worst case is used.
 # 移動は 距離 / 速度 + 6 s 待つ（cmdMove）。巡航速度は他のクライアントが変えられる
@@ -109,6 +115,12 @@ def move_timeout_s(distance_cm: float) -> float:
     """Reply wait for a move of `distance_cm` / 距離 `distance_cm` の移動の応答待ち時間"""
     travel_s = distance_cm / SLOWEST_SPEED_CM_PER_S
     return travel_s + MOVE_EXTRA_S + NETWORK_MARGIN_S
+
+
+def rotate_timeout_s(angle_deg: float) -> float:
+    """Reply wait for a `cw` / `ccw` of `angle_deg` / 角度 `angle_deg` の cw・ccw の応答待ち時間"""
+    turn_s = abs(angle_deg) / YAW_RATE_LIMIT_DEG_PER_S
+    return turn_s + ROTATE_EXTRA_S + NETWORK_MARGIN_S
 
 
 class VehicleApi:

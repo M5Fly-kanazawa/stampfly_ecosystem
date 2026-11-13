@@ -1,0 +1,27 @@
+# api_rotate_stop_midturn.scn — `stop` in the middle of `cw 360`
+#                                `cw 360` の途中の `stop`
+#
+# `stop` ends the turn at once and holds the heading the craft has: the waiting `cw 360` answers
+# `error interrupted by stop`, and a following `cw 90` / `ccw 90` turn from that held heading.
+# `stop` は回頭をその場で終わらせ、機体のいる向きを保持する: 待っていた `cw 360` は
+# `error interrupted by stop` を返し、続く `cw 90` / `ccw 90` はその保持した向きから回る。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_rotate_stop_midturn.scn --target vehicle --duration 52000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     6000      50      # boot at rest — calibration completes
+   +    api  "command"                                          # enter SDK mode (t=6)
+   +    api  "takeoff"                                          # take off -> hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50      # the takeoff finishes (to t=18)
+   +    api  "up 70"                                            # climb to ~1.2 m BEFORE the turns (see api_flight.scn)
+   +    rc   2048  2048   2048    2048  0     4000      50      # settle (to t=22)
+   +    api  "cw 360"                                           # t=22 s: a full turn clockwise
+   +    rc   2048  2048   2048    2048  0     3000     50
+   +    api  "stop"                                             # t=25 s: about halfway (172 deg of 360)
+   +    rc   2048  2048   2048    2048  0     3000     50
+   +    api  "cw 90"                                            # t=28 s: +90 from the held heading
+   +    rc   2048  2048   2048    2048  0     6000     50
+   +    api  "ccw 90"                                           # t=34 s: back
+   +    rc   2048  2048   2048    2048  0     6000     50
+   +    api  "land"
+   +    rc   2048  2048   2048    2048  0     8000     50

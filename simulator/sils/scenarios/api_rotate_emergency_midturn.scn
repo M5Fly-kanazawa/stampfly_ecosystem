@@ -1,0 +1,19 @@
+# api_rotate_emergency_midturn.scn — `emergency` in the middle of `ccw 270`
+#                                     `ccw 270` の途中の `emergency`
+#
+# `emergency` cuts the motors at once; the waiting turn answers `error interrupted by emergency`.
+# `emergency` はモータを即座に止め、待っていた回頭は `error interrupted by emergency` を返す。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_rotate_emergency_midturn.scn --target vehicle --duration 34000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     6000      50      # boot at rest — calibration completes
+   +    api  "command"                                          # enter SDK mode (t=6)
+   +    api  "takeoff"                                          # take off -> hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50      # the takeoff finishes (to t=18)
+   +    api  "up 70"                                            # climb to ~1.2 m BEFORE the turns (see api_flight.scn)
+   +    rc   2048  2048   2048    2048  0     4000      50      # settle (to t=22)
+   +    api  "ccw 270"                                          # t=22 s
+   +    rc   2048  2048   2048    2048  0     2000     50
+   +    api  "emergency"                                        # t=24 s: mid-turn
+   +    rc   2048  2048   2048    2048  0     10000     50

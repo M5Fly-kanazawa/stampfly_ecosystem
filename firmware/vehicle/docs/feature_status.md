@@ -104,7 +104,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | **INIT 停止根治**（-O2 固定＋ESKF 疎構造化＋StateTask コア0） | 実機でコア1飽和→StateTask 飢餓。SILS では CPU 飽和が見えない教訓 | b4f4800 |
 | ARM の press-toggle 化 | 実機でボタン押下中のみ ARM される誤実装が発覚（コントローラの ARM はモーメンタリ） | — |
 | 設計保留事項の確定（A1〜A6） | レビューで設計保留 → ユーザー決定: 自動着陸 verb / WiFi 両対応 / 相補フィルタ ToF / ReloadParams / 衝撃検出 400Hz | 5コミット |
-| 運用安全の小品 | `param save` の armed 拒否（フラッシュ停止対策）／起動音の2秒遅延（esptool 窓回避）／ControlTask 通知ウォッチドッグ／`param reset` | — |
+| 運用安全の小品 | `param save` の armed 拒否（フラッシュ停止対策）／`reboot` の armed 拒否（モータ停止対策）／起動音の2秒遅延（esptool 窓回避）／ControlTask 通知ウォッチドッグ／`param reset` | — |
 | Data Stream 品質3点 | 差分量（flow）は全サンプル配送・DRDY はデータと同一バースト読み・容量上限棄却の計数可視化 — いずれも実機ベンチが摘出 | 7bd69db ほか |
 
 ## 5. vehicle_old にあって vehicle にないもの

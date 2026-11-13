@@ -1244,12 +1244,20 @@ int cmd_magcal(int argc, char** argv)
     return 0;
 }
 
-/// `reboot` — restart the flight controller.
-/// `reboot` — フライトコントローラを再起動する。
+/// `reboot` — restart the flight controller. DISARMED ONLY: the restart stops the motors at
+/// once, so it is refused with a message while armed, like `param save`.
+/// `reboot` — フライトコントローラを再起動する。**disarmed 限定**: 再起動はモータを即座に
+/// 止めるので、`param save` と同様に armed 中はメッセージ付きで拒否する。
 int cmd_reboot(int argc, char** argv)
 {
     (void)argc;
     (void)argv;
+    // Guard first: nothing is flushed or printed as "rebooting..." when the restart is refused.
+    // 先にガードする: 拒否するときは、フラッシュも "rebooting..." の表示もしない。
+    if (!sf::isRebootAllowed(static_cast<sf::FlightState>(sf::system_mode.latest().state))) {
+        std::printf("refused: reboot stops the motors — land/disarm first\n");
+        return 1;
+    }
     sf::tasks::flush_log_sink();   // the messages logged just before reach the console / 直前までのログをコンソールへ出す
     std::printf("rebooting...\n");
     std::fflush(stdout);

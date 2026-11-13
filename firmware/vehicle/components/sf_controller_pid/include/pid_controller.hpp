@@ -367,8 +367,8 @@ private:
     SilenceWatch guide_watch_;             // time since guide_stamp_ changed / 時刻印の更新からの経過
     SilenceWatch link_watch_;              // time since the setpoint stamp changed / setpoint 時刻印の更新からの経過
     float stick_snapshot_[4] = {0, 0, 0, 0};  // r,p,y,thr at engage / 設定時スティック
-    float guide_yaw_kp_      = 2.0f;       // [1/s] yaw P gain / ヨー P ゲイン
-    float guide_yaw_rate_max_ = 1.0f;      // [rad/s] yaw turn rate limit / ヨー回頭率上限
+    float guide_yaw_kp_      = sf::limits::kGuidanceYawKpPerSec;       // [1/s] yaw P gain / ヨー P ゲイン
+    float guide_yaw_rate_max_ = sf::limits::kGuidanceYawRateMaxRadPerSec;      // [rad/s] yaw turn rate limit / ヨー回頭率上限
     float stick_move_cancel_ = 0.15f;      // stick departure to cancel / 解除閾値
     float max_pos_vel_    = 1.0f;    // [m/s] POS_HOLD horizontal velocity setpoint limit
 

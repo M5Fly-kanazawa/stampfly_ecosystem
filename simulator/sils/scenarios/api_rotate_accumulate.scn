@@ -1,0 +1,27 @@
+# api_rotate_accumulate.scn — Four `cw 90` end at the starting heading (turns accumulate on the target)
+#                `cw 90` の 4 回は元の向きで終わる（回頭は目標に累積する）
+#
+# Each turn composes on the previous TARGET heading, not on the estimate, so four quarter turns add up
+# to one full turn without a drift from the estimate at each command.
+# 各回頭は直前の「目標」の向きに合成し、推定値には合成しないので、4 回の 90 度は、コマンド毎の
+# 推定値からのずれ無しに、ちょうど 1 周になる。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_rotate_accumulate.scn --target vehicle --duration 56000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     6000      50      # boot at rest — calibration completes
+   +    api  "command"                                          # enter SDK mode (t=6)
+   +    api  "takeoff"                                          # take off -> hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50      # the takeoff finishes (to t=18)
+   +    api  "up 70"                                            # climb to ~1.2 m BEFORE the turns (see api_flight.scn)
+   +    rc   2048  2048   2048    2048  0     4000      50      # settle (to t=22)
+   +    api  "cw 90"                                              # t=22 s
+   +    rc   2048  2048   2048    2048  0     6000     50
+   +    api  "cw 90"                                              # t=28 s
+   +    rc   2048  2048   2048    2048  0     6000     50
+   +    api  "cw 90"                                              # t=34 s
+   +    rc   2048  2048   2048    2048  0     6000     50
+   +    api  "cw 90"                                              # t=40 s
+   +    rc   2048  2048   2048    2048  0     6000     50
+   +    api  "land"
+   +    rc   2048  2048   2048    2048  0     8000      50

@@ -1,0 +1,23 @@
+# api_rotate_ok_when_complete.scn — `cw 360` answers "ok" only when the craft has gone round
+#                `cw 360` は機体が 1 周してはじめて "ok" を返す
+#
+# `down 30` is sent at the same time as `cw 360`. The API parks it behind the turn and runs it after the
+# turn's "ok": the descent must not start before the 6.3 s turn is over. (An "ok" sent at once would
+# let the craft descend during the turn.)
+# `cw 360` と同時に `down 30` を送る。API はそれを回頭の後ろに置き、回頭の "ok" の後に実行する:
+# 6.3 s の回頭が終わる前に降下が始まってはならない。（"ok" が直ちに返れば、回頭の最中に降下する。）
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_rotate_ok_when_complete.scn --target vehicle --duration 48000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     6000      50      # boot at rest — calibration completes
+   +    api  "command"                                          # enter SDK mode (t=6)
+   +    api  "takeoff"                                          # take off -> hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50      # the takeoff finishes (to t=18)
+   +    api  "up 70"                                            # climb to ~1.2 m BEFORE the turns (see api_flight.scn)
+   +    rc   2048  2048   2048    2048  0     4000      50      # settle (to t=22)
+   +    api  "cw 360"                                           # t=22 s: turn one full circle clockwise
+   +    api  "down 30"                                          # t=22 s: parked behind the turn, runs after its "ok"
+   +    rc   2048  2048   2048    2048  0     16000     50      # the turn (6.3 s), the descent, settling (to t=38)
+   +    api  "land"
+   +    rc   2048  2048   2048    2048  0     8000      50

@@ -43,7 +43,7 @@ Tello 実機の映像ポート（UDP 11111）は StampFly には無い（カメ�
 | コマンド | 構文 | 範囲 | 説明 |
 |---|---|---|---|
 | `up`/`down`/`left`/`right`/`forward`/`back` | `<verb> x`（cm） | 合成移動距離 10〜300cm（Tello実機は20〜500cm。下限は屋内向けにきめ細かく設定。300cm超は方向を保ったまま300cmにクランプし `ok` を返す） | 現在の誘導目標（推定値でなく目標値）に合成し、到達until ブロック |
-| `cw`/`ccw` | `<verb> x`（度） | 1〜360度 | ヨー目標を加算し、到達until ブロック |
+| `cw`/`ccw` | `<verb> x`（度） | 1〜360度 | 直前のヨー目標に x 度を指令の向きに加算（`cw` は上から見て時計回り）。機体が x 度回って向きが揃うまでブロックする（待ち時間は x / 57.3 度毎秒 + 6 秒。360度なら最大約 12 秒）。大きな角度でも指令の向きに指令の角度だけ回る |
 | `go` | `go x y z speed` | xyz: cm（合成距離は up/down 等と同じ10〜300cmクランプ）, speed: 10〜100 cm/s | 3軸同時移動 |
 | `rc` | `rc a b c d` | 各 -100〜100 | 連続速度指令（撃ちっぱなし、応答なし）。a=ロール（右+）、b=ピッチ（前+）、c=スロットル（上+）、d=ヨーレート（時計回り+）。送信停止で自動的にその場保持へ戻る。パイロットがスティックを動かすと即解除される |
 
@@ -227,7 +227,7 @@ Until `command` is sent to enter SDK mode, every other command returns `"error n
 | Command | Syntax | Range | Description |
 |---|---|---|---|
 | `up`/`down`/`left`/`right`/`forward`/`back` | `<verb> x` (cm) | Combined travel distance 10–300 cm (the real Tello is 20–500 cm; the lower bound is finer for indoor use; distances over 300 cm are clamped to 300 cm, preserving direction, and still reply `ok`) | Composes onto the current guidance TARGET (not the state estimate); blocks until reached |
-| `cw`/`ccw` | `<verb> x` (degrees) | 1–360 degrees | Adds to the yaw target; blocks until reached |
+| `cw`/`ccw` | `<verb> x` (degrees) | 1–360 degrees | Adds x degrees to the previous yaw target in the commanded direction (`cw` = clockwise seen from above); blocks until the craft has turned x degrees and the heading is reached (wait: x / 57.3 deg/s + 6 s, at most about 12 s for 360 degrees). Any angle turns the commanded angle in the commanded direction |
 | `go` | `go x y z speed` | xyz: cm (same 10–300 cm clamp as above), speed: 10–100 cm/s | Simultaneous 3-axis move |
 | `rc` | `rc a b c d` | each -100..100 | Continuous velocity command (fire-and-forget, no reply). a=roll (right+), b=pitch (forward+), c=throttle (up+), d=yaw rate (clockwise+). Automatically reverts to holding position when the stream stops; instantly overridden if the pilot moves the stick |
 

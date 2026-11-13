@@ -53,6 +53,16 @@ namespace limits {
 /// 上限の高さから床まで約 sqrt(2 × 1.2 / 0.49) = 2.2 s、約 1.1 m/s で着く（SILS: 出力停止の 2.3〜2.9 s 後に接地、0.8〜1.2 m/s）。
 /// kBlindLandingTimeoutUs（10 s）よりずっと短い。
 inline constexpr float kAltitudeCeilingM = 1.2f;
+/// Yaw turn rate limit [rad/s] and P gain [1/s] of the guidance yaw law (PidController: the guidance
+/// position mode seeks the target yaw with rate = gain x wrapped error, clamped to the limit). One definition for the controller, the
+/// API's `rc` yaw rate (full stick), and the `cw` / `ccw` guidance and wait (rotate_guidance.hpp). Neither is a parameter, a
+/// setter or an autotune output: they change only by editing these constants, and rotate_guidance.hpp checks its lead angles against them at compile time.
+/// 誘導ヨー則のヨー回頭率の上限 [rad/s] と P ゲイン [1/s]（PidController: 誘導位置モードは 率 = ゲイン × 折り返した誤差 で
+/// 目標ヨーを追い、上限でクランプする）。制御器・API の `rc` のヨーレート（満舵）・`cw` / `ccw` の誘導と待ち時間
+/// （rotate_guidance.hpp）の定義は 1 か所。どちらもパラメータ・setter・オートチューンの出力ではなく、この定数を書き換えたときだけ変わる。
+/// rotate_guidance.hpp は先行角をこれらに対してコンパイル時に検査する。
+inline constexpr float kGuidanceYawRateMaxRadPerSec = 1.0f;
+inline constexpr float kGuidanceYawKpPerSec         = 2.0f;
 /// Target altitude of the auto-takeoff [m]: the height every takeoff ends at and then holds, whether the ARM of the transmitter started it
 /// (PidController: the climb target) or the API `takeoff` (ApiTask: the altitude of the guidance target it seeds). High enough to clear the
 /// ground effect (the ToF airborne edge of 0.15 m is the ESKF vertical handoff, not this target). Must not exceed kAltitudeCeilingM.

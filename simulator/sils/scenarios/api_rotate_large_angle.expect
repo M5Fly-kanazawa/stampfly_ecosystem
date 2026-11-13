@@ -1,0 +1,30 @@
+# api_rotate_large_angle.expect — `cw 270`, `ccw 360`, `cw 360` turn the full angle, in the commanded direction
+# `cw 270`・`ccw 360`・`cw 360` は、指令の向きに指令の角度だけ回る
+#
+# yaw_turn_deg is the signed change of the TRUE heading (truth, unwrapped) over each 14 s window: the
+# angle itself, not a log line. The tolerance is the firmware's completion tolerance (0.17 rad = 9.7
+# deg) plus the overshoot. Before the fix: cw 270 turned -90 deg (the other way), cw 360 turned 0.
+# yaw_turn_deg は各 14 s の窓での「真値」方位（アンラップ済み）の符号付き変化: ログ行でなく角度
+# そのもの。許容差はファームの完了許容差（0.17 rad = 9.7 度）にオーバーシュートを足した値。
+# 修正前: cw 270 は -90 度（逆向き）、cw 360 は 0 度だった。
+exit 0
+log_contains any "cmd: cw 270"
+log_contains any "cmd: ccw 360"
+log_contains any "cmd: cw 360"
+log_absent  any "error rotate timeout"
+log_absent  any "Guidance cancelled by pilot stick"
+order "cmd: cw 270" "cmd: ccw 360"
+order "cmd: ccw 360" "cmd: cw 360"
+order "cmd: cw 360" "cmd: land"
+metric yaw_turn_deg > 261 in 22.0 36.0
+metric yaw_turn_deg < 279 in 22.0 36.0
+metric yaw_turn_deg < -351 in 36.0 50.0
+metric yaw_turn_deg > -369 in 36.0 50.0
+metric yaw_turn_deg > 351 in 50.0 64.0
+metric yaw_turn_deg < 369 in 50.0 64.0
+# Net of the three turns: 270 - 360 + 360 = 270 deg. / 3 回の合計: 270 - 360 + 360 = 270 度。
+metric yaw_turn_deg > 261 in 22.0 64.0
+metric yaw_turn_deg < 279 in 22.0 64.0
+# The craft stays in the air and level through the turns. / 回頭中も機体は空中で水平。
+metric alt_min > 0.8 in 22.0 64.0
+metric tilt_max < 0.2618 in 22.0 64.0   # 15.0 deg

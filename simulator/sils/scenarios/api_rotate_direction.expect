@@ -1,0 +1,25 @@
+# api_rotate_direction.expect — `ccw 270`, `cw 180`, `ccw 180` keep the commanded direction
+# `ccw 270`・`cw 180`・`ccw 180` は指令の向きを保つ
+#
+# Signed change of the TRUE heading (unwrapped) over each 14 s window; clockwise = +. Before the fix
+# ccw 270 turned +90 deg (the other way), and the direction of a 180-degree turn followed the sign of
+# the estimate noise.
+# 各 14 s の窓での「真値」方位（アンラップ済み）の符号付き変化。時計回りが正。修正前は ccw 270 が
+# +90 度（逆向き）に回り、180 度の回頭の向きは推定値の雑音の符号で決まっていた。
+exit 0
+log_contains any "cmd: ccw 270"
+log_contains any "cmd: cw 180"
+log_contains any "cmd: ccw 180"
+log_absent  any "error rotate timeout"
+log_absent  any "Guidance cancelled by pilot stick"
+order "cmd: ccw 270" "cmd: cw 180"
+order "cmd: cw 180" "cmd: ccw 180"
+order "cmd: ccw 180" "cmd: land"
+metric yaw_turn_deg < -261 in 22.0 36.0
+metric yaw_turn_deg > -279 in 22.0 36.0
+metric yaw_turn_deg > 171 in 36.0 50.0
+metric yaw_turn_deg < 189 in 36.0 50.0
+metric yaw_turn_deg < -171 in 50.0 64.0
+metric yaw_turn_deg > -189 in 50.0 64.0
+metric alt_min > 0.8 in 22.0 64.0
+metric tilt_max < 0.2618 in 22.0 64.0   # 15.0 deg

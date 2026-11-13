@@ -1,0 +1,25 @@
+# api_rotate_direction.scn — `cw` / `ccw` of 270 and 180 degrees keep the commanded direction
+#                270 度・180 度の `cw` / `ccw` は指令の向きを保つ
+#
+# ccw 270 (counter-clockwise), then cw 180 and ccw 180: a 180-degree turn has no shortest direction, so
+# the direction must come from the command, not from the sign of the estimate noise.
+# ccw 270（反時計回り）、続いて cw 180 と ccw 180: 180 度の回頭には最短の向きが無いので、向きは
+# 推定値の雑音の符号でなく、コマンドから決めねばならない。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_rotate_direction.scn --target vehicle --duration 74000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     6000      50      # boot at rest — calibration completes
+   +    api  "command"                                          # enter SDK mode (t=6)
+   +    api  "takeoff"                                          # take off -> hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50      # the takeoff finishes (to t=18)
+   +    api  "up 70"                                            # climb to ~1.2 m BEFORE the turns (see api_flight.scn)
+   +    rc   2048  2048   2048    2048  0     4000      50      # settle (to t=22)
+   +    api  "ccw 270"                                              # t=22 s
+   +    rc   2048  2048   2048    2048  0     14000     50
+   +    api  "cw 180"                                              # t=36 s
+   +    rc   2048  2048   2048    2048  0     14000     50
+   +    api  "ccw 180"                                              # t=50 s
+   +    rc   2048  2048   2048    2048  0     14000     50
+   +    api  "land"
+   +    rc   2048  2048   2048    2048  0     8000      50

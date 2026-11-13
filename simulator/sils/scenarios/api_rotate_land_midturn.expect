@@ -1,0 +1,23 @@
+# api_rotate_land_midturn.expect — `land` in the middle of `ccw 270` is parked behind the turn
+# `ccw 270` の途中の `land` は回頭の後ろに置かれる
+#
+# t=22 s `ccw 270`; t=24 s `land`. A `land` read while a turn waits is parked (as for `cw 90`: the
+# same code path), so the turn runs on to its end before the landing starts: the heading reaches
+# -270 deg within the 9.7 deg completion tolerance and the altitude is not lost before t=26.5 s;
+# the craft then lands.
+# t=22 s に `ccw 270`、t=24 s に `land`。回頭の待機中に読んだ `land` は置かれる（`cw 90` でも同じ
+# コード経路）ので、回頭は着陸の前に最後まで続く: 向きは完了許容差 9.7 度以内で -270 度に届き、
+# t=26.5 s までは高度を失わない。その後に着陸する。
+exit 0
+log_contains any "cmd: ccw 270"
+log_contains any "cmd: land"
+log_contains any "Autonomous landing engaged"
+log_absent  any "error cancelled by land"
+log_absent  any "error rotate timeout"
+order "cmd: ccw 270" "cmd: land"
+order "cmd: land" "Autonomous landing engaged"
+metric yaw_turn_deg < -250 in 22.0 28.0
+metric yaw_turn_deg > -279 in 22.0 28.0
+metric yaw_turn_deg < -100 in 24.0 26.0
+metric alt_min > 1.15 in 24.0 26.5
+metric alt_max < 0.10 in 40.0 43.0

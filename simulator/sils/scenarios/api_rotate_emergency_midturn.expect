@@ -1,0 +1,19 @@
+# api_rotate_emergency_midturn.expect — `emergency` in the middle of `ccw 270`
+# `ccw 270` の途中の `emergency`
+#
+# t=22 s `ccw 270`; t=24 s `emergency`. The motors are cut at once (FLYING -> IDLE_GROUND), the
+# waiting turn answers `error interrupted by emergency`, and the craft does not turn on (the
+# heading change stays at the value of the cut, about -148 deg, instead of -270).
+# t=22 s に `ccw 270`、t=24 s に `emergency`。モータは即座に止まり（FLYING -> IDLE_GROUND）、
+# 待っていた回頭は `error interrupted by emergency` を返し、機体はそれ以上回らない（向きの変化は
+# 停止時の約 -148 度のままで、-270 度にならない）。
+exit 0
+log_contains any "cmd: emergency (during a blocking command)"
+log_contains any "reply: error interrupted by emergency"
+log_contains any "Transition: FLYING → IDLE_GROUND"
+log_absent  any "error rotate timeout"
+order "cmd: ccw 270" "cmd: emergency (during a blocking command)"
+order "cmd: emergency (during a blocking command)" "reply: error interrupted by emergency"
+metric yaw_turn_deg > -165 in 22.0 33.0
+metric yaw_turn_deg < -135 in 22.0 33.0
+metric alt_max < 0.10 in 29.0 33.0

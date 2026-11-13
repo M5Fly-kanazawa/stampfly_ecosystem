@@ -1,0 +1,28 @@
+# api_rotate_large_angle.scn — `cw` / `ccw` of 270 and 360 degrees turn the full angle in the commanded direction
+#                270 度・360 度の `cw` / `ccw` は、指令の向きに指令の角度だけ回る
+#
+# The controller turns by the SHORTEST path to the guidance yaw target, so a final heading 180 degrees or
+# more away must not be handed over at once (cw 270 would turn 90 degrees the other way, cw 360 not at
+# all). The sequence cw 270, ccw 360, cw 360 crosses the +-180 degree seam several times; each turn is
+# one 14 s window (the turn is 4.7 s or 6.3 s, then it settles).
+# 制御器は誘導ヨー目標へ「最短経路」で回るので、180 度以上先の最終の向きを一度に渡してはならない
+# （cw 270 は逆に 90 度回り、cw 360 は回らない）。cw 270、ccw 360、cw 360 の列は ±180 度の継ぎ目を
+# 何度もまたぐ。各回頭は 14 s の窓（回頭は 4.7 s か 6.3 s、その後整定）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_rotate_large_angle.scn --target vehicle --duration 74000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     6000      50      # boot at rest — calibration completes
+   +    api  "command"                                          # enter SDK mode (t=6)
+   +    api  "takeoff"                                          # take off -> hover at 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50      # the takeoff finishes (to t=18)
+   +    api  "up 70"                                            # climb to ~1.2 m BEFORE the turns (see api_flight.scn)
+   +    rc   2048  2048   2048    2048  0     4000      50      # settle (to t=22)
+   +    api  "cw 270"                                              # t=22 s
+   +    rc   2048  2048   2048    2048  0     14000     50
+   +    api  "ccw 360"                                              # t=36 s
+   +    rc   2048  2048   2048    2048  0     14000     50
+   +    api  "cw 360"                                              # t=50 s
+   +    rc   2048  2048   2048    2048  0     14000     50
+   +    api  "land"
+   +    rc   2048  2048   2048    2048  0     8000      50

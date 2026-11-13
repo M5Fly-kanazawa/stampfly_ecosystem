@@ -321,7 +321,7 @@ TAB で補完。
 | `led` | `<0-255>` | 本体 LED 輝度（NVS 保存）|
 | `motor` | `[test <1-4> <0-100> [秒]\|all <0-100> [秒]\|stop]` | **モータ単体テスト（disarmed 限定・要プロペラ除去）**。M1=FR M2=RR M3=RL M4=FL。最後の引数で回転時間（秒、0.1〜60、省略時 2 秒）。例: `motor test 1 30 5`。講習用ファームでも使える |
 | `magcal` | `[start\|stop\|status\|save\|clear]` | 地磁気のハード/ソフトアイアン校正（下記手順）|
-| `reboot` | — | 再起動 |
+| `reboot` | — | 再起動。**disarmed 限定**: ARM 中は `refused: reboot stops the motors — land/disarm first` で拒否する（再起動はモータを即座に止めるため。`param save` の ARM 中の拒否と同じ形）|
 
 **下向き ToF の出力停止のときの `status` の行と `sensor tof` の 2 行目:**
 
@@ -651,7 +651,7 @@ completes.
 | `led` | `<0-255>` | Body LED brightness (NVS) |
 | `motor` | `[test <1-4> <0-100> [sec]\|all <0-100> [sec]\|stop]` | **Bench motor test (DISARMED only — props off!)**. M1=FR M2=RR M3=RL M4=FL. Optional last argument = run time in seconds (0.1–60, default 2). Example: `motor test 1 30 5`. Also works on the workshop firmware |
 | `magcal` | `[start\|stop\|status\|save\|clear]` | Magnetometer hard/soft-iron calibration: `start` → rotate the craft in all orientations (figure-8, ~100+ samples) → `stop` (sphere fit) → `save` (NVS). Yaw aiding engages at the next boot; enable fusion with `param set eskf.use_mag 1`. Uncalibrated mag is automatically kept OUT of the fusion |
-| `reboot` | — | Restart the flight controller |
+| `reboot` | — | Restart the flight controller. **DISARMED only**: while armed it is refused with `refused: reboot stops the motors — land/disarm first` (the restart stops the motors at once; the same form as the refusal of `param save` while armed) |
 
 **The `status` lines during a downward-ToF silence episode, and the second line of `sensor tof`:**
 

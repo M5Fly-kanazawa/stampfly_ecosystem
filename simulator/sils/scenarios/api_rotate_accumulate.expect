@@ -1,0 +1,24 @@
+# api_rotate_accumulate.expect — four `cw 90` add up to one full turn, ending at the starting heading
+# 4 回の `cw 90` は合計でちょうど 1 周になり、元の向きで終わる
+#
+# Each turn composes on the previous TARGET heading, not on the estimate: the total is 360 deg within
+# 2 deg (a turn composed on the estimate would carry up to 9.7 deg of completion tolerance into each
+# command). Each quarter turn is 90 deg in the commanded direction, as it always was.
+# 各回頭は直前の「目標」の向きに合成し、推定値には合成しない: 合計は 2 度以内で 360 度
+# （推定値に合成すると、完了許容差の最大 9.7 度が各コマンドに持ち越される）。各 90 度の回頭は、
+# 従来どおり指令の向きに 90 度。
+exit 0
+log_contains any "cmd: cw 90"
+log_absent  any "error rotate timeout"
+metric yaw_turn_deg > 81 in 22.0 28.0
+metric yaw_turn_deg < 99 in 22.0 28.0
+metric yaw_turn_deg > 81 in 28.0 34.0
+metric yaw_turn_deg < 99 in 28.0 34.0
+metric yaw_turn_deg > 81 in 34.0 40.0
+metric yaw_turn_deg < 99 in 34.0 40.0
+metric yaw_turn_deg > 81 in 40.0 46.0
+metric yaw_turn_deg < 99 in 40.0 46.0
+metric yaw_turn_deg > 358 in 22.0 46.0
+metric yaw_turn_deg < 362 in 22.0 46.0
+metric alt_min > 0.8 in 22.0 46.0
+metric tilt_max < 0.2618 in 22.0 46.0   # 15.0 deg

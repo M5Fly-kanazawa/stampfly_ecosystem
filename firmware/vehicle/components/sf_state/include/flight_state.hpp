@@ -147,6 +147,15 @@ inline bool isArmed(FlightState state)
            state == FlightState::FLIP;
 }
 
+/// Whether the CLI `reboot` is accepted in a state: only when disarmed. The restart stops the
+/// motors at once, so while armed it is refused with a message (like `param save`).
+/// CLI の `reboot` を状態で受理するか: disarmed のときだけ。再起動はモータを即座に止めるので、
+/// armed 中は（`param save` と同様に）メッセージ付きで拒否する。
+inline bool isRebootAllowed(FlightState state)
+{
+    return !isArmed(state);
+}
+
 /// Check if a state implies airborne (in the air)
 /// 状態が空中を意味するか確認する
 inline bool isAirborne(FlightState state)

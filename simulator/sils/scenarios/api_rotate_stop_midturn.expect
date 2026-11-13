@@ -1,0 +1,28 @@
+# api_rotate_stop_midturn.expect — `stop` in the middle of `cw 360`
+# `cw 360` の途中の `stop`
+#
+# t=22 s `cw 360`; t=25 s `stop` (172 of 360 deg done). The waiting turn answers
+# `error interrupted by stop`; the heading at the stop is held (the true heading changes by under 5 deg
+# from t=25 to 28 s, 1.4 deg measured); the following `cw 90` turns +90 from that held heading and the
+# `ccw 90` brings it back (yaw_turn_deg = signed true-heading change).
+# t=22 s に `cw 360`、t=25 s に `stop`（360 度のうち 172 度）。待っていた回頭は
+# `error interrupted by stop` を返し、stop の時点の向きは保持される（t=25〜28 s の真の向きの変化は
+# 5 度未満、実測 1.4 度）。続く `cw 90` はその保持した向きから +90 度回り、`ccw 90` が戻す。
+exit 0
+log_contains any "cmd: stop (during a blocking command)"
+log_contains any "reply: error interrupted by stop"
+log_absent  any "error rotate timeout"
+order "cmd: cw 360" "cmd: stop (during a blocking command)"
+order "reply: error interrupted by stop" "cmd: cw 90"
+order "cmd: cw 90" "cmd: ccw 90"
+metric yaw_turn_deg > 160 in 22.0 25.0
+metric yaw_turn_deg < 185 in 22.0 25.0
+metric yaw_turn_deg > -5 in 25.0 28.0
+metric yaw_turn_deg < 5 in 25.0 28.0
+metric yaw_turn_deg > -3 in 26.0 28.0
+metric yaw_turn_deg < 3 in 26.0 28.0
+metric yaw_turn_deg > 81 in 28.0 34.0
+metric yaw_turn_deg < 99 in 28.0 34.0
+metric yaw_turn_deg < -81 in 34.0 40.0
+metric yaw_turn_deg > -99 in 34.0 40.0
+metric alt_min > 0.8 in 22.0 40.0
