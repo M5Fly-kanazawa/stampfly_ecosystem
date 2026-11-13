@@ -24,6 +24,7 @@ JSON レコードを並べたテキスト形式）は、一式から必要なと
 | `wifi` | WiFi UDP でテレメトリを取得し、一式として保存 |
 | `list` | `logs/` 配下の一式を一覧表示 |
 | `info` | 一式の `meta.json` 要約・ストリームごとの統計・診断値（ループ周期・有限でない数・ToF・ログ経路の欠落）を表示。`--text` で機体のテキストログ（`ESP_LOG` の行）を表示 |
+| `stats` | 実機確認用の要約（床の ToF・ループのカウンタ・着陸のモータ停止・回頭・気圧高度・起動の理由）を表で表示 |
 | `check` | 一式の構造・単位・時刻整合性を検査 |
 | `convert` | 旧 `.jsonl` → 一式、または 一式 → 派生の整列/JSONL CSV |
 | `viz` | 一式を可視化（各信号を原レートのまま描画） |
@@ -383,6 +384,79 @@ sf log video logs/flight_20260911T121243.sflog.zip
 
 電池電圧は status の記録値（約 1 秒ごと）を次の記録まで保持して表示します。低電圧の目盛り 3.4 V はファームの既定値（`safety.battery.low_v`）で、ログには記録されません。
 
+## 12. sf log stats
+
+実機確認（`firmware/vehicle/docs/hardware_checkout.md`）の問いに、一式から答える表を出します。モードを 1 つ選び、その問いに必要なストリームだけを読みます。出すのは数値と事実だけで、合否の線は手順書の側にあります（この命令は合否を判定しません）。実体は `lib/sflog/stats.py` です。
+
+```bash
+sf log stats <モード> [一式] [--since 秒] [--until 秒]
+```
+
+`一式` を省くと `logs/` 内の最新の一式を使います。時刻は機体時刻（起動からの秒）で、`sf log info <一式> --text` の行頭の時刻と同じです。
+
+| モード | 答える問い | 読むストリーム | 区間の指定 |
+|--------|-----------|----------------|-----------|
+| `tof` | ARMED_GROUND（ARM 済み・地上）の間、床の下向き ToF（機体底面の距離センサ）は何 cm を読んだか。床の帯（5 cm）を超えた有効な読みはあるか | `flight_phase`・`tof_bottom` | 任意 |
+| `spread` | 有効な ToF の読みは、1 秒ごとにどれだけばらつくか（最大 − 最小） | `tof_bottom` | **必須** |
+| `loop` | ARM 中の 400 Hz ループの `late`（遅れた回数）・`over budget`（処理が周期を超えた回数）はいつ増えたか。有限でない数の検出、ログ経路の欠落、テキストログの欠落、ToF 出力停止の行数 | `loop_timing`・`nonfinite`・`link_health`（任意: `text_log`・`tof_silence`） | 任意 |
+| `events` | 最高到達の高さ、保持高度（`--target` ± `--band`）に最後に収まらなかった時刻、LANDING 開始から全モータが止まるまでの時間と、止まる前の最後の有効な ToF | `tof_bottom`・`flight_phase`（LANDING があれば `motor`） | 任意 |
+| `turn` | 区間内の向きの変化（符号つき。時計回りが正）、ToF の高さの最小・最大、水平の流れ（区間の最初の位置からの最大の距離。推定器の値） | `attitude`・`tof_bottom`・`posvel` | **必須** |
+| `baro` | 気圧から求めた床基準の高さと ToF の高さの差（rms: 二乗平均平方根と最大）、学習したオフセットの範囲と経過時間 | `baro_height`・`tof_bottom` | **必須** |
+| `boot` | 起動の理由（`reset_reason`）と電池電圧の最小・最大 | `status` | 任意 |
+
+出力の例（シミュレーション SILS の飛行の一式。値は例）:
+
+```text
+$ sf log stats tof logs/checkout/s1_tof_floor.sflog.zip
+Floor ToF while ARMED_GROUND
+  ARMED_GROUND time       : 40.2 s in 1 run(s), from 12.0 s
+  ToF samples             : 1206 (valid 1200, invalid 6)
+  valid minimum           : 3.1 cm
+  valid maximum           : 3.5 cm
+  valid above 5 cm        : 0
+
+$ sf log stats events logs/checkout/s3_takeoff.sflog.zip
+Flight events
+  peak ToF height         : 0.816 m at 10.897 s
+  last time outside 0.50 +- 0.07 m : 12.745 s (after the peak, before landing)
+  LANDING                 : started at 13.022 s; all motors stopped 3.140 s later
+  last valid ToF before stop: 3.8 cm, 0.080 s before the stop; invalid samples in the last 0.5 s: 3
+
+$ sf log stats turn logs/checkout/s3_turn.sflog.zip --since 22 --until 36
+Turn in the window
+  yaw change              : -270.0 deg (min -270.0, max +0.0); positive = clockwise seen from above
+  ToF height              : min 1.113 m, max 1.256 m
+  horizontal drift        : max 0.000 m from the first position (ESKF estimate)
+
+$ sf log stats loop logs/checkout/s4_final.sflog.zip
+Armed 400 Hz loop (counters are totals since boot)
+  no armed counter changed (late and over budget stayed 0 while ARMed)
+  imu      armed: cycles 3456, late 0, over budget 0, period max 2.50 ms, busy max 0.00 ms
+  control  armed: cycles 3456, late 0, over budget 0, period max 2.50 ms, busy max 0.00 ms
+  non-finite              : detected 0 of 3456 armed cycles
+  log paths               : log_stream_overflow=0, send_drops=0, entry_drops=0, text_dropped_lines=0
+  text log                : 136 lines, 0 dropped before a line (loss markers)
+  ToF output stopped      : tof_silent=1 in 0 of 1250 rows
+```
+
+`loop` の表は、ARM 中のカウンタ（`late`・`over budget`）が増えた行だけを時刻つきで並べます。カウンタは起動以降の累計です。
+
+### オプション
+
+| 引数 | 説明 | 既定値 |
+|------|------|-------|
+| `モード`（位置引数、必須） | `tof`・`spread`・`loop`・`events`・`turn`・`baro`・`boot` のどれか | - |
+| `bundle`（位置引数、省略可） | 一式のパス（`.sflog.zip` またはフォルダ） | `logs/` 内の最新の一式 |
+| `--since SECONDS`、`--until SECONDS` | 区間（機体時刻の秒、両端を含む）。`spread`・`turn`・`baro` は両方が必須 | 全区間 |
+| `--target METERS` | `events` のみ。整定を判定する保持高度 | 0.5（自動離陸の高度） |
+| `--band METERS` | `events` のみ。保持高度の前後で「整定」とみなす半幅 | 0.07（POS_HOLD の保持精度） |
+
+### 終了コードと欠落したストリーム
+
+- 終了コード 0: 表を出した。
+- 終了コード 1: 一式が読めない、必要なストリームが無い、または区間に標本が無い。メッセージにストリーム名を書く（例: `stream 'loop_timing' is missing or empty in this bundle`）。旧ファームの取得や、診断値のストリームを持たない一式（`logs/` 内の過去の実機ログなど）では、`loop` などがこの形で終わる。`boot` は `status` を持つ全ての一式で動く。
+- `events` で、ARM 中だけモータを記録する一式（SILS の一式）には、停止後の全 duty 0 の行が無い。その場合は「全 duty 0 の行が無い」と述べ、代わりに LANDING の状態が終わった時刻を出す。実機の一式は ARM 前後もモータの行を記録する。
+
 ---
 
 <a id="english"></a>
@@ -412,6 +486,7 @@ newest bundle in `logs/` when none is given. A bundle name's extension may be om
 | `wifi` | Capture telemetry via WiFi UDP, saved as a bundle |
 | `list` | List bundles under `logs/` |
 | `info` | Show a bundle's `meta.json` summary, per-stream stats and diagnostics (loop timing, non-finite counters, ToF, log-path losses); `--text` prints the vehicle's text log (the `ESP_LOG` lines) |
+| `stats` | Checkout summaries as tables (floor ToF, loop counters, motor stop at landing, turn, barometric height, boot reason) |
 | `check` | Validate a bundle's structure, units, and timing |
 | `convert` | Convert a legacy `.jsonl` to a bundle, or a bundle to a derived aligned/JSONL CSV |
 | `viz` | Visualize a bundle (every stream plotted at its own native rate) |
@@ -773,3 +848,76 @@ Sample (the first 30 s of a POS_HOLD hover on 2026-06-27, scaled down to 1280×7
 | Other | `--speed`, `--fps`, `--frames-dir DIR` (JPEG frames instead of an mp4), `--swiftshader` (Chrome software rendering) |
 
 The battery voltage is the logged status value (about once a second), held until the next sample. The 3.4 V low-voltage mark is the firmware default (`safety.battery.low_v`); the log does not record it.
+
+## 12. sf log stats
+
+Answers the questions of the hardware checkout (`firmware/vehicle/docs/hardware_checkout.md`) from a bundle as tables. Pick one mode; it reads only the streams that its question needs. It prints numbers and facts only: the pass/fail line belongs to the procedure (this command does not judge). The implementation is `lib/sflog/stats.py`.
+
+```bash
+sf log stats <mode> [bundle] [--since seconds] [--until seconds]
+```
+
+Without `bundle` the newest bundle in `logs/` is used. Times are vehicle times (seconds since boot), the same as the time stamps at the start of the lines of `sf log info <bundle> --text`.
+
+| Mode | Question | Streams read | Window |
+|------|----------|--------------|--------|
+| `tof` | While ARMED_GROUND (armed, on the ground), what did the downward floor ToF (the distance sensor under the vehicle) read in cm? Is there a valid reading above the floor band (5 cm)? | `flight_phase`, `tof_bottom` | optional |
+| `spread` | How much do the valid ToF readings scatter in each 1 s window (maximum - minimum)? | `tof_bottom` | **required** |
+| `loop` | When did the armed 400 Hz loop's `late` (late wakes) and `over budget` (work longer than the period) counters grow? The non-finite count, the log-path losses, the text-log losses, the rows with the ToF output stopped | `loop_timing`, `nonfinite`, `link_health` (optional: `text_log`, `tof_silence`) | optional |
+| `events` | The peak height, the last time outside the hold height (`--target` +- `--band`), the time from the LANDING start until all motors stopped, and the last valid ToF before the stop | `tof_bottom`, `flight_phase` (`motor` when there is a LANDING) | optional |
+| `turn` | Heading change in the window (signed; clockwise is positive), minimum and maximum ToF height, horizontal drift (the largest distance from the first position of the window; the estimator's value) | `attitude`, `tof_bottom`, `posvel` | **required** |
+| `baro` | Barometric floor-relative height minus the ToF height (rms: root mean square, and maximum), the range and age of the learned offset | `baro_height`, `tof_bottom` | **required** |
+| `boot` | The boot reasons (`reset_reason`) and the minimum and maximum battery voltage | `status` | optional |
+
+Example outputs (flights of a SILS simulation bundle; the values are examples):
+
+```text
+$ sf log stats tof logs/checkout/s1_tof_floor.sflog.zip
+Floor ToF while ARMED_GROUND
+  ARMED_GROUND time       : 40.2 s in 1 run(s), from 12.0 s
+  ToF samples             : 1206 (valid 1200, invalid 6)
+  valid minimum           : 3.1 cm
+  valid maximum           : 3.5 cm
+  valid above 5 cm        : 0
+
+$ sf log stats events logs/checkout/s3_takeoff.sflog.zip
+Flight events
+  peak ToF height         : 0.816 m at 10.897 s
+  last time outside 0.50 +- 0.07 m : 12.745 s (after the peak, before landing)
+  LANDING                 : started at 13.022 s; all motors stopped 3.140 s later
+  last valid ToF before stop: 3.8 cm, 0.080 s before the stop; invalid samples in the last 0.5 s: 3
+
+$ sf log stats turn logs/checkout/s3_turn.sflog.zip --since 22 --until 36
+Turn in the window
+  yaw change              : -270.0 deg (min -270.0, max +0.0); positive = clockwise seen from above
+  ToF height              : min 1.113 m, max 1.256 m
+  horizontal drift        : max 0.000 m from the first position (ESKF estimate)
+
+$ sf log stats loop logs/checkout/s4_final.sflog.zip
+Armed 400 Hz loop (counters are totals since boot)
+  no armed counter changed (late and over budget stayed 0 while ARMed)
+  imu      armed: cycles 3456, late 0, over budget 0, period max 2.50 ms, busy max 0.00 ms
+  control  armed: cycles 3456, late 0, over budget 0, period max 2.50 ms, busy max 0.00 ms
+  non-finite              : detected 0 of 3456 armed cycles
+  log paths               : log_stream_overflow=0, send_drops=0, entry_drops=0, text_dropped_lines=0
+  text log                : 136 lines, 0 dropped before a line (loss markers)
+  ToF output stopped      : tof_silent=1 in 0 of 1250 rows
+```
+
+The `loop` table lists, with the time, only the rows in which an armed counter (`late`, `over budget`) grew. The counters are totals since boot.
+
+### Options
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `mode` (positional, required) | One of `tof`, `spread`, `loop`, `events`, `turn`, `baro`, `boot` | - |
+| `bundle` (positional, optional) | Bundle path (`.sflog.zip` or directory) | Newest bundle in `logs/` |
+| `--since SECONDS`, `--until SECONDS` | Window (vehicle time in seconds, both ends included). Both are required for `spread`, `turn` and `baro` | the whole bundle |
+| `--target METERS` | `events` only: the hold height the settling is judged against | 0.5 (the auto-takeoff height) |
+| `--band METERS` | `events` only: the half-width around the hold height that counts as settled | 0.07 (the POS_HOLD hold accuracy) |
+
+### Exit codes and missing streams
+
+- Exit code 0: a table was printed.
+- Exit code 1: the bundle cannot be read, a needed stream is missing, or the window holds no sample. The message names the stream (for example `stream 'loop_timing' is missing or empty in this bundle`). A capture from older firmware, or any bundle without the diagnostics streams (past real-vehicle logs in `logs/`, for example), ends this way in `loop` and similar modes. `boot` works on every bundle that has `status`.
+- In `events`, a bundle that records the motors only while ARMed (a SILS bundle) has no all-zero row after the stop. The command then says that no all-zero row exists and prints the time the LANDING state ended instead. A real-vehicle bundle also records motor rows before and after ARM.

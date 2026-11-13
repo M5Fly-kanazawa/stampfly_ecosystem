@@ -21,6 +21,8 @@ from .align import aligned
 from .bundle import FlightLog, is_bundle, make_meta, resolve_bundle_path
 from .check import Finding, check_bundle, is_ok
 from .convert import aligned_to_csv, bundle_to_jsonl, jsonl_to_bundle
+from . import stats
+from .stats import StatsError
 from .textlog import diagnostics_summary, format_text_log, has_text_log
 
 __version__ = "0.1.0"
@@ -46,6 +48,8 @@ __all__ = [
     "format_text_log",
     "has_text_log",
     "diagnostics_summary",
+    "stats",
+    "StatsError",
     "__version__",
     # not in the Phase 0 deliverable's required export list, but small and
     # useful enough to expose directly rather than forcing a submodule

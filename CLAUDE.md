@@ -70,6 +70,7 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 | `sf log wifi` | WiFi経由400Hzテレメトリ取得 |
 | `sf log convert` | バイナリ→CSV変換 |
 | `sf log info` | ログファイル情報表示 |
+| `sf log stats` | 実機確認用の要約（床の ToF・ループのカウンタ・着陸のモータ停止・回頭・気圧高度・起動の理由）|
 | `sf log analyze` | フライトログ解析 |
 | `sf log viz` | ログ可視化 |
 | `sf log video` | ログを 3D の機体が飛ぶ mp4 に変換（Chrome と ffmpeg が必要。既定の出力 `logs/videos/<ログ名>_3d.mp4`、既存は上書きせず `_2`… を付ける、`--force` で上書き）|

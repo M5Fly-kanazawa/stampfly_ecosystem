@@ -309,7 +309,7 @@ analysis/
 tools/
 ├── README.md
 ├── calibration/       # sf cal
-├── log_analyzer/      # sf log（wifi / convert / analyze / viz / video / list / info）。UDP 取得 udp_capture.py を含む。replay_video/ = sf log video（出力は logs/videos/）
+├── log_analyzer/      # sf log（wifi / convert / analyze / viz / video / list / info / stats。stats の実体は lib/sflog/stats.py）。UDP 取得 udp_capture.py を含む。replay_video/ = sf log video（出力は logs/videos/）
 ├── params_audit/      # sf params check / generate
 ├── sysid/             # sf sysid（同定・自動調整）
 ├── flasher_gui/       # sf flasher（GUI 書き込み）。書き込み処理の本体は lib/sfcli/commands/flash.py

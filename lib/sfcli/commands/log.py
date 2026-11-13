@@ -17,6 +17,7 @@ Subcommands:
     check    - Validate a bundle's structure/units (lib/sflog.check_bundle)
     convert  - Convert JSONL<->bundle, or a bundle -> aligned/JSONL CSV
     info     - Show a bundle summary (meta.json + per-stream stats + status-v4 diagnostics); --text: the text log
+    stats    - Checkout summaries of a bundle (floor ToF, loop counters, motor stop, turn, baro height, boot)
     analyze  - Analyze a bundle (gyro PSD, hover stats; --health: motor-fault report)
     viz      - Visualize a bundle (every stream at its native rate; -i: Plotly)
     video    - Render a flight log as an mp4 (3D StampFly flies the logged path)
@@ -233,6 +234,36 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="With --text: only lines at or before this vehicle time (seconds since boot)",
     )
     info_parser.set_defaults(func=run_info)
+
+    # --- stats ---
+    stats_parser = log_subparsers.add_parser(
+        "stats",
+        help="Checkout summaries of a bundle (ToF, loop counters, events, turn, baro, boot)",
+        description="Answer one question of the hardware checkout from a bundle and print a table "
+                    "with units. Modes: tof (floor ToF while ARMED_GROUND), spread (ToF scatter per 1 s), "
+                    "loop (armed 400 Hz counters, non-finite count, log-path losses), events (peak height, "
+                    "settling, motor stop after LANDING), turn (heading change, ToF sink, drift), "
+                    "baro (barometric height vs ToF), boot (reset reasons, battery voltage). "
+                    "Times are vehicle times in seconds since boot (the time stamps of "
+                    "`sf log info --text`). Exit code 1 when a needed stream is missing.",
+    )
+    stats_parser.add_argument("mode", choices=sflog.stats.MODES, metavar="MODE",
+                              help="One of: " + ", ".join(sflog.stats.MODES))
+    stats_parser.add_argument(
+        "bundle", nargs="?",
+        help="Bundle path, .sflog.zip or directory (default: newest in logs/)",
+    )
+    stats_parser.add_argument("--since", type=float, metavar="SECONDS",
+                              help="Window start, vehicle time in seconds (required for spread, turn, baro)")
+    stats_parser.add_argument("--until", type=float, metavar="SECONDS",
+                              help="Window end, vehicle time in seconds (required for spread, turn, baro)")
+    stats_parser.add_argument("--target", type=float, default=sflog.stats.DEFAULT_TARGET_M, metavar="METERS",
+                              help="events: hold height to judge the settling against "
+                                   f"(default: {sflog.stats.DEFAULT_TARGET_M} = the auto-takeoff height)")
+    stats_parser.add_argument("--band", type=float, default=sflog.stats.DEFAULT_SETTLE_BAND_M, metavar="METERS",
+                              help="events: half-width of the settled band around --target "
+                                   f"(default: {sflog.stats.DEFAULT_SETTLE_BAND_M})")
+    stats_parser.set_defaults(func=run_stats)
 
     # --- analyze ---
     analyze_parser = log_subparsers.add_parser(
@@ -770,6 +801,33 @@ def _stream_info_row(name: str, stats: dict) -> str:
         f"{first_str:>14s} {last_str:>14s} {duration_s:>7.1f}"
     )
 
+
+
+def run_stats(args: argparse.Namespace) -> int:
+    """`sf log stats MODE [BUNDLE]`: print one checkout summary (lib/sflog/stats.py). Exit 1 when the bundle
+    cannot be read or a needed stream is missing (the message names it).
+    `sf log stats MODE [BUNDLE]`: 実機確認の要約を 1 つ表示する（lib/sflog/stats.py）。一式が読めない、または必要な
+    ストリームが無いときは終了コード 1（メッセージにストリーム名を書く）。
+    """
+    bundle_path = _resolve_bundle_arg(args.bundle)
+    if bundle_path is None:
+        return 1
+    try:
+        log = sflog.load(bundle_path)
+    except Exception as e:  # noqa: BLE001
+        console.error(f"Failed to read bundle {bundle_path}: {e}")
+        return 1
+    try:
+        result = sflog.stats.compute(
+            log, args.mode, since=args.since, until=args.until, target_m=args.target, band_m=args.band
+        )
+    except sflog.StatsError as e:
+        console.error(f"{bundle_path.name}: {e}")
+        return 1
+    console.print(f"Bundle: {bundle_path.name}   mode: {args.mode}")
+    for line in result.lines:
+        console.print(line)
+    return 0
 
 
 def run_analyze(args: argparse.Namespace) -> int:

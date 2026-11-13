@@ -99,6 +99,7 @@ sf log capture -d 60       # USBシリアルで60秒キャプチャ
 # 解析
 sf log list                # ログファイル一覧
 sf log info                # 最新ログの情報
+sf log stats boot          # 実機確認用の要約（モード: tof/spread/loop/events/turn/baro/boot）
 sf log analyze             # フライト解析
 ```
 
@@ -238,6 +239,7 @@ sf log capture -d 60       # Capture 60s via USB serial
 # Analysis
 sf log list                # List log files
 sf log info                # Latest log info
+sf log stats boot          # Checkout summaries (modes: tof/spread/loop/events/turn/baro/boot)
 sf log analyze             # Flight analysis
 ```
 
