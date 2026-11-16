@@ -141,6 +141,8 @@ PC 担当者の端末（飛行の段階。全て同じ PC、機体の WiFi に�
 
 ## 3. このドキュメントの使い方
 
+Claude Code を進行役にして進めるときは、リポジトリで Claude Code を起動して `/hardware-checkout` と入力する（`.claude/skills/hardware-checkout/SKILL.md`）。手順を 1 つずつ示し、保存した記録を読んで合格線と照合する。モータが回りうる命令は、その場合も人が入力する。
+
 ### 確認項目
 
 各項目に ID（C1〜C16）を付ける。結果表（8 章）は実施 1 回ごとの行を持ち、各行にこの ID を書く。
@@ -809,6 +811,8 @@ If any of these occurs, stop on the spot (stop the motors, remove the battery, s
 | Stages 2 and 3 | The visual abort criteria above. Yellow fast blinking and the warning sound. An unexpected state transition. The battery warning sound. Unexpected behavior after a communication loss. In the turns (2-9, 2-10): the ToF height falls below 0.30 m, or the horizontal position drifts more than 0.5 m from the center of the area. Stage 3 ends with a landing as soon as anything abnormal appears in the sequence |
 
 ## 3. How to Use This Document
+
+To have Claude Code lead the procedure, start Claude Code in the repository and enter `/hardware-checkout` (`.claude/skills/hardware-checkout/SKILL.md`). It presents one step at a time, reads the saved records and compares them with the pass lines. Every command that can turn the motors is still typed by a person.
 
 ### Check Items
 
