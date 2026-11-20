@@ -71,6 +71,18 @@ static inline size_t heap_caps_get_free_size(uint32_t caps)
     return (size_t)1 << 20;   // pretend 1 MiB free
 }
 
+static inline size_t heap_caps_get_minimum_free_size(uint32_t caps)
+{
+    (void)caps;
+    return (size_t)1 << 19;   // pretend 512 KiB lowest free
+}
+
+static inline size_t heap_caps_get_largest_free_block(uint32_t caps)
+{
+    (void)caps;
+    return (size_t)1 << 19;   // pretend 512 KiB largest block
+}
+
 #ifdef __cplusplus
 }
 #endif
