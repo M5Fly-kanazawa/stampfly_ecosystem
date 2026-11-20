@@ -199,7 +199,7 @@ TARGET_LOG_SINK = test_log_sink
 SRCS_BAROMETRIC_HEIGHT = test_barometric_height.cpp
 TARGET_BAROMETRIC_HEIGHT = test_barometric_height
 
-.PHONY: all clean test
+.PHONY: all clean test eskf_fast_equiv
 
 all: $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOG_SINK) $(TARGET_LOOP_TIMING) $(TARGET_STEP_TIMING) $(TARGET_NONFINITE_GUARD) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) $(TARGET_ROTATE_GUIDANCE) $(TARGET_PARAM_RANGE) $(TARGET_STATE_MANAGER) $(TARGET_BAROMETRIC_HEIGHT) $(TARGET_FAILSAFE)
 
@@ -291,3 +291,15 @@ test: all
 
 clean:
 	rm -f $(TARGET_FAILSAFE) $(TARGET) $(TARGET_ESKF_FLIP) $(TARGET_FLIP_SEQUENCER) $(TARGET_TILT_CONSISTENCY) $(TARGET_SENSOR_FRESHNESS) $(TARGET_TOF_SILENCE) $(TARGET_TOF_HEALTH) $(TARGET_BLIND_LANDING) $(TARGET_TAKEOFF_POLICY) $(TARGET_LOG_RING) $(TARGET_LOG_SINK) $(TARGET_LOOP_TIMING) $(TARGET_STEP_TIMING) $(TARGET_NONFINITE_GUARD) $(TARGET_BATTERY_ALERT_POLICY) $(TARGET_API_ARGUMENTS) $(TARGET_ROTATE_GUIDANCE) $(TARGET_PARAM_RANGE) $(TARGET_STATE_MANAGER) $(TARGET_BAROMETRIC_HEIGHT)
+
+# Bit-exact equivalence of the ESKF SF_EXP_ESKF_FAST switch: build the SAME driver against
+# eskf_core.cpp with the switch 0 and 1, run both, and require identical per-call state hashes.
+# ESKF の SF_EXP_ESKF_FAST スイッチのビット同一性: 同じドライバをスイッチ 0/1 の eskf_core.cpp で
+# ビルド・実行し、呼び出しごとの状態ハッシュが完全一致することを要求する。
+ESKF_EQ_SRCS = test_eskf_fast_equiv.cpp ../components/sf_estimator_eskf/eskf_core.cpp
+eskf_fast_equiv:
+	$(CXX) $(CXXFLAGS) -DSF_EXP_ESKF_FAST=0 $(ESKF_EQ_SRCS) -o test_eskf_fast_equiv_off
+	$(CXX) $(CXXFLAGS) -DSF_EXP_ESKF_FAST=1 $(ESKF_EQ_SRCS) -o test_eskf_fast_equiv_on
+	./test_eskf_fast_equiv_off eskf_equiv_off.hash > /dev/null
+	./test_eskf_fast_equiv_on eskf_equiv_on.hash
+	cmp eskf_equiv_off.hash eskf_equiv_on.hash && echo "ESKF fast path: BIT-IDENTICAL"

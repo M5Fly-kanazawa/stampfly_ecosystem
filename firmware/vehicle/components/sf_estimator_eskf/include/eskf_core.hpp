@@ -27,6 +27,19 @@
 #include "sf_math.hpp"
 #include <cstdint>
 
+// -----------------------------------------------------------------------------
+// Experiment switch: SF_EXP_ESKF_FAST (default 0 = the original code, unchanged).
+// 1 = bit-exact speed-ups: the accel-attitude LPF coefficient is cached, a dead
+// DCM computation is dropped, and the frozen-state initial diagonal is computed
+// lazily. Every change keeps the result bit-identical (see eskf_core.cpp comments).
+// 実験スイッチ SF_EXP_ESKF_FAST（既定 0 = 従来コードのまま）。1 = 結果をビット単位で
+// 変えない高速化: 加速度姿勢 LPF 係数のキャッシュ、結果に使われない DCM 計算の削除、
+// フリーズ状態の初期対角の遅延計算。
+// -----------------------------------------------------------------------------
+#ifndef SF_EXP_ESKF_FAST
+#define SF_EXP_ESKF_FAST 0
+#endif
+
 namespace sf {
 
 using namespace math;
@@ -350,6 +363,16 @@ private:
     Vec3  accel_att_lpf_ = {0, 0, 0};   // filtered body accel for the attitude update
     float accel_lpf_dt_  = 0.0f;        // [s] last predict dt (for the LPF coefficient)
     bool  accel_lpf_init_ = false;      // seed the filter to the first sample (no ramp)
+#if SF_EXP_ESKF_FAST
+    // Cache of the LPF coefficient a = 1 - exp(-2*pi*hz*dt); valid while hz and dt are
+    // bit-identical to the cached pair (same input -> same libm output).
+    // LPF 係数 a のキャッシュ。hz と dt がキャッシュ時とビット同一の間のみ有効
+    // （同じ入力なら libm の出力も同じ）。
+    float accel_lpf_cached_hz_ = 0.0f;
+    float accel_lpf_cached_dt_ = 0.0f;
+    float accel_lpf_cached_a_  = 0.0f;
+    bool  accel_lpf_cache_valid_ = false;
+#endif
 
     // ToF-velocity differentiation history (updateToFVelocity). Member, not a
     // function-local static, so reset() discards it (no spike on re-takeoff).

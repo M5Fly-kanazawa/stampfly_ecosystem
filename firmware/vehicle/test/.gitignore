@@ -22,3 +22,7 @@ test_param_range
 test_log_sink
 test_barometric_height
 test_failsafe
+test_eskf_fast_equiv_off
+test_eskf_fast_equiv_on
+eskf_equiv_off.hash
+eskf_equiv_on.hash

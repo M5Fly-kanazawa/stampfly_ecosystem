@@ -32,6 +32,7 @@
 #include "esp_log.h"
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <algorithm>
 
 static const char* TAG = "ESKF_CORE";
@@ -764,7 +765,24 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
     Vec3 accel_src = accel_raw;
     if (cfg_.accel_att_lpf_hz > 0.0f && accel_lpf_dt_ > 0.0f) {
         if (!accel_lpf_init_) { accel_att_lpf_ = accel_raw; accel_lpf_init_ = true; }
+#if SF_EXP_ESKF_FAST
+        // BIT-EXACT: the coefficient is a pure function of (hz, dt). Reuse the previous value only
+        // when BOTH inputs have the identical bit pattern (memcmp, so -0/NaN are not conflated);
+        // the cached value was produced by the very same expression, hence identical bits.
+        // ビット同一: 係数は (hz, dt) の純関数。両入力のビット列が完全に同じ場合だけ前回値を再利用
+        // （memcmp なので -0/NaN も区別）。キャッシュ値は同一の式で作られたので同じビット列。
+        if (!accel_lpf_cache_valid_
+            || memcmp(&accel_lpf_cached_hz_, &cfg_.accel_att_lpf_hz, sizeof(float)) != 0
+            || memcmp(&accel_lpf_cached_dt_, &accel_lpf_dt_, sizeof(float)) != 0) {
+            accel_lpf_cached_hz_ = cfg_.accel_att_lpf_hz;
+            accel_lpf_cached_dt_ = accel_lpf_dt_;
+            accel_lpf_cached_a_  = 1.0f - expf(-2.0f * 3.14159265f * cfg_.accel_att_lpf_hz * accel_lpf_dt_);
+            accel_lpf_cache_valid_ = true;
+        }
+        const float a = accel_lpf_cached_a_;
+#else
         const float a = 1.0f - expf(-2.0f * 3.14159265f * cfg_.accel_att_lpf_hz * accel_lpf_dt_);
+#endif
         accel_att_lpf_.x += a * (accel_raw.x - accel_att_lpf_.x);
         accel_att_lpf_.y += a * (accel_raw.y - accel_att_lpf_.y);
         accel_att_lpf_.z += a * (accel_raw.z - accel_att_lpf_.z);
@@ -818,8 +836,14 @@ void EskfCore::updateAccelAttitude(const Vec3& accel_raw)
 
     // H matrix: attitude part + accel bias part
     // H行列: 姿勢部分 + 加速度バイアス部分
+#if !SF_EXP_ESKF_FAST
+    // (dead code: R_dcm is never read below — H is built from h_vec. Removed when the switch is on;
+    //  Quat::to_dcm is a pure const function, so dropping it cannot change any result.)
+    // （使われない計算: R_dcm は以降で読まれない — H は h_vec から作る。スイッチ ON で削除。
+    //  Quat::to_dcm は純粋な const 関数なので、削除しても結果は変わらない。）
     float R_dcm[3][3];
     q_.to_dcm(R_dcm);
+#endif
 
     float H[3][N] = {};
     // Attitude columns: -[h_vec×] (h_vec = predicted specific force; = g_expected baseline)
@@ -1067,6 +1091,37 @@ void EskfCore::shrinkBiasCovariance(float factor)
 
 void EskfCore::enforceCovarianceConstraints()
 {
+#if SF_EXP_ESKF_FAST
+    // BIT-EXACT: init_diag[] was filled with 15 products every call although it is read only for
+    // frozen states. Each entry is the same product std*std, so computing it on demand (below)
+    // yields identical bits; nothing else reads init_diag.
+    // ビット同一: init_diag[] は毎回15個の積で埋めていたが、読むのはフリーズ状態のみ。各要素は
+    // 同じ積 std*std なので必要時に計算しても同じビット列。他に init_diag を読む箇所はない。
+    const float init_std[N / 3] = {cfg_.init_pos_std, cfg_.init_vel_std, cfg_.init_att_std,
+                                   cfg_.init_bg_std, cfg_.init_ba_std};
+    for (int i = 0; i < N; i++) {
+        if (!(active_mask_ & (1 << i))) {
+            // Frozen: reset diagonal, zero cross-covariance
+            // フリーズ: 対角リセット、クロス共分散ゼロ化
+            const float std_dev = init_std[i / 3];   // state layout: 3 states per block / 3状態ずつのブロック
+            P_(i, i) = std_dev * std_dev;
+            for (int j = 0; j < N; j++) {
+                if (j != i) {
+                    P_(i, j) = 0;
+                    P_(j, i) = 0;
+                }
+            }
+        } else {
+            // Active: enforce minimum diagonal
+            // アクティブ: 対角下限を強制
+            if (P_(i, i) < 1e-12f) P_(i, i) = 1e-12f;
+        }
+    }
+
+    // Enforce symmetry / 対称性を強制
+    P_.symmetrize();
+}
+#else
     // Initial diagonal values for frozen states
     // フリーズ状態の初期対角値
     float init_diag[N];
@@ -1099,6 +1154,7 @@ void EskfCore::enforceCovarianceConstraints()
     // Enforce symmetry / 対称性を強制
     P_.symmetrize();
 }
+#endif
 
 // =============================================================================
 // Apply Masked Error State / マスク付き誤差状態の適用
