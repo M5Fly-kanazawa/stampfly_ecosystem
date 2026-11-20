@@ -339,7 +339,7 @@ TAB で補完。
 | `period max` | 地上は 2.5 ms 付近（ジッタで 3 ms 程度まで）。ARM の瞬間の停止が直っていれば 10 ms 未満 | 連続する起床の間隔の最大。5 ms 付近なら 1 ティック、7.5 ms 付近なら 2 ティックを落とした |
 | `busy max`、`over budget` | `busy max` が 2.5 ms 未満、`over budget` が 0 | 1 周期の処理時間（上位タスクに割り込まれた時間を含む）の最大と、2.5 ms を超えた回数 |
 
-**工程別の所要時間の見方**（ログに 60 秒ごとに出る 2 行。USB コンソールで読む）: 1 周期の処理時間が何の工程でかかっているかを、直前の 60 秒の窓で表示する。直前に `ImuTask: 400Hz load: busy_avg=...` の行が出る。
+**工程別の所要時間の見方**（ログに 60 秒ごとに出る 2 行。USB コンソールで読む）: 1 周期の処理時間が何の工程でかかっているかを、直前の 60 秒の窓で表示する。直前に `ImuTask: 400Hz load: busy_avg=...` の行が出る。この 2 行は `config::IMU_STEP_TIMING_ENABLED`（`main/config.hpp`）を true にしてビルドしたときだけ出る。既定は false で、有効にすると 400Hz の周期に時計の読み出しと集計の費用が加わる（実機では予算超過の周期が約 3 倍に増えた）ので、診断のときだけ有効にする。
 
 ```
 ImuTask: step us (n/avg/max): read=24000/210/480 predict=24000/830/1290 tof=1800/410/700 front=24000/20/60 flow=6000/520/900 mag=1500/90/200 baro=3000/60/150 rest=24000/180/650
@@ -698,7 +698,7 @@ completes.
 | `period max` | about 2.5 ms on the ground (up to about 3 ms with jitter); below 10 ms once the ARM-instant stall is fixed | Longest interval between two consecutive wakes. About 5 ms means one tick was dropped, about 7.5 ms two |
 | `busy max`, `over budget` | `busy max` below 2.5 ms, `over budget` 0 | Longest time of one cycle (preemption by higher-priority tasks included) and the number of cycles longer than 2.5 ms |
 
-**Reading the per-step time** (two log lines printed every 60 seconds; read them on the USB console): shows which step of a cycle the time goes to, over the preceding 60-second window. The `ImuTask: 400Hz load: busy_avg=...` line comes just before them.
+**Reading the per-step time** (two log lines printed every 60 seconds; read them on the USB console): shows which step of a cycle the time goes to, over the preceding 60-second window. The `ImuTask: 400Hz load: busy_avg=...` line comes just before them. These two lines appear only in a build with `config::IMU_STEP_TIMING_ENABLED` (`main/config.hpp`) set to true. The default is false: enabling it adds clock reads and bookkeeping to the 400 Hz cycle (on the real craft the over-budget cycles became about 3 times as frequent), so enable it only to diagnose.
 
 ```
 ImuTask: step us (n/avg/max): read=24000/210/480 predict=24000/830/1290 tof=1800/410/700 front=24000/20/60 flow=6000/520/900 mag=1500/90/200 baro=3000/60/150 rest=24000/180/650

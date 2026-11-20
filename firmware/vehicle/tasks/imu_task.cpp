@@ -482,17 +482,54 @@ static sf::StepTimingStats g_step_timing;
 static inline size_t stepIndex(TimedStep step) { return static_cast<size_t>(step); }
 static inline size_t kindIndex(ObservationKind kind) { return static_cast<size_t>(kind); }
 
-/// Record one observation step (time from started_us to now) when the kind had a sample in this
-/// cycle; returns the clock so the next step can start from it.
-/// この周期にその種類の標本があったときだけ、観測の工程（started_us から今まで）を記録する。
-/// 次の工程がそこから始められるよう、時計の値を返す。
-static uint32_t recordObservationStep(TimedStep step, bool had_sample, uint32_t started_us)
+/// True when the per-step timing is compiled in (config::IMU_STEP_TIMING_ENABLED). When false every
+/// wrapper below compiles to nothing: no clock read, no statistics, no log.
+/// 工程別の計測が組み込まれているか（config::IMU_STEP_TIMING_ENABLED）。false のとき、下の包みはすべて
+/// 何にもコンパイルされない: 時計の読み出しも、統計も、ログもない。
+static constexpr bool kStepTimingEnabled = config::IMU_STEP_TIMING_ENABLED;
+
+/// The clock for a step boundary [us]; 0 (and no clock read) when the timing is disabled.
+/// 工程の境目の時刻 [µs]。計測が無効なら 0（時計は読まない）。
+static inline uint32_t stepClockUs()
 {
-    const uint32_t finished_us = static_cast<uint32_t>(esp_timer_get_time());
-    if (had_sample) {
-        g_step_timing.recordStep(stepIndex(step), finished_us - started_us);
+    if constexpr (kStepTimingEnabled) {
+        return static_cast<uint32_t>(esp_timer_get_time());
+    } else {
+        return 0u;
     }
-    return finished_us;
+}
+
+/// Record a step that ran from started_us until now; returns the clock for the next step.
+/// started_us から今までかかった工程を記録し、次の工程の始まりの時刻を返す。
+static inline uint32_t stepRecordSince(TimedStep step, uint32_t started_us)
+{
+    if constexpr (kStepTimingEnabled) {
+        const uint32_t finished_us = stepClockUs();
+        g_step_timing.recordStep(stepIndex(step), finished_us - started_us);
+        return finished_us;
+    } else {
+        return 0u;
+    }
+}
+
+/// Like stepRecordSince(), but records only when the kind had a sample in this cycle.
+/// stepRecordSince() と同じだが、この周期にその種類の標本があったときだけ記録する。
+static inline uint32_t stepRecordObservation(TimedStep step, bool had_sample, uint32_t started_us)
+{
+    if constexpr (kStepTimingEnabled) {
+        return had_sample ? stepRecordSince(step, started_us) : stepClockUs();
+    } else {
+        return 0u;
+    }
+}
+
+/// Count one consumed sample of an observation kind in this cycle.
+/// この周期で観測の種類の標本を 1 個処理したと数える。
+static inline void stepNoteUpdate(ObservationKind kind)
+{
+    if constexpr (kStepTimingEnabled) {
+        g_step_timing.noteUpdate(kindIndex(kind));
+    }
 }
 
 /// Drain the downward-ToF queue: feed every sample to the estimator, the takeoff/landing manager
@@ -515,7 +552,7 @@ static bool consumeToFSamples(bool armed, bool in_landing_descent, sf::SensorSna
         if (g_tof_health.needsReacquire(tof.valid) && armed) {
             g_estimator->reacquireAltitude();
         }
-        g_step_timing.noteUpdate(kindIndex(ObservationKind::Tof));
+        stepNoteUpdate(ObservationKind::Tof);
         g_estimator->updateTof(tof);
         // Inject the SAME sample into the takeoff/landing manager so it does not compete
         // with the estimator for the sensor_tof queue (single consumer). Also inject the
@@ -554,7 +591,7 @@ static bool consumeFrontToFSamples(sf::SensorSnapshot& snap)
     // 任意センサが無い場合は timestamp 0 のまま。
     sf::TofData tof_front;
     while (sf::sensor_tof_front.read(tof_front)) {
-        g_step_timing.noteUpdate(kindIndex(ObservationKind::FrontTof));
+        stepNoteUpdate(ObservationKind::FrontTof);
         snap.tof_front_distance  = tof_front.distance;
         snap.tof_front_status    = tof_front.status;
         snap.tof_front_timestamp = tof_front.timestamp;
@@ -573,7 +610,7 @@ static bool consumeFlowSamples(sf::SensorSnapshot& snap)
     bool snap_dirty = false;
     sf::FlowData flow;
     while (sf::sensor_flow.read(flow)) {
-        g_step_timing.noteUpdate(kindIndex(ObservationKind::Flow));
+        stepNoteUpdate(ObservationKind::Flow);
         g_estimator->updateFlow(flow);
         // Mirror EVERY flow sample for the Data Stream: dx/dy are incremental
         // (displacement since the previous read), so a latest()-style 50Hz peek
@@ -610,7 +647,7 @@ static bool consumeMagSamples(sf::SensorSnapshot& snap)
     bool snap_dirty = false;
     sf::MagData mag;
     while (sf::sensor_mag.read(mag)) {
-        g_step_timing.noteUpdate(kindIndex(ObservationKind::Mag));
+        stepNoteUpdate(ObservationKind::Mag);
         applyMagBootPolicy(mag);
         g_estimator->updateMag(mag);
         snap.mag[0] = mag.mag[0]; snap.mag[1] = mag.mag[1]; snap.mag[2] = mag.mag[2];
@@ -627,7 +664,7 @@ static bool consumeBaroSamples(bool armed, sf::SensorSnapshot& snap)
     bool snap_dirty = false;
     sf::BaroData baro;
     while (sf::sensor_baro.read(baro)) {
-        g_step_timing.noteUpdate(kindIndex(ObservationKind::Baro));
+        stepNoteUpdate(ObservationKind::Baro);
         g_estimator->updateBaro(baro);
         g_baro_height.onBaroSample({baro.altitude, baro.pressure, baro.timestamp}, {armed, groundContactTrusted()});
         snap.baro_pressure = baro.pressure; snap.baro_altitude = baro.altitude;
@@ -673,25 +710,25 @@ static void processAsyncSensors()
     g_takeoff_landing.noteLandingDescent(in_landing_descent);   // LANDING begins: judge the touchdown afresh, before any sample / LANDING が始まる: 接地の判定を、どのサンプルより前に新たに行う
     // Each observation kind is timed on its own: the clock read at the end of one step starts the next.
     // 観測の種類ごとに別々に測る: 1 つの工程の終わりに読んだ時計が、次の工程の始まりになる。
-    uint32_t step_clock_us = static_cast<uint32_t>(esp_timer_get_time());
+    uint32_t step_clock_us = stepClockUs();
     bool kind_dirty = consumeToFSamples(armed, in_landing_descent, snap);
-    step_clock_us = recordObservationStep(TimedStep::TofUpdate, kind_dirty, step_clock_us);
+    step_clock_us = stepRecordObservation(TimedStep::TofUpdate, kind_dirty, step_clock_us);
     snap_dirty = kind_dirty || snap_dirty;
 
     kind_dirty = consumeFrontToFSamples(snap);
-    step_clock_us = recordObservationStep(TimedStep::FrontTof, kind_dirty, step_clock_us);
+    step_clock_us = stepRecordObservation(TimedStep::FrontTof, kind_dirty, step_clock_us);
     snap_dirty = kind_dirty || snap_dirty;
 
     kind_dirty = consumeFlowSamples(snap);
-    step_clock_us = recordObservationStep(TimedStep::FlowUpdate, kind_dirty, step_clock_us);
+    step_clock_us = stepRecordObservation(TimedStep::FlowUpdate, kind_dirty, step_clock_us);
     snap_dirty = kind_dirty || snap_dirty;
 
     kind_dirty = consumeMagSamples(snap);
-    step_clock_us = recordObservationStep(TimedStep::MagUpdate, kind_dirty, step_clock_us);
+    step_clock_us = stepRecordObservation(TimedStep::MagUpdate, kind_dirty, step_clock_us);
     snap_dirty = kind_dirty || snap_dirty;
 
     kind_dirty = consumeBaroSamples(armed, snap);
-    recordObservationStep(TimedStep::BaroUpdate, kind_dirty, step_clock_us);
+    stepRecordObservation(TimedStep::BaroUpdate, kind_dirty, step_clock_us);
     snap_dirty = kind_dirty || snap_dirty;
 
     if (snap_dirty) {
@@ -1406,7 +1443,7 @@ void ImuTask(void* pvParameters)
         // Publish raw IMU data to topic
         // 生IMUデータをトピックに発行
         sf::sensor_imu.publish(imu);
-        g_step_timing.recordStep(stepIndex(TimedStep::ReadImu), static_cast<uint32_t>(esp_timer_get_time()) - now);
+        stepRecordSince(TimedStep::ReadImu, now);
 
         // IMU-rate safety checks (requirements §9): impact / gyro anomaly at the
         // sample rate, so "2 consecutive" means 5 ms — fast enough for a real
@@ -1443,10 +1480,9 @@ void ImuTask(void* pvParameters)
         // Step 2: 推定器の予測ステップを実行
         // =====================================================================
 
-        const uint32_t predict_start_us = static_cast<uint32_t>(esp_timer_get_time());
+        const uint32_t predict_start_us = stepClockUs();
         g_estimator->predict(imu, config::IMU_DT);
-        g_step_timing.recordStep(stepIndex(TimedStep::Predict),
-                                 static_cast<uint32_t>(esp_timer_get_time()) - predict_start_us);
+        stepRecordSince(TimedStep::Predict, predict_start_us);
 
         feedBlindTouchdown(imu);   // blind-landing touchdown, every IMU cycle (a silent ToF drives nothing) / ToF なし着陸の接地。毎 IMU 周期（出力停止した ToF は何も駆動しない）
 
@@ -1545,11 +1581,12 @@ void ImuTask(void* pvParameters)
         // and clear the window, right after the 400Hz load line of this same cycle.
         // 工程別統計を周期全体（起床からここまで）で閉じ、1 分ごとに、同じ周期の 400Hz load 行の直後に
         // 出して窓を消す。
-        g_step_timing.endCycle(static_cast<uint32_t>(esp_timer_get_time()) - now, kCycleBudgetUs,
-                               stepIndex(TimedStep::Rest));
-        if ((cycle_count % kLoadLogEveryCycles) == 0u) {
-            logStepTiming();
-            g_step_timing.reset();
+        if constexpr (kStepTimingEnabled) {
+            g_step_timing.endCycle(stepClockUs() - now, kCycleBudgetUs, stepIndex(TimedStep::Rest));
+            if ((cycle_count % kLoadLogEveryCycles) == 0u) {
+                logStepTiming();
+                g_step_timing.reset();
+            }
         }
         // The esp_timer paces the loop; the ulTaskNotifyTake at the top blocks
         // until the next 400Hz tick, so no explicit delay is needed here.
