@@ -26,3 +26,5 @@ test_eskf_fast_equiv_off
 test_eskf_fast_equiv_on
 eskf_equiv_off.hash
 eskf_equiv_on.hash
+test_heavy_kind_select
+imu_heavy_kind_select.gen.hpp

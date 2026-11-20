@@ -57,7 +57,54 @@
 #include "sf_math.hpp"      // sf::math::kGravity/Quat/Vec3 (used directly below;
                             // not relied on through another header's includes)
 
+// -----------------------------------------------------------------------------
+// Experiment switches (A/B builds; every one defaults to 0 = the original code, unchanged;
+// passed with -D "SF_EXP_FLAGS=-DSF_EXP_xxx=1", see CMakeLists.txt). The three are independent.
+// 実験スイッチ（A/B ビルド用。すべて既定 0 = 従来コードのまま。
+// -D "SF_EXP_FLAGS=-DSF_EXP_xxx=1" で渡す。CMakeLists.txt 参照）。3 つは互いに独立。
+//
+// SF_EXP_ONE_KIND_PER_CYCLE: at most ONE heavy observation kind per 400 Hz cycle. The downward
+//   ToF is never deferred (takeoff / touchdown / ToF-silence verdicts depend on its time); the
+//   flow, mag and baro samples wait in their queues for a later cycle. Priority: ToF > flow >
+//   mag > baro (a "deferred kind goes first" rule was tried in the host test and is not needed: no
+//   sample is dropped and it makes the flow wait longer).
+//   1 周期に処理する重い観測を 1 種類までにする。下向き ToF は絶対に遅らせない（離陸・接地・
+//   ToF 出力停止の判定が ToF の処理時刻に依存する）。フロー・地磁気・気圧の標本はキューに残して
+//   後の周期へ回す。優先順位 ToF > フロー > 地磁気 > 気圧（「回された種類を先にする」規則は
+//   host テストで試したが不要: 標本は 1 つも捨てられず、フローの待ちが長くなる）。
+// SF_EXP_BARO_OFF_IMU: MEASUREMENT ONLY, NOT A SHIPPABLE FORM. ImuTask only drains the baro queue
+//   (no estimator update, no barometric height, no snapshot write), to measure the upper bound of
+//   what moving the barometer out of this task would save. The barometric height stays frozen.
+//   計測専用（採用できる形ではない）。ImuTask は気圧キューを読み捨てるだけ（推定器の更新・
+//   気圧高度・スナップショットへの書き込みなし）。気圧の処理を本タスクから外した効果の上限を測る。
+//   気圧高度の観測値は更新されなくなる。
+// SF_EXP_REST_LEAN: fewer duplicated reads per cycle: system_mode.latest() once (at the wake),
+//   controller_status.latest() once, and one estimator getState() per interval in which the state
+//   does not change. Values read mid-cycle become the cycle-start value (at most one cycle old).
+//   毎周期の重複した読み出しを減らす: system_mode.latest() は起床時に 1 回、controller_status.latest()
+//   も 1 回、getState() は状態が変わらない区間ごとに 1 回。周期の途中で読んでいた値は、周期の先頭の値
+//   （最大 1 周期古い）になる。
+// -----------------------------------------------------------------------------
+#ifndef SF_EXP_ONE_KIND_PER_CYCLE
+#define SF_EXP_ONE_KIND_PER_CYCLE 0
+#endif
+#ifndef SF_EXP_BARO_OFF_IMU
+#define SF_EXP_BARO_OFF_IMU 0
+#endif
+#ifndef SF_EXP_REST_LEAN
+#define SF_EXP_REST_LEAN 0
+#endif
+
 static const char* TAG = "ImuTask";
+
+#if SF_EXP_REST_LEAN
+/// The values read ONCE per cycle (SF_EXP_REST_LEAN): system_mode at the wake (ImuTask loop),
+/// controller_status in feedBlindTouchdown (runs every cycle, before any ToF sample is handled).
+/// 周期ごとに 1 回だけ読む値（SF_EXP_REST_LEAN）: 起床時の system_mode（ImuTask ループ）、
+/// feedBlindTouchdown での controller_status（毎周期、どの ToF 標本よりも前に走る）。
+static sf::SystemMode g_cycle_mode{};
+static sf::ControllerStatus g_cycle_controller{};
+#endif
 
 /// Conversion factor: 1 g to m/s² (standard gravity, SSOT: sf::math::kGravity)
 /// 換算係数: 1 g → m/s²（標準重力, SSOT: sf::math::kGravity）
@@ -311,7 +358,11 @@ static bool groundContactTrusted()
     if (!g_failsafe.tof_silent) {
         return g_takeoff_landing.isOnGround();
     }
+#if SF_EXP_REST_LEAN
+    return !sf::isArmed(static_cast<sf::FlightState>(g_cycle_mode.state));   // the mode read at the wake / 起床時に読んだモード
+#else
     return !sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state));
+#endif
 }
 
 /// Feed the blind-touchdown detector one IMU sample: active only in LANDING with a silent ToF. The
@@ -321,10 +372,17 @@ static bool groundContactTrusted()
 /// のほかに 2 つの事実を必要とし、制御器が controller_status に出す: 支持推力に対する指令推力と、鉛直速度の推定。
 static void feedBlindTouchdown(const sf::ImuData& imu)
 {
+#if SF_EXP_REST_LEAN
+    const bool landing = static_cast<sf::FlightState>(g_cycle_mode.state) == sf::FlightState::LANDING;   // the mode read at the wake / 起床時に読んだモード
+    const bool blind_landing = landing && g_failsafe.tof_silent;
+    g_cycle_controller = sf::controller_status.latest();   // the ONE read of this cycle; feedToFHealth reuses it / この周期の唯一の読み出し。feedToFHealth が使い回す
+    const sf::ControllerStatus& controller = g_cycle_controller;
+#else
     const bool landing =
         static_cast<sf::FlightState>(sf::system_mode.latest().state) == sf::FlightState::LANDING;
     const bool blind_landing = landing && g_failsafe.tof_silent;
     const sf::ControllerStatus controller = sf::controller_status.latest();
+#endif
     sf::BlindTouchdownInput input{};
     input.dt_s                 = config::IMU_DT;
     input.accel_magnitude      = std::sqrt(imu.accel[0] * imu.accel[0] + imu.accel[1] * imu.accel[1] +
@@ -388,7 +446,11 @@ static uint32_t takeoffElapsedUs(const sf::SystemMode& mode, uint32_t now_us)
 /// 不感帯にいる、など。tof_health_tracker.hpp）。上昇量は制御器の加速度積分。
 static void feedToFHealth(const sf::TofData& tof)
 {
+#if SF_EXP_REST_LEAN
+    const sf::SystemMode& mode = g_cycle_mode;   // the mode read at the wake / 起床時に読んだモード
+#else
     const sf::SystemMode mode = sf::system_mode.latest();
+#endif
     const sf::FlightState state = static_cast<sf::FlightState>(mode.state);
 
     // An estimator that does not use the ToF (eskf.use_tof = false: the barometer anchors the
@@ -403,7 +465,11 @@ static void feedToFHealth(const sf::TofData& tof)
     facts.innovation_m       = g_tof_vertical ? observed.innovation_m : 0.0f;
     facts.distance_m         = tof.distance;
     facts.phase              = toFFlightPhase(state);
+#if SF_EXP_REST_LEAN
+    facts.rise_m             = g_cycle_controller.vertical_rise_m;   // read once in feedBlindTouchdown / feedBlindTouchdown で 1 回読んだ値
+#else
     facts.rise_m             = sf::controller_status.latest().vertical_rise_m;
+#endif
     facts.takeoff_elapsed_us = takeoffElapsedUs(mode, facts.now_us);
     g_tof_health.onSample(tof.timestamp, facts);
     if (facts.phase == sf::ToFFlightPhase::Takeoff) {   // the positive floor evidence is a TAKEOFF fact / 床の積極的な証拠は TAKEOFF の事実
@@ -437,9 +503,14 @@ static void publishToFHealth()
 /// a valid sample, the estimator has re-acquired the ToF (not silent), and the craft is off the floor.
 /// 気圧高度の推定器に、このサンプルの傾き補正した ToF の高さと、そこからオフセットを学習してよいか（有効なサンプルで、推定器が
 /// ToF を取り込み済み（出力停止でない）、かつ機体が床を離れている）を与える。
+#if SF_EXP_REST_LEAN
+static void feedBarometricHeightToF(const sf::TofData& tof, const sf::StateEstimate& state)   // state: the copy the caller took after updateTof / state: 呼び出し側が updateTof の後に取ったコピー
+{
+#else
 static void feedBarometricHeightToF(const sf::TofData& tof)
 {
     const sf::StateEstimate state = g_estimator->getState();   // attitude: quaternion w, x, y, z / 姿勢: クォータニオン
+#endif
     const float cos_tilt = 1.0f - 2.0f * (state.attitude[1] * state.attitude[1] + state.attitude[2] * state.attitude[2]);
     sf::BarometricToFSample sample{};
     sample.height_m     = tof.distance * cos_tilt;
@@ -561,10 +632,17 @@ static bool consumeToFSamples(bool armed, bool in_landing_descent, sf::SensorSna
         // 同じサンプルを離着陸マネージャに注入し、sensor_tof キューを推定器と奪い合わない
         // ようにする（単一 consumer）。鉛直速度（NED down）も注入し、着陸検出器を入力の純粋な
         // 関数に保つ（マネージャ内でトピックを読まない）。
+#if SF_EXP_REST_LEAN
+        const sf::StateEstimate state_after_tof = g_estimator->getState();   // ONE copy: nothing below changes the estimator / 1 回のコピー: 以下は推定器を変えない
+        g_takeoff_landing.update(tof, armed, state_after_tof.velocity[2], in_landing_descent);
+        feedToFHealth(tof);
+        feedBarometricHeightToF(tof, state_after_tof);
+#else
         g_takeoff_landing.update(tof, armed, g_estimator->getState().velocity[2],
                                  in_landing_descent);
         feedToFHealth(tof);
         feedBarometricHeightToF(tof);
+#endif
         consumed = true;
         snap.tof_distance  = tof.distance;
         snap.tof_status    = tof.status;
@@ -626,6 +704,7 @@ static bool consumeFlowSamples(sf::SensorSnapshot& snap)
     return snap_dirty;
 }
 
+#if !SF_EXP_BARO_OFF_IMU   // unused when the baro is only drained / 気圧が読み捨てだけなら使わない
 /// Mirror the barometric height into the snapshot: the value as of the last NEW conversion, with the age counted to this sample.
 /// 気圧高度をスナップショットへミラーする: 最後の「新しい」変換の時点の値で、経過時間はこのサンプルまで数える。
 static void mirrorBarometricHeight(const sf::BaroData& baro, sf::SensorSnapshot& snap)
@@ -639,6 +718,7 @@ static void mirrorBarometricHeight(const sf::BaroData& baro, sf::SensorSnapshot&
     else if (age_decis > sf::kBaroAgeSaturatedDecis) snap.baro_offset_age_decis = static_cast<uint16_t>(sf::kBaroAgeSaturatedDecis);
     else                                           snap.baro_offset_age_decis = static_cast<uint16_t>(age_decis);
 }
+#endif   // !SF_EXP_BARO_OFF_IMU
 
 /// Fuse the magnetometer samples and mirror them. Returns true if the snapshot changed.
 /// 磁気センサのサンプルを融合してミラーする。スナップショットが変われば true。
@@ -661,6 +741,20 @@ static bool consumeMagSamples(sf::SensorSnapshot& snap)
 /// 気圧計のサンプルを融合してミラーする。スナップショットが変われば true。
 static bool consumeBaroSamples(bool armed, sf::SensorSnapshot& snap)
 {
+#if SF_EXP_BARO_OFF_IMU
+    // MEASUREMENT ONLY (SF_EXP_BARO_OFF_IMU), not a shippable form: read the samples and throw them away, so BaroTask's
+    // overflow count does not rise; no estimator update, no barometric height, no snapshot write. The barometric
+    // height observation is NOT updated in this build.
+    // 計測専用（SF_EXP_BARO_OFF_IMU）。採用できる形ではない。標本を読んで捨てるだけ（BaroTask 側のあふれの
+    // 数を増やさないため）。推定器の更新・気圧高度・スナップショットへの書き込みはしない。このビルドでは
+    // 気圧高度の観測値は更新されない。
+    (void)armed;
+    (void)snap;
+    sf::BaroData discarded;
+    while (sf::sensor_baro.read(discarded)) {
+    }
+    return false;
+#else
     bool snap_dirty = false;
     sf::BaroData baro;
     while (sf::sensor_baro.read(baro)) {
@@ -673,11 +767,75 @@ static bool consumeBaroSamples(bool armed, sf::SensorSnapshot& snap)
         snap_dirty = true;
     }
     return snap_dirty;
+#endif
 }
 
 /// SystemMode.state_since_us that processAsyncSensors() read in this cycle: the state the landing verdict of the cycle belongs to (published as SystemStatus.verdict_state_since_us).
 /// この周期に processAsyncSensors() が読んだ SystemMode.state_since_us: その周期の着陸判定が属する状態（SystemStatus.verdict_state_since_us として発行）。
 static uint32_t g_verdict_state_since_us = 0;
+
+#if SF_EXP_ONE_KIND_PER_CYCLE
+// SF_PURE_BEGIN heavy_kind_select  (the host test extracts this region verbatim / host テストがこの区間をそのまま取り出す)
+/// Heavy observation kinds as bits, in priority order (the lowest bit wins). The downward ToF is not here:
+/// it is always processed in its cycle and, when it was, no other heavy kind is.
+/// 重い観測の種類をビットで表す。優先順位の順（最下位ビットが先）。下向き ToF はここに無い:
+/// 常にその周期に処理し、処理したときは他の重い種類を処理しない。
+static constexpr uint8_t kHeavyFlow = 1u << 0;
+static constexpr uint8_t kHeavyMag  = 1u << 1;
+static constexpr uint8_t kHeavyBaro = 1u << 2;
+
+/// The heavy kind to process in this cycle (0 = none). tof_processed: the downward ToF had samples and was processed.
+/// ready_mask: kinds whose queue holds a sample. Priority: flow > mag > baro.
+/// この周期に処理する重い種類（0 = なし）。tof_processed: 下向き ToF に標本があり処理した。ready_mask: キューに
+/// 標本がある種類。優先順位はフロー > 地磁気 > 気圧。
+static uint8_t selectHeavyKind(bool tof_processed, uint8_t ready_mask)
+{
+    if (tof_processed) {
+        return 0u;
+    }
+    if ((ready_mask & kHeavyFlow) != 0u) {
+        return kHeavyFlow;
+    }
+    if ((ready_mask & kHeavyMag) != 0u) {
+        return kHeavyMag;
+    }
+    return static_cast<uint8_t>(ready_mask & kHeavyBaro);
+}
+// SF_PURE_END heavy_kind_select
+
+/// Process at most one heavy kind (flow / mag / baro) in this cycle, chosen by selectHeavyKind(); the others stay
+/// in their queues. Returns the clock for the next timed step.
+/// この周期に重い種類（フロー・地磁気・気圧）を 1 つまで処理する。選択は selectHeavyKind()。他はキューに残る。
+/// 次の計測工程の始まりの時刻を返す。
+static uint32_t consumeOneHeavyKind(bool tof_processed, bool armed, sf::SensorSnapshot& snap,
+                                    bool& snap_dirty, uint32_t step_clock_us)
+{
+    uint8_t ready_mask = 0u;
+    if (sf::sensor_flow.available()) { ready_mask |= kHeavyFlow; }
+    if (sf::sensor_mag.available())  { ready_mask |= kHeavyMag; }
+#if !SF_EXP_BARO_OFF_IMU   // the baro is not a heavy kind when it is only drained / 気圧は読み捨てだけなら重い種類ではない
+    if (sf::sensor_baro.available()) { ready_mask |= kHeavyBaro; }
+#endif
+    const uint8_t picked = selectHeavyKind(tof_processed, ready_mask);
+
+    bool kind_dirty = false;
+    if (picked == kHeavyFlow) {
+        kind_dirty = consumeFlowSamples(snap);
+        step_clock_us = stepRecordObservation(TimedStep::FlowUpdate, kind_dirty, step_clock_us);
+    } else if (picked == kHeavyMag) {
+        kind_dirty = consumeMagSamples(snap);
+        step_clock_us = stepRecordObservation(TimedStep::MagUpdate, kind_dirty, step_clock_us);
+    } else if (picked == kHeavyBaro) {
+        kind_dirty = consumeBaroSamples(armed, snap);
+        step_clock_us = stepRecordObservation(TimedStep::BaroUpdate, kind_dirty, step_clock_us);
+    }
+#if SF_EXP_BARO_OFF_IMU
+    consumeBaroSamples(armed, snap);   // drain only, every cycle (SF_EXP_BARO_OFF_IMU) / 読み捨てだけ、毎周期
+#endif
+    snap_dirty = kind_dirty || snap_dirty;
+    return step_clock_us;
+}
+#endif   // SF_EXP_ONE_KIND_PER_CYCLE
 
 /// Process async sensor observations from queues
 /// キューからの非同期センサ観測を処理する
@@ -688,7 +846,11 @@ static void processAsyncSensors()
     // consuming, no queue competition).
     // arm 状態が離着陸マネージャの接地判定を制御（disarmed→接地）。system_mode トピック
     // （Latest, 非消費）から毎サイクル1回読む。
+#if SF_EXP_REST_LEAN
+    const sf::SystemMode& mode = g_cycle_mode;   // the mode read at the wake / 起床時に読んだモード
+#else
     const sf::SystemMode mode = sf::system_mode.latest();
+#endif
     const bool armed = sf::isArmed(static_cast<sf::FlightState>(mode.state));
     // True while the autonomous landing descent is commanded — enables the stalled-descent
     // touchdown branch (a stall near the ground means "landed" only when we are descending).
@@ -714,11 +876,17 @@ static void processAsyncSensors()
     bool kind_dirty = consumeToFSamples(armed, in_landing_descent, snap);
     step_clock_us = stepRecordObservation(TimedStep::TofUpdate, kind_dirty, step_clock_us);
     snap_dirty = kind_dirty || snap_dirty;
+#if SF_EXP_ONE_KIND_PER_CYCLE
+    const bool tof_processed = kind_dirty;   // the downward ToF had samples in this cycle / この周期に下向き ToF の標本があった
+#endif
 
     kind_dirty = consumeFrontToFSamples(snap);
     step_clock_us = stepRecordObservation(TimedStep::FrontTof, kind_dirty, step_clock_us);
     snap_dirty = kind_dirty || snap_dirty;
 
+#if SF_EXP_ONE_KIND_PER_CYCLE
+    consumeOneHeavyKind(tof_processed, armed, snap, snap_dirty, step_clock_us);
+#else
     kind_dirty = consumeFlowSamples(snap);
     step_clock_us = stepRecordObservation(TimedStep::FlowUpdate, kind_dirty, step_clock_us);
     snap_dirty = kind_dirty || snap_dirty;
@@ -730,6 +898,7 @@ static void processAsyncSensors()
     kind_dirty = consumeBaroSamples(armed, snap);
     stepRecordObservation(TimedStep::BaroUpdate, kind_dirty, step_clock_us);
     snap_dirty = kind_dirty || snap_dirty;
+#endif
 
     if (snap_dirty) {
         snap.timestamp = static_cast<uint32_t>(esp_timer_get_time());
@@ -876,9 +1045,14 @@ static void initTiltMonitor()
 /// predict + updates, and the ToF on-ground flag.
 /// 傾き整合モニタに IMU 1周期分を与える: 生加速度、この周期の predict＋更新後の推定、
 /// ToF の接地フラグ。
+#if SF_EXP_REST_LEAN
+static void updateTiltMonitor(const sf::ImuData& imu, const sf::StateEstimate& estimate)   // estimate: the copy after this cycle's updates and handoff / estimate: この周期の更新とハンドオフの後のコピー
+{
+#else
 static void updateTiltMonitor(const sf::ImuData& imu)
 {
     const sf::StateEstimate estimate = g_estimator->getState();
+#endif
     g_tilt_monitor.update(config::IMU_DT, imu.accel, estimate.attitude,
                           groundContactTrusted());
 }
@@ -955,7 +1129,11 @@ static void feedBootCalibration(const sf::ImuData& imu)
     // 校正は静止時のみ有効。平均完了前に arm された（離陸中/飛行中）なら中止し推定器を
     // 触らない — 飛行運動（例: ヨー回転）を平均するとバイアスがゴミになる。arm 状態は
     // system_mode（Latest, 非消費）から読む。
+#if SF_EXP_REST_LEAN
+    const sf::SystemMode& mode = g_cycle_mode;   // the mode read at the wake / 起床時に読んだモード
+#else
     const sf::SystemMode mode = sf::system_mode.latest();
+#endif
     if (sf::isArmed(static_cast<sf::FlightState>(mode.state))) {
         g_calib_active = false;
         g_calibrated   = true;      // no longer pending (aborted)
@@ -1399,6 +1577,9 @@ void ImuTask(void* pvParameters)
         uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
         ++cycle_count;
         const sf::SystemMode mode_at_wake = sf::system_mode.latest();   // read once per cycle / 周期ごとに 1 回だけ読む
+#if SF_EXP_REST_LEAN
+        g_cycle_mode = mode_at_wake;   // every other reader of this cycle uses this copy / この周期の他の読み手はこのコピーを使う
+#endif
         loop_timing.beginCycle(now, mode_at_wake.armed);
 
         // =====================================================================
@@ -1512,7 +1693,12 @@ void ImuTask(void* pvParameters)
         // predict + updates and before the status publish that carries its flag.
         // 傾き整合（地上: 推定姿勢 vs 測定した重力）。predict＋更新の後、フラグを載せる
         // ステータス発行の前に実行。
+#if SF_EXP_REST_LEAN
+        const sf::StateEstimate state_after_updates = g_estimator->getState();   // ONE copy: the estimator does not change until the publish below / 1 回のコピー: 下の発行まで推定器は変わらない
+        updateTiltMonitor(imu, state_after_updates);
+#else
         updateTiltMonitor(imu);
+#endif
 
         // Publish boot/system readiness (calibrated + ToF airborne) for the pre-arm
         // check (requestArm) and the takeoff sequencer (StateTask: TAKEOFF → FLYING).
@@ -1562,7 +1748,11 @@ void ImuTask(void* pvParameters)
         // Step 4: 状態推定値を発行
         // =====================================================================
 
+#if SF_EXP_REST_LEAN
+        sf::StateEstimate state = state_after_updates;
+#else
         sf::StateEstimate state = g_estimator->getState();
+#endif
         sf::estimate_state.publish(state);
 
         // =====================================================================
