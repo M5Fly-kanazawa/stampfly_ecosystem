@@ -14,6 +14,18 @@ if(SF_APP_DIR)
     message(STATUS "[vehicle] Application sources from ${SF_APP_DIR}")
 endif()
 
+# Experiment (branch exp/imu-cycle-budget-20261120): -D SF_EXP_HOT_IRAM=1 places the
+# code of the 400 Hz path in IRAM through the linker fragment hot_iram.lf. Unset or 0
+# adds no fragment, so the build is unchanged.
+# 実験（ブランチ exp/imu-cycle-budget-20261120）: -D SF_EXP_HOT_IRAM=1 で、400 Hz 経路の
+# コードをリンカフラグメント hot_iram.lf により IRAM に置く。未指定または 0 ならフラグメントを
+# 足さず、ビルドは変わらない。
+set(SF_HOT_IRAM_LDFRAGMENTS "")
+if(SF_EXP_HOT_IRAM)
+    set(SF_HOT_IRAM_LDFRAGMENTS "hot_iram.lf")
+    message(STATUS "SF_EXP_HOT_IRAM: 400 Hz path code is placed in IRAM")
+endif()
+
 idf_component_register(
     SRCS
         "main.cpp"
@@ -35,6 +47,7 @@ idf_component_register(
          "../tasks/api_task.cpp"
         ${SF_APP_SRCS}
     INCLUDE_DIRS "." "../tasks" ${SF_APP_INCS}
+    LDFRAGMENTS ${SF_HOT_IRAM_LDFRAGMENTS}
     REQUIRES
         esp_timer
         nvs_flash
