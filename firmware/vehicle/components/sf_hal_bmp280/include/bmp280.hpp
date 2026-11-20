@@ -157,6 +157,14 @@ public:
     bool isInitialized() const { return initialized_; }
 
 private:
+    /// Configure the sensor after the I2C device is added (used by init()).
+    /// I2C デバイス追加後にセンサを設定する（init() から使用）。
+    esp_err_t configureDevice();
+
+    /// Remove the I2C device and return to the pre-init state (failed init).
+    /// I2C デバイスを外し init 前の状態へ戻す（init 失敗時）。
+    void releaseDevice();
+
     // Calibration data structure
     struct CalibData {
         uint16_t dig_T1;

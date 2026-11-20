@@ -308,6 +308,25 @@ inline constexpr uint32_t ARMED_GROUND_SPOOL_US = 300000;  // 0.3 s
 inline constexpr uint32_t SENSOR_HEALTH_STALE_US = 500000;  // 0.5 s
 
 // =============================================================================
+// Optional I2C sensor initialisation retry (BMM150 / BMP280 / INA3221)
+// Optional な I2C センサの初期化再試行（BMM150 / BMP280 / INA3221）
+// =============================================================================
+
+// A transient I2C error at boot (the MCU restarted while the sensors stayed
+// powered, and several tasks start talking on the shared bus at once) must not
+// leave an Optional sensor disabled until the next boot. Each task therefore
+// tries to initialise its sensor up to this many times (first try included),
+// waiting the delay below between tries; only after all tries fail is the
+// sensor treated as absent (hardware_init.md §5).
+// 起動時の一時的な I2C エラー（マイコンだけが再起動してセンサが通電したまま、かつ
+// 複数タスクが共有バスで同時に通信を始める）で、Optional なセンサが次の起動まで
+// 無効のままになってはならない。各タスクはセンサの初期化を最大この回数（初回を含む）
+// 試み、試行の間は下の時間だけ待つ。全回失敗して初めてセンサ不在として扱う
+// （hardware_init.md §5）。
+inline constexpr int      OPTIONAL_SENSOR_INIT_MAX_ATTEMPTS = 3;
+inline constexpr uint32_t OPTIONAL_SENSOR_INIT_RETRY_DELAY_MS = 20;
+
+// =============================================================================
 // Power Monitor (INA3221) Wiring
 // 電源モニタ（INA3221）配線
 // =============================================================================

@@ -38,6 +38,7 @@
 #include "topics.hpp"
 #include "config.hpp"
 #include "sf_board.hpp"
+#include "optional_sensor_init.hpp"
 #include "bmp280.hpp"
 
 static const char* TAG = "BaroTask";
@@ -91,7 +92,8 @@ void BaroTask(void* /*pvParameters*/)
     // NORMAL モード + 妥当なオーバーサンプリングが Config 既定値として
     // 設定済みなので、そのまま使う。
 
-    esp_err_t err = g_baro.init(cfg);
+    esp_err_t err = sf::initOptionalI2cSensor(
+        TAG, "BMP280", [&]() { return g_baro.init(cfg); });
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "BMP280 init failed: %s — Baro disabled (Optional)",
                  esp_err_to_name(err));

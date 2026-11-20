@@ -34,6 +34,7 @@
 #include "topics.hpp"
 #include "config.hpp"
 #include "sf_board.hpp"
+#include "optional_sensor_init.hpp"
 #include "power_monitor.hpp"
 #include "failsafe.hpp"
 #include "sensor_freshness.hpp"
@@ -158,7 +159,8 @@ void PowerTask(void* pvParameters)
     // 電池シャントは 0.01 Ω（R12）。0.1 Ω ではない（config.hpp 参照）。
     // 値を誤ると電流と電力の表示が比例してずれる。
     cfg.shunt_resistor_ohm = config::POWER_BATTERY_SHUNT_OHM;
-    const bool present = (g_power.init(cfg) == ESP_OK);
+    const bool present = (sf::initOptionalI2cSensor(
+        TAG, "INA3221", [&]() { return g_power.init(cfg); }) == ESP_OK);
     sf::internal::board::set_sensor_present(
         sf::internal::board::SensorId::Power, present);
     if (present) {

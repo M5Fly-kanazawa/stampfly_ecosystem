@@ -269,6 +269,34 @@ esp_err_t init_i2c_bus()
 }
 
 // ---------------------------------------------------------------------------
+// Step: I2C bus recovery (right after the bus is created, before any sensor)
+// ステップ: I2C バス回復（バス生成の直後、どのセンサにも触る前）
+// ---------------------------------------------------------------------------
+//
+// The MCU can restart (USB serial reset, watchdog) while the sensors stay
+// powered from the battery, and a slave may then be stopped in the middle of
+// a transaction, holding SDA low. i2c_master_bus_reset() clocks SCL (up to
+// nine times) and issues a STOP, which releases such a slave. A failure is not
+// fatal: the sensors have their own bounded retry, so the boot goes on and
+// the result is logged once.
+//
+// マイコンだけが再起動（USB シリアルのリセット・ウォッチドッグ）してセンサが電池で
+// 通電したままの場合、スレーブが通信の途中で止まって SDA を Low に保つことがある。
+// i2c_master_bus_reset() は SCL を（最大 9 回）振って STOP を出し、そのスレーブを解放する。
+// 失敗しても致命ではない（各センサが有限回の再試行を持つ）ので、起動は続け、
+// 結果を 1 行ログに出す。
+void recover_i2c_bus()
+{
+    const esp_err_t err = i2c_master_bus_reset(g_i2c_bus);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "  L1: I2C bus recovery done (SCL clocks + STOP)");
+    } else {
+        ESP_LOGW(TAG, "  L1: I2C bus recovery failed: %s — boot continues",
+                 esp_err_to_name(err));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Step: SPI bus (IMU + OptFlow)
 // ステップ: SPI バス (IMU + OptFlow)
 // ---------------------------------------------------------------------------
@@ -436,6 +464,7 @@ esp_err_t init()
     }
     ESP_LOGI(TAG, "  L1: I2C bus ready (port=%d, SDA=%d, SCL=%d)",
              kI2cPort, kI2cSda, kI2cScl);
+    recover_i2c_bus();
 
     // Level 2: SPI bus (shared by IMU and OptFlow; Critical — the IMU needs it).
     // Level 2: SPI バス (IMU + OptFlow 共有; Critical — IMU が依存)。

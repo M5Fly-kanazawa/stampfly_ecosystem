@@ -148,6 +148,7 @@ Level 0: Pre-kernel resources
 
 Level 1: Bus peripherals
   - I2C master bus（GPIO3=SDA, GPIO4=SCL, glitch filter, internal pullup）
+  - I2C バス回復: バス生成の直後、どのセンサにも触る前に `i2c_master_bus_reset()` を 1 回呼ぶ（SCL を最大 9 回振って STOP を出し、通信の途中で止まったスレーブを解放する。マイコンだけが再起動してセンサが通電したままの場合に備える）。失敗しても起動は続け、結果を 1 行ログに出す
   - SPI host (IMU)
   - SPI host (Flow)
   - LEDC timer (PWM 周波数 150kHz, 8-bit 解像度)
@@ -206,14 +207,28 @@ ledc_timer     ─→  Motor / LED / Buzzer
 | Critical | Motor HAL | `abort()` + LED 赤点滅 | 推力を出せない |
 | Critical | NVS | `abort()` | パラメータ・キャリブを読めない |
 | Critical | I2C bus / SPI host / LEDC timer | `abort()` | 全 HAL が依存する基盤 |
-| **Optional** | BMM150 Mag | `sensor_present(Mag) = false` で続行 | ヨー推定がドリフトしやすくなるが ACRO/STAB は可能 |
+| **Optional** | BMM150 Mag | 初期化を最大 3 回（試行の間 20 ms。`config::OPTIONAL_SENSOR_INIT_MAX_ATTEMPTS`・`OPTIONAL_SENSOR_INIT_RETRY_DELAY_MS`、共通関数 `sf::initOptionalI2cSensor()`）試み、全回失敗して初めて `sensor_present(Mag) = false` で続行 | ヨー推定がドリフトしやすくなるが ACRO/STAB は可能 |
 | Optional | VL53L3CX Front ToF | `sensor_present(FrontToF) = false` | 障害物検知不能、フライトは可能 |
 | Optional | PMW3901 Flow | `sensor_present(Flow) = false` | 位置推定の補助（ホバーは ToF が鉛直を担う。気圧計は観測専用） |
-| Optional | BMP280 Baro | `sensor_present(Baro) = false` | 観測専用（制御・推定は ToF のみ）。無くても飛行は変わらない |
-| Optional | Power monitor | `sensor_present(Power) = false` | 電圧監視なしでも飛行は可能（バッテリ警告は失われる） |
+| Optional | BMP280 Baro | Mag と同じ有限回の初期化再試行の後、全回失敗なら `sensor_present(Baro) = false` | 観測専用（制御・推定は ToF のみ）。無くても飛行は変わらない |
+| Optional | Power monitor（INA3221） | Mag と同じ有限回の初期化再試行の後、全回失敗なら `sensor_present(Power) = false` | 電圧監視なしでも飛行は可能（バッテリ警告は失われる） |
 | **Recoverable** | VL53L3CX Bottom ToF（起動時の初期化失敗、または出力停止） | ARM されていない間（INIT・IDLE_GROUND・IDLE_HELD）だけ、TofTask が XSHUT（GPIO 7）でリセットして初期化・測距開始をやり直す。最初の試行は出力停止が 2 s 続いた後、以後出力停止が続く間 10 s ごと（`kTofReinitSilenceUs`・`kTofReinitRetryIntervalUs`）。判断は純関数 `sf::mayReinitializeToF()`。ARM 中は決して試行しない。出力停止の間、ARM は `ArmBlock::TofSilent` で拒否される（モードを問わない、`detailed_design.md` §3 注12） | 高度推定の主観測。ACRO / STABILIZE の制御則は高度を使わないが、高度センサが保証できない機体は離陸させない。センサの電源・バスの一時的な喪失はリセットで復帰しうるので、電源の入れ直しを要求しない。飛行中は、ToF なしの着陸が働く |
-| Recoverable | I2C / SPI 一時的 I/O エラー | task ループ内で retry、`READ_FAIL_LOG_INTERVAL = 400` cycles で警告抑制 | 振動や電源ノイズで稀に発生、再試行で復帰可能 |
+| Recoverable | I2C / SPI 一時的 I/O エラー（起動時の初期化を含む） | task ループ内で retry、初期化時は上記の有限回の再試行（Optional な I2C センサ）、`READ_FAIL_LOG_INTERVAL = 400` cycles で警告抑制 | 振動や電源ノイズで稀に発生、再試行で復帰可能 |
 | Recoverable | ESP-NOW パケットロス | failsafe 側で `command_setpoint` の age を判定 | 通信ロスは飛行中に発生しうる、タイムアウト Failsafe で対応 |
+
+#### Optional な I2C センサの初期化再試行
+
+BMM150・BMP280・INA3221 の初期化は、起動時の一時的な I2C エラーで「センサなし」に落ちないよう、有限回だけ再試行する。再試行は各タスク（MagTask・BaroTask・PowerTask）の先頭で、共通関数 `sf::initOptionalI2cSensor()`（`tasks/optional_sensor_init.hpp`）が行う。
+
+| 項目 | 内容 |
+|------|------|
+| 試行回数・待ち | 最大 3 回（初回を含む）、試行の間 20 ms（`vTaskDelay`） |
+| 失敗した試行 | WARN 1 行: センサ名・試行番号／最大回数・エラー名 |
+| 2 回目以降で成功 | INFO 1 行: センサ名・何回目で成功したか（一時的な失敗だったことが起動ログから分かる） |
+| 全回失敗 | Optional 無効（`sensor_present = false`）で起動を続ける。最後の試行のエラー名を WARN に出す |
+| ドライバの条件 | 各 HAL の `init()` は失敗時に I2C デバイスハンドルを外して初期状態へ戻すので、再度呼んでも二重登録・ハンドル漏れが起きない |
+
+400 Hz のタスク（ImuTask・ControlTask）と ToF（下向き・前方）の初期化・再初期化の経路は、この再試行の対象外である。
 
 ### LED エラーパターン（Critical 失敗時）
 
@@ -345,5 +360,9 @@ This document specifies:
 - Namespace boundaries for the 4-tier learner access (L0 / L1 / L2 / L3)
 
 **Bottom ToF classification (Recoverable while disarmed).** A bottom ToF whose bring-up fails at boot, or that delivers no sample for 2 s, is reset through XSHUT (GPIO 7) and initialised again by TofTask, as long as the craft is not armed (INIT / IDLE_GROUND / IDLE_HELD): the first attempt after 2 s of silence, then every 10 s while the sensor stays silent (`kTofReinitSilenceUs`, `kTofReinitRetryIntervalUs`). The decision is the pure function `sf::mayReinitializeToF()` (`tof_silence_policy.hpp`); in every armed state nothing about the sensor changes. While the sensor is silent ARM is refused in every mode (`ArmBlock::TofSilent`; `detailed_design.md` §3 note 12). The task never deletes itself, and a failed bring-up does not stop the boot.
+
+**I2C bus recovery at boot.** Right after the I2C master bus is created and before any sensor is touched, sf_board calls `i2c_master_bus_reset()` once (it clocks SCL up to nine times and issues a STOP, releasing a slave that was stopped in the middle of a transaction while only the MCU restarted and the sensors stayed powered). A failure does not stop the boot; the result is logged on one line.
+
+**Optional I2C sensors retry their initialisation.** BMM150 (Mag), BMP280 (Baro) and INA3221 (Power) are initialised up to 3 times (first try included, 20 ms between tries; `config::OPTIONAL_SENSOR_INIT_MAX_ATTEMPTS`, `OPTIONAL_SENSOR_INIT_RETRY_DELAY_MS`) by the shared function `sf::initOptionalI2cSensor()` (`tasks/optional_sensor_init.hpp`) at the top of MagTask, BaroTask and PowerTask. Each failed try logs one WARN line (sensor, try number / maximum, error name); a success on the second try or later logs one INFO line saying which try succeeded. Only when every try fails is the sensor treated as absent (Optional, `sensor_present = false`). Each HAL `init()` releases its I2C device handle on failure, so calling it again neither registers the device twice nor leaks a handle. ImuTask, ControlTask and the ToF bring-up / re-initialisation path are not affected.
 
 See the Japanese section for complete content.

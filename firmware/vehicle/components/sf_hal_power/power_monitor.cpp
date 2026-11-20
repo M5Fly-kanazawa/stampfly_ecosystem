@@ -70,6 +70,34 @@ esp_err_t PowerMonitor::init(const Config& config)
         return ret;
     }
 
+    // Configure the sensor. On any failure give the I2C device handle back, so
+    // init() can be called again (retry) without a duplicate or leaked handle.
+    // センサを設定する。失敗したら I2C デバイスハンドルを返却し、init() を再度
+    // （再試行で）呼んでも二重登録・ハンドル漏れが起きないようにする。
+    ret = configureDevice();
+    if (ret != ESP_OK) {
+        releaseDevice();
+    }
+    return ret;
+}
+
+void PowerMonitor::releaseDevice()
+{
+    // Remove the device from the bus and return to the pre-init state.
+    // デバイスをバスから外し、init 前の状態へ戻す。
+    if (dev_handle_) {
+        i2c_master_bus_rm_device(dev_handle_);
+        dev_handle_ = nullptr;
+    }
+    initialized_ = false;
+}
+
+esp_err_t PowerMonitor::configureDevice()
+{
+    // Everything after the device is added to the bus (chip-ID check, registers).
+    // デバイスをバスへ追加した後の全処理（チップ ID 確認・レジスタ設定）。
+    esp_err_t ret;
+
     // Read and verify manufacturer ID
     uint16_t manufacturer_id;
     ret = readRegister(ina3221_reg::MANUFACTURER_ID, &manufacturer_id);

@@ -49,6 +49,7 @@
 #include "config.hpp"
 #include "flight_state.hpp"     // isArmed (magcal refused while armed)
 #include "sf_board.hpp"
+#include "optional_sensor_init.hpp"
 #include "bmm150.hpp"
 #include "mag_calibration.hpp"
 
@@ -166,7 +167,8 @@ void MagTask(void* /*pvParameters*/)
     // 計測で mag が ~10Hz と判明して発覚）。
     cfg.data_rate = stampfly::BMM150DataRate::ODR_25HZ;
 
-    esp_err_t err = g_mag.init(cfg);
+    esp_err_t err = sf::initOptionalI2cSensor(
+        TAG, "BMM150", [&]() { return g_mag.init(cfg); });
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "BMM150 init failed: %s — Mag disabled (Optional)",
                  esp_err_to_name(err));
