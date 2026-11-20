@@ -45,6 +45,7 @@
 #include "esp_mac.h"       // esp_read_mac(ESP_MAC_WIFI_SOFTAP) for `mac` / `mac` の SoftAP BSSID 読み
 #include "esp_console.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"   // internal-RAM free size for `status`
 #include "nvs.h"       // wifi credentials (CLI writes, sf_comm reads at boot)
 #include "lwip/sockets.h"   // TCP CLI server (requirements §7: CLI over TCP)
 #include <cerrno>
@@ -414,6 +415,23 @@ static void printNonFinite()
                 cycles_at(sf::NonFiniteStage::MixerOutput), cycles_at(sf::NonFiniteStage::MotorCommand));
 }
 
+/// `status`, heap part: free internal RAM, the lowest it has been since boot, and the largest single
+/// block. MALLOC_CAP_INTERNAL alone also counts instruction-only IRAM, which a task stack or a
+/// buffer cannot use; adding MALLOC_CAP_8BIT keeps only byte-accessible internal RAM (what
+/// xTaskCreate and malloc draw from). Display only: the calls take the heap lock briefly
+/// (largest block walks all blocks), and the 400 Hz tasks do not allocate.
+/// `status` のヒープ部分: 内蔵 RAM の空き、起動以降の最小値、最大の連続ブロック。MALLOC_CAP_INTERNAL だけだと
+/// 命令専用の IRAM も数えるが、タスクのスタックやバッファには使えない。MALLOC_CAP_8BIT を足すと、バイト
+/// 単位で読み書きできる内蔵 RAM（xTaskCreate や malloc が使う領域）だけになる。表示のみ。
+static void printHeap()
+{
+    constexpr uint32_t kUsableInternalCaps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    std::printf("heap    : internal free %lu B, minimum since boot %lu B, largest block %lu B\n",
+                static_cast<unsigned long>(heap_caps_get_free_size(kUsableInternalCaps)),
+                static_cast<unsigned long>(heap_caps_get_minimum_free_size(kUsableInternalCaps)),
+                static_cast<unsigned long>(heap_caps_get_largest_free_block(kUsableInternalCaps)));
+}
+
 /// `status` — flight state / mode / arm, pairing, attitude, altitude, battery, sensors, the
 /// refusal reasons and the flip gate.
 /// `status` — フライト状態/モード/ARM、ペアリング、姿勢、高度、電池、センサ、拒否の理由、宙返りの判定。
@@ -440,6 +458,7 @@ int cmd_status(int argc, char** argv)
     }
     printLoopTiming();
     printNonFinite();
+    printHeap();
     return 0;
 }
 

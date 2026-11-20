@@ -311,7 +311,7 @@ TAB で補完。
 | コマンド | 引数 | 説明 |
 |---------|------|------|
 | `param` | `[list\|get <name>\|set <name> <val>\|save]` | パラメータ読み書き（範囲検証・NVS 保存）|
-| `status` | — | 状態/モード/ARM・ペアリング・姿勢・高度・電池・センサ・400Hz ループの周期（`loop` 行）・制御値の有限性（`finite` 行） |
+| `status` | — | 状態/モード/ARM・ペアリング・姿勢・高度・電池・センサ・400Hz ループの周期（`loop` 行）・制御値の有限性（`finite` 行）・内蔵メモリの空き（`heap` 行） |
 | `sensor` | `[imu\|mag\|baro\|tof\|flow\|power\|all]` | センサ最新値表示 |
 | `version` | — | ファーム名・ビルド日時 |
 | `mac` | — | 自 MAC とラベル用の下4桁を表示（機体ラベル用） |
@@ -366,6 +366,8 @@ ImuTask: over-budget cycles 142: flow+tof=88 flow+baro=21 flow=19 tof+mag=9 none
 | `finite  : all control values finite (N armed cycles checked)` | 健全。検査した N 周期で、どの値も有限だった | なし |
 | `finite  : NON-FINITE in D of N armed cycles; first at <境界>, T s after boot` | N 周期のうち D 周期に NaN・無限大があった。`<境界>` は最初に見つかった場所（`estimate input` 推定値の入力、`setpoint input` 目標値の入力、`control reference` 制御器の外側ループの出力、`control output` 制御器の出力（レート PID の出力）、`mixer output` ミキサの出力、`motor command` モータ指令）で、T はその起動からの時刻 | 飛行ログと突き合わせて原因を調べる。`<境界>` が上流ほど原因に近い |
 | `cycles per boundary: estimate …, setpoint …, reference …, controller …, mixer …, motor …` | 境界ごとの、有限でない値があった周期の数 | 0 でない最も上流の境界が発生箇所の手がかり（NaN は下流の境界すべてに伝わる） |
+
+**内蔵メモリの空きの見方**（`status` の `heap` 行）: `heap    : internal free A B, minimum since boot M B, largest block L B`。単位はバイト。`internal free` は今の内蔵 RAM の空きの合計、`minimum since boot` は起動以降で空きが最も少なくなった値、`largest block` は今確保できる最大の連続した 1 塊。内蔵 RAM は小さく、`minimum since boot` が小さいと、新しいタスクの生成や通信（WiFi など）の確保が失敗しうる。`largest block` が小さいと、空きの合計が足りていても大きな確保（タスクのスタックなど）は失敗する。合否の目安の数値はまだ無い（実測待ち）。
 
 **USB ケーブルなしで診断を読む（WiFi 取得）**: 飛行中は USB ケーブルを付けないので、`status` の `loop` 行・`finite` 行も、USB コンソールのログ（状態遷移・「Landing detected (...)」・フェイルセーフ・拒否の理由）も見えない。同じ内容は WiFi 取得（`sf log wifi`）の一式に入る。飛ばす前に飛行時間より長い取得を始め（`sf log wifi -d 120 -o flight1`）、着陸後に次のように読む。
 
@@ -670,7 +672,7 @@ completes.
 | Command | Args | Description |
 |---------|------|-------------|
 | `param` | `[list\|get <name>\|set <name> <val>\|save]` | Read/write parameters (validated, NVS) |
-| `status` | — | State/mode/arm, pairing, attitude, altitude, battery, sensors, the 400 Hz loop period (`loop` lines), finiteness of the control values (`finite` line) |
+| `status` | — | State/mode/arm, pairing, attitude, altitude, battery, sensors, the 400 Hz loop period (`loop` lines), finiteness of the control values (`finite` line), free internal memory (`heap` line) |
 | `sensor` | `[imu\|mag\|baro\|tof\|flow\|power\|all]` | Print sensor readings |
 | `version` | — | Firmware name / build date |
 | `mac` | — | Show this vehicle's MAC and its 4-hex-digit label (for the vehicle sticker) |
@@ -725,6 +727,8 @@ How to check: (1) After boot, run `status` and see that `late` of `imu all` and 
 | `finite  : all control values finite (N armed cycles checked)` | healthy: every value was finite in the N cycles checked | none |
 | `finite  : NON-FINITE in D of N armed cycles; first at <boundary>, T s after boot` | D of the N cycles held a NaN / infinity. `<boundary>` is where it was first seen (`estimate input`, `setpoint input`, `control reference` = outer-loop output of the controller, `control output` = controller output (the rate PID output), `mixer output`, `motor command`) and T is the time since boot | compare with the flight log to find the cause; the more upstream the boundary, the closer to the cause |
 | `cycles per boundary: estimate ..., setpoint ..., reference ..., controller ..., mixer ..., motor ...` | per boundary, the number of cycles that held a non-finite value | the most upstream boundary that is not 0 points to where it came from (a NaN travels to every boundary downstream) |
+
+**Reading the free internal memory** (the `heap` line of `status`): `heap    : internal free A B, minimum since boot M B, largest block L B`. Units are bytes. `internal free` is the total free internal RAM now, `minimum since boot` is the lowest the free amount has been since boot, and `largest block` is the largest single contiguous block that can be allocated now. Internal RAM is small: when `minimum since boot` is small, allocations for a new task or for communication (WiFi etc.) can fail; when `largest block` is small, a large allocation (a task stack, for example) fails even if the total is enough. No pass/fail figure exists yet (awaiting measurements).
 
 **Reading the diagnostics without a USB cable (WiFi capture):** in flight there is no USB cable, so neither the `loop` and `finite` lines of `status` nor the USB console log (state transitions, "Landing detected (...)", failsafe, reasons for refusals) can be seen. The same content is in the bundle of a WiFi capture (`sf log wifi`). Before the flight start a capture longer than the flight (`sf log wifi -d 120 -o flight1`) and read it after landing as follows.
 
