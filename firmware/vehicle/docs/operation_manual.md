@@ -339,6 +339,23 @@ TAB で補完。
 | `period max` | 地上は 2.5 ms 付近（ジッタで 3 ms 程度まで）。ARM の瞬間の停止が直っていれば 10 ms 未満 | 連続する起床の間隔の最大。5 ms 付近なら 1 ティック、7.5 ms 付近なら 2 ティックを落とした |
 | `busy max`、`over budget` | `busy max` が 2.5 ms 未満、`over budget` が 0 | 1 周期の処理時間（上位タスクに割り込まれた時間を含む）の最大と、2.5 ms を超えた回数 |
 
+**工程別の所要時間の見方**（ログに 60 秒ごとに出る 2 行。USB コンソールで読む）: 1 周期の処理時間が何の工程でかかっているかを、直前の 60 秒の窓で表示する。直前に `ImuTask: 400Hz load: busy_avg=...` の行が出る。
+
+```
+ImuTask: step us (n/avg/max): read=24000/210/480 predict=24000/830/1290 tof=1800/410/700 front=24000/20/60 flow=6000/520/900 mag=1500/90/200 baro=3000/60/150 rest=24000/180/650
+ImuTask: over-budget cycles 142: flow+tof=88 flow+baro=21 flow=19 tof+mag=9 none=5; max updates in one cycle: tof=1 front=1 flow=2 mag=1 baro=2
+```
+
+| 見る値 | 意味 |
+|--------|------|
+| `step us (n/avg/max)` の各工程 | `n` はその工程が走った周期の数、`avg` は 1 回あたりの平均 [µs]、`max` は最大 [µs]。`read` は BMI270 の SPI 読み出し・座標変換・`sensor_imu` の発行、`predict` は推定器の予測、`tof`・`front`・`flow`・`mag`・`baro` は下向き ToF・前方 ToF（ログ専用）・オプティカルフロー・地磁気・気圧の観測更新、`rest` は周期全体から上の工程を引いた残り（傾きモニタ、`system_status`・`estimate_state` の発行など） |
+| 観測の工程の `n` | その種類の標本があった周期の数。同じ周期に標本が複数あればその周期の合計を 1 回として数える。標本がなかった周期は数えない（問い合わせだけの時間は `rest` に入る） |
+| `over-budget cycles N` | 周期全体（起床から ControlTask への通知まで）が 2500 µs を超えた周期の数。`400Hz load` の `busy` は推定値の発行の手前までなので、数が少し食い違うことがある |
+| `flow+tof=88` など | 超過した周期で、その周期に処理した観測の種類の組み合わせごとの回数（多い順に 8 組まで）。`none` はどの観測もなかった周期。8 組に入らない分は `others=` にまとめる |
+| `max updates in one cycle` | 1 周期に同じ種類の標本を処理した個数の最大 |
+
+読み方の例: `flow+tof` が超過の大半を占め、`flow` の `max` と `tof` の `max` の和が 2500 µs に近ければ、観測更新が同じ周期に重なったことが遅れの原因である。`none` や `predict` の `max` が大きければ、観測以外（推定器の予測、上位タスクによる割り込み）を疑う。
+
 確かめ方: ① 起動して `status` で `imu all`・`control all` の `late` が小さいことを見る。② ARM して数秒おいてから DISARM し、`status` で `armed` 行の `late` と `period max` を見る（ARM の瞬間の 50 ms 級の停止が直っていれば `period max` は 10 ms 未満になる。ARM 中に 13〜22% の周期で続く 5 ms 級の遅れは別件（未解決）で、`late` が 0 にならなくても本対策の不合格ではない）。③ `imu` に出て `control` に出ない遅れは ImuTask の側、`control` だけに出る遅れは制御の計算が 1 周期を超えたか、BMI270 の読み出し失敗で ImuTask が通知を飛ばしたことを示す。`imu` の遅れには 400Hz の合図を出す `esp_timer` タスクの遅れも含む。④ ログ（USB コンソール）は最大 10 ms 遅れて出る（400Hz タスクを待たせないため）。満杯で捨てたときは、抜けた位置の直後に `log sink full: N lines dropped` と出る。TCP の CLI では、コマンド処理中の警告は従来どおりその接続へ直接出る。
 
 **制御値の有限性の見方**（`status` の `finite` 行）: 制御の計算に NaN（非数）や無限大が現れなかったかを、ARM 中の制御周期だけについて、起動以降の累計で表示する。NaN が出ても機体は止まらない（検出と記録だけ）。ただしモータへの出口では、有限でない値のモータの出力を 0 にする。
@@ -680,6 +697,23 @@ completes.
 | `late` | does not grow at the ARM instant (0 on the ground) | Wakes that came more than 1.5 periods (3.75 ms) after the previous one = missed 400 Hz ticks |
 | `period max` | about 2.5 ms on the ground (up to about 3 ms with jitter); below 10 ms once the ARM-instant stall is fixed | Longest interval between two consecutive wakes. About 5 ms means one tick was dropped, about 7.5 ms two |
 | `busy max`, `over budget` | `busy max` below 2.5 ms, `over budget` 0 | Longest time of one cycle (preemption by higher-priority tasks included) and the number of cycles longer than 2.5 ms |
+
+**Reading the per-step time** (two log lines printed every 60 seconds; read them on the USB console): shows which step of a cycle the time goes to, over the preceding 60-second window. The `ImuTask: 400Hz load: busy_avg=...` line comes just before them.
+
+```
+ImuTask: step us (n/avg/max): read=24000/210/480 predict=24000/830/1290 tof=1800/410/700 front=24000/20/60 flow=6000/520/900 mag=1500/90/200 baro=3000/60/150 rest=24000/180/650
+ImuTask: over-budget cycles 142: flow+tof=88 flow+baro=21 flow=19 tof+mag=9 none=5; max updates in one cycle: tof=1 front=1 flow=2 mag=1 baro=2
+```
+
+| Value | Meaning |
+|-------|---------|
+| Each step of `step us (n/avg/max)` | `n` is the number of cycles in which the step ran, `avg` the mean duration of one run [us], `max` the longest [us]. `read` is the BMI270 SPI read, the frame transform and the `sensor_imu` publish; `predict` the estimator prediction; `tof`, `front`, `flow`, `mag`, `baro` the observation updates of the downward ToF, the front ToF (log only), the optical flow, the magnetometer and the barometer; `rest` the whole cycle minus the steps above (tilt monitor, the `system_status` and `estimate_state` publishes, ...) |
+| `n` of an observation step | Cycles in which that kind had a sample. When one cycle holds several samples, the cycle's total counts as one run. Cycles without a sample are not counted (the time of merely polling the queue falls into `rest`) |
+| `over-budget cycles N` | Cycles whose whole length (wake to the notification of ControlTask) exceeded 2500 us. The `busy` of the `400Hz load` line stops before the estimate publish, so the two counts can differ slightly |
+| `flow+tof=88` and so on | For the over-budget cycles, the count per combination of the observation kinds processed in that cycle (the 8 most frequent). `none` is a cycle with no observation. Combinations beyond the 8 are summed as `others=` |
+| `max updates in one cycle` | The largest number of samples of one kind processed in a single cycle |
+
+Example of reading: if `flow+tof` accounts for most of the overruns and the `max` of `flow` plus the `max` of `tof` is close to 2500 us, observation updates landing in the same cycle are the cause. If `none` is large, or the `max` of `predict` is, suspect something other than the observations (the estimator prediction, preemption by a higher-priority task).
 
 How to check: (1) After boot, run `status` and see that `late` of `imu all` and `control all` is small. (2) ARM, wait a few seconds, DISARM, run `status` and read `late` and `period max` of the `armed` rows (if the 50 ms-class stall at the ARM instant is fixed, `period max` stays below 10 ms; a 5 ms-class delay that continues in 13-22% of the cycles while armed is a separate, unresolved issue, and `late` not reaching 0 is not a failure of this fix). (3) A delay that shows on `imu` and not on `control` is on the ImuTask side; a delay on `control` only means the control computation takes longer than one period or ImuTask skipped the notification after a failed BMI270 read. A delay on `imu` also includes delay of the `esp_timer` task that issues the 400 Hz tick. (4) Log lines on the USB console appear up to 10 ms late (so that the 400 Hz tasks never wait); a burst the ring could not hold prints `log sink full: N lines dropped` where the lines went missing. In the TCP CLI, warnings raised while a command runs still go straight to that connection.
 

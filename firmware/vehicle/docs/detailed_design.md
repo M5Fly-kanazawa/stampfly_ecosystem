@@ -945,6 +945,8 @@ TofTask（8KB、優先度 14、30Hz）は底面センサの立ち上げに失敗
 
 数え方は起動以降の累計。ControlTask の起床は ImuTask の通知に同期するので、ImuTask が遅れると ControlTask の間隔も伸びる（両方に出る）。ControlTask だけに出るなら、制御の計算が 1 周期を超えているか、BMI270 の読み出しに失敗して ImuTask が通知を飛ばした（ControlTask は起こされない）。`imu` の遅れには 400Hz の合図を出す `esp_timer` タスクの遅れも含む。WiFi 取得でも読める: 毎秒のステータスパケット v4 が全項目を運び、バンドルの `loop_timing` ストリーム（`sf log info` が最後の値を表示）になる。ホスト試験は `test/test_log_ring.cpp`・`test/test_log_sink.cpp`・`test/test_loop_timing.cpp`。
 
+工程別の所要時間: ImuTask は 1 周期を工程（IMU の読み出し・推定器の予測・下向き ToF／前方 ToF／オプティカルフロー／地磁気／気圧の観測更新・残り）に区切り、`sf::StepTimingStats`（`step_timing.hpp`、純粋なロジック）へ工程ごとの回数・合計・最大を集める。2500 µs を超えた周期については、その周期に処理した観測の種類の組み合わせごとの回数も数える。60 秒ごとにログシンク経由の INFO 2 行（`step us (n/avg/max)` と `over-budget cycles`）として出し、窓を消す。計測は時刻を読んで足すだけで、制御・推定の計算と順序は変えない。読み方は `operation_manual.md` の「工程別の所要時間の見方」、ホスト試験は `test/test_step_timing.cpp`。
+
 対象外（未解決）: ARM 中に 13〜22% の周期で続く 5 ms 級の遅れが実機ログ（front_tof_poshold_yaw4x90・yaw360）にある。大半は IMU 標本の時刻が前の行と同じ、つまり標本の取り違えである。ログシンクが直す ARM の瞬間の 50 ms 級の停止とは別の現象で、候補は、400Hz の合図を出す `esp_timer` タスクがコア 0 で Wi-Fi のタスクより低い優先度であること、または ARM 中の処理時間が 2.5 ms 近いことである。別件として扱い、この症状の対策の範囲に含めない。
 
 #### 有限でない数（NaN・無限大）の監視
@@ -1420,6 +1422,8 @@ The 1 Hz status packet (0x4F) grows from v3 (57 bytes) to 224 bytes by appending
 | `armed_*` | The five items above, counted only for cycles that began while armed, so the ground idle before the flight does not dilute them |
 
 Counts are since boot. ControlTask wakes on ImuTask's notification, so a late ImuTask lengthens ControlTask's interval too (both show it). If only ControlTask shows it, the control computation takes longer than one period. The WiFi capture carries them too: the 1 Hz status packet v4 holds every field and becomes the `loop_timing` stream of the bundle (`sf log info` prints the last values). Host tests: `test/test_log_ring.cpp`, `test/test_log_sink.cpp`, `test/test_loop_timing.cpp`.
+
+Per-step time: ImuTask cuts one cycle into steps (the IMU read, the estimator prediction, the observation updates of the downward ToF / front ToF / optical flow / magnetometer / barometer, and the rest) and collects run count, total and maximum per step in `sf::StepTimingStats` (`step_timing.hpp`, pure logic). For the cycles longer than 2500 us it also counts, per combination of the observation kinds processed in that cycle, how many cycles there were. Every 60 seconds it prints two INFO lines through the log sink (`step us (n/avg/max)` and `over-budget cycles`) and clears the window. The measurement only reads the clock and adds; the control and estimation computations and their order are unchanged. How to read it: "Reading the per-step time" in `operation_manual.md`; host test: `test/test_step_timing.cpp`.
 
 #### Non-finite numbers (NaN, infinity)
 

@@ -29,6 +29,8 @@
  */
 
 #include <atomic>     // s_imu_spi_init_done (FlowTask SPI-init serialization)
+#include <cstdarg>   // va_list (appendText of the step-timing log)
+#include <cstdio>    // vsnprintf (appendText)
 #include <cmath>      // std::sqrt (accelerometer magnitude for the blind touchdown)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -50,6 +52,7 @@
 #include "bmi270_wrapper.hpp"
 #include "config.hpp"
 #include "loop_timing_scope.hpp"      // period / busy-time monitor of this 400Hz loop
+#include "step_timing.hpp"            // per-step time statistics of this 400Hz loop (60 s log)
 #include "params.hpp"
 #include "sf_math.hpp"      // sf::math::kGravity/Quat/Vec3 (used directly below;
                             // not relied on through another header's includes)
@@ -446,6 +449,52 @@ static void feedBarometricHeightToF(const sf::TofData& tof)
     g_baro_height.onToFSample(sample);
 }
 
+/// Steps of one ImuTask cycle that are timed (index into g_step_timing). The first group runs every
+/// cycle; the observation steps are counted only in the cycles where that kind had a sample.
+/// ImuTask の 1 周期で測る工程（g_step_timing の添字）。先頭の組は毎周期走り、観測の工程は、その種類の
+/// 標本があった周期だけ数える。
+enum class TimedStep : size_t {
+    ReadImu = 0,   ///< BMI270 SPI read, frame transform, sensor_imu publish / BMI270 の SPI 読み出し・座標変換・sensor_imu 発行
+    Predict,       ///< g_estimator->predict
+    TofUpdate,     ///< downward ToF samples (estimator, takeoff/landing, health) / 下向き ToF の標本（推定器・離着陸・健全性）
+    FrontTof,      ///< front ToF samples (log only) / 前方 ToF の標本（ログ専用）
+    FlowUpdate,    ///< optical-flow samples / オプティカルフローの標本
+    MagUpdate,     ///< magnetometer samples / 地磁気の標本
+    BaroUpdate,    ///< barometer samples / 気圧の標本
+    Rest,          ///< cycle total minus the steps above (tilt monitor, status and estimate publish, ...) / 周期全体から上の工程を引いた残り（傾きモニタ・status と推定値の発行など）
+};
+
+/// Observation kinds whose samples are counted per cycle (bit k of the over-budget combination).
+/// 周期ごとに標本数を数える観測の種類（予算超過の組み合わせのビット k）。
+enum class ObservationKind : size_t { Tof = 0, FrontTof, Flow, Mag, Baro, Count };
+static_assert(static_cast<size_t>(ObservationKind::Count) == sf::StepTimingStats::kMaxKinds,
+              "StepTimingStats kind count must match ObservationKind");
+
+/// Names printed in the 60 s step-timing log, in TimedStep order and ObservationKind order.
+/// 60 秒ごとの工程別ログに出す名前（TimedStep の順、ObservationKind の順）。
+static const char* const kTimedStepNames[] = {"read", "predict", "tof", "front", "flow", "mag", "baro", "rest"};
+static const char* const kObservationNames[] = {"tof", "front", "flow", "mag", "baro"};
+
+/// Step statistics of the current 60 s window; touched by ImuTask only.
+/// 現在の 60 秒の窓の工程別統計。ImuTask だけが触る。
+static sf::StepTimingStats g_step_timing;
+
+static inline size_t stepIndex(TimedStep step) { return static_cast<size_t>(step); }
+static inline size_t kindIndex(ObservationKind kind) { return static_cast<size_t>(kind); }
+
+/// Record one observation step (time from started_us to now) when the kind had a sample in this
+/// cycle; returns the clock so the next step can start from it.
+/// この周期にその種類の標本があったときだけ、観測の工程（started_us から今まで）を記録する。
+/// 次の工程がそこから始められるよう、時計の値を返す。
+static uint32_t recordObservationStep(TimedStep step, bool had_sample, uint32_t started_us)
+{
+    const uint32_t finished_us = static_cast<uint32_t>(esp_timer_get_time());
+    if (had_sample) {
+        g_step_timing.recordStep(stepIndex(step), finished_us - started_us);
+    }
+    return finished_us;
+}
+
 /// Drain the downward-ToF queue: feed every sample to the estimator, the takeoff/landing manager
 /// and the health tracker, mirror it into the snapshot, and publish tof_health. Returns true when at
 /// least one sample was consumed.
@@ -466,6 +515,7 @@ static bool consumeToFSamples(bool armed, bool in_landing_descent, sf::SensorSna
         if (g_tof_health.needsReacquire(tof.valid) && armed) {
             g_estimator->reacquireAltitude();
         }
+        g_step_timing.noteUpdate(kindIndex(ObservationKind::Tof));
         g_estimator->updateTof(tof);
         // Inject the SAME sample into the takeoff/landing manager so it does not compete
         // with the estimator for the sensor_tof queue (single consumer). Also inject the
@@ -504,6 +554,7 @@ static bool consumeFrontToFSamples(sf::SensorSnapshot& snap)
     // 任意センサが無い場合は timestamp 0 のまま。
     sf::TofData tof_front;
     while (sf::sensor_tof_front.read(tof_front)) {
+        g_step_timing.noteUpdate(kindIndex(ObservationKind::FrontTof));
         snap.tof_front_distance  = tof_front.distance;
         snap.tof_front_status    = tof_front.status;
         snap.tof_front_timestamp = tof_front.timestamp;
@@ -522,6 +573,7 @@ static bool consumeFlowSamples(sf::SensorSnapshot& snap)
     bool snap_dirty = false;
     sf::FlowData flow;
     while (sf::sensor_flow.read(flow)) {
+        g_step_timing.noteUpdate(kindIndex(ObservationKind::Flow));
         g_estimator->updateFlow(flow);
         // Mirror EVERY flow sample for the Data Stream: dx/dy are incremental
         // (displacement since the previous read), so a latest()-style 50Hz peek
@@ -551,22 +603,31 @@ static void mirrorBarometricHeight(const sf::BaroData& baro, sf::SensorSnapshot&
     else                                           snap.baro_offset_age_decis = static_cast<uint16_t>(age_decis);
 }
 
-/// Fuse the magnetometer and barometer samples and mirror them. Returns true if the snapshot changed.
-/// 磁気センサと気圧計のサンプルを融合してミラーする。スナップショットが変われば true。
-static bool consumeMagAndBaroSamples(bool armed, sf::SensorSnapshot& snap)
+/// Fuse the magnetometer samples and mirror them. Returns true if the snapshot changed.
+/// 磁気センサのサンプルを融合してミラーする。スナップショットが変われば true。
+static bool consumeMagSamples(sf::SensorSnapshot& snap)
 {
     bool snap_dirty = false;
     sf::MagData mag;
     while (sf::sensor_mag.read(mag)) {
+        g_step_timing.noteUpdate(kindIndex(ObservationKind::Mag));
         applyMagBootPolicy(mag);
         g_estimator->updateMag(mag);
         snap.mag[0] = mag.mag[0]; snap.mag[1] = mag.mag[1]; snap.mag[2] = mag.mag[2];
         snap.mag_timestamp = mag.timestamp;
         snap_dirty = true;
     }
+    return snap_dirty;
+}
 
+/// Fuse the barometer samples and mirror them. Returns true if the snapshot changed.
+/// 気圧計のサンプルを融合してミラーする。スナップショットが変われば true。
+static bool consumeBaroSamples(bool armed, sf::SensorSnapshot& snap)
+{
+    bool snap_dirty = false;
     sf::BaroData baro;
     while (sf::sensor_baro.read(baro)) {
+        g_step_timing.noteUpdate(kindIndex(ObservationKind::Baro));
         g_estimator->updateBaro(baro);
         g_baro_height.onBaroSample({baro.altitude, baro.pressure, baro.timestamp}, {armed, groundContactTrusted()});
         snap.baro_pressure = baro.pressure; snap.baro_altitude = baro.altitude;
@@ -610,11 +671,28 @@ static void processAsyncSensors()
     g_verdict_state_since_us = mode.state_since_us;   // the state this cycle's landing verdict belongs to (SystemStatus.verdict_state_since_us) / この周期の着陸判定が属する状態（SystemStatus.verdict_state_since_us）
     markGroundContactUnknownOnSilence(armed);
     g_takeoff_landing.noteLandingDescent(in_landing_descent);   // LANDING begins: judge the touchdown afresh, before any sample / LANDING が始まる: 接地の判定を、どのサンプルより前に新たに行う
-    snap_dirty = consumeToFSamples(armed, in_landing_descent, snap) || snap_dirty;
+    // Each observation kind is timed on its own: the clock read at the end of one step starts the next.
+    // 観測の種類ごとに別々に測る: 1 つの工程の終わりに読んだ時計が、次の工程の始まりになる。
+    uint32_t step_clock_us = static_cast<uint32_t>(esp_timer_get_time());
+    bool kind_dirty = consumeToFSamples(armed, in_landing_descent, snap);
+    step_clock_us = recordObservationStep(TimedStep::TofUpdate, kind_dirty, step_clock_us);
+    snap_dirty = kind_dirty || snap_dirty;
 
-    snap_dirty = consumeFrontToFSamples(snap) || snap_dirty;
-    snap_dirty = consumeFlowSamples(snap) || snap_dirty;
-    snap_dirty = consumeMagAndBaroSamples(armed, snap) || snap_dirty;
+    kind_dirty = consumeFrontToFSamples(snap);
+    step_clock_us = recordObservationStep(TimedStep::FrontTof, kind_dirty, step_clock_us);
+    snap_dirty = kind_dirty || snap_dirty;
+
+    kind_dirty = consumeFlowSamples(snap);
+    step_clock_us = recordObservationStep(TimedStep::FlowUpdate, kind_dirty, step_clock_us);
+    snap_dirty = kind_dirty || snap_dirty;
+
+    kind_dirty = consumeMagSamples(snap);
+    step_clock_us = recordObservationStep(TimedStep::MagUpdate, kind_dirty, step_clock_us);
+    snap_dirty = kind_dirty || snap_dirty;
+
+    kind_dirty = consumeBaroSamples(armed, snap);
+    recordObservationStep(TimedStep::BaroUpdate, kind_dirty, step_clock_us);
+    snap_dirty = kind_dirty || snap_dirty;
 
     if (snap_dirty) {
         snap.timestamp = static_cast<uint32_t>(esp_timer_get_time());
@@ -1072,6 +1150,91 @@ static void initToFVerticalPolicy()
     g_tof_vertical = use_tof;
 }
 
+/// Cycles per step-timing log window: 60 s at 400Hz.
+/// 工程別ログの 1 窓あたりの周期数: 400Hz で 60 秒。
+static constexpr uint32_t kLoadLogEveryCycles = 24000;
+
+/// Cycle budget [us] that a cycle must not exceed (the 400Hz period).
+/// 周期が超えてはならない予算 [µs]（400Hz の周期）。
+static constexpr uint32_t kCycleBudgetUs = config::IMU_PERIOD_US;
+
+/// Longest step-timing log line [bytes]; the log sink accepts up to 384 (sf::LogRing::kMaxLineBytes).
+/// 工程別ログの 1 行の最大長 [バイト]。ログシンクは 384（sf::LogRing::kMaxLineBytes）まで受ける。
+static constexpr size_t kStepLogLineBytes = 384;
+
+/// Over-budget combinations printed individually; the rest are summed as "others".
+/// 個別に出す予算超過の組み合わせの数。残りは "others" に合算する。
+static constexpr size_t kPrintedCombinations = 8;
+
+/// Append formatted text to buffer[0..capacity), advancing length; the text is cut at the end.
+/// 書式付きの文字列を buffer の末尾へ追加し length を進める。入りきらない分は切る。
+static void appendText(char* buffer, size_t capacity, size_t& length, const char* format, ...)
+    __attribute__((format(printf, 4, 5)));
+static void appendText(char* buffer, size_t capacity, size_t& length, const char* format, ...)
+{
+    if (length >= capacity) {
+        return;
+    }
+    va_list arguments;
+    va_start(arguments, format);
+    const int written = vsnprintf(buffer + length, capacity - length, format, arguments);
+    va_end(arguments);
+    if (written > 0) {
+        length += static_cast<size_t>(written);
+        if (length > capacity - 1) {
+            length = capacity - 1;
+        }
+    }
+}
+
+/// Log the per-step time of the window: one line of steps (runs/average/longest, us) and one line
+/// of the over-budget breakdown. ESP_LOGI goes through the log sink, so the 400Hz loop does not wait.
+/// 窓の工程別の所要時間を出す: 工程の行（回数/平均/最大、µs）と、予算超過の内訳の行。ESP_LOGI は
+/// ログシンクを通るので 400Hz ループは待たされない。
+static void logStepTiming()
+{
+    static char line[kStepLogLineBytes];   // static: keeps 384 bytes off the task stack / static: タスクのスタックに 384 バイトを置かない
+    size_t length = 0;
+    appendText(line, sizeof(line), length, "step us (n/avg/max):");
+    for (size_t step = 0; step < sizeof(kTimedStepNames) / sizeof(kTimedStepNames[0]); ++step) {
+        const sf::StepStat& stat = g_step_timing.step(step);
+        appendText(line, sizeof(line), length, " %s=%lu/%lu/%lu", kTimedStepNames[step],
+                   static_cast<unsigned long>(stat.count),
+                   static_cast<unsigned long>(sf::StepTimingStats::averageUs(stat)),
+                   static_cast<unsigned long>(stat.max_us));
+    }
+    ESP_LOGI(TAG, "%s", line);
+
+    sf::KindCombination top[kPrintedCombinations];
+    const size_t printed = g_step_timing.largestCombinations(top, kPrintedCombinations);
+    uint32_t others = g_step_timing.overBudgetCycles();
+    length = 0;
+    appendText(line, sizeof(line), length, "over-budget cycles %lu:",
+               static_cast<unsigned long>(g_step_timing.overBudgetCycles()));
+    for (size_t i = 0; i < printed; ++i) {
+        appendText(line, sizeof(line), length, " ");
+        bool first = true;
+        for (size_t kind = 0; kind < sf::StepTimingStats::kMaxKinds; ++kind) {
+            if ((top[i].mask & (uint32_t{1} << kind)) != 0u) {
+                appendText(line, sizeof(line), length, "%s%s", first ? "" : "+", kObservationNames[kind]);
+                first = false;
+            }
+        }
+        appendText(line, sizeof(line), length, "%s=%lu", first ? "none" : "",
+                   static_cast<unsigned long>(top[i].count));
+        others -= top[i].count;
+    }
+    if (others > 0u) {
+        appendText(line, sizeof(line), length, " others=%lu", static_cast<unsigned long>(others));
+    }
+    appendText(line, sizeof(line), length, "; max updates in one cycle:");
+    for (size_t kind = 0; kind < sf::StepTimingStats::kMaxKinds; ++kind) {
+        appendText(line, sizeof(line), length, " %s=%lu", kObservationNames[kind],
+                   static_cast<unsigned long>(g_step_timing.maxUpdates(kind)));
+    }
+    ESP_LOGI(TAG, "%s", line);
+}
+
 void ImuTask(void* pvParameters)
 {
     ESP_LOGI(TAG, "ImuTask started");
@@ -1243,6 +1406,7 @@ void ImuTask(void* pvParameters)
         // Publish raw IMU data to topic
         // 生IMUデータをトピックに発行
         sf::sensor_imu.publish(imu);
+        g_step_timing.recordStep(stepIndex(TimedStep::ReadImu), static_cast<uint32_t>(esp_timer_get_time()) - now);
 
         // IMU-rate safety checks (requirements §9): impact / gyro anomaly at the
         // sample rate, so "2 consecutive" means 5 ms — fast enough for a real
@@ -1279,7 +1443,10 @@ void ImuTask(void* pvParameters)
         // Step 2: 推定器の予測ステップを実行
         // =====================================================================
 
+        const uint32_t predict_start_us = static_cast<uint32_t>(esp_timer_get_time());
         g_estimator->predict(imu, config::IMU_DT);
+        g_step_timing.recordStep(stepIndex(TimedStep::Predict),
+                                 static_cast<uint32_t>(esp_timer_get_time()) - predict_start_us);
 
         feedBlindTouchdown(imu);   // blind-landing touchdown, every IMU cycle (a silent ToF drives nothing) / ToF なし着陸の接地。毎 IMU 周期（出力停止した ToF は何も駆動しない）
 
@@ -1339,7 +1506,6 @@ void ImuTask(void* pvParameters)
         {
             static uint32_t s_busy_sum_us = 0;
             static uint32_t s_busy_max_us = 0;
-            constexpr uint32_t kLoadLogEveryCycles = 24000;   // 60 s at 400Hz
             const uint32_t busy_us =
                 static_cast<uint32_t>(esp_timer_get_time()) - now;
             s_busy_sum_us += busy_us;
@@ -1373,6 +1539,17 @@ void ImuTask(void* pvParameters)
         TaskHandle_t control = sf::tasks::control_handle();
         if (control != nullptr) {
             xTaskNotifyGive(control);
+        }
+
+        // Close the step statistics with the whole cycle (wake to here), then once a minute log
+        // and clear the window, right after the 400Hz load line of this same cycle.
+        // 工程別統計を周期全体（起床からここまで）で閉じ、1 分ごとに、同じ周期の 400Hz load 行の直後に
+        // 出して窓を消す。
+        g_step_timing.endCycle(static_cast<uint32_t>(esp_timer_get_time()) - now, kCycleBudgetUs,
+                               stepIndex(TimedStep::Rest));
+        if ((cycle_count % kLoadLogEveryCycles) == 0u) {
+            logStepTiming();
+            g_step_timing.reset();
         }
         // The esp_timer paces the loop; the ulTaskNotifyTake at the top blocks
         // until the next 400Hz tick, so no explicit delay is needed here.
