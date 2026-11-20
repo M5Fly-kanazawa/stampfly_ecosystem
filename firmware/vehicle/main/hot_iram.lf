@@ -9,78 +9,9 @@
 archive: libmain.a
 entries:
     imu_task (noflash_text)
-    control_task (noflash_text)
 
 [mapping:sf_hot_eskf]
 archive: libsf_estimator_eskf.a
 entries:
     * (noflash_text)
 
-[mapping:sf_hot_controller_pid]
-archive: libsf_controller_pid.a
-entries:
-    pid_controller (noflash_text)
-    flip_sequencer (noflash_text)
-
-[mapping:sf_hot_actuator]
-archive: libsf_actuator.a
-entries:
-    actuator (noflash_text)
-
-[mapping:sf_hot_motor]
-archive: libsf_hal_motor.a
-entries:
-    motor_driver (noflash_text)
-
-[mapping:sf_hot_bmi270]
-archive: libsf_hal_bmi270.a
-entries:
-    bmi270_wrapper (noflash_text)
-    bmi270_data (noflash_text)
-    bmi270_spi (noflash_text)
-
-[mapping:sf_hot_takeoff_landing]
-archive: libsf_takeoff_landing.a
-entries:
-    takeoff_landing (noflash_text)
-
-[mapping:sf_hot_failsafe]
-archive: libsf_failsafe.a
-entries:
-    failsafe (noflash_text)
-
-[mapping:sf_hot_tilt]
-archive: libsf_estimator.a
-entries:
-    tilt_consistency (noflash_text)
-
-# newlib libm (single-precision math used by the estimator / controller)
-[mapping:sf_hot_libm]
-archive: libm.a
-entries:
-    libm_a-wf_sqrt (noflash_text)
-    libm_a-wf_acos (noflash_text)
-    libm_a-wf_asin (noflash_text)
-    libm_a-wf_atan2 (noflash_text)
-    libm_a-wf_exp (noflash_text)
-    libm_a-wf_pow (noflash_text)
-    libm_a-ef_acos (noflash_text)
-    libm_a-ef_asin (noflash_text)
-    libm_a-ef_atan2 (noflash_text)
-    libm_a-ef_exp (noflash_text)
-    libm_a-ef_pow (noflash_text)
-    libm_a-sf_sin (noflash_text)
-    libm_a-sf_cos (noflash_text)
-    libm_a-sf_atan (noflash_text)
-    libm_a-sf_fabs (noflash_text)
-    libm_a-sf_floor (noflash_text)
-    libm_a-sf_scalbn (noflash_text)
-    libm_a-kf_sin (noflash_text)
-    libm_a-kf_cos (noflash_text)
-    libm_a-kf_rem_pio2 (noflash_text)
-    libm_a-ef_rem_pio2 (noflash_text)
-    libm_a-math_errf (noflash_text)
-    libm_a-sf_fmax (noflash_text)
-    libm_a-sf_fmin (noflash_text)
-    libm_a-sf_finite (noflash_text)
-    libm_a-sf_fpclassify (noflash_text)
