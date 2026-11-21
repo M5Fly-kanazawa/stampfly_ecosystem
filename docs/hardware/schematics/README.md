@@ -20,7 +20,7 @@ StampFly の回路図（PDF）の置き場所と、各ファイルの内容を�
 | ファイル | 基板 | 図面の作成日（PDF の情報） | ページ | SHA-256（先頭 16 桁） |
 |----------|------|---------------------------|--------|----------------------|
 | [`Stamp_Fly_v1.0.pdf`](Stamp_Fly_v1.0.pdf) | 主基板（M5StampS3 を載せる基板。IMU・地磁気・気圧・下向き ToF・電流計・モータ駆動） | 2024-06-05 | 1 | `cd723159b898d840` |
-| [`StampS3_Fly_Hat.pdf`](StampS3_Fly_Hat.pdf) | 主基板のコネクタ P3 に付く小基板 | 2023-09-22 | 1 | `bdd7b6ae25cb69f9` |
+| [`StampS3_Fly_Hat.pdf`](StampS3_Fly_Hat.pdf) | 主基板のコネクタ P3 に付く小基板（前方 ToF VL53L3CX、電池コネクタ、電池電圧から 3.3 V を作るレギュレータ HT7533） | 2023-09-22 | 1 | `bdd7b6ae25cb69f9` |
 | [`Sch_PMW3901MB_SPI.pdf`](Sch_PMW3901MB_SPI.pdf) | オプティカルフローセンサ PMW3901 の基板（SPI） | 2024-06-06 | 1 | `f8a7d9e79c124a9e` |
 
 ### 取り込みの記録
@@ -61,7 +61,7 @@ This directory holds the StampFly schematics (PDF) and lists what each file is. 
 | File | Board | Drawing date (PDF metadata) | Pages | SHA-256 (first 16 digits) |
 |------|-------|-----------------------------|-------|---------------------------|
 | [`Stamp_Fly_v1.0.pdf`](Stamp_Fly_v1.0.pdf) | Main board (carries the M5StampS3; IMU, magnetometer, barometer, downward ToF, power monitor, motor drivers) | 2024-06-05 | 1 | `cd723159b898d840` |
-| [`StampS3_Fly_Hat.pdf`](StampS3_Fly_Hat.pdf) | Small board that plugs into connector P3 of the main board | 2023-09-22 | 1 | `bdd7b6ae25cb69f9` |
+| [`StampS3_Fly_Hat.pdf`](StampS3_Fly_Hat.pdf) | Small board that plugs into connector P3 of the main board (front ToF VL53L3CX, battery connector, regulator HT7533 making 3.3 V from the battery) | 2023-09-22 | 1 | `bdd7b6ae25cb69f9` |
 | [`Sch_PMW3901MB_SPI.pdf`](Sch_PMW3901MB_SPI.pdf) | Optical-flow sensor PMW3901 board (SPI) | 2024-06-06 | 1 | `f8a7d9e79c124a9e` |
 
 ### Import Record
