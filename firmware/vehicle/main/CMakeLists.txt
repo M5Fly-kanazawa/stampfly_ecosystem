@@ -36,7 +36,15 @@ idf_component_register(
         ${SF_APP_SRCS}
     INCLUDE_DIRS "." "../tasks" ${SF_APP_INCS}
     # Linker fragment: places the 400 Hz path (ImuTask, ESKF) code in IRAM.
-    # リンカフラグメント: 400 Hz 経路（ImuTask・ESKF）のコードを IRAM に置く。
+    # hot_iram.lf itself is ASCII only (ldgen reads it with the platform's default
+    # encoding), so the Japanese explanation is here.
+    # リンカフラグメント: 400 Hz の周期ごとに走るコード（ImuTask と ESKF）を、フラッシュではなく
+    # IRAM（内蔵 RAM）に置く。フラッシュのコードは命令キャッシュ経由で読まれ、キャッシュが小さいと
+    # ImuTask の 1 周期の処理時間が伸びる（根拠: docs/hardware/mcu-memory.md の 7・8 章）。
+    # 動かすのは .text だけで、.rodata はフラッシュに残す。増える IRAM は約 19 KB。その分だけ
+    # ヒープが減るので、対象を増やすときは空きヒープを測り直すこと。
+    # hot_iram.lf は ASCII だけで書く（ldgen が OS の既定の文字コードで読むため、日本語を入れると
+    # Windows でビルドが止まりうる）。
     LDFRAGMENTS "hot_iram.lf"
     REQUIRES
         esp_timer

@@ -6,12 +6,9 @@
 # .rodata (constant tables, strings) stays in flash, behind the separate data cache.
 # This costs about 19 KB of IRAM. Before adding more targets here, measure the
 # free heap again: IRAM taken here is not available to the heap.
-# 400 Hz の周期ごとに走るコード（ImuTask と ESKF）を、フラッシュではなく IRAM（内蔵 RAM）に置く。
-# フラッシュのコードは命令キャッシュ経由で読まれ、キャッシュが小さいと 400 Hz 経路が追い出され続け、
-# ImuTask の 1 周期の処理時間が伸びる。根拠: docs/hardware/mcu-memory.md の 7・8 章。
-# 動かすのは .text（コードと、その中のリテラルプール）だけ（"noflash_text"）。
-# .rodata（定数表・文字列）は別系統のデータキャッシュ経由のままフラッシュに残す。
-# 増える IRAM は約 19 KB。IRAM の分だけヒープが減るので、対象を増やすときは必ず空きヒープを測り直すこと。
+# Keep this file ASCII only: ldgen opens linker fragments with the default
+# encoding of the platform, so non-ASCII text can stop a build on Windows.
+# The Japanese explanation is in main/CMakeLists.txt (LDFRAGMENTS).
 
 [mapping:sf_hot_main]
 archive: libmain.a
