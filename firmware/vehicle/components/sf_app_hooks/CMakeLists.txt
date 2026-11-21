@@ -25,31 +25,33 @@
 # app.cpp の両方が委譲できる標準の controller()/estimator() 本体
 # （sf::app::stock::。stock_hooks.hpp と examples/11_app_controller 参照）。
 if(SF_APP_DIR)
-    idf_component_register(
-        SRCS "stock_hooks.cpp"
-        INCLUDE_DIRS "include"
-        REQUIRES sf_controller sf_estimator
-        PRIV_REQUIRES
-            sf_controller_pid
-            sf_controller_snn
-            sf_estimator_eskf
-            sf_estimator_complementary
-            sf_estimator_snn
-            sf_snn_core
-            sf_core
-    )
+    set(SF_APP_HOOKS_SRCS "stock_hooks.cpp")
 else()
-    idf_component_register(
-        SRCS "app_default.cpp" "stock_hooks.cpp"
-        INCLUDE_DIRS "include"
-        REQUIRES sf_controller sf_estimator
-        PRIV_REQUIRES
-            sf_controller_pid
-            sf_controller_snn
-            sf_estimator_eskf
-            sf_estimator_complementary
-            sf_estimator_snn
-            sf_snn_core
-            sf_core
-    )
+    set(SF_APP_HOOKS_SRCS "app_default.cpp" "stock_hooks.cpp")
+endif()
+
+idf_component_register(
+    SRCS ${SF_APP_HOOKS_SRCS}
+    INCLUDE_DIRS "include"
+    REQUIRES sf_controller sf_estimator
+    PRIV_REQUIRES
+        sf_controller_pid
+        sf_estimator_eskf
+        sf_estimator_complementary
+        sf_core
+)
+
+# The research SNN components are linked only when CONFIG_SF_ENABLE_SNN=y
+# (Kconfig in this component). REQUIRES is read before sdkconfig exists
+# (early expansion), so it cannot depend on a CONFIG_ value; the conditional
+# edge is therefore added here, after registration, where CONFIG_* is defined.
+# 研究用 SNN のコンポーネントは CONFIG_SF_ENABLE_SNN=y のときだけリンクする
+# （Kconfig は本コンポーネント内）。REQUIRES は sdkconfig が出来る前（早期展開）
+# に読まれ CONFIG_ の値に依存できないため、条件つきの依存辺は登録の後
+# （CONFIG_* が定義済み）のここで足す。
+if(CONFIG_SF_ENABLE_SNN)
+    foreach(snn_component sf_controller_snn sf_estimator_snn sf_snn_core)
+        idf_component_get_property(snn_lib ${snn_component} COMPONENT_LIB)
+        target_link_libraries(${COMPONENT_LIB} PRIVATE ${snn_lib})
+    endforeach()
 endif()

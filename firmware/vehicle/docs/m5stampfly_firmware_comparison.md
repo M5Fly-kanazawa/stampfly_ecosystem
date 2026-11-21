@@ -40,7 +40,7 @@
    - そのため、コントローラのファームウェアも同時に入れ替える必要がある。
 3. **出荷前に直すか、方針を決める必要がある点が 5 つある。**
    - BMI270 のライセンス表記の不整合
-   - 研究用の機能（未学習の SNN 制御器など）が既定のビルドに入っていること
+   - 研究用の機能（自動調整など）が既定のビルドに入っていること（SNN は外した）
    - 飛行中の DISARM 操作の意味が変わること
    - 通信が途切れた直後の 3 秒間の動作が、要件（ホバー維持）と実装（最後のスティック入力を保持）で食い違っていること
    - StampFly V1.1 での動作確認
@@ -127,18 +127,19 @@ vehicle の動作は操作説明書（`operation_manual.md:134`）に書かれ�
   - `NOTICE.md` の記述を実際に合わせる。
   - PDF は削除するか、配布してよいか確認する。
 
-### A4. 研究用・未完成の機能が既定のビルドに入っている
+### A4. 研究用・未完成の機能が既定のビルドに入っている（SNN は外した）
 
 - **SNN 制御器と SNN 推定器**
-  - `main/CMakeLists.txt` で、条件なしにビルドに入っている。
-  - どちらを使うかはパラメータで決まり、既定値は PID と ESKF。
+  - 既定のビルドには入らない。ビルド設定 `CONFIG_SF_ENABLE_SNN`（既定は無効、`sf_app_hooks/Kconfig`）を有効にしたときだけ、`sf_estimator_snn`・`sf_controller_snn`・`sf_snn_core` がリンクされる。
+  - 有効にしたビルドでは、どちらを使うかはパラメータで決まり、既定値は PID と ESKF。
   - SNN 制御器のヘッダ（`snn_controller.hpp:32-33`）には、「未学習の固定乱数の仮置き。SILS では墜落するのが想定どおりの結果」とある。
-  - CLI で `param set controller.type 1` → `param save` とすると、再起動後もこの制御器で動く。
+  - 既定のビルドで `controller.type` = 1、`estimator.type` = 2 が保存されていても、警告を 1 行出して PID・ESKF で起動を続ける。
+  - 有効にすると内蔵 RAM を約 31 KB 使う。SILS のビルドは常に有効。
 - **自動調整（autotune）**
   - UDP API の `autotune` コマンドで、飛行中に開始できる（`api_task.cpp:1209-1212`）。
   - 得られたゲインはその場で反映される（調査エージェントの読解）。
 - **フリップ**：既定で無効（`flip.enable = 0`）。操作説明書には、2026-10-02 の実機での初回フリップが失敗し、原因を解析中と書かれている。
-- **対応**：出荷用のビルド構成を別に用意し、研究用の機能はコンパイル時に外す。そうすれば、利用者が誤ってこれらを選ぶことはなくなる。
+- **対応**：SNN は上のとおり既定のビルドから外した。自動調整（autotune）は出荷用のビルド構成で外す。そうすれば、利用者が誤ってこれらを選ぶことはなくなる。
 
 ### A5. 通信が途切れた直後の 3 秒間の動作が、要件と実装で食い違っている
 
@@ -243,7 +244,7 @@ vehicle の動作は操作説明書（`operation_manual.md:134`）に書かれ�
 
 1. コントローラの扱いを決める：両方のファームウェアを同時に配布するか、移行期間だけ vehicle に旧形式の受信処理を入れるか。
 2. BMI270 のライセンス表記と `NOTICE.md` を直す。
-3. 出荷用のビルド構成を用意する：SNN と autotune を外し、フリップの扱いを決める。
+3. 出荷用のビルド構成を用意する：autotune を外し、フリップの扱いを決める（SNN は既定のビルドから外した）。
 4. 飛行中の DISARM の仕様（STABILIZE で即停止）を製品としてどうするか決める。
 5. 通信断の直後に目標値を中立に置き換え、要件どおり「3 秒ホバー → 着陸」にする（A5）。
 6. M5Stack に V1.1 のハードウェアの違いを確認する。
@@ -290,7 +291,7 @@ Date written: 2026-10-28. File locations are given as paths relative to `firmwar
    - The controller firmware therefore has to be replaced at the same time.
 3. **There are 5 points to fix, or to decide a policy on, before shipping.**
    - Inconsistent license notices for the BMI270
-   - Research features (such as the untrained SNN controller) being included in the default build
+   - Research features (such as autotune) being included in the default build (the SNN has been removed)
    - The meaning of the DISARM operation in flight changes
    - The behavior during the 3 seconds right after a link loss differs between the requirement (hold hover) and the implementation (hold the last stick input)
    - Operation check on StampFly V1.1
@@ -377,18 +378,19 @@ The behavior of vehicle is written in the operation manual (`operation_manual.md
   - Make the description in `NOTICE.md` match the actual state.
   - Delete the PDF or confirm that it may be distributed.
 
-### A4. Research and unfinished features are in the default build
+### A4. Research and unfinished features are in the default build (the SNN has been removed)
 
 - **SNN controller and SNN estimator**
-  - They are included in the build unconditionally in `main/CMakeLists.txt`.
-  - Which one is used is decided by a parameter, and the default is PID and ESKF.
+  - They are not in the default build. `sf_estimator_snn`, `sf_controller_snn` and `sf_snn_core` are linked only when the build option `CONFIG_SF_ENABLE_SNN` (disabled by default, `sf_app_hooks/Kconfig`) is enabled.
+  - In a build that enables it, which one is used is decided by a parameter, and the default is PID and ESKF.
   - The header of the SNN controller (`snn_controller.hpp:32-33`) says "a placeholder of untrained fixed random numbers; crashing in SILS is the expected result".
-  - If `param set controller.type 1` followed by `param save` is run from the CLI, the vehicle runs with this controller even after a restart.
+  - In the default build, even if `controller.type` = 1 or `estimator.type` = 2 is stored, the firmware logs one warning line and keeps booting with PID and ESKF.
+  - Enabling it uses about 31 KB of internal RAM. The SILS build always enables it.
 - **Automatic tuning (autotune)**
   - It can be started in flight by the `autotune` command of the UDP API (`api_task.cpp:1209-1212`).
   - The resulting gains are applied immediately (from an investigation agent's reading).
 - **Flip**: Disabled by default (`flip.enable = 0`). The operation manual states that the first flip on a real vehicle on 2026-10-02 failed and the cause is under analysis.
-- **Action**: Prepare a separate factory build configuration and exclude the research features at compile time. Then users can no longer select them by mistake.
+- **Action**: The SNN has been removed from the default build as above. Autotune is to be excluded in a factory build configuration. Then users can no longer select them by mistake.
 
 ### A5. The behavior during the 3 seconds right after a link loss differs between the requirement and the implementation
 
@@ -493,7 +495,7 @@ The behavior of vehicle is written in the operation manual (`operation_manual.md
 
 1. Decide how to handle the controller: distribute both firmwares at the same time, or add reception of the old format to vehicle for a transition period only.
 2. Fix the BMI270 license notice and `NOTICE.md`.
-3. Prepare a factory build configuration: remove the SNN and autotune, and decide how to handle flip.
+3. Prepare a factory build configuration: remove autotune and decide how to handle flip (the SNN has been removed from the default build).
 4. Decide what to do, as a product, about the DISARM specification in flight (immediate stop in STABILIZE).
 5. Replace the setpoint with neutral right after a link loss, so that the behavior is "hover for 3 seconds, then land" as required (A5).
 6. Ask M5Stack about the differences in the V1.1 hardware.

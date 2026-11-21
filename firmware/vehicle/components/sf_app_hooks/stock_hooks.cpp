@@ -32,8 +32,11 @@
 #include "eskf_estimator.hpp"
 #include "params.hpp"
 #include "pid_controller.hpp"
+
+#if CONFIG_SF_ENABLE_SNN
 #include "snn_controller.hpp"
 #include "snn_estimator.hpp"
+#endif
 
 static const char* TAG = "AppDefault";
 
@@ -51,6 +54,11 @@ sf::IController& controller()
     // ControlTask が1回だけ呼ぶ約束だが、ガードは無害で、契約を守らない
     // 将来の呼び出し元からも保護する。
     //
+    // The SNN objects exist only when CONFIG_SF_ENABLE_SNN=y (they are static,
+    // so they would otherwise occupy about 31 KB of internal RAM).
+    // SNN の実体は CONFIG_SF_ENABLE_SNN=y のときだけ存在する（static のため、
+    // 無効でも置くと内蔵 RAM を約 31 KB 占める）。
+    //
     // controller.type (0 = PID, 1 = SNN) selects the implementation; the SNN
     // branch is the Stage 1 wiring skeleton (Stroobants et al. 2025 port,
     // arXiv:2411.13945). Each branch uses the same guarded-init pattern
@@ -60,18 +68,26 @@ sf::IController& controller()
     // 同じガード付き初期化パターン（init() を1回だけ）を使う。
     static sf::PidController pid_controller;
     static bool pid_initialized = false;
-    static sf::SnnController snn_controller;
-    static bool snn_initialized = false;
 
     int32_t controller_type = 0;
     sf::params::get_int("controller.type", controller_type);
     if (controller_type == 1) {
+#if CONFIG_SF_ENABLE_SNN
+        static sf::SnnController snn_controller;
+        static bool snn_initialized = false;
         if (!snn_initialized) {
             snn_controller.init();
             snn_initialized = true;
         }
         ESP_LOGI(TAG, "Controller: SNN (CUBA-LIF, UNTRAINED placeholder)");
         return snn_controller;
+#else
+        // The SNN is not built in: keep booting with PID (Optional feature
+        // falls back to the default, INV: no abort).
+        // SNN は組み込まれていない: PID で起動を続ける（任意機能は既定へ
+        // 戻す。起動は中止しない）。
+        ESP_LOGW(TAG, "controller.type=1 (SNN) is not built in (CONFIG_SF_ENABLE_SNN=n) - using PID");
+#endif
     }
 
     if (!pid_initialized) {
@@ -96,7 +112,6 @@ sf::IEstimator& estimator()
     // （arXiv:2411.13945）。
     static sf::EskfEstimator eskf;
     static sf::ComplementaryEstimator comp;
-    static sf::SnnEstimator snn;
     int32_t type = 0;
     sf::params::get_int("estimator.type", type);
     if (type == 1) {
@@ -105,9 +120,16 @@ sf::IEstimator& estimator()
         return comp;
     }
     if (type == 2) {
+#if CONFIG_SF_ENABLE_SNN
+        static sf::SnnEstimator snn;
         snn.init();
         ESP_LOGI(TAG, "Estimator: SNN (CUBA-LIF, UNTRAINED placeholder)");
         return snn;
+#else
+        // The SNN is not built in: keep booting with ESKF.
+        // SNN は組み込まれていない: ESKF で起動を続ける。
+        ESP_LOGW(TAG, "estimator.type=2 (SNN) is not built in (CONFIG_SF_ENABLE_SNN=n) - using ESKF");
+#endif
     }
     eskf.init();
     ESP_LOGI(TAG, "Estimator: ESKF (15-state)");

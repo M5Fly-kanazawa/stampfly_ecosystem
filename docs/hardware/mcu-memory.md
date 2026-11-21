@@ -472,7 +472,7 @@ ESP-IDF の文書は次のように述べている。
 
 | 候補 | 見込み | 動作への影響 | 確かめること |
 |------|--------|--------------|--------------|
-| SNN を既定のビルドから外す（ビルド時の選択にする） | 約 31 KB（15,568 + 15,464 B、計算） | 既定の構成では変化なし。既定のビルドでは SNN を選べなくなる | SNN を使う SILS のシナリオ・テストの有無、教育・研究用として残す方針 |
+| SNN を既定のビルドから外す（ビルド時の選択にする）。実験ブランチで実装済み（既定のビルドから外した）。実機の空きは未測定 | 約 31 KB（15,568 + 15,464 B、計算） | 既定の構成では変化なし。既定のビルドでは SNN を選べなくなる | SNN を使う SILS のシナリオ・テストの有無、教育・研究用として残す方針 |
 | SNN の配列の上限を実際の構成に合わせる | 1 個あたり 8〜10 KB（概算、未検証） | SNN は選べるまま | 上限を使う別の構成が無いか |
 | タスクのスタックを実測に合わせる | 下の試算で 33,792 B（床の上の実測に基づく） | あふれの危険。CommTask は逆に増やす候補 | ARM・飛行・WiFi 接続・較正を行った後の実測 |
 | 地磁気の較正用の標本バッファを較正のときだけ確保する | 約 6,000 B | 較正の開始時に確保に失敗しうる | 較正は地上だけか、標本数 500 の根拠 |
@@ -1011,7 +1011,7 @@ Putting the free memory of chapter 6 together with the processing times of this 
 
 | Candidate | Expected saving | Effect on behavior | What to check |
 |-----------|-----------------|--------------------|---------------|
-| Remove the SNN from the default build (make it a build-time choice) | About 31 KB (15,568 + 15,464 B, calculated) | No change in the default configuration. The SNN can no longer be selected in the default build | Whether any SILS scenario or test uses the SNN; the policy of keeping it for education and research |
+| Remove the SNN from the default build (make it a build-time choice). Implemented on the experiment branch (removed from the default build). The free space on the real vehicle is not measured | About 31 KB (15,568 + 15,464 B, calculated) | No change in the default configuration. The SNN can no longer be selected in the default build | Whether any SILS scenario or test uses the SNN; the policy of keeping it for education and research |
 | Fit the SNN array upper limits to the actual configuration | 8-10 KB each (rough estimate, unverified) | The SNN stays selectable | Whether another configuration uses the upper limits |
 | Fit the task stacks to the measurements | 33,792 B in the estimate below (based on measurements on the floor) | Risk of overflow. CommTask is rather a candidate to increase | Measurements after arming, flight, WiFi connection and calibration |
 | Allocate the magnetometer calibration sample buffer only during calibration | About 6,000 B | Allocation may fail when calibration starts | Whether calibration happens only on the ground; the basis for 500 samples |
