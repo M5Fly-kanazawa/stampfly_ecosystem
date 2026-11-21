@@ -513,7 +513,9 @@ SNN を既定のビルドから外したうえで併用したビルド（実験�
 | SNN なしのみ | 1318 µs（1280〜1338） | 2842〜4599 µs | 0.48 %（0.14〜0.73） | 1.08 %（0.31〜2.39） | 67,504 B / 66,228 B / 31,744 B（別の起動での読み取り） | 動く |
 | SNN なし + 命令キャッシュ 32 KB + ImuTask と ESKF を IRAM | 344 µs（339〜349） | 1313〜2857 µs | 0 %（6 回とも） | 0 %（6 回とも） | 32,036 B / 29,888 B / 19,456 B | 動く |
 
-SNN を外す前は、同じ併用でコンソールを起動できなかった（6 章）。この値も床の上のもので、ARM 中・飛行中・WiFi 接続時は未確認である。採用は決まっていない。
+SNN を外す前は、同じ併用でコンソールを起動できなかった（6 章）。この値も床の上のもので、ARM 中・飛行中・WiFi 接続時は未確認である。
+
+**採用の決定（開発者、2026-11-21）: この組み合わせ（SNN はビルド時の選択で既定は無効、命令キャッシュ 32 KB、ImuTask と ESKF を IRAM に置く）を採用する。** 実験用のスイッチを外した形での実装と、`fix/flight-safety` への取り込みは未着手である。効果が小さかった候補（観測を 1 周期 1 種類に絞る、読み出しの重複を減らす、気圧を ImuTask から外す、ESKF の計算の省略）は採用の対象に含めない。
 
 ## 9. 未確認の事項と次に確かめること
 
@@ -1061,7 +1063,9 @@ The combination was measured on the real vehicle on top of the build without the
 | Without the SNN only | 1318 us (1280-1338) | 2842-4599 us | 0.48 % (0.14-0.73) | 1.08 % (0.31-2.39) | 67,504 B / 66,228 B / 31,744 B (read in a separate boot) | works |
 | Without the SNN + 32 KB instruction cache + ImuTask and ESKF in IRAM | 344 us (339-349) | 1313-2857 us | 0 % (all 6 boots) | 0 % (all 6 boots) | 32,036 B / 29,888 B / 19,456 B | works |
 
-Before the SNN was removed the same combination could not start the console (chapter 6). These values are also from the floor; armed, in flight and with WiFi clients are not confirmed. Adoption is not decided.
+Before the SNN was removed the same combination could not start the console (chapter 6). These values are also from the floor; armed, in flight and with WiFi clients are not confirmed.
+
+**Decision to adopt (developer, 2026-11-21): this combination is adopted (the SNN as a build-time option, off by default; 32 KB instruction cache; ImuTask and the ESKF placed in IRAM).** The implementation without experiment switches and the merge into `fix/flight-safety` have not started. The candidates with a small effect (one observation kind per cycle, fewer duplicate reads, baro off ImuTask, the ESKF arithmetic savings) are not part of the adoption.
 
 ## 9. Unconfirmed Items and What to Check Next
 
