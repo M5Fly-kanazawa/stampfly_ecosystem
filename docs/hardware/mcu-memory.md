@@ -33,6 +33,7 @@ StampFly のマイコンモジュール（M5StampS3。チップは ESP32-S3FN8�
 | フラッシュ | 8 MB をチップのパッケージに内蔵（Quad SPI） |
 | 内蔵 RAM | 512 KB のうち、今のファームで起動後に空いているのは約 37 KB（実測 36,736 B） |
 | メモリの置き方と時間 | 400 Hz の処理の 1 周期の時間が、置き方で大きく変わる（実験では 1359〜1367 µs から 366 µs まで） |
+| 最適化の余地 | SRAM の領域は使い切っているが、既定の構成で使わない SNN（スパイキングニューラルネットワーク）が約 31 KB を占める。スタックは設定値 106,496 B に対し、床の上の使用量の最大の合計が 41,884 B（8 章） |
 
 ## 2. モジュールとチップの仕様
 
@@ -86,7 +87,7 @@ StampFly のマイコンモジュール（M5StampS3。チップは ESP32-S3FN8�
 | ESP-IDF 文書 Speed Optimization | https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/performance/speed.html |
 | ESP-IDF 文書 Minimizing RAM Usage | https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/performance/ram-usage.html |
 
-ESP-IDF 文書は stable 版の表示を読んだもので、機体のファームは v5.5.2 である。版の違いによる記述の差は確かめていない（8 章）。
+ESP-IDF 文書は stable 版の表示を読んだもので、機体のファームは v5.5.2 である。版の違いによる記述の差は確かめていない（9 章）。
 
 ## 3. 実機から読み出した値
 
@@ -174,9 +175,27 @@ DRAM はデータを置く RAM、IRAM は命令（コード）を置く RAM の�
 
 表の最後の区画 storage の終わりは 0x510000（計算）である。それより後ろの使い方は確かめていない。
 
+### 内蔵 SRAM 512 KiB の内訳
+
+基準のファーム（53553678）の起動時の表示のアドレスからの計算による。
+
+| 領域 | 大きさ | 使い道 | 出どころ |
+|------|--------|--------|----------|
+| 0x40370000〜0x40378000 のうち下の部分 | 16 KiB | 命令キャッシュ用と見られる（推定。Espressif の技術資料とは未照合） | 計算 |
+| 0x40374000 から（IRAM） | 16 KiB | コード専用の領域 | リンカの定義 |
+| 0x3FC88000〜0x3FCBB090 | 204.1 KiB | ファームの固定分 | 計算 |
+| 〜0x3FCE9710（ヒープの領域 1） | 185.6 KiB | ヒープ | 起動時の表示から計算 |
+| 〜0x3FCEEE34（ヒープの領域 2） | 21.8 KiB | ヒープ。領域 1 との間に隙間は無い | 起動時の表示から計算 |
+| 〜0x3FCF0000 | 4.4 KiB | ヒープに入らない。ROM の予約と見られる（推定） | 計算 |
+| 0x3FCF0000 からの 64 KiB のうち | 32 KiB | ヒープの領域 3 | 起動時の表示 |
+| 同上の残り | 32 KiB | データキャッシュ用と見られる（推定） | 計算 |
+| 合計 | 32 + 416 + 64 = 512 KiB | | 計算 |
+
+0x40370000〜0x40378000 の 32 KiB は、上の 16 KiB が IRAM、下の 16 KiB が命令キャッシュ用と見られる。0x3FC88000〜0x3FCF0000 は 416 KiB である。使われていない領域は見つからなかった。推定とした 3 か所（命令キャッシュ用、ROM の予約、データキャッシュ用）は、8 章・9 章の確認事項に挙げる。
+
 ### 内蔵 RAM の使われ方の概観
 
-数値は 5 章の表（ビルド）による。帯の長さは DIRAM 合計 341,760 B に対する割合（計算）の概略である。
+数値は 5 章の表（ビルド）による。上の内訳（512 KiB 全体）とは別の見方で、DIRAM の合計 341,760 B だけを扱う。2 つの数値は突き合わせていない。帯の長さは DIRAM 合計 341,760 B に対する割合（計算）の概略である。
 
 ```
 DIRAM 341,760 B（データとコードで共用する領域）
@@ -222,33 +241,79 @@ DIRAM 341,760 B（データとコードで共用する領域）
 | libphy.a | 86 B | 3,272 B |
 | libspi_flash.a | 24 B | 2,148 B |
 
-### タスクのスタックの設定値
+### 大きな変数（.bss）
+
+基準のビルドの ELF（実行ファイル）から。行番号は `firmware/vehicle/` 以下。SNN とは、ニューロンの発火を模したニューラルネットワーク（スパイキングニューラルネットワーク）の推定器・制御器のことである。関数内 static とは、関数の中で static をつけて宣言した変数のことで、その関数が呼ばれなくても固定の領域に RAM を占める。リングとは、固定長の領域を循環して使う記憶の仕組みのことである。
+
+| 変数 | RAM | 内容と根拠 |
+|------|-----|-----------|
+| `sf::app::stock::estimator()::snn` | 15,568 B | SNN の推定器。`components/sf_app_hooks/stock_hooks.cpp:93-95` の関数内 static |
+| `sf::app::stock::controller()::snn_controller` | 15,464 B | SNN の制御器。同 :63-66 |
+| `g_tof_bottom`、`g_tof_front` | 各 10,904 B | VL53L3CX のドライバの作業領域（ST の VL53LX のデバイス構造体を含む）。`tasks/tof_task.cpp:108,112` |
+| `g_mag_cal` | 6,060 B | 地磁気の較正器。標本バッファ float×500×3 = 6,000 B が大半（`components/sf_hal_bmm150/include/mag_calibration.hpp:85,185-187`、`tasks/mag_task.cpp:72`） |
+| `sf::log_stream` | 4,876 B | 400 Hz のログの待ち行列（深さ 32 = 80 ms 分。`topics.hpp:77`） |
+| `s_console_ring`、`s_wifi_ring` | 各 4,116 B | ログシンクのリング（各 4,096 B + 管理。`sf_core/log_sink.cpp:53-54`、`log_sink.hpp:72,80`） |
+
+`bmi270_config_file`（8,192 B）と `sf::params::table`（4,032 B）は、nm（シンボルの一覧を出すツール）の種別は D/d（初期値つきのデータ）だが、アドレスが 0x3C10xxxx でフラッシュ上にあり、RAM は使っていない。nm の種別だけでは RAM かフラッシュかを判断できない。
+
+SNN について。
+
+- 既定の構成は controller.type = 0（PID）、estimator.type = 0（ESKF）で、SNN は使わない（`params.cpp:283-292`、`stock_hooks.cpp:68-69,96-98`）。
+- 選ばれなくても関数内 static のため RAM を占める。コメントは「ヒープを使わず静的に生成する」方針を述べている（`stock_hooks.cpp:88-92`）。
+- SNN は未学習の固定乱数を入れた研究用の枠組みで、コードの冒頭に、SILS で墜落するのが想定どおりと書かれている（`snn_controller.hpp` の冒頭）。
+- 大きさの大半は、上限（入力 16、ニューロン 48）で確保した配列である。実際の構成は 10 入力・16 ニューロンである（`cuba_lif_layer.hpp:77-78`、`snn_controller.hpp:58-59`）。
+- 既存の文書 `firmware/vehicle/docs/m5stampfly_firmware_comparison.md`（A4、132-146 行）が「研究用の機能が既定のビルドに入っている」と指摘している。
+
+### タスクのスタックの設定値と実測
 
 スタックとは、関数呼び出しの途中経過や局所変数を置く、タスクごとの作業領域のことである。タスクとは、FreeRTOS（組み込み向けの OS）が並行して動かす処理の単位のことである。
 
-`firmware/vehicle/main/config.hpp` の `STACK_*`。
+設定値は `firmware/vehicle/main/config.hpp` の `STACK_*`。実測は 2026-11-21、実験ブランチのコミット f2f4b199 の `stack` コマンドによる（記録 `logs/checkout/stack_floor_1.txt`、Git の管理外）。単位は B。空きの最小は、起動以降で空きが最も小さくなったときの残りである。使用量の最大は、設定値から空きの最小を引いた値（計算）である。
 
-| タスク | 設定値 |
-|--------|--------|
-| IMU | 16,384 B |
-| CONTROL | 8,192 B |
-| STATE | 4,096 B |
-| OPTFLOW | 8,192 B |
-| MAG | 8,192 B |
-| BARO | 8,192 B |
-| COMM | 4,096 B |
-| TOF | 8,192 B |
-| TELEMETRY | 4,096 B |
-| POWER | 4,096 B |
-| BUTTON | 4,096 B |
-| NOTIFY | 4,096 B |
-| CLI（コンソールの入力を読むタスク） | 8,192 B |
-| LOG | 6,144 B |
-| API | 6,144 B |
-| TELLO_STATE | 4,096 B |
-| 合計（計算） | 106,496 B（104 KiB） |
+| タスク | 設定値 | 空きの最小 | 使用量の最大 | コア | 優先度 |
+|--------|--------|-----------|--------------|------|--------|
+| ImuTask | 16,384 | 11,864 | 4,520 | 1 | 24 |
+| ControlTask | 8,192 | 5,232 | 2,960 | 1 | 23 |
+| StateTask | 4,096 | 1,668 | 2,428 | 0 | 22 |
+| FlowTask | 8,192 | 5,600 | 2,592 | 0 | 20 |
+| MagTask | 8,192 | 5,848 | 2,344 | 0 | 18 |
+| BaroTask | 8,192 | 6,016 | 2,176 | 0 | 16 |
+| TofTask | 8,192 | 5,752 | 2,440 | 0 | 14 |
+| PowerTask | 4,096 | 1,568 | 2,528 | 0 | 12 |
+| CommTask | 4,096 | 1,224 | 2,872 | 0 | 15 |
+| TelemetryTask | 4,096 | 1,728 | 2,368 | 0 | 13 |
+| ButtonTask | 4,096 | 1,752 | 2,344 | 0 | 10 |
+| NotifyTask | 4,096 | 1,788 | 2,308 | 0 | 8 |
+| CLITask（コンソールの入力を読むタスク） | 8,192 | 5,540 | 2,652 | 0 | 5 |
+| LogTask | 6,144 | 3,484 | 2,660 | 0 | 5 |
+| ApiTask | 6,144 | 3,984 | 2,160 | 0 | 6 |
+| TelloStateTask | 4,096 | 1,564 | 2,532 | 0 | 6 |
+| 16 個の合計（計算） | 106,496（104 KiB） | 64,612 | 41,884 | | |
+
+ESP-IDF が作るタスクの空きの最小（設定値は取得できない）は次のとおり。
+
+| タスク | 空きの最小 |
+|--------|-----------|
+| esp_timer | 3,072 B |
+| ipc0 | 528 B |
+| ipc1 | 536 B |
+| IDLE0 | 728 B |
+| IDLE1 | 720 B |
+| wifi | 4,136 B |
+| sys_evt | 3,340 B |
+| tiT（lwIP） | 1,488 B |
+| console_repl | 5,692 B |
 
 ESP-IDF 側のスタックの設定値は、main タスク 3,584 B、esp_timer 3,584 B、イベント 4,096 B、lwIP の TCP/IP 3,072 B、IPC 1,280 B（コアごと）、アイドル 1,536 B（コアごと）である。上の合計には含めていない。
+
+同じ起動での空き（`status` の `heap` 行）は 36,516 B、起動以降の最小 34,416 B、最大の塊 23,552 B であった。
+
+測定の条件と限界は次のとおり。
+
+- 条件: 床の上、ARM していない、電池あり、全センサ動作、USB コンソールのみ、起動 75 s 後。WiFi の接続なし、較正なし。
+- ARM、飛行、WiFi の CLI や取得、地磁気の較正を行うと、使用量は増えうる（未確認）。
+- スタックの設定値を決めた根拠は、LogTask（printf に約 1.5 KB）以外、コメントにも設計文書にも見つからなかった。
+- `config.hpp:104` のコメントは合計を「92KB」と書くが、16 個の合計は 106,496 B（計算）で合わない。
 
 ### RAM にコードを置く設定が有効な ESP-IDF の機能
 
@@ -262,6 +327,28 @@ ESP-IDF 側のスタックの設定値は、main タスク 3,584 B、esp_timer 3
 | CONFIG_ESP_TIMER_IN_IRAM | y |
 
 自前のコードはすべてフラッシュ上にあり、`IRAM_ATTR` の指定は 0 件である。WiFi の受信バッファの設定は、静的 10 個、動的受信 32 個、動的送信 32 個である。
+
+### 既定から変えているビルド設定
+
+`firmware/vehicle/sdkconfig.defaults`（コメントと空行を除いて 28 行）のうち、メモリに関係するもの。
+
+| 設定 | 値 |
+|------|-----|
+| CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM | 10 |
+| CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM | 32 |
+| CONFIG_ESP_WIFI_AMPDU_TX_ENABLED | n |
+| CONFIG_ESP_WIFI_AMPDU_RX_ENABLED | n |
+| CONFIG_ESP_WIFI_IRAM_OPT | y |
+| CONFIG_SPI_MASTER_IN_IRAM | y |
+| CONFIG_I2C_ISR_IRAM_SAFE | y |
+| CONFIG_GPIO_CTRL_FUNC_IN_IRAM | y |
+| CONFIG_LEDC_CTRL_FUNC_IN_IRAM | y |
+| CONFIG_RMT_ISR_IRAM_SAFE | y |
+| CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE | 4096 |
+| CONFIG_NVS_DEFAULT_PART_SIZE | 0x6000 |
+| CONFIG_COMPILER_OPTIMIZATION_PERF | y |
+
+命令キャッシュ・データキャッシュの大きさと、400 Hz の制御経路のコードの置き場所についての指定は無い。ESP-IDF の既定のままで、自前のコードはすべてフラッシュ上にある。
 
 ### 起動時のヒープの領域
 
@@ -340,7 +427,7 @@ ESP-IDF 側のスタックの設定値は、main タスク 3,584 B、esp_timer 3
 |------|------|
 | WiFi の CLI（TCP 23）や `sf log wifi` の取得をつないだときの空き | 未確認 |
 | ARM 中（飛行中の状態）の空き | 未確認 |
-| 各タスクのスタックの実際の使用量 | 未確認 |
+| ARM・飛行・WiFi 接続・較正のときのタスクのスタックの使用量 | 未確認（床の上の値は 5 章に測った） |
 
 ## 7. メモリの置き方と処理時間
 
@@ -377,11 +464,53 @@ ESP-IDF の文書は次のように述べている。
 
 6 章の空きと本章の処理時間を合わせると、処理時間が短くなる置き方ほど、起動後の空きが減っている。
 
-## 8. 未確認の事項と次に確かめること
+## 8. 最適化の候補
+
+**状態: 検討中。どれも採用は決まっていない。** 見込みは条件が異なるため、足し算で 1 つの数字にまとめない。
+
+### 候補の表
+
+| 候補 | 見込み | 動作への影響 | 確かめること |
+|------|--------|--------------|--------------|
+| SNN を既定のビルドから外す（ビルド時の選択にする） | 約 31 KB（15,568 + 15,464 B、計算） | 既定の構成では変化なし。既定のビルドでは SNN を選べなくなる | SNN を使う SILS のシナリオ・テストの有無、教育・研究用として残す方針 |
+| SNN の配列の上限を実際の構成に合わせる | 1 個あたり 8〜10 KB（概算、未検証） | SNN は選べるまま | 上限を使う別の構成が無いか |
+| タスクのスタックを実測に合わせる | 下の試算で 33,792 B（床の上の実測に基づく） | あふれの危険。CommTask は逆に増やす候補 | ARM・飛行・WiFi 接続・較正を行った後の実測 |
+| 地磁気の較正用の標本バッファを較正のときだけ確保する | 約 6,000 B | 較正の開始時に確保に失敗しうる | 較正は地上だけか、標本数 500 の根拠 |
+| 前方 ToF が無い機体でドライバの作業領域を確保しない | 最大 10,904 B（前方 ToF の無い機体だけ） | 搭載機では変わらない | 搭載の判定の時点 |
+| WiFi のバッファ数・WiFi の処理を RAM に置く設定の見直し | 未確認（測っていない） | 通信の余裕が減る | テレメトリ・ログの取得に要る量 |
+| ログのリング・待ち行列を縮める | 2.4〜4 KB 程度 | ログの欠落への余裕が減る | 欠落の実測 |
+
+### スタックの試算
+
+**目安であり、決定ではない。** 5 章の床の上の実測（ARM・WiFi 接続・較正なし）に、次の規則を当てた試算である。
+
+- 規則: 使用量の最大の 1.5 倍以上、かつ空きの最小 1,536 B 以上になるように、1,024 B の倍数へ切り上げる。
+
+| タスク | 今 | 試算 |
+|--------|-----|------|
+| ImuTask | 16,384 B | 7,168 B |
+| ControlTask | 8,192 B | 5,120 B |
+| FlowTask | 8,192 B | 5,120 B |
+| MagTask | 8,192 B | 4,096 B |
+| BaroTask | 8,192 B | 4,096 B |
+| TofTask | 8,192 B | 4,096 B |
+| CLITask | 8,192 B | 5,120 B |
+| LogTask | 6,144 B | 5,120 B |
+| ApiTask | 6,144 B | 4,096 B |
+| 合計の減り（計算） | | 33,792 B |
+
+- 上の表にないタスクは、この規則では今の値のままである。
+- CommTask は、この規則だと今の 4,096 B では足りず 5,120 B が要る（今の空きの最小は 1,224 B）。上の合計の減りには、この増加分を含めていない。
+
+### 空けたメモリの使い道の候補
+
+7 章の「命令キャッシュ 32 KB」（追加 約 16 KB）と「ImuTask と ESKF を IRAM」（追加 約 19 KB）の併用。併用したビルドは、今の空きではコンソールを起動できなかった（6 章）。
+
+## 9. 未確認の事項と次に確かめること
 
 | 項目 | 状態 | 次に確かめること |
 |------|------|------------------|
-| タスクのスタックの実際の使用量 | 未確認 | 各タスクのスタックの最小の空き（使用量の最大値）を実機で読む |
+| ARM・飛行・WiFi 接続・較正の後のタスクのスタックの使用量 | 未確認（床の上の値は 5 章に測った） | それぞれの状態の後に `stack` コマンドで空きの最小を読む |
 | WiFi 接続時（TCP 23、`sf log wifi`）の空き | 未確認 | 接続した状態で `status` の `heap` 行を読む |
 | ARM 中の空き | 未確認 | ARM した状態の空きを読む（飛行中の有線操作は避け、WiFi 経由で読む） |
 | 動的な確保の内訳（WiFi など） | 未確認（測っていない） | ヒープの確保元ごとの量を測る |
@@ -394,7 +523,15 @@ ESP-IDF の文書は次のように述べている。
 | ESP-IDF 文書の版の違い（stable 版と v5.5.2） | 未確認 | v5.5.2 の文書で引用箇所を照合する |
 | 手元の機体が StampFly v1.0 か v1.1 か、StampS3 か StampS3A か | 未確認 | 機体の表示・基板で確かめる |
 | 読み出しが 1 台だけであること | 1 台のみ | 他の機体でも読み出す |
-| RAM を多く使う置き方（命令キャッシュの拡大・コードを IRAM に置く）を採用するか | 検討中 | 空きと処理時間の表（6・7 章）を基準に判断する |
+| SNN を使う SILS のシナリオ・テストの有無 | 未確認 | シナリオとテストを調べる |
+| WiFi のバッファ（テレメトリ・ログの取得）に要る量 | 未確認 | 取得に必要な量を測る |
+| SRAM の内訳の推定 3 か所（命令キャッシュ用 16 KiB、ROM の予約 4.4 KiB、データキャッシュ用 32 KiB） | 未確認（推定。Espressif の技術資料と未照合） | Espressif の技術資料と照合する |
+| SNN の配列の上限を使う別の構成の有無 | 未確認 | SNN のコードを調べる |
+| 地磁気の較正を地上だけで行うか、標本数 500 の根拠 | 未確認 | 設計文書とコードで確かめる |
+| 前方 ToF の搭載の判定の時点 | 未確認 | ToF のコードで確かめる |
+| ログの欠落への余裕（リング・待ち行列を縮めたときの欠落） | 未確認 | 欠落を実測する |
+| スタックの設定値の根拠（LogTask 以外） | 見つからなかった | 設計した人に確かめる |
+| RAM を多く使う置き方（命令キャッシュの拡大・コードを IRAM に置く）を採用するか | 検討中 | 空きと処理時間の表（6・7 章）と最適化の候補（8 章）を基準に判断する |
 
 ---
 
@@ -433,6 +570,7 @@ Units are kept as in the original material. B is bytes, KB follows the source's 
 | Flash | 8 MB inside the chip package (Quad SPI) |
 | Internal RAM | Of 512 KB, about 37 KB is free after boot with the current firmware (measured 36,736 B) |
 | Memory placement and time | The time of one 400 Hz processing cycle depends strongly on placement (in the experiments, from 1359-1367 µs down to 366 µs) |
+| Room for optimization | Every region of the SRAM is in use, but the SNN (spiking neural network), which the default configuration does not use, occupies about 31 KB. Against configured stacks of 106,496 B, the sum of the maximum usage on the floor is 41,884 B (chapter 8) |
 
 ## 2. Module and Chip Specification
 
@@ -486,7 +624,7 @@ Which version the vehicle at hand is has not been checked in this document.
 | ESP-IDF documentation Speed Optimization | https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/performance/speed.html |
 | ESP-IDF documentation Minimizing RAM Usage | https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/performance/ram-usage.html |
 
-The ESP-IDF pages were read in their stable-version display, while the vehicle firmware uses v5.5.2. Differences caused by the version difference have not been checked (chapter 8).
+The ESP-IDF pages were read in their stable-version display, while the vehicle firmware uses v5.5.2. Differences caused by the version difference have not been checked (chapter 9).
 
 ## 3. Values Read from the Real Device
 
@@ -574,9 +712,27 @@ A partition table is a list that divides the flash by purpose.
 
 The end of the last partition, storage, is 0x510000 (calculated). How the flash after it is used has not been checked.
 
+### Breakdown of the 512 KiB Internal SRAM
+
+Calculated from the addresses in the boot message of the baseline firmware (53553678).
+
+| Region | Size | Use | Source |
+|--------|------|-----|--------|
+| Lower part of 0x40370000-0x40378000 | 16 KiB | Appears to be for the instruction cache (estimate; not checked against Espressif technical material) | Calculated |
+| From 0x40374000 (IRAM) | 16 KiB | Code-only area | Linker definition |
+| 0x3FC88000-0x3FCBB090 | 204.1 KiB | Fixed part of the firmware | Calculated |
+| to 0x3FCE9710 (heap region 1) | 185.6 KiB | Heap | Calculated from the boot message |
+| to 0x3FCEEE34 (heap region 2) | 21.8 KiB | Heap. No gap to region 1 | Calculated from the boot message |
+| to 0x3FCF0000 | 4.4 KiB | Not part of the heap. Appears to be a ROM reservation (estimate) | Calculated |
+| Of the 64 KiB from 0x3FCF0000 | 32 KiB | Heap region 3 | Boot message |
+| Rest of the above | 32 KiB | Appears to be for the data cache (estimate) | Calculated |
+| Total | 32 + 416 + 64 = 512 KiB | | Calculated |
+
+Of the 32 KiB at 0x40370000-0x40378000, the upper 16 KiB is IRAM and the lower 16 KiB appears to be for the instruction cache. 0x3FC88000-0x3FCF0000 is 416 KiB. No unused region was found. The three places marked as estimates (instruction cache, ROM reservation, data cache) are listed among the items to check in chapters 8 and 9.
+
 ### Overview of Internal RAM Use
 
-The numbers come from the table in chapter 5 (build). The bar length is a rough ratio to the DIRAM total of 341,760 B (calculated).
+The numbers come from the table in chapter 5 (build). This is a different view from the breakdown above (the whole 512 KiB) and covers only the DIRAM total of 341,760 B. The two sets of numbers are not matched against each other. The bar length is a rough ratio to the DIRAM total of 341,760 B (calculated).
 
 ```
 DIRAM 341,760 B (area shared by data and code)
@@ -624,33 +780,79 @@ From commit 53553678, ESP-IDF v5.5.2, `idf_size.py` output.
 | libphy.a | 86 B | 3,272 B |
 | libspi_flash.a | 24 B | 2,148 B |
 
-### Configured Task Stack Sizes
+### Large Variables (.bss)
+
+From the ELF (executable file) of the baseline build. Line numbers are relative to `firmware/vehicle/`. An SNN is an estimator or controller built as a neural network that imitates neuron firing (a spiking neural network). A function-local static is a variable declared with `static` inside a function; it occupies RAM in a fixed area even if the function is never called. A ring is a storage mechanism that reuses a fixed-length area cyclically.
+
+| Variable | RAM | Content and basis |
+|----------|-----|-------------------|
+| `sf::app::stock::estimator()::snn` | 15,568 B | SNN estimator. Function-local static at `components/sf_app_hooks/stock_hooks.cpp:93-95` |
+| `sf::app::stock::controller()::snn_controller` | 15,464 B | SNN controller. Same file :63-66 |
+| `g_tof_bottom`, `g_tof_front` | 10,904 B each | Work area of the VL53L3CX driver (includes the device structure of ST's VL53LX). `tasks/tof_task.cpp:108,112` |
+| `g_mag_cal` | 6,060 B | Magnetometer calibrator. Mostly the sample buffer float×500×3 = 6,000 B (`components/sf_hal_bmm150/include/mag_calibration.hpp:85,185-187`, `tasks/mag_task.cpp:72`) |
+| `sf::log_stream` | 4,876 B | Queue of the 400 Hz log (depth 32 = 80 ms; `topics.hpp:77`) |
+| `s_console_ring`, `s_wifi_ring` | 4,116 B each | Rings of the log sinks (4,096 B each + management; `sf_core/log_sink.cpp:53-54`, `log_sink.hpp:72,80`) |
+
+`bmi270_config_file` (8,192 B) and `sf::params::table` (4,032 B) have the nm (a tool that lists symbols) type D/d (initialized data), but their addresses are 0x3C10xxxx, which is in flash, and they use no RAM. The nm type alone cannot tell RAM from flash.
+
+About the SNN.
+
+- The default configuration is controller.type = 0 (PID) and estimator.type = 0 (ESKF); the SNN is not used (`params.cpp:283-292`, `stock_hooks.cpp:68-69,96-98`).
+- Because they are function-local statics, they occupy RAM even when not selected. The comment states a policy of creating them statically without using the heap (`stock_hooks.cpp:88-92`).
+- The SNN is a research framework with untrained fixed random values; the head of the code says that crashing in SILS is expected (head of `snn_controller.hpp`).
+- Most of the size is arrays allocated for the upper limits (16 inputs, 48 neurons). The actual configuration is 10 inputs and 16 neurons (`cuba_lif_layer.hpp:77-78`, `snn_controller.hpp:58-59`).
+- The existing document `firmware/vehicle/docs/m5stampfly_firmware_comparison.md` (A4, lines 132-146) points out that "research features are in the default build".
+
+### Configured Task Stack Sizes and Measurements
 
 A stack is the per-task work area that holds the progress of function calls and local variables. A task is the unit of processing that FreeRTOS (an embedded operating system) runs concurrently.
 
-`STACK_*` in `firmware/vehicle/main/config.hpp`.
+The settings are the `STACK_*` in `firmware/vehicle/main/config.hpp`. The measurements are from 2026-11-21 with the `stack` command of commit f2f4b199 on the experiment branch (record `logs/checkout/stack_floor_1.txt`, outside Git). Units are B. The minimum free is the remainder at the moment when the free stack was smallest since boot. The maximum usage is the setting minus the minimum free (calculated).
 
-| Task | Setting |
-|------|---------|
-| IMU | 16,384 B |
-| CONTROL | 8,192 B |
-| STATE | 4,096 B |
-| OPTFLOW | 8,192 B |
-| MAG | 8,192 B |
-| BARO | 8,192 B |
-| COMM | 4,096 B |
-| TOF | 8,192 B |
-| TELEMETRY | 4,096 B |
-| POWER | 4,096 B |
-| BUTTON | 4,096 B |
-| NOTIFY | 4,096 B |
-| CLI (task that reads console input) | 8,192 B |
-| LOG | 6,144 B |
-| API | 6,144 B |
-| TELLO_STATE | 4,096 B |
-| Total (calculated) | 106,496 B (104 KiB) |
+| Task | Setting | Minimum free | Maximum usage | Core | Priority |
+|------|---------|--------------|---------------|------|----------|
+| ImuTask | 16,384 | 11,864 | 4,520 | 1 | 24 |
+| ControlTask | 8,192 | 5,232 | 2,960 | 1 | 23 |
+| StateTask | 4,096 | 1,668 | 2,428 | 0 | 22 |
+| FlowTask | 8,192 | 5,600 | 2,592 | 0 | 20 |
+| MagTask | 8,192 | 5,848 | 2,344 | 0 | 18 |
+| BaroTask | 8,192 | 6,016 | 2,176 | 0 | 16 |
+| TofTask | 8,192 | 5,752 | 2,440 | 0 | 14 |
+| PowerTask | 4,096 | 1,568 | 2,528 | 0 | 12 |
+| CommTask | 4,096 | 1,224 | 2,872 | 0 | 15 |
+| TelemetryTask | 4,096 | 1,728 | 2,368 | 0 | 13 |
+| ButtonTask | 4,096 | 1,752 | 2,344 | 0 | 10 |
+| NotifyTask | 4,096 | 1,788 | 2,308 | 0 | 8 |
+| CLITask (task that reads console input) | 8,192 | 5,540 | 2,652 | 0 | 5 |
+| LogTask | 6,144 | 3,484 | 2,660 | 0 | 5 |
+| ApiTask | 6,144 | 3,984 | 2,160 | 0 | 6 |
+| TelloStateTask | 4,096 | 1,564 | 2,532 | 0 | 6 |
+| Total of the 16 (calculated) | 106,496 (104 KiB) | 64,612 | 41,884 | | |
+
+The minimum free stack of the tasks created by ESP-IDF (the settings cannot be obtained) is as follows.
+
+| Task | Minimum free |
+|------|--------------|
+| esp_timer | 3,072 B |
+| ipc0 | 528 B |
+| ipc1 | 536 B |
+| IDLE0 | 728 B |
+| IDLE1 | 720 B |
+| wifi | 4,136 B |
+| sys_evt | 3,340 B |
+| tiT (lwIP) | 1,488 B |
+| console_repl | 5,692 B |
 
 The ESP-IDF side stack settings are: main task 3,584 B, esp_timer 3,584 B, event 4,096 B, lwIP TCP/IP 3,072 B, IPC 1,280 B (per core), idle 1,536 B (per core). They are not included in the total above.
+
+In the same boot, the free memory (the `heap` line of `status`) was 36,516 B, the minimum since boot 34,416 B and the largest block 23,552 B.
+
+The conditions and limits of the measurement are as follows.
+
+- Conditions: on the floor, not armed, battery connected, all sensors running, USB console only, 75 s after boot. No WiFi connection, no calibration.
+- Arming, flight, the WiFi CLI or capture, and magnetometer calibration may increase the usage (unconfirmed).
+- No basis for the configured stack sizes was found in comments or design documents, except for LogTask (about 1.5 KB for printf).
+- The comment at `config.hpp:104` states the total as "92KB", but the total of the 16 is 106,496 B (calculated), which does not match.
 
 ### ESP-IDF Features with Code Placed in RAM Enabled
 
@@ -664,6 +866,28 @@ The ESP-IDF side stack settings are: main task 3,584 B, esp_timer 3,584 B, event
 | CONFIG_ESP_TIMER_IN_IRAM | y |
 
 All of the project's own code is in flash, and there are 0 `IRAM_ATTR` specifications. The WiFi receive buffer settings are 10 static, 32 dynamic receive and 32 dynamic transmit.
+
+### Build Settings Changed from the Defaults
+
+Of `firmware/vehicle/sdkconfig.defaults` (28 lines excluding comments and blank lines), the memory-related ones.
+
+| Setting | Value |
+|---------|-------|
+| CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM | 10 |
+| CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM | 32 |
+| CONFIG_ESP_WIFI_AMPDU_TX_ENABLED | n |
+| CONFIG_ESP_WIFI_AMPDU_RX_ENABLED | n |
+| CONFIG_ESP_WIFI_IRAM_OPT | y |
+| CONFIG_SPI_MASTER_IN_IRAM | y |
+| CONFIG_I2C_ISR_IRAM_SAFE | y |
+| CONFIG_GPIO_CTRL_FUNC_IN_IRAM | y |
+| CONFIG_LEDC_CTRL_FUNC_IN_IRAM | y |
+| CONFIG_RMT_ISR_IRAM_SAFE | y |
+| CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE | 4096 |
+| CONFIG_NVS_DEFAULT_PART_SIZE | 0x6000 |
+| CONFIG_COMPILER_OPTIMIZATION_PERF | y |
+
+There is no specification of the instruction and data cache sizes, nor of where the code of the 400 Hz control path is placed. They remain at the ESP-IDF defaults, and all of the project's own code is in flash.
 
 ### Heap Regions at Boot
 
@@ -742,7 +966,7 @@ No "upper limit of what can be added" is set from these measurements. Points rem
 |------|--------|
 | Free memory with the WiFi CLI (TCP 23) or a `sf log wifi` capture connected | Unconfirmed |
 | Free memory while armed (flight state) | Unconfirmed |
-| Actual stack usage of each task | Unconfirmed |
+| Stack usage of the tasks during arming, flight, WiFi connection and calibration | Unconfirmed (floor values are measured in chapter 5) |
 
 ## 7. Memory Placement and Processing Time
 
@@ -779,11 +1003,53 @@ The ESP-IDF documentation states the following.
 
 Putting the free memory of chapter 6 together with the processing times of this chapter, the placements that shorten the processing time are the ones that reduce the free memory after boot.
 
-## 8. Unconfirmed Items and What to Check Next
+## 8. Optimization Candidates
+
+**Status: under consideration. None of them has been decided for adoption.** The expected savings are not added into a single number because their conditions differ.
+
+### Table of Candidates
+
+| Candidate | Expected saving | Effect on behavior | What to check |
+|-----------|-----------------|--------------------|---------------|
+| Remove the SNN from the default build (make it a build-time choice) | About 31 KB (15,568 + 15,464 B, calculated) | No change in the default configuration. The SNN can no longer be selected in the default build | Whether any SILS scenario or test uses the SNN; the policy of keeping it for education and research |
+| Fit the SNN array upper limits to the actual configuration | 8-10 KB each (rough estimate, unverified) | The SNN stays selectable | Whether another configuration uses the upper limits |
+| Fit the task stacks to the measurements | 33,792 B in the estimate below (based on measurements on the floor) | Risk of overflow. CommTask is rather a candidate to increase | Measurements after arming, flight, WiFi connection and calibration |
+| Allocate the magnetometer calibration sample buffer only during calibration | About 6,000 B | Allocation may fail when calibration starts | Whether calibration happens only on the ground; the basis for 500 samples |
+| Do not allocate the driver work area on vehicles without a front ToF | Up to 10,904 B (only on vehicles without a front ToF) | No change on equipped vehicles | At what point the presence is determined |
+| Review the number of WiFi buffers and the settings that place WiFi processing in RAM | Unconfirmed (not measured) | Less margin for communication | Amount needed for telemetry and log capture |
+| Shrink the log rings and queue | About 2.4-4 KB | Less margin against log loss | Measurement of log loss |
+
+### Stack Estimate
+
+**This is a guide, not a decision.** It applies the following rule to the floor measurements of chapter 5 (no arming, no WiFi connection, no calibration).
+
+- Rule: round up to a multiple of 1,024 B so that the stack is at least 1.5 times the maximum usage and the minimum free is at least 1,536 B.
+
+| Task | Now | Estimate |
+|------|-----|----------|
+| ImuTask | 16,384 B | 7,168 B |
+| ControlTask | 8,192 B | 5,120 B |
+| FlowTask | 8,192 B | 5,120 B |
+| MagTask | 8,192 B | 4,096 B |
+| BaroTask | 8,192 B | 4,096 B |
+| TofTask | 8,192 B | 4,096 B |
+| CLITask | 8,192 B | 5,120 B |
+| LogTask | 6,144 B | 5,120 B |
+| ApiTask | 6,144 B | 4,096 B |
+| Total reduction (calculated) | | 33,792 B |
+
+- Tasks not in the table keep their current values under this rule.
+- For CommTask, this rule says the current 4,096 B is not enough and 5,120 B is needed (the current minimum free is 1,224 B). This increase is not included in the total reduction above.
+
+### Candidate Uses of the Freed Memory
+
+Using together the "instruction cache 32 KB" (about 16 KB more) and "ImuTask and ESKF in IRAM" (about 19 KB more) of chapter 7. The build with both could not start the console with the current free memory (chapter 6).
+
+## 9. Unconfirmed Items and What to Check Next
 
 | Item | Status | What to check next |
 |------|--------|--------------------|
-| Actual stack usage of the tasks | Unconfirmed | Read the minimum free stack (maximum usage) of each task on the real device |
+| Task stack usage after arming, flight, WiFi connection and calibration | Unconfirmed (floor values are measured in chapter 5) | Read the minimum free stack with the `stack` command after each state |
 | Free memory with WiFi connected (TCP 23, `sf log wifi`) | Unconfirmed | Read the `heap` line of `status` in the connected state |
 | Free memory while armed | Unconfirmed | Read the free memory in the armed state (avoid wired operation in flight; read it over WiFi) |
 | Breakdown of dynamic allocations (WiFi etc.) | Unconfirmed (not measured) | Measure the amount per allocation source in the heap |
@@ -796,4 +1062,12 @@ Putting the free memory of chapter 6 together with the processing times of this 
 | Differences between ESP-IDF documentation versions (stable and v5.5.2) | Unconfirmed | Compare the quoted passages with the v5.5.2 documentation |
 | Whether the vehicle at hand is StampFly v1.0 or v1.1, and StampS3 or StampS3A | Unconfirmed | Check the markings and the board of the vehicle |
 | Only one vehicle was read | One vehicle only | Read other vehicles too |
-| Whether to adopt placements that trade internal RAM for speed (cache, IRAM) | Under consideration | Decide using the tables of free memory and processing time (chapters 6 and 7) |
+| Whether any SILS scenario or test uses the SNN | Unconfirmed | Check the scenarios and tests |
+| Amount needed for WiFi buffers (telemetry and log capture) | Unconfirmed | Measure the amount needed for capture |
+| Three estimates in the SRAM breakdown (16 KiB for the instruction cache, 4.4 KiB ROM reservation, 32 KiB for the data cache) | Unconfirmed (estimates; not checked against Espressif technical material) | Check against Espressif technical material |
+| Whether another configuration uses the SNN array upper limits | Unconfirmed | Check the SNN code |
+| Whether magnetometer calibration happens only on the ground; the basis for 500 samples | Unconfirmed | Check in design documents and code |
+| At what point the presence of the front ToF is determined | Unconfirmed | Check in the ToF code |
+| Margin against log loss (loss when the rings and queue are shrunk) | Unconfirmed | Measure the loss |
+| Basis for the configured stack sizes (other than LogTask) | Not found | Ask the designer |
+| Whether to adopt placements that trade internal RAM for speed (cache, IRAM) | Under consideration | Decide using the tables of free memory and processing time (chapters 6 and 7) and the optimization candidates (chapter 8) |
