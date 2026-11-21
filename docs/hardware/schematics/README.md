@@ -29,6 +29,7 @@ StampFly の回路図（PDF）の置き場所と、各ファイルの内容を�
 |------|------|
 | 取り込み日 | 2026-11-21 |
 | 作成者 | M5Stack（図面は Altium Designer の出力） |
+| 公開の扱い | StampFly はオープンソースハードウェアであり、回路図は公開してよい資料（開発者の確認、2026-11-21）。ライセンスの条文はこの文書では確かめていない |
 | 変更 | なし（受け取ったファイルのまま） |
 | 版の表示 | 図面の中に表題欄は無い。版はファイル名による |
 
@@ -69,6 +70,7 @@ This directory holds the StampFly schematics (PDF) and lists what each file is. 
 |------|---------|
 | Imported | 2026-11-21 |
 | Author | M5Stack (the drawings are Altium Designer output) |
+| Publication | StampFly is open-source hardware and the schematics may be published (confirmed by the developer, 2026-11-21). The licence text is not checked in this document |
 | Changes | None (files as received) |
 | Revision marking | The drawings have no title block; the revision comes from the file name |
 
