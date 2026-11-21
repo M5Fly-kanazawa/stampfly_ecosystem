@@ -6,12 +6,13 @@
 
 ### このドキュメントについて
 
-StampFly の下向きと前方に付く ToF（Time of Flight、光を出して反射が戻るまでの時間から距離を測るセンサ）VL53L3CX について、機体 1 台で測った結果をまとめる。内容は次の 2 点である。
+StampFly の下向きと前方に付く ToF（Time of Flight、光を出して反射が戻るまでの時間から距離を測るセンサ）VL53L3CX について、機体 1 台で測った結果をまとめる。内容は次の 3 点である。
 
 | 内容 | 章 |
 |------|----|
 | 1 回の読み出しにかかる時間の内訳 | 3 章 |
 | 測距の上限（飛行ログの調査と、手に持った機体での実験） | 4 章 |
+| クロストークの較正の実験（較正の結果と、補正ありの手持ち測定） | 5 章 |
 
 事実・推論・未確認を分けて書く。測っていないことは書かない。
 
@@ -21,7 +22,7 @@ StampFly の下向きと前方に付く ToF（Time of Flight、光を出して�
 |------|------|
 | 日付 | 2026-11-21 の夜から 2026-11-22 |
 | 機体 | 1 台。床の上または手持ち、ARM していない、プロペラ付き、電池あり（4.16〜4.19 V）、全センサ動作（`status` の `sensors present=0x7F`）、電源スイッチ付きハブ経由の USB |
-| ファームウェア | fix/flight-safety の f4b72074（`App version archive/2026-11-13-31-gf4b72074`）を基準に、比較用の変更を Git 管理外の作業ツリーで加えたもの（各章に書く）。測定の後、機体は基準のビルドに戻した（`logs/checkout/restore_A_20261122.txt`） |
+| ファームウェア | fix/flight-safety の f4b72074（`App version archive/2026-11-13-31-gf4b72074`）を基準に、比較用の変更を Git 管理外の作業ツリーで加えたもの（各章に書く）。測定の後、機体は基準のビルドに戻した（3・4 章の後は `logs/checkout/restore_A_20261122.txt`、5 章の後は `logs/checkout/restore_A_20261122b.txt`） |
 | 記録 | `logs/checkout/`（Git 管理外）。作った変更と集計の道具は同じ場所に置いた（下の表） |
 
 | 記録・道具 | 内容 |
@@ -30,6 +31,10 @@ StampFly の下向きと前方に付く ToF（Time of Flight、光を出して�
 | `range_L33_*.txt`、`range_M33_*.txt`、`range_L33_check.txt` | 4 章の手持ち実験の記録 |
 | `tof_timing.patch`、`toftime_parse.py` | 3 章の計測用の変更（Git のパッチ）と集計 |
 | `tof_range.patch`、`tofdiag_parse.py`、`range_capture.py`、`move_an.py`、`run_variant.sh` | 4 章の実験用の変更（Git のパッチ）、集計、記録、動かし方の解析、書き込みから測定までの手順 |
+| `tof_xtalk.patch`、`xtalk_cal.py` | 5 章の実験用の変更（Git のパッチ。命令 `tofcal` と診断の追加）と、較正の実行・記録の手順 |
+| `xtalk_show_before.txt`、`xtalk_cal_w1000.txt`、`xtalk_cal_w1500.txt` | 5 章の較正前の状態と、較正 2 回の記録 |
+| `range_Xon_wall_{0.5,1.0,1.5,2.0,2.5,3.0}.txt` | 5 章の補正ありの手持ち測定の記録（補正なしの比較は `range_L33_wall_*.txt`） |
+| `restore_A_20261122b.txt` | 5 章の後に基準のビルドへ戻したときの記録 |
 
 ### 結論の要約
 
@@ -40,6 +45,8 @@ StampFly の下向きと前方に付く ToF（Time of Flight、光を出して�
 | 測距モード | 機体のファームウェアは LONG。静止なら白い壁で 3.0 m（部屋の制約で、これより遠くは測っていない）まで、床で約 2.0 m（手の届く高さ）まで有効率 95〜100 % | 事実 |
 | MEDIUM | 壁から 1.5 m までは有効、2.0 m で有効率 1.0 %、2.5〜3.0 m では誤った近い距離を有効として返した。使えない | 事実 |
 | 飛行ログの有効率 | 気圧高度基準で 1.9〜2.0 m が 64 %、2.0〜2.2 m が 22 % | 事実（計算はサブエージェント、独立の確認なし） |
+| 手前の弱い目標 | 距離 30 mm 未満の弱い目標は、クロストークの較正（RAM 上、白い壁で 1500 mm の較正値）を有効にすると、白い壁の 0.5〜3.0 m の 6 点すべてで 0 % になった（補正なしでは 5.8〜76 %）。壁の目標の有効率・信号・距離は変わらなかった。原因がクロストークであることの確定ではない（5 章） | 事実（消えたこと）、推論（原因） |
+| クロストークの較正 | 暗い環境ではなく室内の照明下で 2 回（壁から 1000 mm、1500 mm）実行し、2 回とも抽出に成功（`cal_status=0`、代替値ではない）。較正値は電源を切ると消える。飛行中の有効率の低下への効果、床向きの測定、保存の方法は未確認（5・6 章） | 事実、未確認 |
 | 飛行中の途切れの原因 | 手持ちの静止・動き・傾きでは再現しなかった。原因は未確認 | 未確認 |
 
 ## 2. 構成と設定
@@ -232,13 +239,13 @@ StampFly の下向きと前方に付く ToF（Time of Flight、光を出して�
 
 | 項目 | 内容 |
 |------|------|
-| 弱い近い目標 | 0.75 m より上の点では、距離 1〜29 mm・信号 0.04〜0.12 Mcps の弱い目標が出る。出る行の割合は点ごとに 2〜59 %。センサの手前からの反射（クロストーク）と推定する。推定であり確認していない |
+| 弱い近い目標 | 0.75 m より上の点では、距離 1〜29 mm・信号 0.04〜0.12 Mcps の弱い目標が出る。出る行の割合は点ごとに 2〜59 %。センサの手前からの反射（クロストーク）と推定する。推定であり、この時点では確認していない（5 章で、クロストークの較正により消えた） |
 | 選び方との関係 | 2 章の選び方は距離 30 mm 以下を除き、最も遠い有効な目標を選ぶので、LONG では床・壁が選ばれた |
 | 信号レート × 距離の 2 乗 | 床で 1.02〜1.28（1.7 m まで）、壁で 0.96〜1.33。壁は床の約 1.2 倍（計算）。距離の 2 乗に反比例して信号が下がる、という予想に合う |
 
 ### 発光の周期から計算した範囲
 
-ToF は光の位相から距離を求める。発光の周期より遠い物は、折り返して近い距離に見える。範囲は次の式で計算した（測定を行った側が使った近似式。`fast_osc` を使う。ソースの定数から直接導いたものではなく、確認は 5 章）。
+ToF は光の位相から距離を求める。発光の周期より遠い物は、折り返して近い距離に見える。範囲は次の式で計算した（測定を行った側が使った近似式。`fast_osc` を使う。ソースの定数から直接導いたものではなく、確認は 6 章）。
 
 $$d_{\text{pclk}} \approx 198.4 \times \frac{48332}{f_{\text{osc}}}\ \text{[mm]}$$
 
@@ -268,21 +275,115 @@ MEDIUM の有効の上限の計算（約 1.78 m）は、(c) の実測（1.5 m �
 | LONG の設定 | 誤りではない。静止なら白い壁で 3.0 m（部屋の制約）まで測れた | 事実 |
 | MEDIUM | 1.5〜2.0 m の間で途切れ、範囲外では誤った近い距離を有効として返すので使えない。同梱の ST の資料 AN5561 の「室内では MEDIUM のほうが遠い」は、この機体では再現しなかった | 事実 |
 | 飛行ログとの食い違い | 飛行ログでは 1.9〜2.0 m で有効率が 64 %、2.0〜2.2 m で 22 % に下がる。手持ちの静止・動き・傾きでは再現しなかった。ただし手持ちで届いた高さは約 2.0 m まで | 事実 |
-| 飛行中の途切れの原因 | 候補は、飛行した場所の床、モータ回転中の条件（振動・電源）、クロストーク（補正なし） | 未確認 |
+| 飛行中の途切れの原因 | 候補は、飛行した場所の床、モータ回転中の条件（振動・電源）、クロストーク（4 章の測定は補正なし。5 章の補正ありの測定は手持ちのみで、飛行では未確認） | 未確認 |
 
-## 5. 未確認の事項と次に確かめること
+## 5. クロストークの較正の実験
+
+### 目的と方法
+
+4 章で、距離 1〜29 mm・信号の弱い目標が出ることを見つけ、センサの手前からの反射（クロストーク。発光した光の一部が目標に届かず、センサの内部や窓から直接受光部に入ること）と推定した。この推定を確かめるため、同じ日にクロストークの較正（クロストークの量を測って、測距の結果から差し引く値を作る操作）を機体で行い、較正の前後で同じ手持ち実験を比べた。
+
+| 項目 | 内容 |
+|------|------|
+| 実験用ビルド | f4b72074 に、既存の診断（`TOFDIAG`・`TOFCFG` 行）に加えてコンソールの命令 `tofcal xtalk [mm] \| off \| on \| show \| refspad` を足したもの。変更は `logs/checkout/tof_xtalk.patch`（Git 管理外） |
+| 命令の動き | 命令は要求を出すだけ。ToF タスクが周期の頭で測距を止め、ST のドライバの `VL53LX_PerformXTalkCalibration` を呼び、測距を再開する。ARM 中は拒否する |
+| 較正値の保存 | RAM 上だけ。電源を切ると消える |
+| 測距の設定 | LONG・33 ms（4 章と同じ） |
+| 較正の姿勢 | 機体を手で持ち、下向きの ToF を白い壁（白い壁紙、細かい凹凸）に正対させた。室内の照明下（暗い環境ではない） |
+| 較正の距離 | 壁から 1000 mm と 1500 mm の 2 回（命令に渡した値） |
+
+### ドライバの性質（ソースの読み）
+
+担当がソースで確認した内容である。関数名で示す（`src/vl53lx/vl53lx_api.c`）。
+
+| 内容 | 種別 |
+|------|------|
+| `VL53LX_PerformXTalkCalibration` の戻り値は、較正の成否を表さない。最後の測距モード・測定時間の再設定の結果で上書きされる | 事実（ソース） |
+| 抽出に失敗すると決め打ちの代替値（平面オフセット 50、波形 307/410/410/307）が入る。実際の状態は `LLData.xtalk_results.cal_status` で見る | 事実（ソース） |
+| 較正の最後に補正は有効になる | 事実（ソース） |
+| 汚れに対する動的な補正（smudge correction）はドライバにあるが、`VL53LX_DataInit` の中で無効（`VL53LX_SMUDGE_CORRECTION_NONE`）にされる。今回も無効のまま | 事実（ソース） |
+| 較正の条件について、リポジトリ内の要約 `firmware/vehicle/components/sf_hal_vl53l3cx/docs/VL53L3CX_driver_doc.md` 6 節は「基準 SPAD（受光素子）→ クロストーク → オフセットの順、クロストークは暗い環境・600 mm」とする。ST の関数の説明（同梱の `VL53LX_API.chm`）は「目標は 60 cm 以上、実際の距離を値で渡す」とする。目標の反射率・大きさの指定は同梱資料に見つからなかった | 事実（資料） |
+| ST の UM2778（較正の資料）は同梱されておらず、読んでいない | 未確認 |
+
+今回は照明下で較正したので、要約が求める「暗い環境」とは条件が違う。
+
+### 較正の結果
+
+記録は `xtalk_cal_w1000.txt`、`xtalk_cal_w1500.txt`。較正前の状態は `xtalk_show_before.txt`（補正は無効、平面オフセット 0、波形はすべて 0）。
+
+| 項目 | 1000 mm | 1500 mm |
+|------|---------|---------|
+| 平面オフセット（生の値 / ÷512） | 191 / 0.373 | 220 / 0.430 |
+| 波形 `shape_bins`（先頭 5 区間、合計） | 12, 352, 471, 172, 17（1024） | 27, 389, 456, 160, 0（1032） |
+| `ext_rate_per_spad` | 1152 | 1160 |
+| `ext_signal_events` | 3376 | 3400 |
+| 抽出の窓 / 目標の開始区間 | 0..4 / 5 | 0..4 / 8 |
+| `cal_status` / `fallback` | 0 / 0 | 0 / 0 |
+| 所要時間 `elapsed_ms` | 1508 | 1510 |
+
+事実として次の点が記録から読める。
+
+| 項目 | 内容 | 種別 |
+|------|------|------|
+| 抽出の成否 | 2 回とも `cal_status=0`、`fallback=0`。代替値の特徴（平面オフセット 50、波形 307/410/410/307）とは一致しない | 事実 |
+| 較正の副作用 | 較正後、`nodetect_kcps`（ドライバの調整値 `DYNXTALK_NODETECT_XTALK_OFFSET_KCPS`）が 410 から平面オフセットと同じ値（191、220）に変わった。ドライバが設定している | 事実 |
+| 1500 mm の較正の開始状態 | 1000 mm の較正値が有効（`en=1`、平面オフセット 191）のまま始めた。2 回は独立の較正ではなく、2 回目は 1 回目の続きの状態からの較正である | 事実 |
+| 測距の中断 | 較正中は測距の出力が約 1.5 秒止まる。再開に 7 ms | 事実 |
+
+2 つの距離で平面オフセット（191 と 220）・波形・`ext_rate_per_spad`（1152 と 1160）がほぼ同じである。壁の戻りが抽出の窓（区間 0〜4）に混ざった結果なら、壁の距離に応じて窓の中身が変わるはずなので、混ざっていないと判断した。これは推論であり、根拠は `ext_rate_per_spad` と波形の位置が同じことだけである。ただし上のとおり 2 回目は 1 回目の補正が有効なまま行ったので、この一致が 2 つの独立な測定の一致とは言えない（独立に較正し直した場合は未確認）。
+
+### 補正ありの手持ち測定
+
+1500 mm での較正値（平面オフセット 220）が有効な状態で、同じ白い壁について 0.5〜3.0 m の 6 点を測り（`range_Xon_wall_{0.5,1.0,1.5,2.0,2.5,3.0}.txt`）、同じ日の補正なし（`range_L33_wall_*.txt`、4 章 (b)）と比べた。集計は `tofdiag_parse.py` の読み込み関数で再計算した。
+
+| 壁までの距離 | 有効率（なし / あり） | 選ばれた距離の中央値 mm | 最遠の目標の信号 Mcps | `sgm` mm（ドライバが出す距離のばらつきの値） | 30 mm 未満の目標を含む行 | 1 行あたりの目標数 |
+|---|---|---|---|---|---|---|
+| 0.5 m | 100 % / 100 % | 506 / 534 | 4.820 / 4.250 | 1.9 / 2.1 | 5.8 % / 0.0 % | 1.08 / 1.00 |
+| 1.0 m | 100 % / 100 % | 1011 / 1010 | 1.266 / 1.258 | 3.2 / 3.1 | 75.9 % / 0.0 % | 1.98 / 1.00 |
+| 1.5 m | 100 % / 100 % | 1561 / 1476 | 0.547 / 0.609 | 5.7 / 5.5 | 63.8 % / 0.0 % | 1.95 / 1.00 |
+| 2.0 m | 100 % / 100 % | 2032 / 1999 | 0.297 / 0.344 | 9.0 / 7.4 | 76.4 % / 0.0 % | 1.99 / 1.00 |
+| 2.5 m | 100 % / 100 % | 2494 / 2505 | 0.195 / 0.188 | 12.9 / 12.8 | 65.0 % / 0.0 % | 1.95 / 1.00 |
+| 3.0 m | 100 % / 100 % | 2973 / 2980 | 0.109 / 0.117 | 18.9 / 16.7 | 64.1 % / 0.0 % | 1.88 / 1.00 |
+
+1 点あたり 203〜208 行。「30 mm 未満の目標」は、状態コードによらず距離が 30 mm 未満（負の値を含む）の目標が 1 つでもある行の割合。補正なしの 1.0 m の値は、依頼時の集計の 76.4 % に対し、記録から数えた値は 75.9 % だった（他の 11 点は一致）。差は集計の数え方の違いと考えられるが、原因は確かめていない。
+
+| 項目 | 内容 | 種別 |
+|------|------|------|
+| 30 mm 未満の目標 | 補正ありでは 6 点すべてで 0 % になり、目標数が 1 になった（補正なしでは 5.8〜76 %） | 事実 |
+| 壁の目標 | 有効率は 100 % のまま。信号 × 距離の 2 乗の中央値は補正なしに対して 0.98〜1.12 倍（2.0 m が 1.12 倍、他の 5 点は 0.98〜1.05 倍）。`sgm` は同程度か小さい。選ばれた距離の中央値の差は、2 つの系列を手持ちで別々の位置に立って測ったことを含む | 事実 |
+| 周囲光 | 補正なし 0.133〜0.148 Mcps、補正あり 0.117〜0.125 Mcps（点ごとの中央値の範囲） | 事実 |
+| 補正の状態 | 1.5〜3.0 m の 4 点の記録には `TOFCFG` の `xtalk_en=1`、`xtalk_plane_kcps=220` がある。0.5 m と 1.0 m の記録には `TOFCFG` がない。この 2 点は、較正の終了（機体の時刻 313 s）の後の測定で、記録の時刻が途切れず続いている（再起動なし）ことから、同じ状態と判断した | 事実と判断 |
+| 弱い近い目標の原因 | 補正で消えたことは、4 章で推定した「センサの手前からの反射（クロストーク）」と矛盾しない。ただし、消えたことだけでは原因がクロストークだと確定したとは言えない（補正が別の原因の目標も一緒に除いた可能性を、今回の記録だけでは分けられない） | 推論 |
+
+### 読み取り
+
+| 項目 | 内容 | 種別 |
+|------|------|------|
+| 手前の弱い目標 | クロストークの較正で、白い壁に対して全距離で消えた。壁の目標の測定結果は変わらない（差は立ち位置と周囲光の差の範囲） | 事実 |
+| 較正の成否 | ドライバの戻り値は成否を表さないので、成否は `cal_status` と代替値の特徴で判断する。今回は 2 回とも成功の側 | 事実 |
+| 飛行中の 1.9〜2.2 m での有効率の低下への効果 | 補正が効くかは飛行では試していない | 未確認 |
+
+## 6. 未確認の事項と次に確かめること
 
 | 項目 | 状態 | 次に確かめること |
 |------|------|------------------|
 | 飛行中の途切れ（1.9 m 以上）の原因 | 未確認 | 飛行中の `TOFDIAG` を記録する |
-| クロストークの補正の効果 | 未確認（補正は無効で、較正値は 0） | クロストークの較正をして同じ実験を繰り返す |
+| クロストークの補正が、飛行中の 1.9〜2.2 m での有効率の低下に効くか | 未確認（5 章: 手持ちの壁では 30 mm 未満の目標が消えたが、飛行では試していない） | 補正を有効にして飛行し、`TOFDIAG` を記録する |
+| 床に向けた補正ありの測定 | 未確認（5 章の補正ありの測定は白い壁だけ） | 床に向けて 4 章 (a) と同じ測定を補正ありで行う |
+| 補正の `off` → `on` で較正値が保たれるか | 未確認 | `tofcal off`、`tofcal on` の前後で `tofcal show` を比べる |
+| 基準 SPAD の較正（`tofcal refspad`） | 未実行 | 実行して、クロストークの較正との順序・結果を確かめる（要約資料は「基準 SPAD → クロストーク → オフセット」の順とする） |
+| 較正後の ToF タスクのスタックの残り | 未確認 | 較正の後に `stack` で ToF タスクの最小の空きを読む |
+| 近距離（0.3 m 未満）への補正の影響 | 未確認 | 0.3 m 未満で補正なし・ありを比べる |
+| 較正の条件の影響（暗い環境・目標の反射率と大きさ・独立な再較正） | 未確認（今回は室内の照明下、白い壁 1 種、1500 mm の較正は 1000 mm の較正が有効な状態から開始） | 補正を無効にしてから較正し直し、条件を変えて較正値を比べる。ST の UM2778 を入手して条件を確かめる |
+| ファームウェアに取り込む場合の課題 | 未確認（較正値の保存先（NVS: 不揮発メモリ）、較正をいつ・誰が・どの姿勢で行うかの手順は未設計） | 設計を決めて実装する |
+| MEDIUM で見られた「範囲外で手前の弱い目標を有効として返す」誤りが、補正で防げるか | 未確認（試していない） | MEDIUM で補正ありの 2.0〜3.0 m を測る |
 | 2 m を超える高さでの床の測定 | 未確認（手持ちで届いたのは約 2.0 m まで） | 高い所から床を測る |
 | 手前 0.5 m 付近の別の目標が持ち手の体であること | 未確認（推定） | 体が入らない配置で測る |
-| 弱い近い目標がセンサの手前からの反射であること | 未確認（推定） | クロストークの較正の前後で比べる |
+| 弱い近い目標がセンサの手前からの反射であること | 未確認（推定。5 章で較正により消えたが、原因がクロストークと確定したとは言えない） | 床向きの補正ありの測定、条件を変えた較正の前後の比較 |
 | 発光の周期から計算した範囲の式 | 未確認（測定を行った側が使った近似式。ソースの `range_maths` の定数からの直接の導出は、手元の読みでは約 4 倍の差が出て、一致を確かめられなかった。MEDIUM の実測とは合う） | 式の出どころを確かめる |
 | 飛行ログの調査の計算 | 独立の確認なし | 別の手段で再計算する |
 | 読み出し時間: 目標が複数のとき、I2C の間の CPU の空き、ARM 中・飛行中の値 | 未確認 | 3 章の未確認の表のとおり |
-| 機体 1 台だけの測定 | 1 台 | 他の機体でも測る |
+| 機体 1 台だけの測定（較正値の機体ごとの差を含む） | 1 台 | 他の機体でも測る |
 
 ---
 
@@ -294,12 +395,13 @@ MEDIUM の有効の上限の計算（約 1.78 m）は、(c) の実測（1.5 m �
 
 ### About This Document
 
-This document summarizes measurements on one vehicle of the ToF sensors (Time of Flight: sensors that measure distance from the time emitted light takes to come back) VL53L3CX, one facing down and one facing forward on StampFly. It covers two things.
+This document summarizes measurements on one vehicle of the ToF sensors (Time of Flight: sensors that measure distance from the time emitted light takes to come back) VL53L3CX, one facing down and one facing forward on StampFly. It covers three things.
 
 | Content | Chapter |
 |---------|---------|
 | Breakdown of the time of one read-out | 3 |
 | Upper limit of ranging (analysis of flight logs and hand-held experiments) | 4 |
+| Crosstalk calibration experiment (calibration results and hand-held measurement with the correction) | 5 |
 
 Facts, inferences and unconfirmed items are written separately. Nothing that was not measured is written.
 
@@ -309,7 +411,7 @@ Facts, inferences and unconfirmed items are written separately. Nothing that was
 |------|---------|
 | Date | The night of 2026-11-21 to 2026-11-22 |
 | Vehicle | One vehicle. On the floor or hand-held, not armed, propellers fitted, battery connected (4.16-4.19 V), all sensors running (`sensors present=0x7F` in `status`), USB through a hub with a power switch |
-| Firmware | Based on f4b72074 of fix/flight-safety (`App version archive/2026-11-13-31-gf4b72074`) with comparison changes added in a working tree outside Git (described in each chapter). After the measurements the vehicle was returned to the baseline build (`logs/checkout/restore_A_20261122.txt`) |
+| Firmware | Based on f4b72074 of fix/flight-safety (`App version archive/2026-11-13-31-gf4b72074`) with comparison changes added in a working tree outside Git (described in each chapter). After the measurements the vehicle was returned to the baseline build (`logs/checkout/restore_A_20261122.txt` after chapters 3 and 4, `logs/checkout/restore_A_20261122b.txt` after chapter 5) |
 | Records | `logs/checkout/` (outside Git). The changes made and the tools for aggregation are kept in the same place (table below) |
 
 | Record or tool | Content |
@@ -318,6 +420,10 @@ Facts, inferences and unconfirmed items are written separately. Nothing that was
 | `range_L33_*.txt`, `range_M33_*.txt`, `range_L33_check.txt` | Records of the hand-held experiments of chapter 4 |
 | `tof_timing.patch`, `toftime_parse.py` | The measurement change of chapter 3 (a Git patch) and its aggregation |
 | `tof_range.patch`, `tofdiag_parse.py`, `range_capture.py`, `move_an.py`, `run_variant.sh` | The experiment change of chapter 4 (a Git patch), aggregation, recording, analysis of the movement, and the procedure from flashing to measuring |
+| `tof_xtalk.patch`, `xtalk_cal.py` | The experiment change of chapter 5 (a Git patch; adds the `tofcal` command and diagnostics) and the procedure for running and recording the calibration |
+| `xtalk_show_before.txt`, `xtalk_cal_w1000.txt`, `xtalk_cal_w1500.txt` | The state before calibration and the records of the two calibrations of chapter 5 |
+| `range_Xon_wall_{0.5,1.0,1.5,2.0,2.5,3.0}.txt` | Records of the hand-held measurement with the correction of chapter 5 (the comparison without it is `range_L33_wall_*.txt`) |
+| `restore_A_20261122b.txt` | Record of returning to the baseline build after chapter 5 |
 
 ### Summary of Conclusions
 
@@ -328,6 +434,8 @@ Facts, inferences and unconfirmed items are written separately. Nothing that was
 | Ranging mode | The vehicle firmware uses LONG. When stationary, the valid rate was 95-100 % up to 3.0 m on a white wall (limited by the room; farther was not measured) and up to about 2.0 m on the floor (the height the hand could reach) | Fact |
 | MEDIUM | Valid up to 1.5 m from the wall, a valid rate of 1.0 % at 2.0 m, and a wrong near distance returned as valid at 2.5-3.0 m. Not usable | Fact |
 | Valid rate in flight logs | Against the barometric height, 64 % at 1.9-2.0 m and 22 % at 2.0-2.2 m | Fact (calculated by a sub-agent, no independent check) |
+| Weak near target | Weak targets under 30 mm became 0 % at all 6 points from 0.5 to 3.0 m on the white wall (5.8-76 % without it) once the crosstalk calibration (in RAM, the 1500 mm value on a white wall) was enabled. The valid rate, signal and distance of the wall target did not change. This does not establish that the cause is crosstalk (chapter 5) | Fact (that they disappeared), inference (the cause) |
+| Crosstalk calibration | Run twice under room lighting rather than in a dark environment (1000 mm and 1500 mm from the wall); the extraction succeeded both times (`cal_status=0`, not the substitute values). The value is lost at power off. The effect on the drop of the valid rate in flight, measurement facing the floor and the way to store the value are unconfirmed (chapters 5 and 6) | Fact, unconfirmed |
 | Cause of the dropouts in flight | Not reproduced by hand-held stationary, moving or tilted cases. The cause is unconfirmed | Unconfirmed |
 
 ## 2. Configuration and Settings
@@ -520,13 +628,13 @@ The distance was 0.66-1.93 m.
 
 | Item | Content |
 |------|---------|
-| Weak near target | At points above 0.75 m, a weak target at 1-29 mm with a signal of 0.04-0.12 Mcps appears. The fraction of lines where it appears is 2-59 % per point. It is presumed to be reflection from in front of the sensor (crosstalk). This is a presumption and was not confirmed |
+| Weak near target | At points above 0.75 m, a weak target at 1-29 mm with a signal of 0.04-0.12 Mcps appears. The fraction of lines where it appears is 2-59 % per point. It is presumed to be reflection from in front of the sensor (crosstalk). This is a presumption and was not confirmed at this point (in chapter 5 it disappeared with the crosstalk calibration) |
 | Relation to the selection | The selection of chapter 2 excludes distances of 30 mm or less and takes the farthest valid target, so the floor or wall was chosen in LONG |
 | Signal rate × distance squared | 1.02-1.28 on the floor (up to 1.7 m) and 0.96-1.33 on the wall. The wall is about 1.2 times the floor (calculated). This agrees with the expectation that the signal falls in inverse proportion to the square of the distance |
 
 ### Range Calculated from the Emission Period
 
-ToF obtains the distance from the phase of the light. An object beyond the emission period wraps around and appears at a near distance. The range was calculated with the following expression (an approximation used by the side that made the measurement, using `fast_osc`; it was not derived directly from the constants in the source; see chapter 5).
+ToF obtains the distance from the phase of the light. An object beyond the emission period wraps around and appears at a near distance. The range was calculated with the following expression (an approximation used by the side that made the measurement, using `fast_osc`; it was not derived directly from the constants in the source; see chapter 6).
 
 $$d_{\text{pclk}} \approx 198.4 \times \frac{48332}{f_{\text{osc}}}\ \text{[mm]}$$
 
@@ -556,18 +664,112 @@ The calculated valid upper limit of MEDIUM (about 1.78 m) agrees with the measur
 | LONG setting | Not a mistake. When stationary it measured up to 3.0 m (the limit of the room) on a white wall | Fact |
 | MEDIUM | It drops out between 1.5 and 2.0 m and returns a wrong near distance as valid out of range, so it is not usable. The statement "MEDIUM reaches farther indoors" in the bundled ST document AN5561 was not reproduced on this vehicle | Fact |
 | Disagreement with flight logs | In flight logs the valid rate falls to 64 % at 1.9-2.0 m and to 22 % at 2.0-2.2 m. This was not reproduced by hand-held stationary, moving or tilted cases. The height reached by hand, however, was only about 2.0 m | Fact |
-| Cause of the dropouts in flight | Candidates are the floor of the place where it flew, conditions with the motors running (vibration, power supply) and crosstalk (no correction) | Unconfirmed |
+| Cause of the dropouts in flight | Candidates are the floor of the place where it flew, conditions with the motors running (vibration, power supply) and crosstalk (the measurements of this chapter have no correction; the measurement with the correction in chapter 5 was hand-held only, and not tried in flight) | Unconfirmed |
 
-## 5. Unconfirmed Items and What to Check Next
+## 5. Crosstalk Calibration Experiment
+
+### Purpose and Method
+
+Chapter 4 found weak targets at 1-29 mm and presumed them to be reflection from in front of the sensor (crosstalk: part of the emitted light that does not reach the target but enters the receiver directly through the inside of the sensor or its window). To test this presumption, a crosstalk calibration (an operation that measures the amount of crosstalk and produces a value to subtract from the ranging result) was performed on the vehicle on the same day, and the same hand-held experiments were compared before and after it.
+
+| Item | Content |
+|------|---------|
+| Experiment build | f4b72074 plus the console command `tofcal xtalk [mm] \| off \| on \| show \| refspad`, in addition to the existing diagnostics (`TOFDIAG` and `TOFCFG` lines). The change is `logs/checkout/tof_xtalk.patch` (outside Git) |
+| Behavior of the command | The command only files a request. The ToF task stops ranging at the head of its period, calls `VL53LX_PerformXTalkCalibration` of the ST driver, and restarts ranging. It is refused while armed |
+| Storage of the calibration value | RAM only. It is lost at power off |
+| Ranging setting | LONG, 33 ms (same as chapter 4) |
+| Posture during calibration | The vehicle was held by hand with the downward ToF facing a white wall squarely (white wallpaper, fine unevenness). Indoors under room lighting (not a dark environment) |
+| Calibration distance | Twice, at 1000 mm and 1500 mm from the wall (the value given to the command) |
+
+### Properties of the Driver (Reading of the Source)
+
+This is what the person in charge confirmed in the source. Shown by function name (`src/vl53lx/vl53lx_api.c`).
+
+| Content | Kind |
+|---------|------|
+| The return value of `VL53LX_PerformXTalkCalibration` does not show whether the calibration succeeded. It is overwritten by the result of the final resetting of the distance mode and the timing budget | Fact (source) |
+| If the extraction fails, fixed substitute values (plane offset 50, shape 307/410/410/307) are put in. The actual state is seen in `LLData.xtalk_results.cal_status` | Fact (source) |
+| The correction is enabled at the end of the calibration | Fact (source) |
+| The driver has a dynamic correction for smudge (smudge correction), but `VL53LX_DataInit` disables it (`VL53LX_SMUDGE_CORRECTION_NONE`). It stayed disabled this time too | Fact (source) |
+| On the calibration conditions, section 6 of the in-repository summary `firmware/vehicle/components/sf_hal_vl53l3cx/docs/VL53L3CX_driver_doc.md` says "reference SPAD (light-receiving element) -> crosstalk -> offset in this order; crosstalk in a dark environment at 600 mm". The description of the ST function (bundled `VL53LX_API.chm`) says "the target should be 60 cm or more, and the actual distance is passed as the value". A specification of the target's reflectance or size was not found in the bundled material | Fact (documents) |
+| ST UM2778 (the calibration document) is not bundled and was not read | Unconfirmed |
+
+The calibration was done under room lighting, so the condition differs from the "dark environment" the summary asks for.
+
+### Calibration Results
+
+Records: `xtalk_cal_w1000.txt` and `xtalk_cal_w1500.txt`. The state before calibration is in `xtalk_show_before.txt` (correction disabled, plane offset 0, shape all 0).
+
+| Item | 1000 mm | 1500 mm |
+|------|---------|---------|
+| Plane offset (raw value / divided by 512) | 191 / 0.373 | 220 / 0.430 |
+| Shape `shape_bins` (first 5 bins, sum) | 12, 352, 471, 172, 17 (1024) | 27, 389, 456, 160, 0 (1032) |
+| `ext_rate_per_spad` | 1152 | 1160 |
+| `ext_signal_events` | 3376 | 3400 |
+| Extraction window / start bin of the target | 0..4 / 5 | 0..4 / 8 |
+| `cal_status` / `fallback` | 0 / 0 | 0 / 0 |
+| Duration `elapsed_ms` | 1508 | 1510 |
+
+The following can be read from the records as facts.
+
+| Item | Content | Kind |
+|------|---------|------|
+| Success of the extraction | `cal_status=0` and `fallback=0` both times. The values do not match the signature of the substitute values (plane offset 50, shape 307/410/410/307) | Fact |
+| Side effect of the calibration | After calibration `nodetect_kcps` (the driver parameter `DYNXTALK_NODETECT_XTALK_OFFSET_KCPS`) changed from 410 to the same value as the plane offset (191, 220). The driver sets it | Fact |
+| Start state of the 1500 mm calibration | It started with the 1000 mm calibration value still enabled (`en=1`, plane offset 191). The two are not independent calibrations; the second one is a calibration from the state left by the first | Fact |
+| Interruption of ranging | The ranging output stops for about 1.5 s during calibration. Restart takes 7 ms | Fact |
+
+At the two distances the plane offsets (191 and 220), the shapes and `ext_rate_per_spad` (1152 and 1160) are almost the same. If the return from the wall had mixed into the extraction window (bins 0-4), the contents of the window would change with the wall distance, so it was judged not to have mixed in. This is an inference; its only basis is that `ext_rate_per_spad` and the position of the shape are the same. However, as above, the second calibration was run with the first correction still enabled, so this agreement cannot be called agreement of two independent measurements (calibrating again independently is unconfirmed).
+
+### Hand-held Measurement with the Correction
+
+With the 1500 mm calibration value (plane offset 220) enabled, 6 points from 0.5 to 3.0 m were measured on the same white wall (`range_Xon_wall_{0.5,1.0,1.5,2.0,2.5,3.0}.txt`) and compared with the correction-off measurement of the same day (`range_L33_wall_*.txt`, (b) of chapter 4). The aggregation was recalculated with the reading function of `tofdiag_parse.py`.
+
+| Distance to the wall | Valid rate (off / on) | Median selected distance mm | Signal of the farthest target Mcps | `sgm` mm (distance-spread value given by the driver) | Lines containing a target under 30 mm | Mean number of targets per line |
+|---|---|---|---|---|---|---|
+| 0.5 m | 100 % / 100 % | 506 / 534 | 4.820 / 4.250 | 1.9 / 2.1 | 5.8 % / 0.0 % | 1.08 / 1.00 |
+| 1.0 m | 100 % / 100 % | 1011 / 1010 | 1.266 / 1.258 | 3.2 / 3.1 | 75.9 % / 0.0 % | 1.98 / 1.00 |
+| 1.5 m | 100 % / 100 % | 1561 / 1476 | 0.547 / 0.609 | 5.7 / 5.5 | 63.8 % / 0.0 % | 1.95 / 1.00 |
+| 2.0 m | 100 % / 100 % | 2032 / 1999 | 0.297 / 0.344 | 9.0 / 7.4 | 76.4 % / 0.0 % | 1.99 / 1.00 |
+| 2.5 m | 100 % / 100 % | 2494 / 2505 | 0.195 / 0.188 | 12.9 / 12.8 | 65.0 % / 0.0 % | 1.95 / 1.00 |
+| 3.0 m | 100 % / 100 % | 2973 / 2980 | 0.109 / 0.117 | 18.9 / 16.7 | 64.1 % / 0.0 % | 1.88 / 1.00 |
+
+There were 203-208 lines per point. "A target under 30 mm" is the fraction of lines that contain at least one target whose distance is under 30 mm (including negative values), whatever its status code. For correction-off at 1.0 m, the requester's aggregation gave 76.4 % and the value counted from the record was 75.9 % (the other 11 points agree). The difference is probably a difference in how it was counted, but the cause was not checked.
+
+| Item | Content | Kind |
+|------|---------|------|
+| Targets under 30 mm | With the correction they were 0 % at all 6 points and the number of targets was 1 (5.8-76 % without it) | Fact |
+| Wall target | The valid rate stayed at 100 %. The median of signal × distance squared was 0.98-1.12 times that without the correction (1.12 times at 2.0 m, 0.98-1.05 times at the other 5 points). `sgm` was the same or smaller. The differences in the median selected distance include the fact that the two series were measured with the hand standing at different positions | Fact |
+| Ambient light | 0.133-0.148 Mcps without the correction, 0.117-0.125 Mcps with it (range of the per-point medians) | Fact |
+| State of the correction | The records of the 4 points from 1.5 to 3.0 m contain `TOFCFG` with `xtalk_en=1` and `xtalk_plane_kcps=220`. The records of 0.5 m and 1.0 m contain no `TOFCFG`. These two points were measured after the end of the calibration (vehicle time 313 s) and the time in the records continues without a break (no restart), so the state was judged to be the same | Fact and judgement |
+| Cause of the weak near target | That it disappeared with the correction does not contradict the presumption of chapter 4 that it is reflection from in front of the sensor (crosstalk). However, its disappearance alone does not establish that the cause is crosstalk (whether the correction also removed targets of another cause cannot be separated by this record alone) | Inference |
+
+### Reading
+
+| Item | Content | Kind |
+|------|---------|------|
+| Weak near target | With the crosstalk calibration it disappeared at all distances on the white wall. The measured wall target did not change (the differences are within the differences of position and ambient light) | Fact |
+| Success of the calibration | The return value of the driver does not show success, so success is judged from `cal_status` and the signature of the substitute values. Both times it was on the success side | Fact |
+| Effect on the drop of the valid rate at 1.9-2.2 m in flight | Whether the correction helps was not tried in flight | Unconfirmed |
+
+## 6. Unconfirmed Items and What to Check Next
 
 | Item | Status | What to check next |
 |------|--------|--------------------|
 | Cause of the dropouts in flight (1.9 m and above) | Unconfirmed | Record `TOFDIAG` in flight |
-| Effect of the crosstalk correction | Unconfirmed (correction disabled, calibration value 0) | Calibrate the crosstalk and repeat the same experiments |
+| Whether the crosstalk correction helps with the drop of the valid rate at 1.9-2.2 m in flight | Unconfirmed (chapter 5: targets under 30 mm disappeared on the hand-held wall, but it was not tried in flight) | Fly with the correction enabled and record `TOFDIAG` |
+| Measurement with the correction facing the floor | Unconfirmed (the measurement with the correction in chapter 5 was on a white wall only) | Repeat (a) of chapter 4 facing the floor with the correction |
+| Whether the calibration value is kept across `off` -> `on` of the correction | Unconfirmed | Compare `tofcal show` before and after `tofcal off` and `tofcal on` |
+| Reference SPAD calibration (`tofcal refspad`) | Not run | Run it and check the order and the result with the crosstalk calibration (the summary document gives the order reference SPAD -> crosstalk -> offset) |
+| Remaining stack of the ToF task after the calibration | Unconfirmed | Read the minimum free stack of the ToF task with `stack` after a calibration |
+| Effect of the correction at short range (under 0.3 m) | Unconfirmed | Compare without and with the correction under 0.3 m |
+| Effect of the calibration conditions (dark environment, reflectance and size of the target, independent re-calibration) | Unconfirmed (this time: room lighting, one kind of white wall, and the 1500 mm calibration started from the state with the 1000 mm calibration enabled) | Calibrate again after disabling the correction and compare the values under changed conditions. Obtain ST UM2778 and check the conditions |
+| Issues for taking it into the firmware | Unconfirmed (where to store the calibration value (NVS: non-volatile memory), and the procedure of when, by whom and in what posture to calibrate, are not designed) | Decide the design and implement it |
+| Whether the correction prevents the error seen in MEDIUM of returning a weak near target as valid when out of range | Unconfirmed (not tried) | Measure 2.0-3.0 m in MEDIUM with the correction |
 | Measurement of the floor above 2 m | Unconfirmed (the hand reached only about 2.0 m) | Measure the floor from a higher place |
 | That the other target near 0.5 m in front is the body of the person holding it | Unconfirmed (presumption) | Measure with an arrangement where the body is not in view |
-| That the weak near target is reflection from in front of the sensor | Unconfirmed (presumption) | Compare before and after the crosstalk calibration |
+| That the weak near target is reflection from in front of the sensor | Unconfirmed (presumption; it disappeared with the calibration in chapter 5, but that does not establish crosstalk as the cause) | Measure facing the floor with the correction, and compare before and after calibrations under changed conditions |
 | The expression for the range calculated from the emission period | Unconfirmed (an approximation used by the side that made the measurement; a direct derivation from the constants of `range_maths` in the source gave about a 4-fold difference in a reading at hand, so agreement could not be confirmed. It agrees with the measurement of MEDIUM) | Check where the expression comes from |
 | Calculation of the flight-log analysis | No independent check | Recalculate by another means |
 | Read-out time: with several targets, CPU idle between I2C transfers, values while armed and in flight | Unconfirmed | As in the unconfirmed table of chapter 3 |
-| Measurement of one vehicle only | One vehicle | Measure other vehicles too |
+| Measurement of one vehicle only (including vehicle-to-vehicle differences of the calibration value) | One vehicle | Measure other vehicles too |
