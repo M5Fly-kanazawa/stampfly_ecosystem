@@ -506,6 +506,15 @@ ESP-IDF の文書は次のように述べている。
 
 7 章の「命令キャッシュ 32 KB」（追加 約 16 KB）と「ImuTask と ESKF を IRAM」（追加 約 19 KB）の併用。併用したビルドは、今の空きではコンソールを起動できなかった（6 章）。
 
+SNN を既定のビルドから外したうえで併用したビルド（実験ブランチのコミット af89b3c4 の状態、`CONFIG_SF_ENABLE_SNN` 無効 + 命令キャッシュ 32 KB + `SF_EXP_HOT_IRAM`）を実機で測った（2026-11-21、床の上、ARM していない、電池あり、全センサ動作、ハブ経由の USB、6 回の起動。測り方は 7 章と同じ）。
+
+| ファーム | 400 Hz の ImuTask の 1 周期の処理時間の平均（最小〜最大） | 60 s の窓の最大（最小〜最大） | 予算超えの周期 | 制御タスクの起床の遅れ | 空き / 起動以降の最小 / 最大の連続した塊 | コンソール |
+|----------|------|------|------|------|------|------|
+| SNN なしのみ | 1318 µs（1280〜1338） | 2842〜4599 µs | 0.48 %（0.14〜0.73） | 1.08 %（0.31〜2.39） | 67,504 B / 66,228 B / 31,744 B（別の起動での読み取り） | 動く |
+| SNN なし + 命令キャッシュ 32 KB + ImuTask と ESKF を IRAM | 344 µs（339〜349） | 1313〜2857 µs | 0 %（6 回とも） | 0 %（6 回とも） | 32,036 B / 29,888 B / 19,456 B | 動く |
+
+SNN を外す前は、同じ併用でコンソールを起動できなかった（6 章）。この値も床の上のもので、ARM 中・飛行中・WiFi 接続時は未確認である。採用は決まっていない。
+
 ## 9. 未確認の事項と次に確かめること
 
 | 項目 | 状態 | 次に確かめること |
@@ -1044,6 +1053,15 @@ Putting the free memory of chapter 6 together with the processing times of this 
 ### Candidate Uses of the Freed Memory
 
 Using together the "instruction cache 32 KB" (about 16 KB more) and "ImuTask and ESKF in IRAM" (about 19 KB more) of chapter 7. The build with both could not start the console with the current free memory (chapter 6).
+
+The combination was measured on the real vehicle on top of the build without the SNN (state of commit af89b3c4 on the experiment branch: `CONFIG_SF_ENABLE_SNN` off + 32 KB instruction cache + `SF_EXP_HOT_IRAM`; 2026-11-21, on the floor, not armed, battery connected, all sensors running, USB through a hub, 6 boots; same method as chapter 7).
+
+| Firmware | Mean time of one 400 Hz ImuTask cycle (min-max) | Maximum in a 60 s window (min-max) | Cycles over the budget | Late wake-ups of the control task | Free / minimum since boot / largest block | Console |
+|----------|------|------|------|------|------|------|
+| Without the SNN only | 1318 us (1280-1338) | 2842-4599 us | 0.48 % (0.14-0.73) | 1.08 % (0.31-2.39) | 67,504 B / 66,228 B / 31,744 B (read in a separate boot) | works |
+| Without the SNN + 32 KB instruction cache + ImuTask and ESKF in IRAM | 344 us (339-349) | 1313-2857 us | 0 % (all 6 boots) | 0 % (all 6 boots) | 32,036 B / 29,888 B / 19,456 B | works |
+
+Before the SNN was removed the same combination could not start the console (chapter 6). These values are also from the floor; armed, in flight and with WiFi clients are not confirmed. Adoption is not decided.
 
 ## 9. Unconfirmed Items and What to Check Next
 
