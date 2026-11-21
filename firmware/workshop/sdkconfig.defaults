@@ -91,3 +91,16 @@ CONFIG_COMPILER_CXX_EXCEPTIONS=y
 # （400Hz で ~1万積和/周期）を未最適化のまま残し、実機計測でコア1を飽和させ
 # StateTask を飢餓させた（INIT 停止バグ）。
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Instruction cache 32 KB (default 16 KB). Same setting as firmware/vehicle/sdkconfig.defaults
+# (decided for the workshop firmware too on 2026-11-21). With 16 KB the code of the 400 Hz path is
+# evicted and the mean processing time of one ImuTask cycle is about 1.3 ms; with 32 KB plus the IRAM
+# placement (the vehicle's main/hot_iram.lf, see main/CMakeLists.txt) it is about 0.34 ms (2026-11-21,
+# measured on the vehicle firmware, real craft, on the floor, not armed; not measured on the
+# workshop firmware). Cost: 16 KB of internal RAM.
+# 命令キャッシュ 32 KB（既定は 16 KB）。firmware/vehicle/sdkconfig.defaults と同じ設定
+# （2026-11-21 に講習用ファームウェアにも適用すると決定）。16 KB では 400 Hz 経路のコードが追い出され
+# ImuTask の 1 周期の処理時間の平均が約 1.3 ms、32 KB と IRAM 配置（機体の main/hot_iram.lf、
+# main/CMakeLists.txt 参照）では約 0.34 ms（2026-11-21、機体ファームウェアで測定、実機・床の上・未 ARM。
+# 講習用ファームウェアでの測定は未実施）。代償は内蔵 RAM 16 KB。
+CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y

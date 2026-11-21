@@ -520,7 +520,7 @@ SNN を既定のビルドから外したうえで併用したビルド（実験�
 
 SNN を外す前は、同じ併用でコンソールを起動できなかった（6 章）。この値も床の上のもので、ARM 中・飛行中・WiFi 接続時は未確認である。
 
-**採用の決定（開発者、2026-11-21）: この組み合わせ（SNN はビルド時の選択で既定は無効、命令キャッシュ 32 KB、ImuTask と ESKF を IRAM に置く）を採用する。** `fix/flight-safety` には、実験スイッチなしの常時有効の形で実装した（SNN の選択、命令キャッシュは `sdkconfig.defaults`、IRAM 配置は `hot_iram.lf`）。上の測定は実験ブランチのビルドであり、この形のファームウェアでの測定はまだ無い（9 章）。効果が小さかった候補（観測を 1 周期 1 種類に絞る、読み出しの重複を減らす、気圧を ImuTask から外す、ESKF の計算の省略）は採用しない。これらは実験ブランチには残っていて、fix/flight-safety には入れない。control_task や BMI270 の読み出しのコードを IRAM に足すかどうかは未決である（開発者の判断待ち）。
+**採用の決定（開発者、2026-11-21）: この組み合わせ（SNN はビルド時の選択で既定は無効、命令キャッシュ 32 KB、ImuTask と ESKF を IRAM に置く）を採用する。** `fix/flight-safety` には、実験スイッチなしの常時有効の形で実装した（SNN の選択、命令キャッシュは `sdkconfig.defaults`、IRAM 配置は `hot_iram.lf`）。上の測定は実験ブランチのビルドであり、この形のファームウェアでの測定はまだ無い（9 章）。効果が小さかった候補（観測を 1 周期 1 種類に絞る、読み出しの重複を減らす、気圧を ImuTask から外す、ESKF の計算の省略）は採用しない。これらは実験ブランチには残っていて、fix/flight-safety には入れない。control_task や BMI270 の読み出しのコードを IRAM に足すかどうかは未決である（開発者の判断待ち）。講習用ファームウェア（`firmware/workshop`）にも、同じ設定と同じリンカフラグメントで適用した（開発者の決定、2026-11-21。ビルドでの確認まで。実機での測定は未確認）。
 
 ## 9. 未確認の事項と次に確かめること
 
@@ -551,7 +551,7 @@ SNN を外す前は、同じ併用でコンソールを起動できなかった�
 | 正式な形（実験スイッチなし、常時有効）のファームウェアでの再測定（処理時間・空き・コンソール） | 未確認（測定は実験ブランチのビルドのもの） | 同じ測り方（7 章）で測り、実験ブランチの値と比べる |
 | ARM 中・飛行中・WiFi 接続時の、ImuTask の処理時間と空き | 未確認（床の上・ARM していない状態だけ測った） | それぞれの状態で、処理時間の統計と `heap` 行を読む |
 | IRAM に置く対象を広げるか（control_task、BMI270 の読み出し） | 未決（開発者の判断待ち） | 広げた分の空きの減りと処理時間を測って判断する |
-| 講習用ファームウェア（`firmware/workshop`）への適用 | 未適用・未決。workshop は自前の `sdkconfig.defaults` と main を持ち、命令キャッシュ 32 KB も IRAM 配置も受け継がない（ソースの確認、2026-11-21）。`sf app build` は機体ファームウェアの設定と main を使うので受け継ぐ（ビルドのマップで確認） | workshop の空きと処理時間を測り、適用するかを開発者が決める |
+| 講習用ファームウェア（`firmware/workshop`）への適用 | 適用済み（開発者の決定、2026-11-21）。`firmware/workshop/sdkconfig.defaults` に命令キャッシュ 32 KB を足し、`firmware/workshop/main/CMakeLists.txt` が機体のリンカフラグメント `firmware/vehicle/main/hot_iram.lf` を参照する。ビルドで確認（生成された sdkconfig で `CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y`、マップの `.iram0.text` が機体ファームウェアと同じ 0x1edeb バイト）。実機での測定は未確認。`sf app build` は機体ファームウェアの設定と main を使うので元から受け継ぐ（ビルドのマップで確認） | 講習用ファームウェアを書き込んだ実機で、処理時間と空きを測る（7 章と同じ測り方） |
 
 ---
 
@@ -1079,7 +1079,7 @@ The combination was measured on the real vehicle on top of the build without the
 
 Before the SNN was removed the same combination could not start the console (chapter 6). These values are also from the floor; armed, in flight and with WiFi clients are not confirmed.
 
-**Decision to adopt (developer, 2026-11-21): this combination is adopted (the SNN as a build-time option, off by default; 32 KB instruction cache; ImuTask and the ESKF placed in IRAM).** It is implemented in `fix/flight-safety` without experiment switches, always on (the SNN choice; the instruction cache in `sdkconfig.defaults`; the IRAM placement in `hot_iram.lf`). The measurements above are from builds of the experiment branch, and no measurement of the firmware in this form exists yet (chapter 9). The candidates with a small effect (one observation kind per cycle, fewer duplicate reads, baro off ImuTask, the ESKF arithmetic savings) are not adopted; they remain on the experiment branch and are not put into fix/flight-safety. Whether to add the control_task and BMI270 read code to IRAM is undecided (waiting for the developer's decision).
+**Decision to adopt (developer, 2026-11-21): this combination is adopted (the SNN as a build-time option, off by default; 32 KB instruction cache; ImuTask and the ESKF placed in IRAM).** It is implemented in `fix/flight-safety` without experiment switches, always on (the SNN choice; the instruction cache in `sdkconfig.defaults`; the IRAM placement in `hot_iram.lf`). The measurements above are from builds of the experiment branch, and no measurement of the firmware in this form exists yet (chapter 9). The candidates with a small effect (one observation kind per cycle, fewer duplicate reads, baro off ImuTask, the ESKF arithmetic savings) are not adopted; they remain on the experiment branch and are not put into fix/flight-safety. Whether to add the control_task and BMI270 read code to IRAM is undecided (waiting for the developer's decision). The same settings and the same linker fragment were also applied to the workshop firmware (`firmware/workshop`) (developer's decision, 2026-11-21; checked up to the build, measurement on the real craft unconfirmed).
 
 ## 9. Unconfirmed Items and What to Check Next
 
@@ -1110,4 +1110,4 @@ Before the SNN was removed the same combination could not start the console (cha
 | Re-measurement of the firmware in its final form (no experiment switch, always on): processing time, free memory, console | Unconfirmed (the measurements are from builds of the experiment branch) | Measure with the same method (chapter 7) and compare with the experiment-branch values |
 | ImuTask processing time and free memory while armed, in flight and with WiFi connected | Unconfirmed (only on the floor, not armed, was measured) | Read the timing statistics and the `heap` line in each state |
 | Whether to widen the code placed in IRAM (control_task, BMI270 read) | Undecided (waiting for the developer's decision) | Measure the loss of free memory and the processing time of the widened placement, then decide |
-| Applying it to the workshop firmware (`firmware/workshop`) | Not applied, undecided. The workshop has its own `sdkconfig.defaults` and main, so it inherits neither the 32 KB instruction cache nor the IRAM placement (checked in the source, 2026-11-21). `sf app build` uses the settings and main of the vehicle firmware, so it inherits both (checked in the map of the build) | Measure the free memory and processing time of the workshop firmware; the developer decides whether to apply it |
+| Applying it to the workshop firmware (`firmware/workshop`) | Applied (developer's decision, 2026-11-21). The 32 KB instruction cache is added to `firmware/workshop/sdkconfig.defaults`, and `firmware/workshop/main/CMakeLists.txt` refers to the vehicle's linker fragment `firmware/vehicle/main/hot_iram.lf`. Checked in the build (`CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y` in the generated sdkconfig; `.iram0.text` in the map is 0x1edeb bytes, the same as the vehicle firmware). Measurement on the real craft is unconfirmed. `sf app build` uses the settings and main of the vehicle firmware, so it inherited both from the start (checked in the map of the build) | Measure the processing time and free memory on a craft running the workshop firmware (same method as chapter 7) |

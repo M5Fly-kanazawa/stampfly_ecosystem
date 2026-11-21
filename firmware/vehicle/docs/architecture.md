@@ -627,6 +627,7 @@ ESP_LOG（どのタスクでも）──→ ログシンク（sf_core/log_sink.c
 | IRAM に置くコード | `main/hot_iram.lf`（リンカフラグメント）。libmain.a の imu_task と libsf_estimator_eskf.a の全部、.text のみ。`main/CMakeLists.txt` の LDFRAGMENTS から常時有効 |
 | 命令キャッシュ | 32 KB（`sdkconfig.defaults` の `CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB`）。代償は内蔵 RAM 約 16 KB |
 | 根拠と測定 | `docs/hardware/mcu-memory.md` 7・8 章。測定は実験ブランチのビルドで、この形のファームウェアでの測定は未実施 |
+| 講習用ファームウェア（`firmware/workshop`） | 同じフラグメント（`firmware/vehicle/main/hot_iram.lf` を `firmware/workshop/main/CMakeLists.txt` の LDFRAGMENTS が参照。複製しない）と同じ命令キャッシュ設定（`firmware/workshop/sdkconfig.defaults`）を使う（開発者の決定 2026-11-21）。ビルドまで確認、実機での測定は未実施 |
 
 ### タスク非割当のコンポーネント
 
@@ -941,6 +942,7 @@ To keep one 400 Hz ImuTask cycle (2.5 ms) within budget, the code of ImuTask and
 | Code placed in IRAM | `main/hot_iram.lf` (linker fragment): imu_task of libmain.a and all of libsf_estimator_eskf.a, .text only. Always on through LDFRAGMENTS in `main/CMakeLists.txt` |
 | Instruction cache | 32 KB (`CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB` in `sdkconfig.defaults`). Cost: about 16 KB of internal RAM |
 | Basis and measurements | Chapters 7 and 8 of `docs/hardware/mcu-memory.md`. The measurements are from builds of the experiment branch; the firmware in this form has not been measured yet |
+| Workshop firmware (`firmware/workshop`) | Uses the same fragment (`LDFRAGMENTS` in `firmware/workshop/main/CMakeLists.txt` refers to `firmware/vehicle/main/hot_iram.lf`; it is not copied) and the same instruction cache setting (`firmware/workshop/sdkconfig.defaults`) (developer's decision, 2026-11-21). Checked up to the build; not measured on the real craft |
 
 ### Components Without Dedicated Tasks
 

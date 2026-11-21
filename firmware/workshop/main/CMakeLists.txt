@@ -55,6 +55,16 @@ idf_component_register(
         "${VEHICLE_TASKS_DIR}/log_task.cpp"
         "${VEHICLE_TASKS_DIR}/api_task.cpp"
     INCLUDE_DIRS "." "${VEHICLE_MAIN_DIR}" "${VEHICLE_TASKS_DIR}"
+    # Place the 400 Hz path (ImuTask and the ESKF) in IRAM, using the SAME linker
+    # fragment as firmware/vehicle (not copied, so the two cannot diverge). This
+    # component's libmain.a contains imu_task (compiled from vehicle/tasks) and it
+    # REQUIRES sf_estimator_eskf, so the fragment applies unchanged. It costs about
+    # 19 KB of IRAM; see docs/hardware/mcu-memory.md chapters 7-9.
+    # 400 Hz 経路（ImuTask と ESKF）を IRAM に置く。リンカフラグメントは firmware/vehicle と
+    # 同じものを参照する（複製しないので両者がずれない）。本コンポーネントの libmain.a は
+    # imu_task（vehicle/tasks からコンパイル）を含み、sf_estimator_eskf を REQUIRES するので、
+    # フラグメントはそのまま当てはまる。IRAM を約 19 KB 使う。docs/hardware/mcu-memory.md の 7〜9 章参照。
+    LDFRAGMENTS "${VEHICLE_MAIN_DIR}/hot_iram.lf"
     REQUIRES
         esp_timer
         nvs_flash
