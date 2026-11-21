@@ -93,6 +93,7 @@ docs/
 ├── DOCUMENT_INDEX.md  # 全文書の目録（日英）
 ├── architecture/      # システム構成・設計判断・シミュレーション方針・Tello 互換 API 参照
 ├── reference/         # 仕様から生成される参照文書（flight-log-format.md）
+├── hardware/          # ハードウェアの資料（schematics/ = M5Stack の回路図 PDF を受け取ったまま置く）
 ├── guides/            # 利用者向けガイド（安全・送信機・独自プログラム・ログ可視化・環境更新 等）
 ├── commands/          # sf CLI コマンドリファレンス
 ├── setup/             # OS 別セットアップ
@@ -107,6 +108,8 @@ docs/
 - `architecture/`: タスク分割・周期・優先度、vehicle / controller / protocol 間の責務境界、設計判断の背景。
   シミュレーション方針は `architecture/simulation-policy.md` を正とする
 - `reference/`: 手で書かない。`protocol/tools/` が仕様から生成する（§5）
+- `hardware/`: 機体のハードウェアの資料。`schematics/` に回路図の PDF（主基板・P3 に付く小基板・オプティカルフロー基板）を
+  変更せずに置き、`README.md` に一覧と取り込みの記録を書く。ピン割り当て・電源系統を確かめるときの基準とする
 - `plans/`: 機能ごとの計画・見直し文書。状態（計画中／実装中／実装済み／見直し中）を冒頭に書く
 - `events/`: `stampfly_workshop/`（Workshop。§4 の `firmware/workshop/` と対）、`dxh2026/`、`sci_tutorial_2026/`
   （いずれも L0 `ws::` API 上の実習。L0 の API・レッスン更新後に再検証が要る）。

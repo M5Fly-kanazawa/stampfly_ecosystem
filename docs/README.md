@@ -25,6 +25,7 @@ docs/
 ├── DOCUMENT_INDEX.md        # 全文書の目録（日英）
 ├── architecture/            # システム構成・設計判断・シミュレーション方針
 ├── reference/                # 仕様から生成される参照文書（手で書かない）
+├── hardware/                 # ハードウェアの資料（schematics/ に回路図 PDF）
 ├── guides/                    # 利用者向けガイド
 ├── commands/                   # sf CLI コマンドリファレンス
 ├── setup/                       # OS 別セットアップ
@@ -41,6 +42,7 @@ docs/
 |---|---|
 | `architecture/` | タスク分割・周期・優先度、vehicle / controller / protocol 間の責務境界、設計判断の背景。シミュレーション方針は `architecture/simulation-policy.md` を正とする |
 | `reference/` | `protocol/tools/` が仕様から生成する参照文書（`flight-log-format.md` 等）。手書きしない |
+| `hardware/` | 機体のハードウェアの資料。`schematics/` に M5Stack の回路図 PDF（主基板・P3 に付く小基板・オプティカルフロー基板）を変更せずに置く。一覧は `hardware/schematics/README.md` |
 | `guides/` | 安全・送信機・独自プログラム・ログ可視化・環境更新 等、利用者向けのガイド |
 | `commands/` | sf CLI の各コマンドのリファレンス |
 | `setup/` | OS 別のセットアップ手順 |
@@ -84,6 +86,7 @@ docs/
 ├── DOCUMENT_INDEX.md        # Index of all documents (JA/EN)
 ├── architecture/            # System structure, design decisions, simulation policy
 ├── reference/                # Reference docs generated from spec (not hand-written)
+├── hardware/                 # Hardware material (schematic PDFs in schematics/)
 ├── guides/                    # User-facing guides
 ├── commands/                   # sf CLI command reference
 ├── setup/                       # Per-OS setup instructions
@@ -100,6 +103,7 @@ docs/
 |---|---|
 | `architecture/` | Task partitioning, timing, priority; responsibility boundaries between vehicle / controller / protocol; background of design decisions. `architecture/simulation-policy.md` is the source of truth for simulation policy |
 | `reference/` | Reference docs generated from spec by `protocol/tools/` (e.g. `flight-log-format.md`). Not hand-written |
+| `hardware/` | Hardware material of the vehicle. `schematics/` holds the M5Stack schematic PDFs (main board, the small board on P3, optical-flow board) unchanged; the list is in `hardware/schematics/README.md` |
 | `guides/` | User-facing guides: safety, transmitter, writing your own program, flight-log visualization, environment upgrades, etc. |
 | `commands/` | Reference for each sf CLI command |
 | `setup/` | Per-OS setup instructions |
