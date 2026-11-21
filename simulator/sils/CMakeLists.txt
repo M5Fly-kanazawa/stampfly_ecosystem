@@ -104,6 +104,11 @@ if(SILS_BUILD_CORES_SMOKE OR SILS_BUILD_RTOS_SMOKE)
     ${VN}/components/sf_calibration/include
     ${VN}/components/sf_failsafe/include
   )
+  # SILS always builds the research SNN (the firmware's CONFIG_SF_ENABLE_SNN, which
+  # defaults to n on the vehicle) so estimator.type=2 / controller.type=1 keep working.
+  # SILS は研究用 SNN を常にビルドする（実機ファームの CONFIG_SF_ENABLE_SNN は既定 n）
+  # ので、estimator.type=2 / controller.type=1 は SILS で使える状態を保つ。
+  target_compile_definitions(sf_cores PUBLIC CONFIG_SF_ENABLE_SNN=1)
 endif()
 
 if(SILS_BUILD_CORES_SMOKE)
@@ -382,6 +387,9 @@ if(SILS_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames
     ${CMAKE_CURRENT_SOURCE_DIR}/devices ${EMU_FW_INCS})
   target_link_libraries(emu_vehicle PRIVATE Threads::Threads mujoco)
+  # Same SNN switch as sf_cores above (these executables compile stock_hooks.cpp themselves).
+  # 上の sf_cores と同じ SNN の切り替え（これらは stock_hooks.cpp を自前でコンパイルする）。
+  target_compile_definitions(emu_vehicle PRIVATE CONFIG_SF_ENABLE_SNN=1)
   if(SF_APP_DIR)
     target_include_directories(emu_vehicle PRIVATE ${SF_APP_DIR})
   endif()
@@ -493,6 +501,9 @@ if(SILS_BUILD_EMU)
     ${CMAKE_CURRENT_SOURCE_DIR}/plant ${CMAKE_CURRENT_SOURCE_DIR}/frames
     ${CMAKE_CURRENT_SOURCE_DIR}/devices ${EMU_FW_INCS} ${WS}/main)
   target_link_libraries(emu_workshop PRIVATE Threads::Threads mujoco)
+  # Same SNN switch as sf_cores above (these executables compile stock_hooks.cpp themselves).
+  # 上の sf_cores と同じ SNN の切り替え（これらは stock_hooks.cpp を自前でコンパイルする）。
+  target_compile_definitions(emu_workshop PRIVATE CONFIG_SF_ENABLE_SNN=1)
 endif()
 
 # -----------------------------------------------------------------------------

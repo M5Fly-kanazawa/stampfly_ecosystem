@@ -1,0 +1,23 @@
+menu "StampFly Research Features"
+
+    config SF_ENABLE_SNN
+        bool "Build the research SNN estimator and controller"
+        default n
+        help
+            Builds the research spiking neural network (SNN, CUBA-LIF) attitude
+            estimator and controller (sf_estimator_snn, sf_controller_snn,
+            sf_snn_core) into the firmware, so that estimator.type = 2 and
+            controller.type = 1 can be selected. The weights are an UNTRAINED
+            placeholder (fixed random values); in SILS the vehicle is expected
+            to crash (emergency DISARM about 1 s after takeoff).
+
+            Enabling this uses about 31 KB of the internal RAM (a fixed
+            variable area, because the SNN objects are static). The chip has
+            no external RAM and only about 37 KB is free after boot, so leave
+            this disabled for any build that is flown for real.
+
+            When disabled (the default), estimator.type = 2 and
+            controller.type = 1 are not available: the firmware logs a warning
+            and starts with the default implementation (ESKF / PID).
+
+endmenu

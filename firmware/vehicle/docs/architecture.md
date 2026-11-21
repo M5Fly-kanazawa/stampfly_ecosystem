@@ -161,7 +161,7 @@ vehicle は **学習者がレベルに応じて入口を選べる** 並列 API �
 
 #### L1 の入口（アプリフック）と不変条件の照合
 
-L1 の差し替え口は `sf_app_hooks`（`app_hooks.hpp`）の 3 関数だけである。`ControlTask` は起動時に `sf::app::controller()` から `IController` を、`ImuTask` は `sf::app::estimator()` から `IEstimator` を 1 回だけ受け取り、`app_main()` は全タスク起動後に `sf::app::start()` を呼ぶ（Phase 5）。アプリが無いときは `app_default.cpp` が既定（`PidController`、`estimator.type` による ESKF／相補の選択、何もしない `start()`）を供給し、既定挙動は変わらない。アプリは `firmware/apps/<name>/*.cpp` として main コンポーネントに直接コンパイルされる（弱シンボルや同名コンポーネントの上書きは使わない — 理由は `docs/plans/sf-app-sils-plan.md` §2）。
+L1 の差し替え口は `sf_app_hooks`（`app_hooks.hpp`）の 3 関数だけである。`ControlTask` は起動時に `sf::app::controller()` から `IController` を、`ImuTask` は `sf::app::estimator()` から `IEstimator` を 1 回だけ受け取り、`app_main()` は全タスク起動後に `sf::app::start()` を呼ぶ（Phase 5）。アプリが無いときは `app_default.cpp` が既定（`PidController`、`estimator.type` による ESKF／相補の選択、何もしない `start()`）を供給し、既定挙動は変わらない。研究用の SNN（`controller.type` = 1、`estimator.type` = 2）は `CONFIG_SF_ENABLE_SNN=y` のビルドでだけ組み込まれ、無効のビルドで選ばれたときは警告を出して PID／ESKF で起動を続ける（任意機能の既定への退避）。アプリは `firmware/apps/<name>/*.cpp` として main コンポーネントに直接コンパイルされる（弱シンボルや同名コンポーネントの上書きは使わない — 理由は `docs/plans/sf-app-sils-plan.md` §2）。
 
 **（設計提案・未実装）** 4 番目の差し替え口として `sf::app::mixer()` を追加し、`Actuator` が起動時に `IMixer` を 1 回だけ受け取る形にする。詳細は本節末尾「ミキサー差し替え口」参照。
 

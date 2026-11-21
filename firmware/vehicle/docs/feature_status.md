@@ -44,6 +44,7 @@ vehicle の開発状況を把握したい開発者・教材利用者。次に何
 | 推定器差し替え | IEstimator、`estimator_type` パラメータで ESKF / 相補フィルタ切替 | SILS 比較検証（P6） |
 | 鉛直系 | ToF-only 鉛直＋接地アンカー＋離陸エッジの鉛直ハンドオフ | SILS alt_rmse 1.6cm＋実機 |
 | 制御器差し替え | IController、カスケード PID（ACRO/STABILIZE/ALT_HOLD/POS_HOLD） | SILS 16シナリオ |
+| 研究用 SNN（推定器・制御器） | ビルド時の選択。既定のビルドには入らず、`CONFIG_SF_ENABLE_SNN=y` で有効にしたビルドでだけ `estimator.type` = 2・`controller.type` = 1 を選べる（重みは未学習の仮置き。有効にすると内蔵 RAM を約 31 KB 使う）。有効にする方法: `idf.py menuconfig` の「StampFly Research Features」、または `firmware/vehicle/sdkconfig` に `CONFIG_SF_ENABLE_SNN=y` を 1 行足してから `sf build vehicle`。無効のビルドで保存済みの値が SNN を指していても、警告を 1 行出して ESKF・PID で起動する。SILS は常に有効 | ビルド（有効・無効とも）、SILS（有効。未学習のため墜落が想定どおり） |
 | POS_HOLD 実機検証 | roadmap Phase 4 | **実機検証済み**（保持精度 ±6-7cm, RMS 16mm） |
 | ミキサー | B⁻¹ 制御配分（物理単位 Nm/N）＋モータ曲線＋ライブ電池電圧補償 | SILS＋実機 |
 | 起動校正 | ジャイロ/加速度バイアス測定→推定器種付け、完了まで ARM 判定 | 実機（§4 の静止判定で強化） |
@@ -164,6 +165,7 @@ vehicle is a redesign of the legacy vehicle_old firmware (87 real flights) aimed
 | Sensors | BMI270 (SPI 1600 Hz, OSR4) / PMW3901 / BMM150 (25 Hz, DRDY-gated) / BMP280 / VL53L3CX / INA3221 — all at design rates (confirmed via Data Stream) | Hardware E2E |
 | Estimation | 15-state ESKF (chi2 gates, active_mask P isolation, sparse predict), swappable IEstimator (ESKF/complementary), ToF-only vertical + ground anchoring + takeoff handoff | SILS G2 + hardware |
 | Control | Swappable IController, cascade PID (ACRO/STAB/ALT/POS), B^-1 mixer in physical units + motor curve + live battery compensation | SILS 16 scenarios |
+| Research SNN (estimator and controller) | A build-time choice. Not in the default build; `estimator.type` = 2 and `controller.type` = 1 can be selected only in a build with `CONFIG_SF_ENABLE_SNN=y` (weights are an untrained placeholder; enabling it uses about 31 KB of internal RAM). To enable: `idf.py menuconfig`, "StampFly Research Features", or add the line `CONFIG_SF_ENABLE_SNN=y` to `firmware/vehicle/sdkconfig` and then run `sf build vehicle`. In a build without it, a stored value that points to the SNN makes the firmware log one warning line and boot with ESKF / PID. SILS always enables it | Build (enabled and disabled), SILS (enabled; a crash is expected because it is untrained) |
 | POS_HOLD hardware validation | roadmap Phase 4 | **Validated on real hardware** (hold accuracy ±6-7cm, RMS 16mm) |
 | State machine & safety | Full flight state machine, comm-loss/battery auto-landing (Landing verb, −0.3 m/s), impact DISARM, crash→re-fly readiness chain, pairing (anti-cross-talk, 30 craft/classroom) | SILS + hardware |
 | Comms & logging | SSOT ControlPacket 14B, Telemetry UDP 50 Hz (receiver: `sf telemetry`, terminal or `--web` browser via UDP→SSE), **Data Stream 400 Hz wire-compatible with legacy** (`sf log wifi`/`viz` unmodified; the 1 Hz status packet v4 adds the ToF diagnostics, loop-timing counters, non-finite counters and log-path loss counters, and a separate text-log packet 0x51 carries the `ESP_LOG` lines of the vehicle during a capture; read with `sf log info`, `sf log info --text`; not yet verified on hardware), Blackbox on SPIFFS, CLI over USB + TCP:23, WiFi STA/AP dual | Hardware E2E |
