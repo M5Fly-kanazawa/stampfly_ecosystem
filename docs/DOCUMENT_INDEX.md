@@ -49,6 +49,7 @@
 | [architecture/coordinate-systems.md](architecture/coordinate-systems.md) | 座標系の定義 |
 | [architecture/stampfly-parameters.md](architecture/stampfly-parameters.md) | 物理パラメータリファレンス |
 | [hardware/schematics/README.md](hardware/schematics/README.md) | 回路図（主基板・P3 に付く小基板・オプティカルフロー基板）の一覧と取り込みの記録 |
+| [hardware/mcu-memory.md](hardware/mcu-memory.md) | マイコンモジュール（M5StampS3）のメモリの仕様と、今のファームウェアでの使われ方 |
 | [architecture/genesis-integration.md](architecture/genesis-integration.md) | Genesis シミュレータ統合 |
 | [architecture/simulation-policy.md](architecture/simulation-policy.md) | シミュレーション方針の正 — 3層構造・モデル一致の合否判定・SILSプラント改修の残作業 |
 
@@ -265,6 +266,7 @@ POS_HOLD 位置制御の実機検証を機に `firmware/vehicle_new` が `firmwa
 | [architecture/coordinate-systems.md](architecture/coordinate-systems.md) | Coordinate system definitions |
 | [architecture/stampfly-parameters.md](architecture/stampfly-parameters.md) | Physical parameters reference |
 | [hardware/schematics/README.md](hardware/schematics/README.md) | Schematics (main board, the small board on P3, optical-flow board): list and import record |
+| [hardware/mcu-memory.md](hardware/mcu-memory.md) | Memory specification of the microcontroller module (M5StampS3) and how the current firmware uses it |
 | [architecture/genesis-integration.md](architecture/genesis-integration.md) | Genesis simulator integration |
 | [architecture/simulation-policy.md](architecture/simulation-policy.md) | Authoritative simulation policy — three-layer structure, model-identity gate, SILS plant retrofit backlog |
 

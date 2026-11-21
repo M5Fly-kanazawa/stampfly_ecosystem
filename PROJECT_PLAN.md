@@ -109,7 +109,8 @@ docs/
   シミュレーション方針は `architecture/simulation-policy.md` を正とする
 - `reference/`: 手で書かない。`protocol/tools/` が仕様から生成する（§5）
 - `hardware/`: 機体のハードウェアの資料。`schematics/` に回路図の PDF（主基板・P3 に付く小基板・オプティカルフロー基板）を
-  変更せずに置き、`README.md` に一覧と取り込みの記録を書く。ピン割り当て・電源系統を確かめるときの基準とする
+  変更せずに置き、`README.md` に一覧と取り込みの記録を書く。ピン割り当て・電源系統を確かめるときの基準とする。
+  `mcu-memory.md` にマイコンモジュールのメモリの仕様と今のファームでの使われ方を書く
 - `plans/`: 機能ごとの計画・見直し文書。状態（計画中／実装中／実装済み／見直し中）を冒頭に書く
 - `events/`: `stampfly_workshop/`（Workshop。§4 の `firmware/workshop/` と対）、`dxh2026/`、`sci_tutorial_2026/`
   （いずれも L0 `ws::` API 上の実習。L0 の API・レッスン更新後に再検証が要る）。

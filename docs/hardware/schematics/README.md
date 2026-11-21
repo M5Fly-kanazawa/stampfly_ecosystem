@@ -30,6 +30,7 @@ StampFly の回路図（PDF）の置き場所と、各ファイルの内容を�
 | 取り込み日 | 2026-11-21 |
 | 作成者 | M5Stack（図面は Altium Designer の出力） |
 | 公開の扱い | StampFly はオープンソースハードウェアであり、回路図は公開してよい資料（開発者の確認、2026-11-21）。ライセンスの条文はこの文書では確かめていない |
+| 公開 URL | M5Stack が同じ 3 枚を公開している: `https://m5stack-doc.oss-cn-shenzhen.aliyuncs.com/1069/Stamp_Fly_v1.0.pdf`、`…/1069/StampS3_Fly_Hat.pdf`、`…/1069/Sch_PMW3901MB_SPI.pdf`（M5Stack 製品文書 StampFly より、閲覧 2026-11-21） |
 | 変更 | なし（受け取ったファイルのまま） |
 | 版の表示 | 図面の中に表題欄は無い。版はファイル名による |
 
@@ -71,6 +72,7 @@ This directory holds the StampFly schematics (PDF) and lists what each file is. 
 | Imported | 2026-11-21 |
 | Author | M5Stack (the drawings are Altium Designer output) |
 | Publication | StampFly is open-source hardware and the schematics may be published (confirmed by the developer, 2026-11-21). The licence text is not checked in this document |
+| Public URLs | M5Stack publishes the same three drawings: `https://m5stack-doc.oss-cn-shenzhen.aliyuncs.com/1069/Stamp_Fly_v1.0.pdf`, `…/1069/StampS3_Fly_Hat.pdf`, `…/1069/Sch_PMW3901MB_SPI.pdf` (from the M5Stack StampFly product documentation, viewed 2026-11-21) |
 | Changes | None (files as received) |
 | Revision marking | The drawings have no title block; the revision comes from the file name |
 
