@@ -15,7 +15,7 @@ StampFly のマイコンモジュール（M5StampS3。チップは ESP32-S3FN8�
 | 実機から読み出した値 | 機体 1 台に esptool・espefuse で読み出しのみ行った結果（2026-11-21） |
 | 公式資料の記述 | M5Stack・Espressif の公開文書（URL つき、閲覧 2026-11-21） |
 | ビルドから | 今のファームのビルド結果（コミット 53553678、ESP-IDF v5.5.2） |
-| 実機で測った値 | 動かした機体での測定（2026-11-20 と 2026-11-21） |
+| 実機で測った値 | 動かした機体での測定（2026-11-20、2026-11-21、2026-11-22） |
 | 開発者の説明 | 開発者から聞いた内容（2026-11-21） |
 
 数値の単位は元の資料のままにしている。B はバイト、KB は資料の表記のまま、KiB は 1024 B を指す（1 KiB = 1024 B）。計算で求めた値には「計算」と添える。
@@ -458,7 +458,7 @@ ESKF とは、機体の姿勢・位置を推定するフィルタ（誤差状態
 | ImuTask と ESKF を IRAM | 483 µs | 0 % | 制御タスクの起床（待ち状態から実行可能になること）の遅れ 0 % |
 | 両方 | 366 µs | 記載なし | コンソールは起動しない |
 
-測定条件は、2026-11-20、床の上、ARM していない、ハブ経由の USB である。ImuTask は 400 Hz で動き、1 周期の予算は 2500 µs（400 Hz の周期は 1/400 s = 2500 µs で、計算）である。詳細の記録は Git の管理外（`logs/checkout/`）にある。測定は実験ブランチのビルドで、IRAM 配置は実験スイッチ `-D SF_EXP_HOT_IRAM=1` と手元の sdkconfig の書き換えで有効にした（実験スイッチは実験ブランチのコミット f6db9203 から 3b8b0212 にある）。fix/flight-safety では実験スイッチを使わず、常時有効である。この形のファームウェアでの測定はまだ無い（9 章）。
+測定条件は、2026-11-20、床の上、ARM していない、ハブ経由の USB である。ImuTask は 400 Hz で動き、1 周期の予算は 2500 µs（400 Hz の周期は 1/400 s = 2500 µs で、計算）である。詳細の記録は Git の管理外（`logs/checkout/`）にある。測定は実験ブランチのビルドで、IRAM 配置は実験スイッチ `-D SF_EXP_HOT_IRAM=1` と手元の sdkconfig の書き換えで有効にした（実験スイッチは実験ブランチのコミット f6db9203 から 3b8b0212 にある）。fix/flight-safety では実験スイッチを使わず、常時有効である。この形のファームウェアでの測定は、床の上・ARM していない条件だけ 8 章の最後の節（2026-11-22）で行った（9 章）。
 
 ### 速度とメモリの引き換え
 
@@ -520,7 +520,66 @@ SNN を既定のビルドから外したうえで併用したビルド（実験�
 
 SNN を外す前は、同じ併用でコンソールを起動できなかった（6 章）。この値も床の上のもので、ARM 中・飛行中・WiFi 接続時は未確認である。
 
-**採用の決定（開発者、2026-11-21）: この組み合わせ（SNN はビルド時の選択で既定は無効、命令キャッシュ 32 KB、ImuTask と ESKF を IRAM に置く）を採用する。** `fix/flight-safety` には、実験スイッチなしの常時有効の形で実装した（SNN の選択、命令キャッシュは `sdkconfig.defaults`、IRAM 配置は `hot_iram.lf`）。上の測定は実験ブランチのビルドであり、この形のファームウェアでの測定はまだ無い（9 章）。効果が小さかった候補（観測を 1 周期 1 種類に絞る、読み出しの重複を減らす、気圧を ImuTask から外す、ESKF の計算の省略）は採用しない。これらは実験ブランチには残っていて、fix/flight-safety には入れない。control_task や BMI270 の読み出しのコードを IRAM に足すかどうかは未決である（開発者の判断待ち）。講習用ファームウェア（`firmware/workshop`）にも、同じ設定と同じリンカフラグメントで適用した（開発者の決定、2026-11-21。ビルドでの確認まで。実機での測定は未確認）。
+**採用の決定（開発者、2026-11-21）: この組み合わせ（SNN はビルド時の選択で既定は無効、命令キャッシュ 32 KB、ImuTask と ESKF を IRAM に置く）を採用する。** `fix/flight-safety` には、実験スイッチなしの常時有効の形で実装した（SNN の選択、命令キャッシュは `sdkconfig.defaults`、IRAM 配置は `hot_iram.lf`）。上の測定は実験ブランチのビルドである。この形のファームウェアは、床の上・ARM していない条件で 8 章の最後の節（2026-11-22）に測った（9 章）。効果が小さかった候補（観測を 1 周期 1 種類に絞る、読み出しの重複を減らす、気圧を ImuTask から外す、ESKF の計算の省略）は採用しない。これらは実験ブランチには残っていて、fix/flight-safety には入れない。control_task や BMI270 の読み出しのコードを IRAM に足すかどうかは未決である（開発者の判断待ち。測定は 8 章の最後の節）。講習用ファームウェア（`firmware/workshop`）にも、同じ設定と同じリンカフラグメントで適用した（開発者の決定、2026-11-21。ビルドでの確認まで。実機での測定は未確認）。
+
+### IRAM に置く対象を広げた比較
+
+採用した形（ImuTask と ESKF を IRAM に置く）に、IRAM に置くコードを足すと処理時間がさらに短くなるかを、実機で測った（2026-11-22）。
+
+| 項目 | 内容 |
+|------|------|
+| 状態 | 床の上、ARM していない、電池あり（4.16〜4.19 V）、全センサ動作（`status` の `sensors present=0x7F`）、電源スイッチ付きハブ経由の USB |
+| ファームウェア | fix/flight-safety の f4b72074（`App version archive/2026-11-13-31-gf4b72074`）を基準に、リンカフラグメント `hot_iram.lf` の対象だけを変えたビルド（Git 管理外の作業ツリー）。測定の後、機体は基準のビルドに戻した（`logs/checkout/restore_A_20261122.txt`） |
+| 測り方 | 7 章と同じ（`steady2.py`、各系列 6 回の起動、1 回の起動で 20400 周期）。順序は A、B、C、D、A（A は 2 回測った） |
+| 記録 | `logs/checkout/steady_x_A1`、`steady_x_B1`、`steady_x_C1`、`steady_x_D1`、`steady_x_A2`（それぞれ `.json` と `_boot01〜06.txt`） |
+
+IRAM に置く対象は次のとおり。
+
+| 記号 | IRAM に置くコード |
+|------|-------------------|
+| A | 現状（`libmain.a` の imu_task と、`libsf_estimator_eskf.a` の全体 = ESKF） |
+| B | A に、`libmain.a` の control_task を足す |
+| C | A に、`libsf_hal_bmi270.a` の bmi270_wrapper、bmi270_data、bmi270_spi を足す（初期化用の bmi270_init と、使っていない bmi270_interrupt は除く） |
+| D | B と C の両方 |
+
+| 記号 | ImuTask の 1 周期の処理時間の平均（6 回の起動の平均、範囲） | 予算超えの周期 | 制御タスクの起床の遅れ（6 回の合計） | `.iram0.text` | 空き / 起動以降の最小 / 最大の連続した塊 |
+|------|------|------|------|------|------|
+| A（1 回目） | 360.8 µs（358〜364） | 0 | 1 | 126,443 B | 31,848 B / 29,904 B / 19,456 B |
+| B | 358.5 µs（355〜372） | 0 | 0 | 130,903 B | 27,316 B / 25,264 B / 17,408 B |
+| C | 341.0 µs（339〜344） | 0 | 0 | 130,239 B | 28,008 B / 26,064 B / 17,408 B |
+| D | 354.0 µs（339〜369） | 0 | 6 | 134,699 B | 23,464 B / 21,240 B / 13,312 B |
+| A（2 回目） | 384.5 µs（380〜388） | 0 | 10 | 126,443 B | 31,660 B / 29,716 B / 19,456 B |
+
+空きは各系列の 1 回目の起動の、起動 63 s 後あたりの `status` の `heap` 行の値である（A の 1 回目の 12 s 後の `status` は 32,172 B）。`.iram0.text` は各ビルドのマップファイルの値（0x1edeb、0x1ff57、0x1fcbf、0x20e2b）。
+
+#### 事実
+
+| 項目 | 内容 |
+|------|------|
+| 同じファームウェア A の 2 回の差 | 処理時間の平均が 360.8 µs と 384.5 µs で、差は 23.7 µs（計算）。制御タスクの起床の遅れも 1 回と 10 回 |
+| B、C、D と A の 1 回目の差（計算） | B は −2.3 µs、C は −19.8 µs、D は −6.8 µs。いずれも A の 2 回の差（23.7 µs）より小さい。A の 2 回目と比べると C は −43.5 µs で、この差のほうが大きい |
+| 空きの減り（A の 1 回目との差、計算） | B は 4,532 B、C は 3,840 B、D は 8,384 B（3.8〜8.4 KB） |
+| 予算超え | 5 系列とも 0 |
+| 電池電圧 | A の 1 回目は 4.19 V、A の 2 回目は 4.16〜4.17 V（`status` の `battery` 行） |
+| SPI ドライバ | ESP-IDF の SPI マスタのドライバは、`sdkconfig.defaults` の 66 行目の `CONFIG_SPI_MASTER_IN_IRAM=y` で、元から IRAM に置かれている |
+| 置かなかったコード | control_task の呼び先の `pid_controller.cpp.obj`（約 27.7 KB）は、今回は IRAM に入れていない |
+
+#### 推論
+
+- B、C、D の効果は、この測定では確認できない。同じファームウェアの 2 回の測定の差（23.7 µs）が、A との差と同じ大きさか、それより大きいためである。
+- 一方で空きは 3.8〜8.4 KB 減る。効果が確認できないまま空きだけ減る。
+
+#### 未確認
+
+| 項目 | 状態 |
+|------|------|
+| A の 1 回目と 2 回目の差の原因 | 未確認（測定の順序、電池電圧の低下、機体の温度などは分けていない） |
+| `pid_controller.cpp.obj` も入れたときの効果 | 未確認（測っていない） |
+| ARM 中・飛行中・WiFi 接続時の効果 | 未確認（床の上、ARM していない状態だけ測った） |
+
+#### 意見と決定
+
+測定を行った側の意見は、広げないことを勧める、である（効果が確認できず、空きが減るため）。開発者の決定（2026-11-22）: 広げない。IRAM に置く対象は ImuTask と ESKF のままとする。
 
 ## 9. 未確認の事項と次に確かめること
 
@@ -548,9 +607,9 @@ SNN を外す前は、同じ併用でコンソールを起動できなかった�
 | ログの欠落への余裕（リング・待ち行列を縮めたときの欠落） | 未確認 | 欠落を実測する |
 | スタックの設定値の根拠（LogTask 以外） | 見つからなかった | 設計した人に確かめる |
 | RAM を多く使う置き方（命令キャッシュの拡大・コードを IRAM に置く） | 採用を決定（2026-11-21）、fix/flight-safety に実装 | 下の 4 項目の確認 |
-| 正式な形（実験スイッチなし、常時有効）のファームウェアでの再測定（処理時間・空き・コンソール） | 未確認（測定は実験ブランチのビルドのもの） | 同じ測り方（7 章）で測り、実験ブランチの値と比べる |
+| 正式な形（実験スイッチなし、常時有効）のファームウェアでの再測定（処理時間・空き・コンソール） | 確認済み（床の上・ARM していない条件、2026-11-22、8 章の最後の節の A、各 6 回の起動を 2 系列）。処理時間の平均は 360.8 µs と 384.5 µs（実験ブランチのとき 344 µs、339〜349）、予算超えは 0、制御タスクの起床の遅れは 6 回の合計で 1 回と 10 回（実験ブランチのときは 0）、空きは 31,848 B と 31,660 B（同 32,036 B）、コンソールは動いた。実験ブランチのときより処理時間が長い原因は未確認。ARM 中・飛行中・WiFi 接続時は下の行のとおり未確認 | 差の原因を調べる（測定の順序、電池電圧、ビルドの差） |
 | ARM 中・飛行中・WiFi 接続時の、ImuTask の処理時間と空き | 未確認（床の上・ARM していない状態だけ測った） | それぞれの状態で、処理時間の統計と `heap` 行を読む |
-| IRAM に置く対象を広げるか（control_task、BMI270 の読み出し） | 未決（開発者の判断待ち） | 広げた分の空きの減りと処理時間を測って判断する |
+| IRAM に置く対象を広げるか（control_task、BMI270 の読み出し） | 広げないと決定（開発者、2026-11-22）。測定（2026-11-22、8 章の最後の節）: 空きが 3.8〜8.4 KB 減り、処理時間の効果は確認できなかった | なし。見直すなら ARM 中・飛行中・WiFi 接続時の処理時間も測る |
 | 講習用ファームウェア（`firmware/workshop`）への適用 | 適用済み（開発者の決定、2026-11-21）。`firmware/workshop/sdkconfig.defaults` に命令キャッシュ 32 KB を足し、`firmware/workshop/main/CMakeLists.txt` が機体のリンカフラグメント `firmware/vehicle/main/hot_iram.lf` を参照する。ビルドで確認（生成された sdkconfig で `CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y`、マップの `.iram0.text` が機体ファームウェアと同じ 0x1edeb バイト）。実機での測定は未確認。`sf app build` は機体ファームウェアの設定と main を使うので元から受け継ぐ（ビルドのマップで確認） | 講習用ファームウェアを書き込んだ実機で、処理時間と空きを測る（7 章と同じ測り方） |
 
 ---
@@ -572,7 +631,7 @@ Facts are written with their source distinguished.
 | Read from the real device | Results of read-only esptool / espefuse access to one vehicle (2026-11-21) |
 | Official material | Public documents of M5Stack and Espressif (with URL, viewed 2026-11-21) |
 | From the build | Build result of the current firmware (commit 53553678, ESP-IDF v5.5.2) |
-| Measured on the real device | Measurements on a running vehicle (2026-11-20 and 2026-11-21) |
+| Measured on the real device | Measurements on a running vehicle (2026-11-20, 2026-11-21 and 2026-11-22) |
 | Developer's explanation | What the developer told us (2026-11-21) |
 
 Units are kept as in the original material. B is bytes, KB follows the source's notation, and KiB means 1024 B (1 KiB = 1024 B). Values obtained by calculation are marked "calculated".
@@ -1017,7 +1076,7 @@ ESKF is the filter that estimates the attitude and position of the vehicle (erro
 | ImuTask and ESKF in IRAM | 483 µs | 0 % | Control-task wake-up (leaving the waiting state to become runnable) delay 0 % |
 | Both | 366 µs | Not recorded | Console does not start |
 
-The measurement conditions are 2026-11-20, on the floor, not armed, USB through a hub. ImuTask runs at 400 Hz and the budget of one cycle is 2500 µs (the period of 400 Hz is 1/400 s = 2500 µs, calculated). The detailed record is outside Git (`logs/checkout/`). The measurements are from builds of the experiment branch; the IRAM placement was enabled with the experiment switch `-D SF_EXP_HOT_IRAM=1` and by rewriting the local sdkconfig (the experiment switches are in the experiment-branch commits f6db9203 to 3b8b0212). In fix/flight-safety no experiment switch is used and the placement is always on. No measurement of the firmware in this form exists yet (chapter 9).
+The measurement conditions are 2026-11-20, on the floor, not armed, USB through a hub. ImuTask runs at 400 Hz and the budget of one cycle is 2500 µs (the period of 400 Hz is 1/400 s = 2500 µs, calculated). The detailed record is outside Git (`logs/checkout/`). The measurements are from builds of the experiment branch; the IRAM placement was enabled with the experiment switch `-D SF_EXP_HOT_IRAM=1` and by rewriting the local sdkconfig (the experiment switches are in the experiment-branch commits f6db9203 to 3b8b0212). In fix/flight-safety no experiment switch is used and the placement is always on. The firmware in this form was measured only on the floor, not armed, in the last section of chapter 8 (2026-11-22) (chapter 9).
 
 ### Trade-off between Speed and Memory
 
@@ -1079,7 +1138,66 @@ The combination was measured on the real vehicle on top of the build without the
 
 Before the SNN was removed the same combination could not start the console (chapter 6). These values are also from the floor; armed, in flight and with WiFi clients are not confirmed.
 
-**Decision to adopt (developer, 2026-11-21): this combination is adopted (the SNN as a build-time option, off by default; 32 KB instruction cache; ImuTask and the ESKF placed in IRAM).** It is implemented in `fix/flight-safety` without experiment switches, always on (the SNN choice; the instruction cache in `sdkconfig.defaults`; the IRAM placement in `hot_iram.lf`). The measurements above are from builds of the experiment branch, and no measurement of the firmware in this form exists yet (chapter 9). The candidates with a small effect (one observation kind per cycle, fewer duplicate reads, baro off ImuTask, the ESKF arithmetic savings) are not adopted; they remain on the experiment branch and are not put into fix/flight-safety. Whether to add the control_task and BMI270 read code to IRAM is undecided (waiting for the developer's decision). The same settings and the same linker fragment were also applied to the workshop firmware (`firmware/workshop`) (developer's decision, 2026-11-21; checked up to the build, measurement on the real craft unconfirmed).
+**Decision to adopt (developer, 2026-11-21): this combination is adopted (the SNN as a build-time option, off by default; 32 KB instruction cache; ImuTask and the ESKF placed in IRAM).** It is implemented in `fix/flight-safety` without experiment switches, always on (the SNN choice; the instruction cache in `sdkconfig.defaults`; the IRAM placement in `hot_iram.lf`). The measurements above are from builds of the experiment branch. The firmware in this form was measured on the floor, not armed, in the last section of chapter 8 (2026-11-22) (chapter 9). The candidates with a small effect (one observation kind per cycle, fewer duplicate reads, baro off ImuTask, the ESKF arithmetic savings) are not adopted; they remain on the experiment branch and are not put into fix/flight-safety. Whether to add the control_task and BMI270 read code to IRAM is undecided (waiting for the developer's decision; the measurement is in the last section of chapter 8). The same settings and the same linker fragment were also applied to the workshop firmware (`firmware/workshop`) (developer's decision, 2026-11-21; checked up to the build, measurement on the real craft unconfirmed).
+
+### Comparison of Widening the Code Placed in IRAM
+
+Whether adding more code to IRAM, on top of the adopted form (ImuTask and the ESKF in IRAM), shortens the processing time further was measured on the real vehicle (2026-11-22).
+
+| Item | Content |
+|------|---------|
+| Condition | On the floor, not armed, battery connected (4.16-4.19 V), all sensors running (`sensors present=0x7F` in `status`), USB through a hub with a power switch |
+| Firmware | Based on f4b72074 of fix/flight-safety (`App version archive/2026-11-13-31-gf4b72074`), with only the targets of the linker fragment `hot_iram.lf` changed (a working tree outside Git). After the measurement the vehicle was returned to the baseline build (`logs/checkout/restore_A_20261122.txt`) |
+| Method | Same as chapter 7 (`steady2.py`, 6 boots per series, 20400 cycles per boot). Order: A, B, C, D, A (A was measured twice) |
+| Records | `logs/checkout/steady_x_A1`, `steady_x_B1`, `steady_x_C1`, `steady_x_D1`, `steady_x_A2` (each as `.json` and `_boot01-06.txt`) |
+
+The code placed in IRAM is as follows.
+
+| Label | Code placed in IRAM |
+|-------|---------------------|
+| A | Current state (imu_task of `libmain.a`, and all of `libsf_estimator_eskf.a` = the ESKF) |
+| B | A plus control_task of `libmain.a` |
+| C | A plus bmi270_wrapper, bmi270_data and bmi270_spi of `libsf_hal_bmi270.a` (excluding bmi270_init, used for initialization, and bmi270_interrupt, which is not used) |
+| D | Both B and C |
+
+| Label | Mean time of one ImuTask cycle (mean over 6 boots, range) | Cycles over the budget | Late wake-ups of the control task (sum of 6 boots) | `.iram0.text` | Free / minimum since boot / largest contiguous block |
+|-------|------|------|------|------|------|
+| A (first) | 360.8 µs (358-364) | 0 | 1 | 126,443 B | 31,848 B / 29,904 B / 19,456 B |
+| B | 358.5 µs (355-372) | 0 | 0 | 130,903 B | 27,316 B / 25,264 B / 17,408 B |
+| C | 341.0 µs (339-344) | 0 | 0 | 130,239 B | 28,008 B / 26,064 B / 17,408 B |
+| D | 354.0 µs (339-369) | 0 | 6 | 134,699 B | 23,464 B / 21,240 B / 13,312 B |
+| A (second) | 384.5 µs (380-388) | 0 | 10 | 126,443 B | 31,660 B / 29,716 B / 19,456 B |
+
+The free memory is the `heap` line of the `status` read about 63 s after boot in the first boot of each series (the `status` at 12 s in the first A series shows 32,172 B). `.iram0.text` is taken from the map file of each build (0x1edeb, 0x1ff57, 0x1fcbf, 0x20e2b).
+
+#### Facts
+
+| Item | Content |
+|------|---------|
+| Two measurements of the same firmware A | The mean processing time is 360.8 µs and 384.5 µs, a difference of 23.7 µs (calculated). The late wake-ups of the control task are also 1 and 10 |
+| Differences of B, C, D from the first A (calculated) | B -2.3 µs, C -19.8 µs, D -6.8 µs. All are smaller than the difference between the two A series (23.7 µs). Against the second A, C is -43.5 µs, which is larger |
+| Decrease of free memory (against the first A, calculated) | B 4,532 B, C 3,840 B, D 8,384 B (3.8-8.4 KB) |
+| Cycles over the budget | 0 in all five series |
+| Battery voltage | 4.19 V in the first A, 4.16-4.17 V in the second A (`battery` line of `status`) |
+| SPI driver | The ESP-IDF SPI master driver is already in IRAM, through `CONFIG_SPI_MASTER_IN_IRAM=y` on line 66 of `sdkconfig.defaults` |
+| Code not placed | `pid_controller.cpp.obj` (about 27.7 KB), called from control_task, was not put into IRAM this time |
+
+#### Inference
+
+- The effect of B, C and D cannot be confirmed in this measurement, because the difference between two measurements of the same firmware (23.7 µs) is as large as, or larger than, the difference from A.
+- The free memory, on the other hand, decreases by 3.8-8.4 KB. The free memory decreases while no effect is confirmed.
+
+#### Unconfirmed
+
+| Item | Status |
+|------|--------|
+| Cause of the difference between the first and second A | Unconfirmed (the order of measurement, the drop of the battery voltage and the temperature of the vehicle were not separated) |
+| Effect of also placing `pid_controller.cpp.obj` | Unconfirmed (not measured) |
+| Effect while armed, in flight and with WiFi connected | Unconfirmed (only on the floor, not armed, was measured) |
+
+#### Opinion and decision
+
+The opinion of the side that made the measurement is to recommend not widening the placement (no effect is confirmed and the free memory decreases). Decision of the developer (2026-11-22): not widened. The code placed in IRAM stays ImuTask and the ESKF.
 
 ## 9. Unconfirmed Items and What to Check Next
 
@@ -1107,7 +1225,7 @@ Before the SNN was removed the same combination could not start the console (cha
 | Margin against log loss (loss when the rings and queue are shrunk) | Unconfirmed | Measure the loss |
 | Basis for the configured stack sizes (other than LogTask) | Not found | Ask the designer |
 | Placements that trade internal RAM for speed (larger cache, code in IRAM) | Adoption decided (2026-11-21), implemented in fix/flight-safety | Check the four items below |
-| Re-measurement of the firmware in its final form (no experiment switch, always on): processing time, free memory, console | Unconfirmed (the measurements are from builds of the experiment branch) | Measure with the same method (chapter 7) and compare with the experiment-branch values |
+| Re-measurement of the firmware in its final form (no experiment switch, always on): processing time, free memory, console | Confirmed (on the floor, not armed, 2026-11-22, A in the last section of chapter 8, two series of 6 boots each). The mean processing time is 360.8 µs and 384.5 µs (344 µs, 339-349, on the experiment branch), cycles over the budget 0, late wake-ups of the control task 1 and 10 in the sum of 6 boots (0 on the experiment branch), free memory 31,848 B and 31,660 B (32,036 B), and the console worked. The cause of the longer processing time than on the experiment branch is unconfirmed. While armed, in flight and with WiFi connected remain unconfirmed, as in the next row | Find the cause of the difference (order of measurement, battery voltage, difference between the builds) |
 | ImuTask processing time and free memory while armed, in flight and with WiFi connected | Unconfirmed (only on the floor, not armed, was measured) | Read the timing statistics and the `heap` line in each state |
-| Whether to widen the code placed in IRAM (control_task, BMI270 read) | Undecided (waiting for the developer's decision) | Measure the loss of free memory and the processing time of the widened placement, then decide |
+| Whether to widen the code placed in IRAM (control_task, BMI270 read) | Decided not to widen (developer, 2026-11-22). Measured (2026-11-22, last section of chapter 8): the free memory decreases by 3.8-8.4 KB and no effect on the processing time was confirmed | None. If it is reconsidered, measure the processing time while armed, in flight and with WiFi connected as well |
 | Applying it to the workshop firmware (`firmware/workshop`) | Applied (developer's decision, 2026-11-21). The 32 KB instruction cache is added to `firmware/workshop/sdkconfig.defaults`, and `firmware/workshop/main/CMakeLists.txt` refers to the vehicle's linker fragment `firmware/vehicle/main/hot_iram.lf`. Checked in the build (`CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y` in the generated sdkconfig; `.iram0.text` in the map is 0x1edeb bytes, the same as the vehicle firmware). Measurement on the real craft is unconfirmed. `sf app build` uses the settings and main of the vehicle firmware, so it inherited both from the start (checked in the map of the build) | Measure the processing time and free memory on a craft running the workshop firmware (same method as chapter 7) |

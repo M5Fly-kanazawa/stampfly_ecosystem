@@ -135,6 +135,8 @@ VL53LX_Error VL53LX_SetDistanceMode(
   - `VL53LX_DISTANCEMODE_MEDIUM`: 中距離モード（3m最適）**推奨**
   - `VL53LX_DISTANCEMODE_LONG`: 長距離モード（4m最適）
 
+> **この機体での実測（2026-11-22、注記）:** 上の「MEDIUM 推奨」は同梱の ST の資料に沿った記述である。StampFly の下向き ToF を白い壁に向けて手で測ったところ（測定時間 33 ms）、MEDIUM は壁から 1.5 m までは有効（100 %）だったが、2.0 m で有効率が 1.0 %、2.5 m と 3.0 m では範囲外にもかかわらず誤った近い距離（有効とされた距離の中央値 118 mm と 44 mm）を有効として返した。LONG は同じ白い壁で 0.5〜3.0 m のすべての点で有効率 100 % だった。機体のファームウェア（`vl53l3cx_wrapper.cpp`）は LONG を使う。詳細は [docs/hardware/tof-vl53l3cx.md](../../../../../docs/hardware/tof-vl53l3cx.md)。
+
 **戻り値:**
 - `VL53LX_ERROR_NONE`: 成功
 
