@@ -230,6 +230,31 @@ BMM150・BMP280・INA3221 の初期化は、起動時の一時的な I2C エラ�
 
 400 Hz のタスク（ImuTask・ControlTask）と ToF（下向き・前方）の初期化・再初期化の経路は、この再試行の対象外である。
 
+#### 前方 ToF と電池の接続（未解決の課題）
+
+状態: **未対応**（2026-11-21 に記録。対応は後日）。
+
+前方 ToF の基板は電池アダプタを兼ねており、電池を付けた状態でも外した状態でも機体に取り付けられる。前方 ToF は電池から給電されるとみられ、電池が接続されていないと動作が不安定になる。電池なしでもデバイス ID などは読めることがあるが、測距はほぼできない（ハードウェアについての開発者の説明、2026-11-21）。
+
+実機で確かめたこと（2026-11-20〜21、コミット 53553678）:
+
+| 条件 | 観測 |
+|------|------|
+| USB 給電のみで起動（電池なし） | 前方 ToF の初期化は成功と表示される（`VL53L3CX (FRONT) initialized at address 0x31`、`front ready`）。その後の読み出しは全て `I2C read failed at 0x0031: ESP_ERR_INVALID_STATE` で失敗し、30 回連続（約 1 s、`kFrontDisableFailCycles`）で無効になる（`front failed 30 reads in a row — disabled`、`sensors : present=0x3F`） |
+| その後に電池を接続 | 機体は再起動せず、前方 ToF は無効のまま残る（2 回中 2 回）。`prearm  : ready`、LED は緑の常灯で、正常なときと区別できない |
+| 動作中に電池を外す（USB は接続のまま） | 同じ失敗の後に無効になり、電池を戻しても戻らない |
+| 電池を先に接続して起動 | 前方 ToF は正常（`present=0x7F`、2 回中 2 回） |
+| マイコンのリセット（PC がシリアルポートを開く）の後、電池あり | 前方 ToF は正常に戻る |
+
+課題:
+
+| # | 課題 | 現状 | 検討の出発点 |
+|---|------|------|------------|
+| 1 | USB で通電した後に電池を接続したとき、前方 ToF が再び正常に読めるようにする | 無効にした後は次のリセットまで再試行しない（`tof_task.cpp` の `trackFrontFailure`・`holdFrontInReset`） | 下向き ToF の非 ARM 中の再初期化（Recoverable、`reinitBottom`）と同じ考え方を前方にも使えるか。きっかけの候補は電池電圧の立ち上がり（PowerTask の値）。ARM 中は行わない |
+| 2 | 電池が無い状態で前方 ToF が取り付けられているとき、前方 ToF を正しく無効と判断する | 初期化が成功と表示された後、30 回の読み出し失敗を待って無効にしている。その間コンソールにエラーが約 30 行出る | 初期化の時点で電池電圧を見て判断するか、最初の測距が成立してから ready とするか。デバイス ID が読めることは判断の根拠にならない |
+
+関連: 前方 ToF が無効であることを ARM の前に知らせる手段が無い（`prearm` も LED も変わらない）。課題 1・2 と合わせて扱う。
+
 ### LED エラーパターン（Critical 失敗時）
 
 `sf_board::init()` が abort 経路に入ったとき、LED が以下のパターンを表示してユーザーに伝える。
@@ -364,5 +389,7 @@ This document specifies:
 **I2C bus recovery at boot.** Right after the I2C master bus is created and before any sensor is touched, sf_board calls `i2c_master_bus_reset()` once (it clocks SCL up to nine times and issues a STOP, releasing a slave that was stopped in the middle of a transaction while only the MCU restarted and the sensors stayed powered). A failure does not stop the boot; the result is logged on one line.
 
 **Optional I2C sensors retry their initialisation.** BMM150 (Mag), BMP280 (Baro) and INA3221 (Power) are initialised up to 3 times (first try included, 20 ms between tries; `config::OPTIONAL_SENSOR_INIT_MAX_ATTEMPTS`, `OPTIONAL_SENSOR_INIT_RETRY_DELAY_MS`) by the shared function `sf::initOptionalI2cSensor()` (`tasks/optional_sensor_init.hpp`) at the top of MagTask, BaroTask and PowerTask. Each failed try logs one WARN line (sensor, try number / maximum, error name); a success on the second try or later logs one INFO line saying which try succeeded. Only when every try fails is the sensor treated as absent (Optional, `sensor_present = false`). Each HAL `init()` releases its I2C device handle on failure, so calling it again neither registers the device twice nor leaks a handle. ImuTask, ControlTask and the ToF bring-up / re-initialisation path are not affected.
+
+**Front ToF and the battery (open issue, not yet addressed; recorded 2026-11-21).** The front ToF board doubles as the battery adapter and can be mounted with or without a battery. The front ToF appears to be powered from the battery and is unstable without it: the device ID may still be read, but ranging is almost impossible (the developer's description of the hardware, 2026-11-21). Measured on hardware (2026-11-20 to 21, commit 53553678): booting on USB power alone, the front ToF initialisation reports success (`VL53L3CX (FRONT) initialized at address 0x31`, `front ready`), then every read fails with `I2C read failed at 0x0031: ESP_ERR_INVALID_STATE` and after 30 failures in a row (about 1 s, `kFrontDisableFailCycles`) it is disabled (`sensors : present=0x3F`); connecting the battery afterwards does not restart the vehicle and the front ToF stays disabled (2 of 2), while `prearm  : ready` and the solid green LED look the same as in the healthy case; removing the battery while running (USB still connected) ends the same way; booting with the battery connected first gives a healthy front ToF (`present=0x7F`, 2 of 2); after an MCU reset with the battery connected it is healthy again. Two issues are open. (1) Make the front ToF readable again when the battery is connected after power-up on USB: today nothing retries until the next reset (`trackFrontFailure`, `holdFrontInReset` in `tof_task.cpp`); a starting point is the disarmed-only re-initialisation used for the bottom ToF (`reinitBottom`), triggered for example by the battery voltage rising, never while armed. (2) Judge the front ToF as disabled correctly when it is mounted without a battery: today the initialisation reports success and 30 failed reads (about 30 error lines on the console) are needed; a starting point is to look at the battery voltage at initialisation, or to report ready only after a first valid measurement; a readable device ID is not evidence. Related: nothing shows a disabled front ToF before arming (neither `prearm` nor the LED changes); handle it together with (1) and (2).
 
 See the Japanese section for complete content.
