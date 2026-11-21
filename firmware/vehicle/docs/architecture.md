@@ -618,6 +618,16 @@ ESP_LOG（どのタスクでも）──→ ログシンク（sf_core/log_sink.c
 
 周期が守れているかは `sf::LoopTimingMonitor` が測る（ImuTask は `imu_loop_timing`、ControlTask は `control_loop_timing`、毎秒発行。CLI の `status` が表示し、WiFi 取得ではステータスパケット v4 が運ぶ）。詳細は `detailed_design.md` §8。 制御経路の NaN・無限大は `sf::NonFiniteMonitor` が境界ごとに数え（ControlTask が `nonfinite_status` を発行し、CLI の `status` が表示し、WiFi 取得ではステータスパケット v4 が運ぶ）、モータ指令の出口で有限でない値のモータを duty 0 にする（`detailed_design.md` §8）。
 
+### 400Hz タスクのコードの置き場所と命令キャッシュ
+
+400Hz の ImuTask の 1 周期（2.5 ms）に収めるため、ImuTask と ESKF のコードは IRAM（コードを置く内蔵 RAM）に置き、命令キャッシュ（フラッシュ上のコードを写しておく高速なメモリ）は 32 KB にする。制御則・状態機械・タスクの構成は変えない。コードの置き場所とキャッシュの大きさだけを変える。
+
+| 項目 | 内容 |
+|------|------|
+| IRAM に置くコード | `main/hot_iram.lf`（リンカフラグメント）。libmain.a の imu_task と libsf_estimator_eskf.a の全部、.text のみ。`main/CMakeLists.txt` の LDFRAGMENTS から常時有効 |
+| 命令キャッシュ | 32 KB（`sdkconfig.defaults` の `CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB`）。代償は内蔵 RAM 約 16 KB |
+| 根拠と測定 | `docs/hardware/mcu-memory.md` 7・8 章。測定は実験ブランチのビルドで、この形のファームウェアでの測定は未実施 |
+
 ### タスク非割当のコンポーネント
 
 | コンポーネント | 方式 | 理由 |
@@ -921,6 +931,16 @@ The numeric streams (the unified packet 0x50 and the status packet 0x4F of the D
 So **LogTask replaces the output function of `ESP_LOG` (the log sink)**. A caller (any task) formats the line and copies it into a fixed-size ring (`sf::LogRing`, 4 KB) in a few microseconds without touching the console; only LogTask (priority 5, no deadline) writes the ring to the console. During a WiFi capture (`sf log wifi`) the same critical section also copies the line into a second ring (for WiFi, 4 KB), and TelemetryTask sends it through the existing Data Stream path (non-blocking `sendto`) as the text-log packet (0x51), at most every 100 ms and at most 1024 bytes per packet (see the log flow). The console and the WiFi capture are two exits of the same sink: there is one logging mechanism. While no capture is active the WiFi ring is not written. The wording and conditions of every message are not altered by the sink, and `ESP_LOG` lines keep their order among themselves. Their order relative to `printf` (CLI replies and prompts) can change (logs are up to about 10 ms late). In the TCP CLI, `CLITask` redirects `stdout` to the socket, so the `ESP_LOG` lines of `CLITask` bypass the ring and are written straight to that socket (not to USB). When the ring is full the line is dropped, and "log sink full: N lines dropped" is printed before the first line stored after the loss. LogTask itself can wait up to 50 ms on the console, so Blackbox records can be missed during that wait when Blackbox is enabled. Logs before LogTask starts (the boot sequence) still go straight to the console. `reboot` drains the ring with `sf::tasks::flush_log_sink()` before restarting so the last messages are not lost.
 
 Whether the period is kept is measured by `sf::LoopTimingMonitor` (`imu_loop_timing` from ImuTask, `control_loop_timing` from ControlTask, published every second, shown by the CLI `status` and carried by the status packet v4 of the WiFi capture). See `detailed_design.md` §8. NaN and infinity on the control path are counted per boundary by `sf::NonFiniteMonitor` (ControlTask publishes `nonfinite_status`, shown by the CLI `status` and carried by the status packet v4 of the WiFi capture), and at the motor command exit a motor whose value is not finite gets duty 0 (`detailed_design.md` §8).
+
+### Placement of the 400 Hz Task Code and the Instruction Cache
+
+To keep one 400 Hz ImuTask cycle (2.5 ms) within budget, the code of ImuTask and the ESKF is placed in IRAM (the internal RAM that holds code) and the instruction cache (the fast memory that holds copies of flash code) is set to 32 KB. The control laws, the state machine and the task structure are unchanged; only where the code lives and the cache size change.
+
+| Item | Content |
+|------|---------|
+| Code placed in IRAM | `main/hot_iram.lf` (linker fragment): imu_task of libmain.a and all of libsf_estimator_eskf.a, .text only. Always on through LDFRAGMENTS in `main/CMakeLists.txt` |
+| Instruction cache | 32 KB (`CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB` in `sdkconfig.defaults`). Cost: about 16 KB of internal RAM |
+| Basis and measurements | Chapters 7 and 8 of `docs/hardware/mcu-memory.md`. The measurements are from builds of the experiment branch; the firmware in this form has not been measured yet |
 
 ### Components Without Dedicated Tasks
 

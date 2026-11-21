@@ -31,7 +31,7 @@ StampFly のマイコンモジュール（M5StampS3。チップは ESP32-S3FN8�
 |------|------|
 | 外付け RAM（PSRAM） | 無い（eFuse の PSRAM の欄が None。データシートの ESP32-S3FN8 の型番表も PSRAM なし） |
 | フラッシュ | 8 MB をチップのパッケージに内蔵（Quad SPI） |
-| 内蔵 RAM | 512 KB のうち、今のファームで起動後に空いているのは約 37 KB（実測 36,736 B） |
+| 内蔵 RAM | 512 KB のうち、起動後に空いているのは、SNN を外す前のファームで約 37 KB（実測 36,736 B）。SNN をビルド時の選択にした後の値は 6 章・8 章 |
 | メモリの置き方と時間 | 400 Hz の処理の 1 周期の時間が、置き方で大きく変わる（実験では 1359〜1367 µs から 366 µs まで） |
 | 最適化の余地 | SRAM の領域は使い切っているが、既定の構成で使わない SNN（スパイキングニューラルネットワーク）が約 31 KB を占める。スタックは設定値 106,496 B に対し、床の上の使用量の最大の合計が 41,884 B（8 章） |
 
@@ -268,7 +268,7 @@ SNN について。
 
 スタックとは、関数呼び出しの途中経過や局所変数を置く、タスクごとの作業領域のことである。タスクとは、FreeRTOS（組み込み向けの OS）が並行して動かす処理の単位のことである。
 
-設定値は `firmware/vehicle/main/config.hpp` の `STACK_*`。実測は 2026-11-21、実験ブランチのコミット f2f4b199 の `stack` コマンドによる（記録 `logs/checkout/stack_floor_1.txt`、Git の管理外）。単位は B。空きの最小は、起動以降で空きが最も小さくなったときの残りである。使用量の最大は、設定値から空きの最小を引いた値（計算）である。
+設定値は `firmware/vehicle/main/config.hpp` の `STACK_*`。実測は 2026-11-21、実験ブランチのコミット f2f4b199 の `stack` コマンドによる（このコマンドは fix/flight-safety に取り込み済み。記録 `logs/checkout/stack_floor_1.txt`、Git の管理外）。単位は B。空きの最小は、起動以降で空きが最も小さくなったときの残りである。使用量の最大は、設定値から空きの最小を引いた値（計算）である。
 
 | タスク | 設定値 | 空きの最小 | 使用量の最大 | コア | 優先度 |
 |--------|--------|-----------|--------------|------|--------|
@@ -347,8 +347,13 @@ ESP-IDF 側のスタックの設定値は、main タスク 3,584 B、esp_timer 3
 | CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE | 4096 |
 | CONFIG_NVS_DEFAULT_PART_SIZE | 0x6000 |
 | CONFIG_COMPILER_OPTIMIZATION_PERF | y |
+| CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB | y（採用に伴う追加。8 章） |
 
-命令キャッシュ・データキャッシュの大きさと、400 Hz の制御経路のコードの置き場所についての指定は無い。ESP-IDF の既定のままで、自前のコードはすべてフラッシュ上にある。
+上の表のうち最後の 1 行は、2026-11-21 の採用決定に伴って fix/flight-safety の `sdkconfig.defaults` に加える設定である。表の他の行と「28 行」は、この追加の前に数えたものである。
+
+ImuTask と ESKF のコードは、リンカフラグメント `firmware/vehicle/main/hot_iram.lf` で IRAM に置く（対象は libmain.a の imu_task と libsf_estimator_eskf.a の全部、.text のみ。`main/CMakeLists.txt` の LDFRAGMENTS から無条件で入る）。命令キャッシュ 32 KB と IRAM 配置の根拠と測定は 7 章・8 章にある。
+
+データキャッシュの大きさの指定は無く、ESP-IDF の既定のままである。以下の「ビルドからの内訳」の表と本節の他の記述（`IRAM_ATTR` の指定は 0 件など）は、この採用の前のコミット 53553678 のビルドのものである。
 
 ### 起動時のヒープの領域
 
@@ -388,7 +393,7 @@ ESP-IDF 側のスタックの設定値は、main タスク 3,584 B、esp_timer 3
 | 状態 | 床の上、ARM していない、電池あり、全センサ動作、USB コンソールのみ接続 |
 | 測る時刻 | 起動 10 s 後と 40 s 後 |
 | 値の意味 | `status` コマンドの `heap` 行。MALLOC_CAP_INTERNAL と MALLOC_CAP_8BIT を満たす内蔵 RAM の空き |
-| 注意 | `heap` 行は実験ブランチ exp/imu-cycle-budget-20261120 のコミット 3b8b0212 で追加した。fix/flight-safety にはまだ無い |
+| 注意 | `heap` 行は実験ブランチ exp/imu-cycle-budget-20261120 のコミット 3b8b0212 で追加した。測定時は実験ブランチのビルドである。fix/flight-safety には取り込み済み |
 
 ### 4 つのファームの結果
 
@@ -431,7 +436,7 @@ ESP-IDF 側のスタックの設定値は、main タスク 3,584 B、esp_timer 3
 
 ## 7. メモリの置き方と処理時間
 
-**状態: 検討中。** 次の表は実験の結果であり、採用するかどうかは決まっていない。
+**状態: 命令キャッシュ 32 KB と、ImuTask・ESKF のコードの IRAM 配置は採用を決め、fix/flight-safety に実装した（8 章）。** 次の表は、実験ブランチでの測定の結果である。
 
 ### 命令キャッシュに収まらないコード
 
@@ -453,7 +458,7 @@ ESKF とは、機体の姿勢・位置を推定するフィルタ（誤差状態
 | ImuTask と ESKF を IRAM | 483 µs | 0 % | 制御タスクの起床（待ち状態から実行可能になること）の遅れ 0 % |
 | 両方 | 366 µs | 記載なし | コンソールは起動しない |
 
-測定条件は、2026-11-20、床の上、ARM していない、ハブ経由の USB である。ImuTask は 400 Hz で動き、1 周期の予算は 2500 µs（400 Hz の周期は 1/400 s = 2500 µs で、計算）である。詳細の記録は Git の管理外（`logs/checkout/`）にある。実験スイッチは実験ブランチのコミット f6db9203 から 3b8b0212 にある。
+測定条件は、2026-11-20、床の上、ARM していない、ハブ経由の USB である。ImuTask は 400 Hz で動き、1 周期の予算は 2500 µs（400 Hz の周期は 1/400 s = 2500 µs で、計算）である。詳細の記録は Git の管理外（`logs/checkout/`）にある。測定は実験ブランチのビルドで、IRAM 配置は実験スイッチ `-D SF_EXP_HOT_IRAM=1` と手元の sdkconfig の書き換えで有効にした（実験スイッチは実験ブランチのコミット f6db9203 から 3b8b0212 にある）。fix/flight-safety では実験スイッチを使わず、常時有効である。この形のファームウェアでの測定はまだ無い（9 章）。
 
 ### 速度とメモリの引き換え
 
@@ -466,13 +471,13 @@ ESP-IDF の文書は次のように述べている。
 
 ## 8. 最適化の候補
 
-**状態: 検討中。どれも採用は決まっていない。** 見込みは条件が異なるため、足し算で 1 つの数字にまとめない。
+**状態: SNN のビルド時の選択、命令キャッシュ 32 KB、ImuTask と ESKF の IRAM 配置の 3 項目は fix/flight-safety に実装した（開発者の採用決定 2026-11-21）。効果が小さかった候補（観測を 1 周期 1 種類に絞る、読み出しの重複を減らす、気圧を ImuTask から外す、ESKF の計算の省略）は採用しない。スタックの見直しなどの他の候補は検討中。** 見込みは条件が異なるため、足し算で 1 つの数字にまとめない。
 
 ### 候補の表
 
 | 候補 | 見込み | 動作への影響 | 確かめること |
 |------|--------|--------------|--------------|
-| SNN を既定のビルドから外す（ビルド時の選択にする）。実験ブランチで実装済み（コミット e67a2fb9、`CONFIG_SF_ENABLE_SNN`、既定は無効）。実機で測った空き（2026-11-21、床の上、ARM していない、起動 10 s 後 / 40 s 後）は 67,504 / 67,516 B、起動以降の最小 66,228 B、最大の連続した塊 31,744 B で、外す前（36,736 B、6 章）より約 30.8 KB 多い（計算） | 約 31 KB（15,568 + 15,464 B、計算） | 既定の構成では変化なし。既定のビルドでは SNN を選べなくなる | SNN を使う SILS のシナリオ・テストの有無、教育・研究用として残す方針 |
+| SNN を既定のビルドから外す（ビルド時の選択にする）。fix/flight-safety に実装済み（`CONFIG_SF_ENABLE_SNN`、既定は無効。元は実験ブランチのコミット e67a2fb9。下の実測は実験ブランチのビルド）。実機で測った空き（2026-11-21、床の上、ARM していない、起動 10 s 後 / 40 s 後）は 67,504 / 67,516 B、起動以降の最小 66,228 B、最大の連続した塊 31,744 B で、外す前（36,736 B、6 章）より約 30.8 KB 多い（計算） | 約 31 KB（15,568 + 15,464 B、計算） | 既定の構成では変化なし。既定のビルドでは SNN を選べなくなる | SNN を使う SILS のシナリオ・テストの有無、教育・研究用として残す方針 |
 | SNN の配列の上限を実際の構成に合わせる | 1 個あたり 8〜10 KB（概算、未検証） | SNN は選べるまま | 上限を使う別の構成が無いか |
 | タスクのスタックを実測に合わせる | 下の試算で 33,792 B（床の上の実測に基づく） | あふれの危険。CommTask は逆に増やす候補 | ARM・飛行・WiFi 接続・較正を行った後の実測 |
 | 地磁気の較正用の標本バッファを較正のときだけ確保する | 約 6,000 B | 較正の開始時に確保に失敗しうる | 較正は地上だけか、標本数 500 の根拠 |
@@ -506,7 +511,7 @@ ESP-IDF の文書は次のように述べている。
 
 7 章の「命令キャッシュ 32 KB」（追加 約 16 KB）と「ImuTask と ESKF を IRAM」（追加 約 19 KB）の併用。併用したビルドは、今の空きではコンソールを起動できなかった（6 章）。
 
-SNN を既定のビルドから外したうえで併用したビルド（実験ブランチのコミット af89b3c4 の状態、`CONFIG_SF_ENABLE_SNN` 無効 + 命令キャッシュ 32 KB + `SF_EXP_HOT_IRAM`）を実機で測った（2026-11-21、床の上、ARM していない、電池あり、全センサ動作、ハブ経由の USB、6 回の起動。測り方は 7 章と同じ）。
+SNN を既定のビルドから外したうえで併用したビルド（実験ブランチのコミット af89b3c4 の状態、`CONFIG_SF_ENABLE_SNN` 無効 + 命令キャッシュ 32 KB + 実験スイッチ `SF_EXP_HOT_IRAM`）を実機で測った（2026-11-21、床の上、ARM していない、電池あり、全センサ動作、ハブ経由の USB、6 回の起動。測り方は 7 章と同じ）。
 
 | ファーム | 400 Hz の ImuTask の 1 周期の処理時間の平均（最小〜最大） | 60 s の窓の最大（最小〜最大） | 予算超えの周期 | 制御タスクの起床の遅れ | 空き / 起動以降の最小 / 最大の連続した塊 | コンソール |
 |----------|------|------|------|------|------|------|
@@ -515,7 +520,7 @@ SNN を既定のビルドから外したうえで併用したビルド（実験�
 
 SNN を外す前は、同じ併用でコンソールを起動できなかった（6 章）。この値も床の上のもので、ARM 中・飛行中・WiFi 接続時は未確認である。
 
-**採用の決定（開発者、2026-11-21）: この組み合わせ（SNN はビルド時の選択で既定は無効、命令キャッシュ 32 KB、ImuTask と ESKF を IRAM に置く）を採用する。** 実験用のスイッチを外した形での実装と、`fix/flight-safety` への取り込みは未着手である。効果が小さかった候補（観測を 1 周期 1 種類に絞る、読み出しの重複を減らす、気圧を ImuTask から外す、ESKF の計算の省略）は採用の対象に含めない。
+**採用の決定（開発者、2026-11-21）: この組み合わせ（SNN はビルド時の選択で既定は無効、命令キャッシュ 32 KB、ImuTask と ESKF を IRAM に置く）を採用する。** `fix/flight-safety` には、実験スイッチなしの常時有効の形で実装した（SNN の選択、命令キャッシュは `sdkconfig.defaults`、IRAM 配置は `hot_iram.lf`）。上の測定は実験ブランチのビルドであり、この形のファームウェアでの測定はまだ無い（9 章）。効果が小さかった候補（観測を 1 周期 1 種類に絞る、読み出しの重複を減らす、気圧を ImuTask から外す、ESKF の計算の省略）は採用しない。これらは実験ブランチには残っていて、fix/flight-safety には入れない。control_task や BMI270 の読み出しのコードを IRAM に足すかどうかは未決である（開発者の判断待ち）。
 
 ## 9. 未確認の事項と次に確かめること
 
@@ -542,7 +547,11 @@ SNN を外す前は、同じ併用でコンソールを起動できなかった�
 | 前方 ToF の搭載の判定の時点 | 未確認 | ToF のコードで確かめる |
 | ログの欠落への余裕（リング・待ち行列を縮めたときの欠落） | 未確認 | 欠落を実測する |
 | スタックの設定値の根拠（LogTask 以外） | 見つからなかった | 設計した人に確かめる |
-| RAM を多く使う置き方（命令キャッシュの拡大・コードを IRAM に置く）を採用するか | 検討中 | 空きと処理時間の表（6・7 章）と最適化の候補（8 章）を基準に判断する |
+| RAM を多く使う置き方（命令キャッシュの拡大・コードを IRAM に置く） | 採用を決定（2026-11-21）、fix/flight-safety に実装 | 下の 4 項目の確認 |
+| 正式な形（実験スイッチなし、常時有効）のファームウェアでの再測定（処理時間・空き・コンソール） | 未確認（測定は実験ブランチのビルドのもの） | 同じ測り方（7 章）で測り、実験ブランチの値と比べる |
+| ARM 中・飛行中・WiFi 接続時の、ImuTask の処理時間と空き | 未確認（床の上・ARM していない状態だけ測った） | それぞれの状態で、処理時間の統計と `heap` 行を読む |
+| IRAM に置く対象を広げるか（control_task、BMI270 の読み出し） | 未決（開発者の判断待ち） | 広げた分の空きの減りと処理時間を測って判断する |
+| 講習用ファームウェア（`firmware/workshop`）への適用 | 未適用・未決。workshop は自前の `sdkconfig.defaults` と main を持ち、命令キャッシュ 32 KB も IRAM 配置も受け継がない（ソースの確認、2026-11-21）。`sf app build` は機体ファームウェアの設定と main を使うので受け継ぐ（ビルドのマップで確認） | workshop の空きと処理時間を測り、適用するかを開発者が決める |
 
 ---
 
@@ -579,7 +588,7 @@ Units are kept as in the original material. B is bytes, KB follows the source's 
 |------|---------|
 | External RAM (PSRAM) | None (the PSRAM fields in the eFuse are None; the part-number table of the datasheet also lists no PSRAM for the ESP32-S3FN8) |
 | Flash | 8 MB inside the chip package (Quad SPI) |
-| Internal RAM | Of 512 KB, about 37 KB is free after boot with the current firmware (measured 36,736 B) |
+| Internal RAM | Of 512 KB, the amount free after boot is about 37 KB in the firmware before the SNN was removed (measured 36,736 B). For the value after the SNN became a build-time option see chapters 6 and 8 |
 | Memory placement and time | The time of one 400 Hz processing cycle depends strongly on placement (in the experiments, from 1359-1367 µs down to 366 µs) |
 | Room for optimization | Every region of the SRAM is in use, but the SNN (spiking neural network), which the default configuration does not use, occupies about 31 KB. Against configured stacks of 106,496 B, the sum of the maximum usage on the floor is 41,884 B (chapter 8) |
 
@@ -818,7 +827,7 @@ About the SNN.
 
 A stack is the per-task work area that holds the progress of function calls and local variables. A task is the unit of processing that FreeRTOS (an embedded operating system) runs concurrently.
 
-The settings are the `STACK_*` in `firmware/vehicle/main/config.hpp`. The measurements are from 2026-11-21 with the `stack` command of commit f2f4b199 on the experiment branch (record `logs/checkout/stack_floor_1.txt`, outside Git). Units are B. The minimum free is the remainder at the moment when the free stack was smallest since boot. The maximum usage is the setting minus the minimum free (calculated).
+The settings are the `STACK_*` in `firmware/vehicle/main/config.hpp`. The measurements are from 2026-11-21 with the `stack` command of commit f2f4b199 on the experiment branch (this command is already in fix/flight-safety; record `logs/checkout/stack_floor_1.txt`, outside Git). Units are B. The minimum free is the remainder at the moment when the free stack was smallest since boot. The maximum usage is the setting minus the minimum free (calculated).
 
 | Task | Setting | Minimum free | Maximum usage | Core | Priority |
 |------|---------|--------------|---------------|------|----------|
@@ -897,8 +906,13 @@ Of `firmware/vehicle/sdkconfig.defaults` (28 lines excluding comments and blank 
 | CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE | 4096 |
 | CONFIG_NVS_DEFAULT_PART_SIZE | 0x6000 |
 | CONFIG_COMPILER_OPTIMIZATION_PERF | y |
+| CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB | y (added with the adoption; chapter 8) |
 
-There is no specification of the instruction and data cache sizes, nor of where the code of the 400 Hz control path is placed. They remain at the ESP-IDF defaults, and all of the project's own code is in flash.
+The last row of the table above is the setting added to `sdkconfig.defaults` in fix/flight-safety with the adoption decision of 2026-11-21. The other rows and the "28 lines" were counted before this addition.
+
+The code of ImuTask and the ESKF is placed in IRAM by the linker fragment `firmware/vehicle/main/hot_iram.lf` (targets: imu_task in libmain.a and all of libsf_estimator_eskf.a, .text only; it is included unconditionally through LDFRAGMENTS in `main/CMakeLists.txt`). The basis and measurements for the 32 KB instruction cache and the IRAM placement are in chapters 7 and 8.
+
+The data cache size is not specified and stays at the ESP-IDF default. The "Breakdown from the Build" table and the other statements in this chapter (for example 0 `IRAM_ATTR` specifications) are from the build of commit 53553678, before this adoption.
 
 ### Heap Regions at Boot
 
@@ -938,7 +952,7 @@ The total of the configured stack sizes is listed as one candidate destination o
 | State | On the floor, not armed, battery connected, all sensors running, only the USB console connected |
 | Measurement time | 10 s and 40 s after boot |
 | Meaning of the value | The `heap` line of the `status` command: free internal RAM satisfying MALLOC_CAP_INTERNAL and MALLOC_CAP_8BIT |
-| Note | The `heap` line was added in commit 3b8b0212 of the experiment branch exp/imu-cycle-budget-20261120. It is not yet in fix/flight-safety |
+| Note | The `heap` line was added in commit 3b8b0212 of the experiment branch exp/imu-cycle-budget-20261120. The measurements are from builds of the experiment branch. It is already in fix/flight-safety |
 
 ### Results for Four Firmwares
 
@@ -981,7 +995,7 @@ No "upper limit of what can be added" is set from these measurements. Points rem
 
 ## 7. Memory Placement and Processing Time
 
-**Status: under consideration.** The tables below are experimental results, and whether to adopt any of them has not been decided.
+**Status: the 32 KB instruction cache and the placement of the ImuTask and ESKF code in IRAM are decided for adoption and implemented in fix/flight-safety (chapter 8).** The tables below are measurements on the experiment branch.
 
 ### Code That Does Not Fit in the Instruction Cache
 
@@ -1003,7 +1017,7 @@ ESKF is the filter that estimates the attitude and position of the vehicle (erro
 | ImuTask and ESKF in IRAM | 483 µs | 0 % | Control-task wake-up (leaving the waiting state to become runnable) delay 0 % |
 | Both | 366 µs | Not recorded | Console does not start |
 
-The measurement conditions are 2026-11-20, on the floor, not armed, USB through a hub. ImuTask runs at 400 Hz and the budget of one cycle is 2500 µs (the period of 400 Hz is 1/400 s = 2500 µs, calculated). The detailed record is outside Git (`logs/checkout/`). The experiment switches are in the experiment-branch commits f6db9203 to 3b8b0212.
+The measurement conditions are 2026-11-20, on the floor, not armed, USB through a hub. ImuTask runs at 400 Hz and the budget of one cycle is 2500 µs (the period of 400 Hz is 1/400 s = 2500 µs, calculated). The detailed record is outside Git (`logs/checkout/`). The measurements are from builds of the experiment branch; the IRAM placement was enabled with the experiment switch `-D SF_EXP_HOT_IRAM=1` and by rewriting the local sdkconfig (the experiment switches are in the experiment-branch commits f6db9203 to 3b8b0212). In fix/flight-safety no experiment switch is used and the placement is always on. No measurement of the firmware in this form exists yet (chapter 9).
 
 ### Trade-off between Speed and Memory
 
@@ -1016,13 +1030,13 @@ Putting the free memory of chapter 6 together with the processing times of this 
 
 ## 8. Optimization Candidates
 
-**Status: under consideration. None of them has been decided for adoption.** The expected savings are not added into a single number because their conditions differ.
+**Status: three items are implemented in fix/flight-safety (SNN as a build-time option, 32 KB instruction cache, ImuTask and ESKF in IRAM; developer's adoption decision of 2026-11-21). The candidates with a small effect (one observation kind per cycle, fewer duplicate reads, baro off ImuTask, the ESKF arithmetic savings) are not adopted. The other candidates, such as the stack review, are under consideration.** The expected savings are not added into a single number because their conditions differ.
 
 ### Table of Candidates
 
 | Candidate | Expected saving | Effect on behavior | What to check |
 |-----------|-----------------|--------------------|---------------|
-| Remove the SNN from the default build (make it a build-time choice). Implemented on the experiment branch (commit e67a2fb9, `CONFIG_SF_ENABLE_SNN`, off by default). Free memory measured on the real vehicle (2026-11-21, on the floor, not armed, 10 s / 40 s after boot) is 67,504 / 67,516 B, minimum since boot 66,228 B, largest block 31,744 B, about 30.8 KB more than before (36,736 B, chapter 6; calculated) | About 31 KB (15,568 + 15,464 B, calculated) | No change in the default configuration. The SNN can no longer be selected in the default build | Whether any SILS scenario or test uses the SNN; the policy of keeping it for education and research |
+| Remove the SNN from the default build (make it a build-time choice). Implemented in fix/flight-safety (`CONFIG_SF_ENABLE_SNN`, off by default; originally experiment-branch commit e67a2fb9; the measurements below are from a build of the experiment branch). Free memory measured on the real vehicle (2026-11-21, on the floor, not armed, 10 s / 40 s after boot) is 67,504 / 67,516 B, minimum since boot 66,228 B, largest block 31,744 B, about 30.8 KB more than before (36,736 B, chapter 6; calculated) | About 31 KB (15,568 + 15,464 B, calculated) | No change in the default configuration. The SNN can no longer be selected in the default build | Whether any SILS scenario or test uses the SNN; the policy of keeping it for education and research |
 | Fit the SNN array upper limits to the actual configuration | 8-10 KB each (rough estimate, unverified) | The SNN stays selectable | Whether another configuration uses the upper limits |
 | Fit the task stacks to the measurements | 33,792 B in the estimate below (based on measurements on the floor) | Risk of overflow. CommTask is rather a candidate to increase | Measurements after arming, flight, WiFi connection and calibration |
 | Allocate the magnetometer calibration sample buffer only during calibration | About 6,000 B | Allocation may fail when calibration starts | Whether calibration happens only on the ground; the basis for 500 samples |
@@ -1056,7 +1070,7 @@ Putting the free memory of chapter 6 together with the processing times of this 
 
 Using together the "instruction cache 32 KB" (about 16 KB more) and "ImuTask and ESKF in IRAM" (about 19 KB more) of chapter 7. The build with both could not start the console with the current free memory (chapter 6).
 
-The combination was measured on the real vehicle on top of the build without the SNN (state of commit af89b3c4 on the experiment branch: `CONFIG_SF_ENABLE_SNN` off + 32 KB instruction cache + `SF_EXP_HOT_IRAM`; 2026-11-21, on the floor, not armed, battery connected, all sensors running, USB through a hub, 6 boots; same method as chapter 7).
+The combination was measured on the real vehicle on top of the build without the SNN (state of commit af89b3c4 on the experiment branch: `CONFIG_SF_ENABLE_SNN` off + 32 KB instruction cache + the experiment switch `SF_EXP_HOT_IRAM`; 2026-11-21, on the floor, not armed, battery connected, all sensors running, USB through a hub, 6 boots; same method as chapter 7).
 
 | Firmware | Mean time of one 400 Hz ImuTask cycle (min-max) | Maximum in a 60 s window (min-max) | Cycles over the budget | Late wake-ups of the control task | Free / minimum since boot / largest block | Console |
 |----------|------|------|------|------|------|------|
@@ -1065,7 +1079,7 @@ The combination was measured on the real vehicle on top of the build without the
 
 Before the SNN was removed the same combination could not start the console (chapter 6). These values are also from the floor; armed, in flight and with WiFi clients are not confirmed.
 
-**Decision to adopt (developer, 2026-11-21): this combination is adopted (the SNN as a build-time option, off by default; 32 KB instruction cache; ImuTask and the ESKF placed in IRAM).** The implementation without experiment switches and the merge into `fix/flight-safety` have not started. The candidates with a small effect (one observation kind per cycle, fewer duplicate reads, baro off ImuTask, the ESKF arithmetic savings) are not part of the adoption.
+**Decision to adopt (developer, 2026-11-21): this combination is adopted (the SNN as a build-time option, off by default; 32 KB instruction cache; ImuTask and the ESKF placed in IRAM).** It is implemented in `fix/flight-safety` without experiment switches, always on (the SNN choice; the instruction cache in `sdkconfig.defaults`; the IRAM placement in `hot_iram.lf`). The measurements above are from builds of the experiment branch, and no measurement of the firmware in this form exists yet (chapter 9). The candidates with a small effect (one observation kind per cycle, fewer duplicate reads, baro off ImuTask, the ESKF arithmetic savings) are not adopted; they remain on the experiment branch and are not put into fix/flight-safety. Whether to add the control_task and BMI270 read code to IRAM is undecided (waiting for the developer's decision).
 
 ## 9. Unconfirmed Items and What to Check Next
 
@@ -1092,4 +1106,8 @@ Before the SNN was removed the same combination could not start the console (cha
 | At what point the presence of the front ToF is determined | Unconfirmed | Check in the ToF code |
 | Margin against log loss (loss when the rings and queue are shrunk) | Unconfirmed | Measure the loss |
 | Basis for the configured stack sizes (other than LogTask) | Not found | Ask the designer |
-| Whether to adopt placements that trade internal RAM for speed (cache, IRAM) | Under consideration | Decide using the tables of free memory and processing time (chapters 6 and 7) and the optimization candidates (chapter 8) |
+| Placements that trade internal RAM for speed (larger cache, code in IRAM) | Adoption decided (2026-11-21), implemented in fix/flight-safety | Check the four items below |
+| Re-measurement of the firmware in its final form (no experiment switch, always on): processing time, free memory, console | Unconfirmed (the measurements are from builds of the experiment branch) | Measure with the same method (chapter 7) and compare with the experiment-branch values |
+| ImuTask processing time and free memory while armed, in flight and with WiFi connected | Unconfirmed (only on the floor, not armed, was measured) | Read the timing statistics and the `heap` line in each state |
+| Whether to widen the code placed in IRAM (control_task, BMI270 read) | Undecided (waiting for the developer's decision) | Measure the loss of free memory and the processing time of the widened placement, then decide |
+| Applying it to the workshop firmware (`firmware/workshop`) | Not applied, undecided. The workshop has its own `sdkconfig.defaults` and main, so it inherits neither the 32 KB instruction cache nor the IRAM placement (checked in the source, 2026-11-21). `sf app build` uses the settings and main of the vehicle firmware, so it inherits both (checked in the map of the build) | Measure the free memory and processing time of the workshop firmware; the developer decides whether to apply it |

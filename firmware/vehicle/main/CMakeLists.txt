@@ -35,6 +35,9 @@ idf_component_register(
          "../tasks/api_task.cpp"
         ${SF_APP_SRCS}
     INCLUDE_DIRS "." "../tasks" ${SF_APP_INCS}
+    # Linker fragment: places the 400 Hz path (ImuTask, ESKF) code in IRAM.
+    # リンカフラグメント: 400 Hz 経路（ImuTask・ESKF）のコードを IRAM に置く。
+    LDFRAGMENTS "hot_iram.lf"
     REQUIRES
         esp_timer
         nvs_flash
