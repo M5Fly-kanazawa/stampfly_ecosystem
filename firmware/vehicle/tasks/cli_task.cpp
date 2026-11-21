@@ -1273,6 +1273,112 @@ int cmd_magcal(int argc, char** argv)
     return 0;
 }
 
+/// One row of the `stack` table: the task name and the stack size it was created with
+/// (kStackSizeUnknown for ESP-IDF tasks, whose size is not readable without the trace facility).
+/// `stack` 表の 1 行: タスク名と生成時のスタックの大きさ（ESP-IDF のタスクは、トレース機能なしでは
+/// 大きさを読めないので kStackSizeUnknown）。
+struct StackRow {
+    const char* name;
+    uint32_t    size_bytes;
+};
+
+constexpr uint32_t kStackSizeUnknown = 0;
+
+// Own tasks first (sizes from config.hpp, names as created in tasks.cpp), then ESP-IDF tasks.
+// A name that cannot be looked up in this build is skipped.
+// 自前のタスク（大きさは config.hpp、名前は tasks.cpp の生成時のもの）、続いて ESP-IDF のタスク。
+// このビルドで名前を引けないものは飛ばす。
+const StackRow kStackRows[] = {
+    {"ImuTask",        config::STACK_IMU},
+    {"ControlTask",    config::STACK_CONTROL},
+    {"StateTask",      config::STACK_STATE},
+    {"FlowTask",       config::STACK_OPTFLOW},
+    {"MagTask",        config::STACK_MAG},
+    {"BaroTask",       config::STACK_BARO},
+    {"TofTask",        config::STACK_TOF},
+    {"PowerTask",      config::STACK_POWER},
+    {"CommTask",       config::STACK_COMM},
+    {"TelemetryTask",  config::STACK_TELEMETRY},
+    {"ButtonTask",     config::STACK_BUTTON},
+    {"NotifyTask",     config::STACK_NOTIFY},
+    {"CLITask",        config::STACK_CLI},
+    {"LogTask",        config::STACK_LOG},
+    {"ApiTask",        config::STACK_API},
+    {"TelloStateTask", config::STACK_TELLO_STATE},
+    {"main",           kStackSizeUnknown},
+    {"esp_timer",      kStackSizeUnknown},
+    {"ipc0",           kStackSizeUnknown},
+    {"ipc1",           kStackSizeUnknown},
+    {"IDLE0",          kStackSizeUnknown},
+    {"IDLE1",          kStackSizeUnknown},
+    {"Tmr Svc",        kStackSizeUnknown},
+    {"wifi",           kStackSizeUnknown},
+    {"sys_evt",        kStackSizeUnknown},
+    {"tiT",            kStackSizeUnknown},
+    {"console_repl",   kStackSizeUnknown},
+};
+
+/// Print one `stack` row and add it to the totals. In ESP-IDF uxTaskGetStackHighWaterMark()
+/// returns BYTES, not words (see its comment in freertos/task.h: "minimum free stack space ...
+/// in bytes (as opposed to words in the standard FreeRTOS documentation)").
+/// `stack` の 1 行を出し、合計に足す。ESP-IDF では uxTaskGetStackHighWaterMark() の戻り値は
+/// ワードではなくバイト（freertos/task.h のコメント: "in bytes (as opposed to words ...)"）。
+static void printStackRow(const StackRow& row, TaskHandle_t handle,
+                          uint32_t& total_size, uint32_t& total_min_free)
+{
+    const uint32_t min_free = static_cast<uint32_t>(uxTaskGetStackHighWaterMark(handle));
+    const BaseType_t core = xTaskGetCoreID(handle);
+    char core_text[16];
+    if (core == tskNO_AFFINITY) {
+        std::snprintf(core_text, sizeof(core_text), "-");
+    } else {
+        std::snprintf(core_text, sizeof(core_text), "%d", static_cast<int>(core));
+    }
+    total_min_free += min_free;
+    if (row.size_bytes == kStackSizeUnknown) {
+        std::printf("          %-14s %6s %9lu %9s %6s %4lu\n", row.name, "-",
+                    static_cast<unsigned long>(min_free), "-", core_text,
+                    static_cast<unsigned long>(uxTaskPriorityGet(handle)));
+        return;
+    }
+    total_size += row.size_bytes;
+    std::printf("          %-14s %6lu %9lu %9lu %6s %4lu\n", row.name,
+                static_cast<unsigned long>(row.size_bytes), static_cast<unsigned long>(min_free),
+                static_cast<unsigned long>(row.size_bytes - min_free), core_text,
+                static_cast<unsigned long>(uxTaskPriorityGet(handle)));
+}
+
+/// `stack` — per-task stack usage (bytes). DISARMED ONLY: looking a task up by name walks the
+/// task lists with the scheduler held briefly, which could delay the 400 Hz tasks, so it is
+/// refused while armed. Display only. The trace facility is off in this build, so tasks are
+/// found by name (xTaskGetHandle) instead of uxTaskGetSystemState().
+/// `stack` — タスクごとのスタック使用量（バイト）。**disarmed 限定**: 名前でタスクを引くと
+/// スケジューラを短く止めてタスク一覧をたどるので 400 Hz のタスクを遅らせうる。armed 中は拒否する。
+/// 表示のみ。このビルドはトレース機能が無効なので、uxTaskGetSystemState() ではなく
+/// 名前引き（xTaskGetHandle）で探す。
+int cmd_stack(int argc, char** argv)
+{
+    (void)argc;
+    (void)argv;
+    if (sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state))) {
+        std::printf("refused: stack scan briefly holds the scheduler — land/disarm first\n");
+        return 1;
+    }
+    std::printf("stack   : name            size  min free  used max   core prio\n");
+    uint32_t total_size = 0;
+    uint32_t total_min_free = 0;
+    for (const StackRow& row : kStackRows) {
+        const TaskHandle_t handle = xTaskGetHandle(row.name);
+        if (handle != nullptr) {
+            printStackRow(row, handle, total_size, total_min_free);
+        }
+    }
+    std::printf("          total (sized) %lu B, min free sum (all listed) %lu B\n",
+                static_cast<unsigned long>(total_size),
+                static_cast<unsigned long>(total_min_free));
+    return 0;
+}
+
 /// `reboot` — restart the flight controller. DISARMED ONLY: the restart stops the motors at
 /// once, so it is refused with a message while armed, like `param save`.
 /// `reboot` — フライトコントローラを再起動する。**disarmed 限定**: 再起動はモータを即座に
@@ -1466,6 +1572,7 @@ const CliCommand kCommands[] = {
     {"motor",   "motor [test <1-4> <0-100> [sec]|all <0-100> [sec]|sweep [duty% sec]|stop] — bench test (disarmed)", &cmd_motor},
     {"wifi",    "wifi [show|mode <sta|ap>|ssid <name>|pass <secret>] — telemetry WiFi", &cmd_wifi},
     {"magcal",  "magcal [start|stop|status|save|clear] — magnetometer calibration", &cmd_magcal},
+    {"stack",   "Show every task's stack usage in bytes (disarmed only)", &cmd_stack},
     {"reboot",  "Reboot the flight controller",                  &cmd_reboot},
 };
 
