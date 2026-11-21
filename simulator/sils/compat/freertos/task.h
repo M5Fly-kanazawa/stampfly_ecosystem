@@ -87,3 +87,13 @@ static inline BaseType_t xTaskCreate(TaskFunction_t fn, const char* name, uint32
                                      void* param, UBaseType_t prio, TaskHandle_t* handle)
 { return xTaskCreatePinnedToCore(fn, name, stack, param, prio, handle, 0); }
 static inline UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t h) { (void)h; return 4096; }
+// Name lookup / priority / core for the CLI `stack` command: the host has no task list to scan,
+// so no name resolves (the command prints only its header and totals).
+// CLI の `stack` コマンド用の名前引き・優先度・コア。ホストには走査できるタスク一覧が無いので
+// どの名前も引けない（ヘッダと合計行だけが出る）。
+#ifndef tskNO_AFFINITY
+#define tskNO_AFFINITY ((BaseType_t)0x7FFFFFFF)
+#endif
+static inline TaskHandle_t xTaskGetHandle(const char* name) { (void)name; return (TaskHandle_t)0; }
+static inline UBaseType_t uxTaskPriorityGet(TaskHandle_t h) { (void)h; return 0; }
+static inline BaseType_t xTaskGetCoreID(TaskHandle_t h) { (void)h; return 0; }

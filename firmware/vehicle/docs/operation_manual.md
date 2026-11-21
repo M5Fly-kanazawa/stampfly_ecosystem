@@ -321,6 +321,7 @@ TAB で補完。
 | `led` | `<0-255>` | 本体 LED 輝度（NVS 保存）|
 | `motor` | `[test <1-4> <0-100> [秒]\|all <0-100> [秒]\|stop]` | **モータ単体テスト（disarmed 限定・要プロペラ除去）**。M1=FR M2=RR M3=RL M4=FL。最後の引数で回転時間（秒、0.1〜60、省略時 2 秒）。例: `motor test 1 30 5`。講習用ファームでも使える |
 | `magcal` | `[start\|stop\|status\|save\|clear]` | 地磁気のハード/ソフトアイアン校正（下記手順）|
+| `stack` | — | 全タスクのスタック使用量の表（単位はバイト）。**disarmed 限定**: ARM 中は `refused: stack scan briefly holds the scheduler — land/disarm first` で拒否する（名前でタスクを引くときスケジューラを短く止め、400 Hz のループを遅らせうるため）。読み方は下の「スタック使用量の見方」 |
 | `reboot` | — | 再起動。**disarmed 限定**: ARM 中は `refused: reboot stops the motors — land/disarm first` で拒否する（再起動はモータを即座に止めるため。`param save` の ARM 中の拒否と同じ形）|
 
 **下向き ToF の出力停止のときの `status` の行と `sensor tof` の 2 行目:**
@@ -368,6 +369,8 @@ ImuTask: over-budget cycles 142: flow+tof=88 flow+baro=21 flow=19 tof+mag=9 none
 | `cycles per boundary: estimate …, setpoint …, reference …, controller …, mixer …, motor …` | 境界ごとの、有限でない値があった周期の数 | 0 でない最も上流の境界が発生箇所の手がかり（NaN は下流の境界すべてに伝わる） |
 
 **内蔵メモリの空きの見方**（`status` の `heap` 行）: `heap    : internal free A B, minimum since boot M B, largest block L B`。単位はバイト。`internal free` は今の内蔵 RAM の空きの合計、`minimum since boot` は起動以降で空きが最も少なくなった値、`largest block` は今確保できる最大の連続した 1 塊。内蔵 RAM は小さく、`minimum since boot` が小さいと、新しいタスクの生成や通信（WiFi など）の確保が失敗しうる。`largest block` が小さいと、空きの合計が足りていても大きな確保（タスクのスタックなど）は失敗する。合否の目安の数値はまだ無い（実測待ち）。
+
+**スタック使用量の見方**（`stack` コマンド）: 1 タスク 1 行で `name  size  min free  used max  core  prio` を出す。単位はすべてバイト。`size` は確保したスタックの大きさ（自前のタスクは `config.hpp` の値。ESP-IDF が作るタスクは取得できないので `-`）、`min free` は起動以降にスタックの空きが最も少なくなったときの残り（`uxTaskGetStackHighWaterMark()` の値。ESP-IDF ではワードではなくバイト）、`used max` は `size − min free`（`size` が分かるタスクだけ）、`core` は動くコア（固定でなければ `-`）、`prio` は優先度。最後の行は、`size` が分かるタスクの `size` の合計と、表示した全タスクの `min free` の合計。表示するのは自前の 16 タスクと、名前で引けた ESP-IDF のタスク（`main`、`esp_timer`、`ipc0`、`ipc1`、`IDLE0`、`IDLE1`、`Tmr Svc`、`wifi`、`sys_evt`、`tiT`、`console_repl`）で、引けない名前の行は出ない。`min free` が小さいタスクはスタックのあふれに近い。値は起動以降の最悪値なので、ARM・飛行・WiFi 接続・`param save` などを一通り行った後に、DISARM して読む。合否の目安の数値はまだ無い（実測待ち）。
 
 **USB ケーブルなしで診断を読む（WiFi 取得）**: 飛行中は USB ケーブルを付けないので、`status` の `loop` 行・`finite` 行も、USB コンソールのログ（状態遷移・「Landing detected (...)」・フェイルセーフ・拒否の理由）も見えない。同じ内容は WiFi 取得（`sf log wifi`）の一式に入る。飛ばす前に飛行時間より長い取得を始め（`sf log wifi -d 120 -o flight1`）、着陸後に次のように読む。
 
@@ -682,6 +685,7 @@ completes.
 | `led` | `<0-255>` | Body LED brightness (NVS) |
 | `motor` | `[test <1-4> <0-100> [sec]\|all <0-100> [sec]\|stop]` | **Bench motor test (DISARMED only — props off!)**. M1=FR M2=RR M3=RL M4=FL. Optional last argument = run time in seconds (0.1–60, default 2). Example: `motor test 1 30 5`. Also works on the workshop firmware |
 | `magcal` | `[start\|stop\|status\|save\|clear]` | Magnetometer hard/soft-iron calibration: `start` → rotate the craft in all orientations (figure-8, ~100+ samples) → `stop` (sphere fit) → `save` (NVS). Yaw aiding engages at the next boot; enable fusion with `param set eskf.use_mag 1`. Uncalibrated mag is automatically kept OUT of the fusion |
+| `stack` | — | Table of the stack usage of every task (units: bytes). **DISARMED only**: while armed it is refused with `refused: stack scan briefly holds the scheduler — land/disarm first` (looking a task up by name holds the scheduler briefly, which could delay the 400 Hz loop). See "Reading the stack usage" below |
 | `reboot` | — | Restart the flight controller. **DISARMED only**: while armed it is refused with `refused: reboot stops the motors — land/disarm first` (the restart stops the motors at once; the same form as the refusal of `param save` while armed) |
 
 **The `status` lines during a downward-ToF silence episode, and the second line of `sensor tof`:**
@@ -729,6 +733,8 @@ How to check: (1) After boot, run `status` and see that `late` of `imu all` and 
 | `cycles per boundary: estimate ..., setpoint ..., reference ..., controller ..., mixer ..., motor ...` | per boundary, the number of cycles that held a non-finite value | the most upstream boundary that is not 0 points to where it came from (a NaN travels to every boundary downstream) |
 
 **Reading the free internal memory** (the `heap` line of `status`): `heap    : internal free A B, minimum since boot M B, largest block L B`. Units are bytes. `internal free` is the total free internal RAM now, `minimum since boot` is the lowest the free amount has been since boot, and `largest block` is the largest single contiguous block that can be allocated now. Internal RAM is small: when `minimum since boot` is small, allocations for a new task or for communication (WiFi etc.) can fail; when `largest block` is small, a large allocation (a task stack, for example) fails even if the total is enough. No pass/fail figure exists yet (awaiting measurements).
+
+**Reading the stack usage** (the `stack` command): one row per task: `name  size  min free  used max  core  prio`. All sizes are in bytes. `size` is the allocated stack (for our own tasks the value in `config.hpp`; `-` for ESP-IDF's tasks, which cannot be read), `min free` is the smallest remaining free stack since boot (the value of `uxTaskGetStackHighWaterMark()`; in ESP-IDF it is bytes, not words), `used max` is `size - min free` (only where `size` is known), `core` is the core it runs on (`-` if not pinned) and `prio` is the priority. The last line gives the sum of `size` over the tasks whose size is known and the sum of `min free` over all the rows shown. It lists our 16 tasks and the ESP-IDF tasks that can be found by name (`main`, `esp_timer`, `ipc0`, `ipc1`, `IDLE0`, `IDLE1`, `Tmr Svc`, `wifi`, `sys_evt`, `tiT`, `console_repl`); a name that cannot be found prints no row. A task with a small `min free` is close to overflowing its stack. The value is the worst case since boot, so read it after exercising ARM, flight, a WiFi connection, `param save` and so on, with the craft disarmed. No pass/fail figure exists yet (awaiting measurements).
 
 **Reading the diagnostics without a USB cable (WiFi capture):** in flight there is no USB cable, so neither the `loop` and `finite` lines of `status` nor the USB console log (state transitions, "Landing detected (...)", failsafe, reasons for refusals) can be seen. The same content is in the bundle of a WiFi capture (`sf log wifi`). Before the flight start a capture longer than the flight (`sf log wifi -d 120 -o flight1`) and read it after landing as follows.
 
