@@ -1,0 +1,22 @@
+# cli_mode.scn — the CLI `mode` selects STABILIZE / ACRO in ARMED_GROUND; altitude modes cannot be selected
+#                CLI の `mode` は ARMED_GROUND で STABILIZE / ACRO を選ぶ。高度モードは選べない
+#
+# Spec under test (detailed_design.md §3.1, CLI input columns, `mode` row): ARMED_GROUND: `mode acro` -> ACRO, `mode stabilize` -> STABILIZE (one-shot requests: the transmitter's switch
+# edge memory is untouched, so the neutral switches do not put the mode back while armed); `mode alt_hold` is not a mode the CLI can select: usage message, the mode is unchanged.
+# 検証する仕様（detailed_design.md §3.1 の CLI の列、`mode` の行）: ARMED_GROUND で `mode acro` → ACRO、`mode stabilize` → STABILIZE（1 回限りの要求: 送信機のスイッチのエッジの記憶には触れないので、
+# 中立のスイッチは ARM 中にモードを戻さない）。`mode alt_hold` は CLI が選べるモードではない: 使い方を表示し、モードは変わらない。
+#
+# Run: sf sils scenario simulator/sils/scenarios/cli_mode.scn --target vehicle --duration 9000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     4000      50      # A: boot at rest — calibration completes
+   +    cli  "arm"                                              # B: ARM from the CLI (STABILIZE)
+   +    cli  "mode acro"                                        # C: ACRO
+   +    rc   2048  2048   2048    2048  0     1000      50      # D: neutral switches: the mode must stay ACRO
+   +    cli  "mode"                                             # E: shows ACRO
+   +    cli  "mode stabilize"                                   # F: STABILIZE
+   +    rc   2048  2048   2048    2048  0     1000      50
+   +    cli  "mode alt_hold"                                    # G: not selectable from the CLI
+   +    cli  "mode"                                             # H: still STABILIZE
+   +    cli  "disarm"                                           # I: motors stopped
+   +    rc   2048  2048   2048    2048  0     500       50

@@ -46,7 +46,7 @@ extern "C" void sils_scenario_register_api_inject(void (*fn)(const char*))
     g_api_inject_fn = fn;
 }
 
-enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api, TofSilent, TofInvalid, TofDeadZone, TofOffline, Param, Battery, Baro };
+enum class Channel { Rc, RcRamp, Key, Btn, Wind, Fault, Bias, Handle, Api, Cli, TofSilent, TofInvalid, TofDeadZone, TofOffline, Param, Battery, Baro };
 
 // Which injector an "rc"-family event uses: the paired transmitter (rc), a
 // different non-paired one exercised AFTER bind (rc_foreign — crosstalk test), or
@@ -756,6 +756,23 @@ int sils_scenario_load(const char* path)
             if (!parse_quoted(rest, e.text)) { err(path, lineno, "api needs a quoted \"...\" string"); return -1; }
             e.ch = Channel::Api;
 
+        } else if (ch == "cli") {
+            // cli "<command line>" — run one firmware CLI command (the `stampfly>` console) as if typed:
+            // the line is tokenized and dispatched to the REAL registered handler (esp_console_run semantics).
+            // The `key` channel writes a pipe that nothing reads on the vehicle target (the USB REPL is inert
+            // on the host), so it cannot reach a handler; this channel does. The handler's printf goes to the
+            // console output, where .expect `log_contains` reads it. The handler runs in the scenario task and
+            // may wait a bounded time (CLI_REQUEST_WAIT_MS): the `rc` stream pauses for that time.
+            // cli "<コマンド行>" — ファームの CLI コマンド（`stampfly>` コンソール）を打ったとおりに 1 つ実行する:
+            // 行を分割し、登録済みの「実ハンドラ」へ渡す（esp_console_run と同じ意味論）。`key` チャネルは vehicle
+            // ターゲットでは誰も読まないパイプへ書くだけ（ホストでは USB REPL が inert）でハンドラに届かないが、
+            // このチャネルは届く。ハンドラの printf はコンソール出力に出て、.expect の `log_contains` が読む。
+            // ハンドラはシナリオのタスクで動き、有限の時間（CLI_REQUEST_WAIT_MS）待つことがある: その間 `rc` は止まる。
+            std::string rest;
+            std::getline(iss, rest);
+            if (!parse_quoted(rest, e.text)) { err(path, lineno, "cli needs a quoted \"...\" string"); return -1; }
+            e.ch = Channel::Cli;
+
         } else if (ch == "wind") {
             // wind <fx> <fy> <fz> [dur_ms] — external force NED [N]; dur_ms>0 = gust.
             // wind <fx> <fy> <fz> [dur_ms] — NED 外乱力 [N]、dur_ms>0 で突風。
@@ -889,6 +906,10 @@ void sils_scenario_driver_task(void* /*arg*/)
             }
             case Channel::Key:
                 sils_console_write(e.text.data(), (int)e.text.size());
+                break;
+            case Channel::Cli:
+                sils_emu_record_note("cli", e.text.c_str());
+                sils_console_run_line(e.text.c_str());
                 break;
             case Channel::Api: {
                 if (g_api_inject_fn) {

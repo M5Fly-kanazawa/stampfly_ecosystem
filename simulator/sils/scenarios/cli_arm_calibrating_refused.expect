@@ -1,0 +1,13 @@
+# cli_arm_calibrating_refused.expect — the CLI `arm` is refused while the boot calibration runs and accepted after it
+# CLI の `arm` は起動校正中は拒否され、校正の後は受理される
+#
+exit 0
+log_contains any "refused: boot calibration running - keep still"
+log_contains any "ARM rejected: boot calibration not complete"
+log_contains any "ok: armed (state ARMED_GROUND, mode STABILIZE)"
+log_contains any "ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)"
+order "refused: boot calibration running - keep still" "ok: armed (state ARMED_GROUND, mode STABILIZE)"
+order "ARM rejected: boot calibration not complete" "ARM accepted"
+# No motor output before the accepted ARM (about 5.0 s).
+# 受理された ARM（約 5.0 s）の前はモータ出力なし。
+metric duty_max < 0.01 in 0.5 4.9

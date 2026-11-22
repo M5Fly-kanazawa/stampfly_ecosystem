@@ -1,0 +1,24 @@
+# cli_arm_stabilize.scn — CLI `arm` in STABILIZE arms the craft; CLI `disarm` stops the motors
+#                         STABILIZE での CLI の `arm` は機体を ARM し、`disarm` はモータを止める
+#
+# A transmitter is present (neutral sticks, ARM button never pressed). The `cli` channel runs the REAL CLI handlers (cmd_arm, cmd_disarm, cmd_status),
+# which publish on api_command; StateTask decides. Spec under test (detailed_design.md §3.1, CLI input columns):
+#  1. IDLE_GROUND, STABILIZE: `arm` is accepted (the pre-arm gates pass after the boot calibration) -> ARMED_GROUND; no transmitter ARM press is needed.
+#  2. ARMED_GROUND: `disarm` stops the motors at once (the craft was armed by the CLI, not by the transmitter).
+#
+# 送信機はあるが（スティック中立・ARM ボタンは押さない）、`cli` チャネルが実際の CLI ハンドラ（cmd_arm・cmd_disarm・cmd_status）を実行する。ハンドラは
+# api_command に要求を出し、判断は StateTask が行う。検証する仕様（detailed_design.md §3.1 の CLI の列）:
+#  1. IDLE_GROUND・STABILIZE: `arm` は受理される（起動校正の後は ARM 前判定を通る）→ ARMED_GROUND。送信機の ARM 押下は要らない。
+#  2. ARMED_GROUND: `disarm` はすぐモータを止める（ARM したのは送信機でなく CLI）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/cli_arm_stabilize.scn --target vehicle --duration 7000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     4000      50      # A: boot at rest — calibration completes
+   +    cli  "mode"                                             # B: shows STABILIZE, IDLE_GROUND
+   +    cli  "arm"                                              # C: ARM from the CLI
+   +    rc   2048  2048   2048    2048  0     1000      50      # D: neutral sticks, ARM button released
+   +    cli  "status"                                           # E: state ARMED_GROUND, armed yes
+   +    cli  "disarm"                                           # F: DISARM from the CLI
+   +    rc   2048  2048   2048    2048  0     1000      50      # G: settle disarmed
+   +    cli  "status"                                           # H: state IDLE_GROUND, armed no

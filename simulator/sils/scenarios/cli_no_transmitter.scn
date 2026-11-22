@@ -1,0 +1,21 @@
+# cli_no_transmitter.scn — with no transmitter packet ever received, the CLI arms and sets the mode, and the mode stays
+#                          送信機の電文が一度も届いていなくても、CLI は ARM とモード設定ができ、モードは残る
+#
+# There is no `rc` event at all: pilot_request is never published (its timestamp stays 0), so StateTask's mode arbitration never runs and nothing puts the mode back; the comm-loss
+# watch has no packet to time out (Failsafe::checkCommTimeout returns before the first packet). Spec under test (detailed_design.md §3.1, CLI input columns):
+#  1. `arm` during the boot calibration is refused (pre-arm gate); `mode acro` in IDLE_GROUND is applied and stays (no transmitter switch position to follow).
+#  2. `arm` after the calibration is accepted with no transmitter ("the transmitter's messages are not a condition"), in ACRO; `disarm` stops the motors.
+# `rc` の事象が無い: pilot_request は一度も発行されず（時刻印は 0 のまま）、StateTask のモード調停は動かないのでモードを戻すものが無い。通信途絶の見張りも、最初の電文が来るまで
+# タイムアウトの対象が無い（Failsafe::checkCommTimeout は最初の電文の前で戻る）。検証する仕様（detailed_design.md §3.1 の CLI の列）:
+#  1. 起動校正中の `arm` は拒否（ARM 前判定）。IDLE_GROUND の `mode acro` は適用され、残る（従うべき送信機のスイッチ位置が無い）。
+#  2. 校正の後の `arm` は送信機なしで受理される（「送信機の電文が届いていること」は条件にしない）。モードは ACRO のまま。`disarm` はモータを止める。
+#
+# Run: sf sils scenario simulator/sils/scenarios/cli_no_transmitter.scn --target vehicle --duration 7000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   1500   cli  "arm"                                            # A: refused (boot calibration running)
+   2000   cli  "mode acro"                                      # B: IDLE_GROUND, no transmitter: applied and it stays
+   3600   cli  "mode"                                           # C: still ACRO
+   +      cli  "arm"                                            # D: accepted (calibration done), no transmitter
+   +      cli  "status"                                         # E: state ARMED_GROUND, mode ACRO
+   5000   cli  "disarm"                                         # F: motors stopped

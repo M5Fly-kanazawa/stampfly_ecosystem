@@ -1,0 +1,20 @@
+# cli_disarm_alt_landing.scn — the CLI `disarm` in ALT_HOLD in flight starts the auto-landing; the second one cuts the motors
+#                              飛行中の ALT_HOLD で CLI の `disarm` は自動着陸を始め、2 回目はモータを切る
+#
+# Same flight as alt_disarm_land.scn (transmitter ARM in ALT_HOLD, auto-takeoff to 0.5 m), but the DISARM comes from the CLI. Spec under test (detailed_design.md §3.1, CLI `disarm` column =
+# the transmitter's rule): ALT_HOLD / POS_HOLD in FLYING: the first `disarm` -> LANDING (the CLI prints "auto-landing started"); a `disarm` while LANDING is the immediate cut (-> IDLE_GROUND).
+# alt_disarm_land.scn と同じ飛行（送信機の ARM・ALT_HOLD・0.5 m への自動離陸）だが、DISARM は CLI から。検証する仕様（detailed_design.md §3.1 の CLI の `disarm` の列 = 送信機の規則）:
+# FLYING の ALT_HOLD / POS_HOLD では、最初の `disarm` が LANDING にし（CLI は「自動着陸を始めた」と表示）、LANDING 中の `disarm` は即カット（→ IDLE_GROUND）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/cli_disarm_alt_landing.scn --target vehicle --duration 17000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    tof_deadzone 0
+   0    rc   2048  2048   2048    2048  0     6000      50                   # A: boot at rest — calibration completes
+   +    rc   2048  2048   2048    2048  0     1500      50        1          # B: ALT switch ON while DISARMED
+   +    rc   2048  2048   2048    2048  1     1000      50        1          # C: transmitter ARM in ALT_HOLD — the auto-takeoff fires
+   +    rc   2048  2048   2048    2048  0     4000      50        1          # D: hover at 0.5 m (ARM button released)
+   +    cli  "disarm"                                                       # E: first CLI DISARM in flight -> auto-landing
+   +    rc   2048  2048   2048    2048  0     700       50        1          # F: descending
+   +    cli  "disarm"                                                       # G: second CLI DISARM while LANDING -> immediate motor cut
+   +    rc   2048  2048   2048    2048  0     1500      50        1          # H: settle on the ground

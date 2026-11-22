@@ -1,0 +1,19 @@
+# cli_arm_rc_disarm.scn — a craft armed by the CLI is disarmed by the transmitter's ARM button press
+#                         CLI で ARM した機体を、送信機の ARM ボタンの押し込みで DISARM する
+#
+# Spec under test (detailed_design.md §3.1, DISARM principle: an explicit DISARM request is accepted from every source, whoever armed the craft):
+#  1. `arm` from the CLI -> ARMED_GROUND.
+#  2. The ARM button's rising edge (a press) while armed is a DISARM request (the transmitter's toggle looks at the real state, not at who armed) -> IDLE_GROUND.
+# 検証する仕様（detailed_design.md §3.1 の DISARM の原則: 明示の DISARM 要求は、誰が ARM したかを問わず、どの入力源からも受理される）:
+#  1. CLI の `arm` → ARMED_GROUND。
+#  2. armed の間の ARM ボタンの立ち上がり（押し込み）は DISARM 要求（送信機のトグルは実状態を見る。誰が ARM したかは見ない）→ IDLE_GROUND。
+#
+# Run: sf sils scenario simulator/sils/scenarios/cli_arm_rc_disarm.scn --target vehicle --duration 8000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     4000      50      # A: boot at rest — calibration completes
+   +    cli  "arm"                                              # B: ARM from the CLI
+   +    rc   2048  2048   2048    2048  0     1000      50      # C: ARMED_GROUND, ARM button not pressed
+   +    rc   2048  2048   2048    2048  1     300       50      # D: press the ARM button (rising edge) -> DISARM
+   +    rc   2048  2048   2048    2048  0     1000      50      # E: release, settle disarmed
+   +    cli  "status"                                           # F: state IDLE_GROUND, armed no

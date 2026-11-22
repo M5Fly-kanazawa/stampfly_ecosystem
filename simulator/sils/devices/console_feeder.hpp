@@ -42,4 +42,12 @@ void sils_console_set_fd(int fd);
 // 台本バイトを非ブロッキング・有界に書く（満杯時 1tick yield）。run-token 保持タスクから。
 void sils_console_write(const char* bytes, int n);
 
+// Run one console line (scenario `cli` channel): tokenize it and call the registered firmware
+// command handler directly, like esp_console_run. Prints "unknown command" when none matches.
+// Implemented in esp_console_shim.cpp (the command registry). Called from the scenario driver task.
+// コンソールの 1 行を実行する（シナリオの `cli` チャネル）: 分割して登録済みのファームの命令
+// ハンドラを直接呼ぶ（esp_console_run と同じ）。一致する命令が無ければ "unknown command" を出す。
+// 実装は esp_console_shim.cpp（命令レジストリ）。シナリオのドライバタスクから呼ぶ。
+void sils_console_run_line(const char* line);
+
 }  // extern "C"

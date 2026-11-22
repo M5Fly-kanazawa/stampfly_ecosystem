@@ -1,0 +1,20 @@
+# cli_arm_calibrating_refused.scn — the CLI `arm` is refused by the pre-arm gates (boot calibration running), accepted after it
+#                                   CLI の `arm` は ARM 前判定（起動校正中）で拒否され、校正の後は受理される
+#
+# Spec under test (detailed_design.md §3.1, CLI input columns, `arm` row: "the pre-arm gates (evaluateArmBlock) apply as for every other source"):
+#  1. `arm` while the boot calibration runs is refused with the reason of the `prearm` line (calibration), the state stays IDLE_GROUND.
+#  2. After the calibration the same command is accepted.
+# 検証する仕様（detailed_design.md §3.1 の CLI の列、`arm` の行:「ARM 前判定（evaluateArmBlock）は他の入力源と同じく適用」）:
+#  1. 起動校正中の `arm` は、`prearm` 行と同じ理由（校正）で拒否され、状態は IDLE_GROUND のまま。
+#  2. 校正が終わると同じ命令が受理される。
+#
+# Run: sf sils scenario simulator/sils/scenarios/cli_arm_calibrating_refused.scn --target vehicle --duration 7000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     1500      50      # A: boot at rest, calibration still running
+   +    cli  "arm"                                              # B: refused (calibration)
+   +    rc   2048  2048   2048    2048  0     3500      50      # C: calibration completes
+   +    cli  "arm"                                              # D: accepted
+   +    rc   2048  2048   2048    2048  0     500       50
+   +    cli  "disarm"                                           # E: motors stopped
+   +    rc   2048  2048   2048    2048  0     500       50

@@ -58,7 +58,7 @@ IDLE_GROUND
 |------|---------|
 | INIT → IDLE_GROUND | 初期化完了 |
 | IDLE_GROUND ↔ IDLE_HELD | ToF距離による自動判定 |
-| IDLE_GROUND → ARMED_GROUND | ARMアクション（ボタン or コントローラ） |
+| IDLE_GROUND → ARMED_GROUND | ARMアクション（ボタン or コントローラ or CLI）。CLI の ARM は STABILIZE・ACRO のときだけ（ALT_HOLD/POS_HOLD の ARM は自動離陸が始まるため。詳細は `detailed_design.md` §3.1「CLI の入力列」） |
 | ARMED_GROUND → TAKEOFF | **ALT_HOLD/POS_HOLD: ARM 自体がトリガ**（スロットル入力不要）。短いスプール/整定ドウェル（0.3s, モータはゼロ）の後、自動離陸シーケンス開始: 固定上昇率＋水平姿勢で**目標高度 0.5m**（地面効果回避, config）まで。**ACRO/STABILIZE: 手動スロットル入力**（生スロットル＝推力、自動離陸なし）、**または、スロットルが閾値以下のまま浮いたとき、健全な下向き ToF が 5 cm を超える有効な高さを 1 s 途切れずに示す**（detailed_design.md §3.1） |
 | TAKEOFF → FLYING | 離陸完了。**ALT/POS: 制御器が目標高度 0.5m を捕捉して通知**（運動量による行き過ぎでなく目標値を捕捉）。**ACRO/STABILIZE: ToF 空中検知（0.15m）**。なお ToF 空中検知 0.15m は ESKF 鉛直ハンドオフ（ImuTask, クラスB）に役割分離され、ALT/POS の離陸完了判定には用いない |
 | サブモード切替 | コントローラからのモード切替コマンド。**地上（IDLE_GROUND/ARMED_GROUND）と FLYING で受理**（設置時の変更が最も安全なため。INIT/TAKEOFF/LANDING/IDLE_HELD 中は拒否し、遷移完了後に適用） |
@@ -68,7 +68,7 @@ IDLE_GROUND
 | LANDING → IDLE_GROUND | 着陸完了（ToF 接地検出 → 本当の DISARM、モータゼロ） |
 | FLYING → ARMED_GROUND | 静かに着陸 / タッチアンドゴー |
 | FLYING → IDLE_GROUND | **衝突検知**（緊急 DISARM）or **ACRO/STABILIZE でのパイロット DISARM**（手動推力モードは自動着陸を持たないため即カット）or **緊急停止**（API `emergency`／着陸中の再 DISARM＝中断）|
-| ARMED_GROUND → IDLE_GROUND | DISARMアクション（地上は常に即カット）。地上で姿勢推定が重力と不一致の場合は自動 DISARM（§9）。いずれも ESKF をリセットして再水平化（再校正はしない） |
+| ARMED_GROUND → IDLE_GROUND | DISARMアクション（地上は常に即カット。送信機・API・CLI のどの入力源からも、誰が ARM したかを問わず受理する）。地上で姿勢推定が重力と不一致の場合は自動 DISARM（§9）。いずれも ESKF をリセットして再水平化（再校正はしない） |
 
 ### ペアリング状態（PairingState）
 
@@ -326,7 +326,7 @@ IDLE_GROUND
 |------------|---------|
 | INIT → IDLE_GROUND | Initialization complete |
 | IDLE_GROUND ↔ IDLE_HELD | Automatic detection by ToF distance |
-| IDLE_GROUND → ARMED_GROUND | ARM action (button or controller) |
+| IDLE_GROUND → ARMED_GROUND | ARM action (button, controller or CLI). The CLI ARM only in STABILIZE / ACRO (an ARM in ALT_HOLD / POS_HOLD starts an auto-takeoff; see `detailed_design.md` §3.1 "CLI input columns") |
 | ARMED_GROUND → TAKEOFF | Throttle input (ACRO / STABILIZE), or the healthy downward ToF shows the craft off the floor (valid heights above 5 cm for 1 s without a break) |
 | TAKEOFF → FLYING | Takeoff complete (altitude threshold reached) |
 | FLYING sub-mode switch | Mode switch command from controller |
@@ -336,7 +336,7 @@ IDLE_GROUND
 | LANDING → IDLE_GROUND | Landing complete (ToF touchdown detection → the real DISARM, motors zero) |
 | FLYING → ARMED_GROUND | Soft landing / touch-and-go |
 | FLYING → IDLE_GROUND | **Crash detection** (emergency DISARM) or **pilot DISARM in ACRO/STABILIZE** (manual-thrust modes have no auto-landing, so cut immediately) or **emergency stop** (API `emergency` / a second DISARM while landing = abort) |
-| ARMED_GROUND → IDLE_GROUND | DISARM action (on the ground always an immediate cut) |
+| ARMED_GROUND → IDLE_GROUND | DISARM action (on the ground always an immediate cut; accepted from the transmitter, the API and the CLI alike, whoever armed the craft) |
 
 ### Pairing State (PairingState)
 

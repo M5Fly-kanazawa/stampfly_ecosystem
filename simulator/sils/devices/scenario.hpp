@@ -29,6 +29,9 @@
  *   <t> rc      <thr> <roll> <pitch> <yaw> <arm> [hold_ms] [rate_hz]
  *   <t> rc_ramp <throttle|roll|pitch|yaw> <from> <to> <step> <rate_hz> <arm>
  *   <t> key     "<text with \n \t \r \\ \" escapes>"
+ *   <t> cli     "<command line>"                  run one firmware CLI command (`arm`, `status`, ...) in the
+ *                                                  REAL registered handler, as typed at `stampfly>`; the
+ *                                                  output goes to the console log (`key` cannot reach a handler)
  *   <t> btn     <down|up|click|hold_ms>            (deferred -> warn+skip)
  *   <t> wind    <fx> <fy> <fz> [dur_ms]            external force NED [N]
  *   <t> fault   <motor 0-3> <gain 0-1>             degrade one motor's thrust health

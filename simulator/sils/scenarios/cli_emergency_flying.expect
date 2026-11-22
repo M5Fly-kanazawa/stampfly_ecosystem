@@ -1,0 +1,16 @@
+# cli_emergency_flying.expect — the CLI `emergency` stops the motors at once in flight, for a craft the CLI armed
+# CLI で ARM した機体を、CLI の `emergency` が飛行中にすぐ止める
+#
+exit 0
+log_contains any "ok: armed (state ARMED_GROUND, mode STABILIZE)"
+log_contains any "Takeoff complete"
+log_contains any "EMERGENCY STOP (FLYING → IDLE_GROUND)"
+log_contains any "ok: motors stopped (state FLYING -> IDLE_GROUND)"
+# Order inside the firmware log (stderr).
+# ファームのログ（stderr）の中の順序。
+order "ARM accepted" "Takeoff complete"
+order "Takeoff complete" "EMERGENCY STOP (FLYING → IDLE_GROUND)"
+# Flying before about 8.5 s, motors stopped from the `emergency` on although the transmitter still holds the throttle.
+# 約 8.5 s まで飛行、`emergency` 以降は送信機がスロットルを保持していてもモータは止まっている。
+metric duty_max > 0.3 in 7.0 8.4
+metric duty_max < 0.01 in 9.2 10.5

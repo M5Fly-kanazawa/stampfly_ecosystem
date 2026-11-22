@@ -1,0 +1,17 @@
+# cli_disarm_alt_landing.expect — the CLI `disarm` in ALT_HOLD in flight: the first starts the auto-landing, the second (in LANDING) cuts the motors
+# 飛行中の ALT_HOLD での CLI の `disarm`: 最初は自動着陸を始め、2 回目（LANDING 中）はモータを切る
+#
+exit 0
+log_contains any "Auto-takeoff engaged"
+log_contains any "Takeoff complete → FLYING/ALT_HOLD"
+log_contains any "DISARM in ALT_HOLD → auto-land (LANDING)"
+log_contains any "ok: auto-landing started (ALT_HOLD / POS_HOLD in flight)"
+log_contains any "DISARM accepted (LANDING → IDLE_GROUND)"
+log_contains any "ok: motors stopped (state LANDING -> IDLE_GROUND)"
+order "Takeoff complete → FLYING/ALT_HOLD" "DISARM in ALT_HOLD → auto-land (LANDING)"
+order "DISARM in ALT_HOLD → auto-land (LANDING)" "DISARM accepted (LANDING → IDLE_GROUND)"
+order "ok: auto-landing started (ALT_HOLD / POS_HOLD in flight)" "ok: motors stopped (state LANDING -> IDLE_GROUND)"
+# The craft hovered (about 0.5 m) before the first `disarm` and the motors are stopped after the second.
+# 最初の `disarm` の前は約 0.5 m でホバーし、2 回目の後はモータが止まっている。
+metric alt_mean > 0.3 in 9.0 12.4
+metric duty_max < 0.01 in 14.0 16.0

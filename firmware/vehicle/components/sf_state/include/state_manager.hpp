@@ -141,6 +141,37 @@ public:
     /// @design detailed_design.md §3.1 — API takeoff: mode change + ARM  [OK]
     bool requestArmForTakeoff(FlightMode takeoff_mode);
 
+    /// ARM for the CLI `arm`: like requestArm(), but refused while the flight mode is ALT_HOLD or POS_HOLD,
+    /// because an ARM in those modes starts an automatic takeoff (ARMED_GROUND -> TAKEOFF after the spool dwell)
+    /// and a command typed on a console must not launch the craft. The mode condition is judged here, not in the
+    /// pre-arm gates (evaluateArmBlock), so a transmitter ARM in ALT_HOLD / POS_HOLD stays accepted. A refusal is
+    /// logged and announced with the error tone, like a pre-arm refusal. No transmitter packet is required.
+    /// CLI の `arm` のための ARM: requestArm() と同じだが、飛行モードが ALT_HOLD・POS_HOLD の間は拒否する。
+    /// これらのモードでの ARM は自動離陸を始めるため（スプール待ちの後に ARMED_GROUND -> TAKEOFF）、コンソールに
+    /// 打った命令が機体を離陸させてはならない。モードの条件は ARM 前判定（evaluateArmBlock）ではなくここで判断する
+    /// ので、送信機の ARM は ALT_HOLD・POS_HOLD でも受理されたままである。拒否はログとエラー音で知らせる
+    /// （ARM 前判定の拒否と同じ）。送信機の電文は要らない。
+    ///
+    /// @return true if the craft is armed by this call
+    ///
+    /// @design detailed_design.md §3.1 — CLI input columns, `arm` row            [OK]
+    /// @design architecture.md INV-3 — the StateManager is the sole executor    [OK]
+    bool requestArmManualMode();
+
+    /// Mode change for the CLI `mode`: only STABILIZE and ACRO can be selected (an altitude mode needs the
+    /// downward ToF and starts an auto-takeoff on ARM). Any other mode is refused here; the state check and the
+    /// callbacks are those of requestModeChange(), the function the transmitter's mode arbitration calls too. The
+    /// request is one-shot: it does not touch the transmitter switch's edge memory (state_task arbitrateFlightMode).
+    /// CLI の `mode` のためのモード変更: 選べるのは STABILIZE と ACRO だけ（高度モードは下向き ToF を要し、
+    /// ARM で自動離陸を始める）。他のモードはここで拒否する。状態の検査とコールバックは、送信機のモード
+    /// 調停も呼ぶ requestModeChange() のものと同じ。要求は 1 回限りで、送信機スイッチのエッジの記憶
+    /// （state_task の arbitrateFlightMode）には触れない。
+    ///
+    /// @return true if the mode is `new_mode` after the call
+    ///
+    /// @design detailed_design.md §3.1 — CLI input columns, `mode` row           [OK]
+    bool requestManualModeChange(FlightMode new_mode);
+
     /// Request DISARM. On the ground, in TAKEOFF (any mode) and in ACRO / STABILIZE it is an immediate motor cut (-> IDLE_GROUND). In ALT_HOLD / POS_HOLD while FLYING
     /// it starts an AUTO-LANDING (-> LANDING, gradual descent) instead of dropping the craft; touchdown then disarms. A DISARM pressed again while already LANDING
     /// is the emergency cut (see below). The ways into LANDING from TAKEOFF are the loss of the link, the battery EMERGENCY with evidence that the craft is off the floor (without it the EMERGENCY is this DISARM, decideBatteryEmergency()), the ToF rules and notifyTakeoffEndedByLanding() (a takeoff that does not lift).

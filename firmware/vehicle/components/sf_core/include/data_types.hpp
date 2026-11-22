@@ -1189,7 +1189,8 @@ struct SensorHealth {
 enum class ApiCmd : uint8_t {
     None      = 0,
     Arm       = 1,   // arm motors (pre-arm gates still apply) / ARM（事前判定は有効）
-    Disarm    = 2,   // disarm (ground)                        / DISARM（地上）
+    Disarm    = 2,   // disarm, any armed state (explicit request, accepted from every source; ALT/POS in flight lands first)
+                     // DISARM（armed のどの状態でも。明示の要求はどの入力源からでも受理。飛行中の ALT/POS は先に着陸）
     Takeoff   = 3,   // mode→POS_HOLD + arm + auto-takeoff      / モード設定+ARM+自動離陸
     Land      = 4,   // autonomous landing                      / 自動着陸
     Emergency = 5,   // immediate motor cut (any state)         / 即時モータ停止
@@ -1202,12 +1203,16 @@ enum class ApiCmd : uint8_t {
     // 規則に従いここに明記する。
     Flip      = 6,   // Tello-compatible flip l/r/f/b (flip-maneuver-plan.md §4.4)
                      // Tello 互換 flip l/r/f/b（plan §4.4）
+    ArmManual = 7,   // arm only while the mode is STABILIZE / ACRO (CLI `arm`: an ALT_HOLD / POS_HOLD ARM would start an auto-takeoff)
+                     // STABILIZE / ACRO のときだけ ARM（CLI の `arm`: ALT_HOLD / POS_HOLD の ARM は自動離陸を始めてしまう）
+    SetManualMode = 8,   // set the flight mode in `mode` (STABILIZE / ACRO only; CLI `mode`)
+                         // `mode` の飛行モードを設定（STABILIZE / ACRO のみ。CLI の `mode`）
 };
 
 /// ApiTask → StateTask command / ApiTask → StateTask コマンド
 struct ApiCommand {
     uint8_t  command;     // ApiCmd value / ApiCmd の値
-    uint8_t  mode;        // FlightMode for Takeoff / Takeoff 用 FlightMode
+    uint8_t  mode;        // FlightMode for Takeoff and SetManualMode / Takeoff と SetManualMode 用 FlightMode
     uint32_t timestamp;   // [us]
     uint8_t  arg;          // FlipDirection for command==Flip (else 0), same
                            // convention as EstimatorCommand.arg / command==Flip

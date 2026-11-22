@@ -1,0 +1,25 @@
+# cli_arm_alt_refused.scn — the CLI `arm` is refused in ALT_HOLD; `mode stabilize` on the ground is put back by the transmitter's switch
+#                           CLI の `arm` は ALT_HOLD で拒否される。地上の `mode stabilize` は送信機のスイッチ位置に戻される
+#
+# The ALT switch is ON while disarmed (the mode arbitration applies ALT_HOLD in IDLE_GROUND). Spec under test (detailed_design.md §3.1, CLI input columns):
+#  1. `arm` in ALT_HOLD is refused (an ARM there starts an auto-takeoff): the state stays IDLE_GROUND, the reason is printed, the StateManager logs it.
+#  2. `mode stabilize` in IDLE_GROUND is applied, then the relevel rule puts the transmitter's switch position (ALT_HOLD) back within one StateTask cycle; the CLI reports "changed, then put back".
+#  3. With the ALT switch OFF the mode is STABILIZE, and `arm` is accepted; `disarm` stops the motors.
+#
+# ALT スイッチを ON にしたまま DISARM で待つ（モード調停が IDLE_GROUND で ALT_HOLD を適用）。検証する仕様（detailed_design.md §3.1 の CLI の列）:
+#  1. ALT_HOLD での `arm` は拒否される（そこでの ARM は自動離陸を始める）: 状態は IDLE_GROUND のまま、理由を表示し、StateManager がログに出す。
+#  2. IDLE_GROUND の `mode stabilize` は適用され、次に StateTask の 1 周期以内に不一致則が送信機のスイッチ位置（ALT_HOLD）へ戻す。CLI は「適用の後に戻された」と報告する。
+#  3. ALT スイッチを OFF にするとモードは STABILIZE になり、`arm` は受理される。`disarm` はモータを止める。
+#
+# Run: sf sils scenario simulator/sils/scenarios/cli_arm_alt_refused.scn --target vehicle --duration 9000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
+   0    rc   2048  2048   2048    2048  0     4000      50                   # A: boot at rest — calibration completes
+   +    rc   2048  2048   2048    2048  0     1500      50        1          # B: ALT switch ON while DISARMED -> ALT_HOLD on the ground
+   +    cli  "arm"                                                          # C: refused (ALT_HOLD), IDLE_GROUND
+   +    cli  "mode stabilize"                                               # D: applied, then put back to ALT_HOLD by the switch
+   +    rc   2048  2048   2048    2048  0     1000      50                   # E: ALT switch OFF -> STABILIZE
+   +    cli  "arm"                                                          # F: accepted
+   +    rc   2048  2048   2048    2048  0     500       50
+   +    cli  "disarm"                                                       # G: motors stopped
+   +    rc   2048  2048   2048    2048  0     500       50

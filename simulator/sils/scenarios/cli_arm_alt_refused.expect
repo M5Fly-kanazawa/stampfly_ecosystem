@@ -1,0 +1,25 @@
+# cli_arm_alt_refused.expect — the CLI `arm` is refused in ALT_HOLD; on the ground `mode stabilize` is put back by the transmitter's switch position
+# CLI の `arm` は ALT_HOLD で拒否される。地上の `mode stabilize` は送信機のスイッチ位置に戻される
+#
+exit 0
+log_contains any "refused: the CLI arms only in STABILIZE or ACRO (mode is ALT_HOLD"
+log_contains any "ARM rejected: the CLI arms only in STABILIZE or ACRO (ALT_HOLD would start an auto-takeoff)"
+log_contains any "changed, then put back to ALT_HOLD by the transmitter's switch position"
+log_contains any "Mode re-leveled to switch position"
+log_contains any "ok: armed (state ARMED_GROUND, mode STABILIZE)"
+log_contains any "ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)"
+# Order inside the CLI output (stdout) and inside the firmware log (stderr); the two streams are not merged by time.
+# CLI の出力（stdout）の中の順序と、ファームのログ（stderr）の中の順序。2 つのストリームは時刻では混ぜていない。
+order "refused: the CLI arms only in STABILIZE or ACRO" "changed, then put back to ALT_HOLD"
+order "changed, then put back to ALT_HOLD" "ok: armed (state ARMED_GROUND, mode STABILIZE)"
+order "ok: armed (state ARMED_GROUND, mode STABILIZE)" "ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)"
+order "Mode change: STABILIZE → ALT_HOLD" "ARM rejected: the CLI arms only in STABILIZE or ACRO"
+order "Mode re-leveled to switch position" "ARM accepted"
+# The refused request armed nothing: the only ARM of the run is the accepted one (it follows the refusal), and the ALT_HOLD never reached ARMED_GROUND.
+# 拒否された要求は何も ARM しなかった: この実行の ARM は受理された 1 回だけ（拒否の後）で、ALT_HOLD で ARMED_GROUND に入ることはなかった。
+order "ARM rejected: the CLI arms only in STABILIZE or ACRO" "ARM accepted"
+log_absent any "Auto-takeoff engaged"
+log_absent any "Transition: ARMED_GROUND → TAKEOFF"
+# Motors never turned before the accepted ARM (about 8.0 s).
+# 受理された ARM（約 8.0 s）の前はモータは回っていない。
+metric duty_max < 0.01 in 4.5 7.9

@@ -486,4 +486,19 @@ inline constexpr uint32_t MOTOR_SWEEP_POLL_MS = 20;  // 20 ms
 // 低電圧ガード定数（kVoltageValidMin, notify.cpp）と同じ値。
 inline constexpr float MOTOR_SWEEP_VOLTAGE_VALID_MIN = 0.1f;
 
+// CLI flight commands (`arm`, `disarm`, `emergency`, `mode`; cli_task.cpp). The CLI publishes the
+// request on api_command and StateTask (one cycle = 20 ms) decides, so the command polls system_mode
+// to report the outcome. The wait is bounded: a refused request leaves no change to wait for, so it
+// costs the whole window; the window is 6 StateTask cycles. After a successful `mode` on the ground the
+// command waits CLI_MODE_SETTLE_MS (3 StateTask cycles) and reads the mode again, because the mode
+// arbitration re-applies the transmitter's switch position within one cycle.
+// CLI の飛行命令（`arm`・`disarm`・`emergency`・`mode`、cli_task.cpp）。CLI は api_command に要求を
+// 出し、判断は StateTask（1 周期 = 20 ms）が行うので、命令は system_mode を見て結果を報告する。待ちには
+// 上限がある: 拒否された要求は待つ変化が起きないので窓の全体を使う。窓は StateTask 6 周期。地上で
+// `mode` が受理された後は CLI_MODE_SETTLE_MS（StateTask 3 周期）待ってモードを読み直す。モード調停が
+// 1 周期以内に送信機のスイッチ位置を再適用するため。
+inline constexpr uint32_t CLI_REQUEST_POLL_MS = 10;
+inline constexpr uint32_t CLI_REQUEST_WAIT_MS = 120;
+inline constexpr uint32_t CLI_MODE_SETTLE_MS  = 60;
+
 }  // namespace config

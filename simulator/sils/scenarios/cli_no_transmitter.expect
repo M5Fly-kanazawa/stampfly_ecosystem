@@ -1,0 +1,21 @@
+# cli_no_transmitter.expect — no transmitter packet ever received: the CLI arms and sets the mode, and the mode stays
+# 送信機の電文が一度も届いていない: CLI が ARM とモード設定をでき、モードは残る
+#
+exit 0
+log_contains any "refused: boot calibration running - keep still"
+log_contains any "Mode change: STABILIZE → ACRO"
+log_contains any "ok: armed (state ARMED_GROUND, mode ACRO)"
+log_contains any "ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)"
+# `mode` on the ground with no transmitter shows ACRO: nothing put it back (no relevel, no packet).
+# 送信機なしの地上の `mode` は ACRO を表示する: 戻すものが無い（再適用なし、電文なし）。
+log_contains out "mode    : ACRO (state IDLE_GROUND)"
+log_absent any "re-leveled"
+log_absent any "COMM_LOST"
+log_absent any "Comm lost"
+# Order inside the CLI output (stdout) and inside the firmware log (stderr).
+# CLI の出力（stdout）の中の順序と、ファームのログ（stderr）の中の順序。
+order "refused: boot calibration running - keep still" "mode    : ACRO (state IDLE_GROUND)"
+order "mode    : ACRO (state IDLE_GROUND)" "ok: armed (state ARMED_GROUND, mode ACRO)"
+order "ok: armed (state ARMED_GROUND, mode ACRO)" "ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)"
+order "ARM rejected: boot calibration not complete" "Mode change: STABILIZE → ACRO"
+order "Mode change: STABILIZE → ACRO" "ARM accepted"

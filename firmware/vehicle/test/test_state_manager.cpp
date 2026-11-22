@@ -24,6 +24,10 @@
  *                                                        api_takeoff_refused_arm_restores_the_previous_mode,
  *                                                        api_takeoff_refused_arm_keeps_mode_when_the_switch_was_refused,
  *                                                        api_takeoff_in_flying_leaves_the_mode_alone
+ *  CLI input columns (`arm`, `mode`; `disarm` and          cli_arm_is_accepted_only_in_manual_modes_on_the_ground,
+ *   `emergency` use the DISARM / emergency rows)         cli_arm_keeps_the_pre_arm_gates,
+ *                                                        cli_mode_is_applied_only_where_the_table_applies_and_only_for_manual_modes,
+ *                                                        disarm_is_accepted_whoever_armed_the_craft
  *  Mode arbitration, "ground reset" column               returning_to_the_ground_resets_the_mode_to_stabilize
  *  Mode arbitration, "Flip request" column               flip_request_is_accepted_only_in_flying,
  *                                                        flip_direction_is_kept_for_the_enter_callback
@@ -602,6 +606,106 @@ TEST(api_takeoff_in_flying_leaves_the_mode_alone)
     fixture.driveTo(FlightState::FLYING);
     ASSERT_TRUE(!fixture.manager.requestArmForTakeoff(FlightMode::ALT_HOLD));
     ASSERT_TRUE(fixture.manager.getMode() == FlightMode::STABILIZE);
+}
+
+/// CLI `arm` column: the state after requestArmManualMode() (detailed_design.md §3.1, CLI input columns).
+/// CLI `arm` の列: requestArmManualMode() の後の状態（detailed_design.md §3.1 の CLI の列）。
+static FlightState expectedAfterCliArm(FlightState state, FlightMode mode)
+{
+    if (state == FlightState::IDLE_GROUND && !isAltitudeMode(mode)) {
+        return FlightState::ARMED_GROUND;   // STABILIZE / ACRO on the ground, the pre-arm gates pass / 地上の STABILIZE / ACRO、ARM 前判定を通る
+    }
+    return state;   // ALT_HOLD / POS_HOLD on the ground (an ARM there starts an auto-takeoff) and every other state: no change / 地上の ALT_HOLD / POS_HOLD（そこでの ARM は自動離陸を始める）と他の全状態: 変化なし
+}
+
+TEST(cli_arm_is_accepted_only_in_manual_modes_on_the_ground)
+{
+    // CLI `arm` column, every state x every mode. The altitude-mode refusal gives the error tone once; no transmitter packet is involved.
+    // CLI の `arm` の列、全状態 x 全モード。高度モードの拒否はエラー音を 1 回鳴らす。送信機の電文は関与しない。
+    for (FlightState state : kAllStates) {
+        for (FlightMode mode : kAllModes) {
+            Fixture fixture;
+            fixture.driveTo(state, mode);
+            fixture.drainNotifyEvents();
+            fixture.manager.requestArmManualMode();
+            ASSERT_MSG(fixture.manager.getState() == expectedAfterCliArm(state, mode),
+                       "CLI arm in %s / %s ended in %s", flightStateName(state), flightModeName(mode),
+                       flightStateName(fixture.manager.getState()));
+            const bool altitude_refusal = state == FlightState::IDLE_GROUND && isAltitudeMode(mode);
+            ASSERT_MSG(fixture.countNotifyEvents(NotifyEvent::ArmRejected) == (altitude_refusal ? 1 : 0),
+                       "CLI arm in %s / %s: wrong number of error tones", flightStateName(state), flightModeName(mode));
+        }
+    }
+    // The mode condition is the CLI's alone: the same ARM from the transmitter / button path stays accepted in an altitude mode.
+    // モードの条件は CLI だけのもの: 同じ ARM を送信機・ボタンの経路から出せば、高度モードでも受理されたまま。
+    Fixture altitude;
+    altitude.driveTo(FlightState::IDLE_GROUND, FlightMode::ALT_HOLD);
+    ASSERT_TRUE(altitude.manager.requestArm());
+    ASSERT_TRUE(altitude.manager.getState() == FlightState::ARMED_GROUND);
+}
+
+TEST(cli_arm_keeps_the_pre_arm_gates)
+{
+    // The CLI `arm` is the one ARM path with an extra mode condition: a pre-arm gate (here boot calibration) refuses it in STABILIZE / ACRO as for every source.
+    // CLI の `arm` は、モードの条件が 1 つ加わるだけの ARM の経路: ARM 前判定（ここでは起動校正）は、他の入力源と同じく STABILIZE / ACRO でも拒否する。
+    for (FlightMode mode : {FlightMode::STABILIZE, FlightMode::ACRO}) {
+        Fixture fixture;
+        fixture.driveTo(FlightState::IDLE_GROUND, mode);
+        fixture.publishReadySystemStatus(false, false, true);
+        fixture.drainNotifyEvents();
+        ASSERT_TRUE(!fixture.manager.requestArmManualMode());
+        ASSERT_MSG(fixture.manager.getState() == FlightState::IDLE_GROUND && fixture.countNotifyEvents(NotifyEvent::ArmRejected) == 1,
+                   "CLI arm during the calibration in %s: state %s", flightModeName(mode), flightStateName(fixture.manager.getState()));
+    }
+}
+
+TEST(cli_mode_is_applied_only_where_the_table_applies_and_only_for_manual_modes)
+{
+    // CLI `mode` column: applied in IDLE_GROUND, ARMED_GROUND, FLYING (the same states as the transmitter's "edge" column); refused in INIT, IDLE_HELD, TAKEOFF, FLIP, LANDING.
+    // Only STABILIZE and ACRO can be selected; ALT_HOLD / POS_HOLD are refused in every state and leave the mode alone.
+    // CLI の `mode` の列: IDLE_GROUND・ARMED_GROUND・FLYING で適用（送信機の「エッジ」の列と同じ状態）、INIT・IDLE_HELD・TAKEOFF・FLIP・LANDING で拒否。
+    // 選べるのは STABILIZE と ACRO だけで、ALT_HOLD / POS_HOLD はどの状態でも拒否し、モードを変えない。
+    for (FlightState state : kAllStates) {
+        const bool applies = state == FlightState::IDLE_GROUND || state == FlightState::ARMED_GROUND ||
+                             state == FlightState::FLYING;
+        for (FlightMode requested : kAllModes) {
+            Fixture fixture;
+            fixture.driveTo(state, FlightMode::STABILIZE);
+            const bool accepted = fixture.manager.requestManualModeChange(requested);
+            const bool expect_accepted = applies && !isAltitudeMode(requested);
+            const FlightMode expected_mode = expect_accepted ? requested : FlightMode::STABILIZE;
+            ASSERT_MSG(accepted == expect_accepted && fixture.manager.getMode() == expected_mode,
+                       "CLI mode %s in %s: accepted=%d mode=%s", flightModeName(requested), flightStateName(state), accepted,
+                       flightModeName(fixture.manager.getMode()));
+        }
+    }
+}
+
+TEST(disarm_is_accepted_whoever_armed_the_craft)
+{
+    // DISARM principle (detailed_design.md §3.1): an explicit DISARM is accepted from every armed state whoever armed the craft. A craft armed through the CLI
+    // path (requestArmManualMode) and one armed through the transmitter path (requestArm) end the same way for every state and mode.
+    // DISARM の原則（detailed_design.md §3.1）: 明示の DISARM は、誰が ARM したかを問わず、armed のどの状態でも受理される。CLI の経路
+    // （requestArmManualMode）で ARM した機体と、送信機の経路（requestArm）で ARM した機体は、全状態・全モードで同じ結果になる。
+    for (FlightMode mode : {FlightMode::STABILIZE, FlightMode::ACRO}) {
+        Fixture by_cli;
+        by_cli.driveTo(FlightState::IDLE_GROUND, mode);
+        ASSERT_TRUE(by_cli.manager.requestArmManualMode());
+        ASSERT_TRUE(by_cli.manager.requestDisarm());
+        ASSERT_TRUE(by_cli.manager.getState() == FlightState::IDLE_GROUND);
+        Fixture by_transmitter;
+        by_transmitter.driveTo(FlightState::ARMED_GROUND, mode);
+        ASSERT_TRUE(by_transmitter.manager.requestDisarm());
+        ASSERT_TRUE(by_transmitter.manager.getState() == FlightState::IDLE_GROUND);
+    }
+    // A craft the transmitter armed and flies in ALT_HOLD: the first DISARM starts the auto-landing, whoever sends it (the CLI publishes the same request).
+    // 送信機が ARM して ALT_HOLD で飛ぶ機体: 最初の DISARM は、誰が送っても自動着陸を始める（CLI も同じ要求を出す）。
+    Fixture flying;
+    flying.driveTo(FlightState::FLYING, FlightMode::ALT_HOLD);
+    ASSERT_TRUE(flying.manager.requestDisarm());
+    ASSERT_TRUE(flying.manager.getState() == FlightState::LANDING);
+    ASSERT_TRUE(flying.manager.requestDisarm());
+    ASSERT_TRUE(flying.manager.getState() == FlightState::IDLE_GROUND);
 }
 
 TEST(api_takeoff_refused_arm_restores_the_previous_mode)

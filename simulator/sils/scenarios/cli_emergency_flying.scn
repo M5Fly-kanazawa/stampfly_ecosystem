@@ -1,0 +1,16 @@
+# cli_emergency_flying.scn — the CLI `emergency` stops the motors at once in flight
+#                            CLI の `emergency` は飛行中にすぐモータを止める
+#
+# The CLI arms the craft (STABILIZE), the transmitter's throttle lifts it, then `emergency` is an unconditional immediate cut (StateManager::requestEmergencyStop).
+# CLI が ARM し（STABILIZE）、送信機のスロットルで浮かせ、`emergency` が無条件の即時停止になる（StateManager::requestEmergencyStop）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/cli_emergency_flying.scn --target vehicle --duration 11000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     4000      50      # A: boot at rest — calibration completes
+   +    cli  "arm"                                              # B: ARM from the CLI (no ARM button press)
+   +    rc   2048  2048   2048    2048  0     1000      50      # C: ARMED_GROUND
+   +    rc   3171  2048   2048    2048  0     2000      50      # D: throttle up -> TAKEOFF -> FLYING (STABILIZE), the craft climbs
+   +    rc   3108  2048   2048    2048  0     1500      50      # E: near-hover
+   +    cli  "emergency"                                        # F: emergency stop in flight
+   +    rc   3108  2048   2048    2048  0     2000      50      # G: the transmitter still holds the throttle: motors must stay stopped

@@ -24,6 +24,7 @@
  */
 
 #include "esp_console.h"
+#include "console_feeder.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -86,6 +87,14 @@ esp_err_t sils_console_dispatch(const char* cmdline, int* cmd_ret)
         }
     }
     return ESP_ERR_NOT_FOUND;
+}
+
+void sils_console_run_line(const char* line)
+{
+    int command_ret = 0;
+    if (sils_console_dispatch(line, &command_ret) == ESP_ERR_NOT_FOUND) {
+        std::printf("unknown command (try 'help')\n");
+    }
 }
 
 }  // extern "C"

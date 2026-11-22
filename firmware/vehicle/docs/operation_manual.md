@@ -136,6 +136,9 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 | DISARM 操作（地上 / TAKEOFF 中 / ACRO・STABILIZE 飛行中）| → IDLE_GROUND。**即カット**（モータ停止）|
 | DISARM 操作（**ALT_HOLD/POS_HOLD で飛行中**）| → **自動着陸**（FLYING → LANDING）。空中でモータを切らず緩降下（0.3 m/s）で接地し、接地検出で本当の DISARM。**着陸中にもう一度 DISARM すると即カット（中断）** |
 | 機体ボタン クリック（地上）| ARM/DISARM トグル（飛行中のクリックは無視）|
+| CLI の `arm` / `disarm` / `emergency`（USB・WiFi。下の CLI コマンド一覧）| `arm`: IDLE_GROUND → ARMED_GROUND（**STABILIZE・ACRO のときだけ**。ALT_HOLD・POS_HOLD は ARM で自動離陸が始まるので拒否）。`disarm`: 送信機の DISARM と同じ規則（地上・TAKEOFF・ACRO/STABILIZE の飛行中は即停止、ALT_HOLD/POS_HOLD の飛行中は 1 回目が自動着陸）。`emergency`: どの状態でも即停止 |
+
+**DISARM の原則:** DISARM の明示の要求（送信機の ARM ボタン押下・API・CLI）は、どの入力源から来ても、誰が ARM したかを問わず、armed の状態であれば常に受理する（CLI で ARM した機体を送信機で、送信機で ARM した機体を CLI で止められる）。機体ボタンのクリックだけは、飛行中は無視する（誤タップでモータを切らないため）。
 
 **ARM できない時**: ARM 操作（RC ボタン・機体ボタン・API）が拒否されると**エラー音（errorTone）が 1 回**鳴り、拒否中は LED が理由を示す（赤低速点滅＝傾き不一致、マゼンタ低速点滅＝待機、青高速点滅＝ペアリング中、シアン低速点滅＝低電圧、黄高速点滅＝下向き ToF 出力停止）。CLI `status` の `prearm` 行は `prearm  : ready` または `prearm  : BLOCKED (tilt mismatch - place level)` のように理由を 1 行で示す（WiFi CLI でも可）。拒否の対象: 校正中（マゼンタ点滅）・低電圧/USB 給電・**ペアリング中**・ベンチ用モータテスト中/テスト後の再水平化待ち（約 1.5 秒）・**下向き ToF（高度センサ）の出力停止のエピソード中**（新しい測定値が 0.3 秒以上来ない、空中で無効な測定値だけが続いた〔飛行中は 0.5 秒、離陸中は 5 cm 上がってから 0.15 秒（上昇量が見えないときは、離陸の開始から 2 秒たったとき）〕、または出力が戻っても推定器がまだ ToF を取り込み直していない〔測定値が 1 秒以上途切れず届き、かつ推定が ToF と 10 回連続で一致するまで、復帰の約 1 秒後〕。**ACRO を含む全モードで拒否**。測定値が「届いた」だけでは許可されない）（`ARM rejected: downward ToF is silent (理由)`、CLI `prearm  : BLOCKED (downward ToF silent / not re-acquired - ...)`。飛行中に出力停止した場合は、**ALT_HOLD・POS_HOLD・自動離陸では上昇を中止して自動で着陸する**（降下は高度を使わずに降りる。**推力の上限は、機体を支えていた推力（支持推力。加速度計で較正する）の 0.95 倍で、重さより小さいので、機体は上昇できない**。降下は、速度を 0.4 m/s に保つ速度制御ではなく、実質は**推力の上限による一定の下向き加速度（約 0.05 g = 0.49 m/s²）の降下**で、降りるほど速くなる（1.2 m の高さから約 1.1 m/s で接地する）。加速度計から推定した鉛直速度（最後のリセットから 2 秒だけ信用する）は、上昇を止める（推力を下げる）ためと降下の最初の加速のために使い、降下が速すぎても、推力を上限より上げて止めには行かない（機体が上昇しうるため）。さらに、降下が 5 秒続いたら推力を絞り始め、8.3 秒でゼロにする。接地は加速度計: 2 g 超の衝撃のあと 0.25 秒間、加速も降下もしていなければ着陸完了、または床が機体を支えている状態（推力が支持推力の 0.7 倍未満なのに加速度計が 1 g を示す）が 0.5 秒続けば着陸完了。ただし通常は 3 G の衝撃カットが先に働いて DISARM する（アラートの種別は ToF 出力停止中の LANDING では非常にならず、接地として扱う）。LANDING に入ってから 10 秒たち、かつ ToF の出力停止が 5.5 秒続いても接地を検出できないときは、時間切れで着陸完了とし、モータを止める（この時点で推力はすでにゼロで、機体は接地しているか自由落下中。ToF が動作したまま 10 秒を超えた LANDING の後に止まったときも、少なくとも 5.5 秒は降下させてからモータを止める）。接地速度は SILS の実測（較正前の支持推力などの改修。場面が成立した 870 本）で、センサノイズなしの最大が 0.89 m/s（離陸直後に出力停止した場合）、ホバー中の出力停止で 0.93〜1.02 m/s、手動上昇中で 1.19 m/s、センサノイズ n2 の最悪が 2.04 m/s と、通常着陸の約 0.3 m/s よりずっと速いので、屋外や人の近くでは避ける。ALT_HOLD・POS_HOLD ではスティックで上げても高度 1.2 m で止まる（高度上限。自動離陸は 0.5 m）ので、落下距離は 1.2 m までに抑えられる。SILS の値で実機は未検証）。**ARMED_GROUND（ARM 済みで地上）で ToF が出力停止したときは、モードを問わず自動で DISARM する**（機体は飛んでいないので、飛ばさない）。**ACRO・STABILIZE では強制着陸せず**、本体の LED（2 系統）が黄の高速点滅になり警告音が鳴るので、パイロットが自分で着陸させる。出力停止中は ALT_HOLD・POS_HOLD への切り替えも拒否され、CLI `status` に `modeblock: REFUSED (...)` と `tof     : SILENT - 理由 ...` が出る。**飛行中に拒否したスイッチは「消費」される**: ToF が復帰しても自動では ALT_HOLD・POS_HOLD に切り替わらないので、復帰後（黄の点滅が消えてから）にスイッチを入れ直す。地上で拒否した切り替えは、エピソードが終わると自動で適用される）・**地上で姿勢推定が重力とずれている間**（`ARM rejected: attitude estimate disagrees with gravity`）は ARM 拒否（CLI `status` API `takeoff` の ARM が拒否されたときは、`takeoff` のために切り替えた飛行モードを元に戻す（拒否された離陸は何も残さない。戻さないと、送信機の電文が届いていない状態で機体のボタンから ARM したときに、POS_HOLD の自動離陸が手の下で始まる）。
 で確認可）。ずれは IDLE_GROUND 中に自動で（滞在ごとに1回）推定器リセットで再水平化される。起動・リセット直後は判定に約 1 秒かかり、その間は `ARM rejected: attitude check not passed yet` で拒否される。ずれが残る（機体が傾いて置かれている等）場合は、LED が**赤の低速点滅**になる。機体を持ち上げて水平な地面に置き直す（置き直しで再校正される）。リセット/DISARM 直後の約 1 秒（傾き判定待ち）とモータテスト後の約 1.5 秒（再水平化待ち）は**マゼンタの低速点滅**で、動かさずに待つと緑に戻る。
@@ -320,6 +323,10 @@ TAB で補完。
 | `sound` | `[on\|off]` | ブザー有効/無効（NVS 保存）|
 | `led` | `<0-255>` | 本体 LED 輝度（NVS 保存）|
 | `motor` | `[test <1-4> <0-100> [秒]\|all <0-100> [秒]\|stop]` | **モータ単体テスト（disarmed 限定・要プロペラ除去）**。M1=FR M2=RR M3=RL M4=FL。最後の引数で回転時間（秒、0.1〜60、省略時 2 秒）。例: `motor test 1 30 5`。講習用ファームでも使える |
+| `arm` | — | ARM を要求する。**STABILIZE・ACRO のときだけ**受理（ALT_HOLD・POS_HOLD は ARM で自動離陸が始まるので `refused: the CLI arms only in STABILIZE or ACRO ...`）。ARM 前判定（較正・電圧・ペアリング・傾き・下向き ToF）は送信機・ボタンと同じ。**送信機の電文が届いていなくてもよい**。結果を 1 行で返す（`ok: armed (state ARMED_GROUND, mode STABILIZE)` / `refused: <理由>`）。ARM すると、機体はアイドル回転でモータが回る（プロペラ周りに注意） |
+| `disarm` | — | DISARM を要求する。**誰が ARM したかを問わず**受理。地上・TAKEOFF・STABILIZE/ACRO の飛行中は即モータ停止、ALT_HOLD/POS_HOLD の飛行中は 1 回目が自動着陸（`ok: auto-landing started ...`）で、着陸中にもう一度打つと即停止（送信機の押し込みと同じ規則）。armed でなければ `no change: not armed` |
+| `emergency` | — | どの armed の状態でも即モータ停止（自動着陸にしない）。`ok: motors stopped (state FLYING -> IDLE_GROUND)` |
+| `mode` | `[stabilize\|acro]` | 飛行モードを選ぶ。引数なしは現在のモードを表示。**選べるのは `stabilize` と `acro` だけ**（ALT_HOLD・POS_HOLD は CLI から選べない）。送信機のモード調停と同じ `requestModeChange` を通る: 地上・ARMED_GROUND・FLYING で受理、TAKEOFF・LANDING・FLIP などでは拒否。**ARM 前の地上（IDLE_GROUND）では、送信機の電文が 1 度でも届いていれば、送信機のスイッチ位置に合わせ直されるので指定が戻ることがある**（`changed, then put back to ... by the transmitter's switch position`）。電文が 1 度も届いていなければ指定は残る。ARM 後は次のスイッチ操作まで残る。DISARM で地上に戻ると STABILIZE に戻る |
 | `magcal` | `[start\|stop\|status\|save\|clear]` | 地磁気のハード/ソフトアイアン校正（下記手順）|
 | `stack` | — | 全タスクのスタック使用量の表（単位はバイト）。**disarmed 限定**: ARM 中は `refused: stack scan briefly holds the scheduler — land/disarm first` で拒否する（名前でタスクを引くときスケジューラを短く止め、400 Hz のループを遅らせうるため）。読み方は下の「スタック使用量の見方」 |
 | `reboot` | — | 再起動。**disarmed 限定**: ARM 中は `refused: reboot stops the motors — land/disarm first` で拒否する（再起動はモータを即座に止めるため。`param save` の ARM 中の拒否と同じ形）|
@@ -406,7 +413,8 @@ sf telemetry --csv f.csv  # CSV 記録（ターミナル/--web どちらでも�
 
 **実装方針:** 各コマンドは状態/HAL に直接触れず、トピックへ「事実」を publish して所有タスクが
 適用する（例: `motor` → `motor_test` トピック → ControlTask、`sound`/`led` → `ui_command` → NotifyTask、
-`unpair` → `button_event` → StateTask）。これにより**将来 WiFi/UDP から同じトピックへ注入すれば
+`unpair` → `button_event` → StateTask、`arm`/`disarm`/`emergency`/`mode` → `api_command` → StateTask）。
+`arm`・`disarm`・`emergency`・`mode` は、API（UDP 8889）の飛行コマンドと同じ受け口（`api_command`）に要求を出し、判断は StateTask（StateManager）が行う。**送信機の電文（`command_setpoint`・`pilot_request`）には触れない**ので、通信途絶の見張りには影響しない。要求の後、最長 120 ms だけ状態を見て結果を返す。規則の全体は `detailed_design.md` §3.1「CLI の入力列」。これにより**将来 WiFi/UDP から同じトピックへ注入すれば
 WiFi 経由の制御を追加できる**（§7）。
 
 **既知の問題:** 手動モード（ACRO / STABILIZE）の ARMED_GROUND は、スロットルが 0.5 未満でも浮いて上がれるので、この状態にいることは床の上にいることを保証しない（直していない。API の `land` は手動モードの ARMED_GROUND では拒否する）。
@@ -552,6 +560,10 @@ identical to the legacy vehicle.**
   (±about centre, deadband ±0.05).
 - **ARM/DISARM**: controller ARM switch (flags bit0) rising = ARM (gated on calibration + voltage),
   falling = DISARM. On-board button click (on ground) toggles ARM/DISARM.
+  The CLI also arms and disarms (`arm`, `disarm`, `emergency`, `mode`; see the CLI table). **An explicit DISARM request
+  (transmitter, API, CLI) is always accepted in an armed state, whoever armed the craft** (the on-board button click
+  is the one exception: ignored in flight). The CLI `arm` is accepted only in STABILIZE / ACRO (an ARM in
+  ALT_HOLD / POS_HOLD starts an auto-takeoff).
 - **Flight modes** (flags): bit2 = ACRO, bit3 = ALT_HOLD, bit4 = POS_HOLD; default STABILIZE.
   Priority **POS_HOLD > ALT_HOLD > ACRO > STABILIZE**.
 - **Heading hold** (STABILIZE and above): while the yaw stick is neutral the heading captured at
@@ -684,6 +696,10 @@ completes.
 | `sound` | `[on\|off]` | Enable/disable the buzzer (NVS) |
 | `led` | `<0-255>` | Body LED brightness (NVS) |
 | `motor` | `[test <1-4> <0-100> [sec]\|all <0-100> [sec]\|stop]` | **Bench motor test (DISARMED only — props off!)**. M1=FR M2=RR M3=RL M4=FL. Optional last argument = run time in seconds (0.1–60, default 2). Example: `motor test 1 30 5`. Also works on the workshop firmware |
+| `arm` | — | Request ARM. Accepted **only in STABILIZE / ACRO** (an ARM in ALT_HOLD / POS_HOLD starts an auto-takeoff, so it is refused with `refused: the CLI arms only in STABILIZE or ACRO ...`). The pre-arm gates (calibration, voltage, pairing, tilt, downward ToF) are the same as for the transmitter and the button. **No transmitter packet is needed.** Prints one result line (`ok: armed (state ARMED_GROUND, mode STABILIZE)` / `refused: <reason>`). An armed craft idles its motors: keep clear of the propellers |
+| `disarm` | — | Request DISARM. Accepted **whoever armed the craft**. On the ground, in TAKEOFF and in STABILIZE / ACRO in flight it stops the motors at once; in ALT_HOLD / POS_HOLD in flight the first request starts an auto-landing (`ok: auto-landing started ...`) and a second one while landing stops the motors at once (the transmitter's rule). When not armed: `no change: not armed` |
+| `emergency` | — | Stop the motors at once in every armed state (no auto-landing): `ok: motors stopped (state FLYING -> IDLE_GROUND)` |
+| `mode` | `[stabilize\|acro]` | Select the flight mode; no argument shows the current one. **Only `stabilize` and `acro` can be selected** (ALT_HOLD / POS_HOLD cannot from the CLI). It goes through the `requestModeChange` the transmitter's mode arbitration uses: accepted in IDLE_GROUND, ARMED_GROUND and FLYING, refused in TAKEOFF, LANDING, FLIP ... **On the ground before ARM (IDLE_GROUND), once a transmitter packet has arrived, the transmitter's switch position is re-applied, so the choice may be put back** (`changed, then put back to ... by the transmitter's switch position`); when no packet has ever arrived the choice stays. After ARM it stays until the next switch edge. Returning to the ground by DISARM resets the mode to STABILIZE |
 | `magcal` | `[start\|stop\|status\|save\|clear]` | Magnetometer hard/soft-iron calibration: `start` → rotate the craft in all orientations (figure-8, ~100+ samples) → `stop` (sphere fit) → `save` (NVS). Yaw aiding engages at the next boot; enable fusion with `param set eskf.use_mag 1`. Uncalibrated mag is automatically kept OUT of the fusion |
 | `stack` | — | Table of the stack usage of every task (units: bytes). **DISARMED only**: while armed it is refused with `refused: stack scan briefly holds the scheduler — land/disarm first` (looking a task up by name holds the scheduler briefly, which could delay the 400 Hz loop). See "Reading the stack usage" below |
 | `reboot` | — | Restart the flight controller. **DISARMED only**: while armed it is refused with `refused: reboot stops the motors — land/disarm first` (the restart stops the motors at once; the same form as the refusal of `param save` while armed) |
@@ -749,7 +765,10 @@ How to check: (1) After boot, run `status` and see that `late` of `imu all` and 
 During a capture the 50 Hz monitoring telemetry (:5005) stops (the analysis stream owns the bandwidth). Log lines are sent at most every 100 ms and only when a line was logged (about 2 lines/s in a typical flight). A burst of many lines in a short time can lose lines, but the loss is visible in `dropped_before` and `text_dropped_lines`.
 
 Every command publishes a FACT on a topic and the owning task applies it (e.g. `motor` → `motor_test`
-→ ControlTask; `sound`/`led` → `ui_command` → NotifyTask; `unpair` → `button_event` → StateTask). So a
+→ ControlTask; `sound`/`led` → `ui_command` → NotifyTask; `unpair` → `button_event` → StateTask; `arm`/`disarm`/`emergency`/`mode` → `api_command` → StateTask). The four flight commands use
+the same entry (`api_command`) as the API's flight verbs, the StateTask (StateManager) decides, and **the transmitter's messages
+(`command_setpoint`, `pilot_request`) are not touched**, so the communication-loss watch is not affected; the command watches the
+state for at most 120 ms and prints the result (full rules: `detailed_design.md` §3.1 "CLI input columns"). So a
 future WiFi/UDP receiver can inject the same topics to add **WiFi control without changing the command
 implementations** (§7).
 

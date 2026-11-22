@@ -284,6 +284,30 @@ bool StateManager::requestArmForTakeoff(FlightMode takeoff_mode)
     return false;
 }
 
+/// @design detailed_design.md §3.1 — CLI input columns, `arm` row (STABILIZE / ACRO only)  [OK]
+bool StateManager::requestArmManualMode()
+{
+    if (state_ == FlightState::IDLE_GROUND && flightModeNeedsAltitude(mode_)) {
+        ESP_LOGW(TAG, "ARM rejected: the CLI arms only in STABILIZE or ACRO (%s would start an auto-takeoff)",
+                 flightModeName(mode_));
+        notify_command.publish({static_cast<uint8_t>(NotifyEvent::ArmRejected),
+                                static_cast<uint32_t>(esp_timer_get_time())});
+        return false;
+    }
+    return requestArm();   // every other state and every pre-arm gate: the one ARM path / 他の状態と ARM 前判定は ARM の唯一の経路
+}
+
+/// @design detailed_design.md §3.1 — CLI input columns, `mode` row (STABILIZE / ACRO only)  [OK]
+bool StateManager::requestManualModeChange(FlightMode new_mode)
+{
+    if (flightModeNeedsAltitude(new_mode)) {
+        ESP_LOGW(TAG, "Mode change rejected: the CLI selects only STABILIZE or ACRO (asked %s)",
+                 flightModeName(new_mode));
+        return false;
+    }
+    return requestModeChange(new_mode);
+}
+
 /// @design requirements.md §2 — ARMED_GROUND→IDLE_GROUND (DISARM),       [OK]
 /// @design requirements.md §2 — FLYING→IDLE_GROUND (pilot DISARM)        [OK]
 bool StateManager::requestDisarm()

@@ -870,7 +870,9 @@ void StateTask(void* pvParameters)
         sf::ButtonEvent button;
         // =====================================================================
         // Network-API flight verbs (ApiTask → api_command, requirements §7
-        // command receive). Same authority split as button/pilot input: the API
+        // command receive; the CLI's arm / disarm / emergency / mode, CLITask →
+        // api_command, use the same entry: detailed_design.md §3.1 "CLI input
+        // columns"). Same authority split as button/pilot input: the API
         // reports facts, this task — through the StateManager — decides.
         // Takeoff composes the EXISTING proven chain: ground mode change →
         // requestArm (pre-arm gates incl. still-calibration apply) → the
@@ -891,6 +893,20 @@ void StateTask(void* pvParameters)
                 break;
             case sf::ApiCmd::Disarm:
                 g_state_manager.requestDisarm();        // ALT/POS in flight → auto-land
+                break;
+            case sf::ApiCmd::ArmManual:
+                // CLI `arm`: ARM only in STABILIZE / ACRO (the mode condition is the StateManager's).
+                // CLI の `arm`: STABILIZE / ACRO のときだけ ARM（モードの条件は StateManager の判断）。
+                g_state_manager.requestArmManualMode();
+                break;
+            case sf::ApiCmd::SetManualMode:
+                // CLI `mode`: one-shot request, the transmitter switch's edge memory (prev_want in
+                // arbitrateFlightMode) is not touched; on the ground the relevel rule may put the
+                // switch position back on the next cycle (detailed_design.md §3.1, CLI columns).
+                // CLI の `mode`: 1 回限りの要求で、送信機スイッチのエッジの記憶（arbitrateFlightMode の
+                // prev_want）には触れない。地上では不一致則が次の周期にスイッチ位置へ戻しうる
+                // （detailed_design.md §3.1 の CLI の列）。
+                g_state_manager.requestManualModeChange(static_cast<sf::FlightMode>(api_cmd.mode));
                 break;
             case sf::ApiCmd::Emergency:
                 g_state_manager.requestEmergencyStop(); // unconditional immediate cut

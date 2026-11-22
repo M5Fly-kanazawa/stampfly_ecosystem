@@ -27,9 +27,11 @@
  * @subscriber system_mode, sensor_power, sensor_health, pairing_state, pairing_complete,
  *             pairing_diag
  * @publisher button_event (CLI `pair` injects a LongPress3s gesture fact)
+ * @publisher api_command (CLI `arm` / `disarm` / `emergency` / `mode` publish a flight request; StateTask decides)
  * @design architecture.md §6 — CLITask: CLI + Parameters              [OK]
  * @design architecture.md §3 — R6 CLI command registry pattern         [OK]
  * @design detailed_design.md §8 — CLITask                            [OK]
+ * @design detailed_design.md §3.1 — CLI input columns (arm / disarm / emergency / mode)  [OK]
  */
 
 #include <cstdio>
@@ -58,6 +60,7 @@
 #include "failsafe_status_guard.hpp"   // a stale failsafe_status reads as ToF silent
 #include "config.hpp"
 #include "nonfinite_guard.hpp"   // nonFiniteStageName() for `status`
+#include "tof_silence_policy.hpp"   // flightModeNeedsAltitude(): why `arm` is refused (display only)
 
 static const char* TAG = "CLITask";
 
@@ -658,6 +661,225 @@ int cmd_pair(int argc, char** argv)
         return 0;
     }
     std::printf("usage: pair [start | status]\n");
+    return 0;
+}
+
+// =============================================================================
+// Flight commands: arm / disarm / emergency / mode
+// 飛行命令: arm / disarm / emergency / mode
+//
+// Each command publishes ONE request on api_command (a fact: "the operator asked"); StateTask,
+// through the StateManager, decides and executes (INV-3). The command then polls system_mode for
+// a short, bounded time to report what happened. The checks here only choose the words of the
+// report; they never decide. The transmitter's messages (command_setpoint, pilot_request) are not
+// touched, so the communication-loss watch is not affected.
+// 各命令は api_command に要求を 1 つ出し（事実:「操作者が求めた」）、判断と実行は StateTask が
+// StateManager を通して行う（INV-3）。その後、命令は system_mode を短い有限の時間だけ見て結果を報告する。
+// ここでの検査は報告の言葉を選ぶだけで、判断はしない。送信機の電文（command_setpoint・pilot_request）には
+// 触れないので、通信途絶の見張りには影響しない。
+// =============================================================================
+
+/// True when the published state is one of the armed states.
+/// 発行された状態が armed の状態のどれかなら true。
+bool isArmedMode(const sf::SystemMode& mode)
+{
+    return sf::isArmed(static_cast<sf::FlightState>(mode.state));
+}
+
+/// Publish one flight request on api_command (the StateTask reads it).
+/// api_command に飛行の要求を 1 つ出す（StateTask が読む）。
+void publishFlightRequest(sf::ApiCmd command, sf::FlightMode mode = sf::FlightMode::STABILIZE)
+{
+    sf::ApiCommand request{};
+    request.command   = static_cast<uint8_t>(command);
+    request.mode      = static_cast<uint8_t>(mode);
+    request.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::api_command.publish(request);
+}
+
+/// Poll system_mode every CLI_REQUEST_POLL_MS until `reached` is true or CLI_REQUEST_WAIT_MS has
+/// passed; returns the last reading. The handlers keep no state, so the USB and TCP consoles can run them at once.
+/// `reached` が真になるか CLI_REQUEST_WAIT_MS が過ぎるまで CLI_REQUEST_POLL_MS ごとに system_mode を読み、
+/// 最後の読みを返す。ハンドラは状態を持たないので、USB と TCP のコンソールが同時に実行してよい。
+template <typename Predicate>
+sf::SystemMode waitForSystemMode(Predicate reached)
+{
+    sf::SystemMode latest = sf::system_mode.latest();
+    for (uint32_t waited_ms = 0; !reached(latest) && waited_ms < config::CLI_REQUEST_WAIT_MS;
+         waited_ms += config::CLI_REQUEST_POLL_MS) {
+        vTaskDelay(pdMS_TO_TICKS(config::CLI_REQUEST_POLL_MS));
+        latest = sf::system_mode.latest();
+    }
+    return latest;
+}
+
+/// Why an ARM was not accepted, in the order the StateManager judges: the state, the flight mode
+/// (the CLI arms only in STABILIZE / ACRO), then the pre-arm gates (the `prearm` line of `status`).
+/// ARM が受理されなかった理由。StateManager が判断する順に: 状態、飛行モード（CLI が ARM するのは
+/// STABILIZE / ACRO だけ）、ARM 前判定（`status` の `prearm` 行）。
+void printArmRefusal(const sf::SystemMode& mode)
+{
+    const auto state       = static_cast<sf::FlightState>(mode.state);
+    const auto flight_mode = static_cast<sf::FlightMode>(mode.sub_mode);
+    const auto block       = static_cast<sf::ArmBlock>(mode.arm_block);
+    if (state != sf::FlightState::IDLE_GROUND) {
+        std::printf("refused: ARM needs IDLE_GROUND (state is %s)\n", sf::flightStateName(state));
+    } else if (sf::flightModeNeedsAltitude(flight_mode)) {
+        std::printf("refused: the CLI arms only in STABILIZE or ACRO (mode is %s: an ARM there starts an "
+                    "auto-takeoff) - use `mode stabilize` or `mode acro`\n", sf::flightModeName(flight_mode));
+    } else if (block != sf::ArmBlock::None) {
+        std::printf("refused: %s\n", armBlockDescription(block));
+    } else {
+        std::printf("not armed yet (state %s): see `status`\n", sf::flightStateName(state));
+    }
+}
+
+/// `arm` — request ARM. Accepted only in STABILIZE / ACRO (an ARM in ALT_HOLD / POS_HOLD starts an
+/// auto-takeoff) and when the pre-arm gates pass; no transmitter packet is needed.
+/// `arm` — ARM を要求する。STABILIZE / ACRO のときだけ（ALT_HOLD / POS_HOLD の ARM は自動離陸を始める）、
+/// かつ ARM 前判定を通ったときだけ受理される。送信機の電文は要らない。
+int cmd_arm(int argc, char** argv)
+{
+    (void)argc;
+    (void)argv;
+    const sf::SystemMode before = sf::system_mode.latest();
+    publishFlightRequest(sf::ApiCmd::ArmManual);
+    const sf::SystemMode after = waitForSystemMode(isArmedMode);
+    if (isArmedMode(before)) {
+        std::printf("no change: already armed (state %s)\n",
+                    sf::flightStateName(static_cast<sf::FlightState>(before.state)));
+    } else if (isArmedMode(after)) {
+        std::printf("ok: armed (state %s, mode %s)\n",
+                    sf::flightStateName(static_cast<sf::FlightState>(after.state)),
+                    sf::flightModeName(static_cast<sf::FlightMode>(after.sub_mode)));
+    } else {
+        printArmRefusal(after);
+    }
+    return 0;
+}
+
+/// Report what a DISARM / emergency request did to the state.
+/// DISARM・非常停止の要求が状態に何をしたかを報告する。
+void printMotorStopResult(const sf::SystemMode& before, const sf::SystemMode& after)
+{
+    const auto before_state = static_cast<sf::FlightState>(before.state);
+    const auto after_state  = static_cast<sf::FlightState>(after.state);
+    if (!sf::isArmed(before_state)) {
+        std::printf("no change: not armed (state %s)\n", sf::flightStateName(before_state));
+    } else if (after_state == sf::FlightState::IDLE_GROUND) {
+        std::printf("ok: motors stopped (state %s -> IDLE_GROUND)\n", sf::flightStateName(before_state));
+    } else if (after_state == sf::FlightState::LANDING && before_state != sf::FlightState::LANDING) {
+        std::printf("ok: auto-landing started (ALT_HOLD / POS_HOLD in flight); `disarm` again stops the "
+                    "motors at once, `emergency` stops them now\n");
+    } else {
+        std::printf("no change yet (state %s): see `status`\n", sf::flightStateName(after_state));
+    }
+}
+
+/// Publish a motor-stop request (`disarm` or `emergency`) and report its outcome. Nothing to wait
+/// for when the craft is not armed.
+/// モータ停止の要求（`disarm`・`emergency`）を出して結果を報告する。armed でなければ待つものは無い。
+int requestMotorStop(sf::ApiCmd command)
+{
+    const sf::SystemMode before = sf::system_mode.latest();
+    publishFlightRequest(command);
+    sf::SystemMode after = before;
+    if (isArmedMode(before)) {
+        after = waitForSystemMode([&before](const sf::SystemMode& latest) { return latest.state != before.state; });
+    }
+    printMotorStopResult(before, after);
+    return 0;
+}
+
+/// `disarm` — request DISARM, accepted from any armed state whoever armed the craft. On the
+/// ground, in TAKEOFF and in STABILIZE / ACRO in flight it stops the motors at once; in ALT_HOLD /
+/// POS_HOLD in flight the first request starts an auto-landing (the same rule as the transmitter).
+/// `disarm` — DISARM を要求する。誰が ARM したかを問わず、armed のどの状態でも受理される。地上・TAKEOFF・
+/// 飛行中の STABILIZE / ACRO ではすぐモータを止め、飛行中の ALT_HOLD / POS_HOLD では最初の要求が
+/// 自動着陸を始める（送信機と同じ規則）。
+int cmd_disarm(int argc, char** argv)
+{
+    (void)argc;
+    (void)argv;
+    return requestMotorStop(sf::ApiCmd::Disarm);
+}
+
+/// `emergency` — stop the motors at once in every armed state (no auto-landing).
+/// `emergency` — armed のどの状態でも即モータ停止（自動着陸にしない）。
+int cmd_emergency(int argc, char** argv)
+{
+    (void)argc;
+    (void)argv;
+    return requestMotorStop(sf::ApiCmd::Emergency);
+}
+
+/// Parse the mode word of `mode`; only STABILIZE and ACRO can be selected from the CLI.
+/// `mode` のモード語を解釈する。CLI から選べるのは STABILIZE と ACRO だけ。
+bool parseManualMode(const char* word, sf::FlightMode& mode)
+{
+    if (std::strcmp(word, "stabilize") == 0) {
+        mode = sf::FlightMode::STABILIZE;
+        return true;
+    }
+    if (std::strcmp(word, "acro") == 0) {
+        mode = sf::FlightMode::ACRO;
+        return true;
+    }
+    return false;
+}
+
+/// Report the result of `mode`. On the ground the mode arbitration may put the transmitter's
+/// switch position back within one StateTask cycle, so the mode is read again after a short settle.
+/// `mode` の結果を報告する。地上ではモード調停が 1 周期以内に送信機のスイッチ位置を戻しうるので、
+/// 短い間をおいてモードを読み直す。
+void printModeResult(sf::FlightMode requested, const sf::SystemMode& after)
+{
+    const auto state = static_cast<sf::FlightState>(after.state);
+    if (static_cast<sf::FlightMode>(after.sub_mode) != requested) {
+        std::printf("refused: mode %s not applied in state %s (the mode changes in IDLE_GROUND, "
+                    "ARMED_GROUND and FLYING); mode is %s\n", sf::flightModeName(requested),
+                    sf::flightStateName(state), sf::flightModeName(static_cast<sf::FlightMode>(after.sub_mode)));
+        return;
+    }
+    if (state != sf::FlightState::IDLE_GROUND) {
+        std::printf("ok: mode %s (state %s)\n", sf::flightModeName(requested), sf::flightStateName(state));
+        return;
+    }
+    vTaskDelay(pdMS_TO_TICKS(config::CLI_MODE_SETTLE_MS));
+    const auto settled = static_cast<sf::FlightMode>(sf::system_mode.latest().sub_mode);
+    if (settled == requested) {
+        std::printf("ok: mode %s (on the ground a received transmitter switch position sets the mode back)\n",
+                    sf::flightModeName(requested));
+    } else {
+        std::printf("changed, then put back to %s by the transmitter's switch position (IDLE_GROUND follows "
+                    "the switches; the mode stays after ARM)\n", sf::flightModeName(settled));
+    }
+}
+
+/// `mode [stabilize|acro]` — select the flight mode (same arbitration target as the transmitter's
+/// switches), or show the current one. ALT_HOLD / POS_HOLD cannot be selected from the CLI.
+/// `mode [stabilize|acro]` — 飛行モードを選ぶ（送信機のスイッチと同じ調停の対象）。引数なしは現在のモードを
+/// 表示する。ALT_HOLD / POS_HOLD は CLI から選べない。
+int cmd_mode(int argc, char** argv)
+{
+    sf::FlightMode requested = sf::FlightMode::STABILIZE;
+    if (argc < 2) {
+        const sf::SystemMode mode = sf::system_mode.latest();
+        std::printf("mode    : %s (state %s)\nusage: mode [stabilize|acro]\n",
+                    sf::flightModeName(static_cast<sf::FlightMode>(mode.sub_mode)),
+                    sf::flightStateName(static_cast<sf::FlightState>(mode.state)));
+        return 0;
+    }
+    if (!parseManualMode(argv[1], requested)) {
+        std::printf("usage: mode [stabilize|acro] - the CLI cannot select ALT_HOLD / POS_HOLD "
+                    "(they need the downward ToF and an ARM there starts an auto-takeoff)\n");
+        return 0;
+    }
+    publishFlightRequest(sf::ApiCmd::SetManualMode, requested);
+    const sf::SystemMode after = waitForSystemMode([requested](const sf::SystemMode& latest) {
+        return static_cast<sf::FlightMode>(latest.sub_mode) == requested;
+    });
+    printModeResult(requested, after);
     return 0;
 }
 
@@ -1567,6 +1789,10 @@ const CliCommand kCommands[] = {
     {"mac",     "Show this vehicle's MAC and 4-hex-digit label",  &cmd_mac},
     {"pair",    "pair [start|status] — (re-)enter pairing / show bind", &cmd_pair},
     {"unpair",  "Clear pairing and re-enter pairing mode",       &cmd_unpair},
+    {"arm",       "arm - ARM (STABILIZE / ACRO only; ALT_HOLD / POS_HOLD start an auto-takeoff)", &cmd_arm},
+    {"disarm",    "disarm - DISARM from any armed state (ALT/POS in flight: auto-landing first)", &cmd_disarm},
+    {"emergency", "emergency - stop the motors at once in any armed state", &cmd_emergency},
+    {"mode",      "mode [stabilize|acro] - select the flight mode / show it", &cmd_mode},
     {"sound",   "sound [on|off|test [start|ok|fail]] — buzzer mute / play a cue", &cmd_sound},
     {"led",     "led <0-255> — body LED brightness",             &cmd_led},
     {"motor",   "motor [test <1-4> <0-100> [sec]|all <0-100> [sec]|sweep [duty% sec]|stop] — bench test (disarmed)", &cmd_motor},

@@ -1,0 +1,17 @@
+# cli_disarm_rc_armed_flying.scn — a craft armed by the transmitter and flying in STABILIZE is stopped by the CLI `disarm`
+#                                  送信機で ARM して STABILIZE で飛んでいる機体を、CLI の `disarm` で止める
+#
+# Spec under test (detailed_design.md §3.1, DISARM principle and the CLI `disarm` column): the transmitter arms (ARM button press), the throttle lifts the craft
+# (stab_flight.scn's recipe), then `disarm` from the CLI in FLYING / STABILIZE is an immediate motor cut (the pilot-DISARM rule: ACRO / STABILIZE in flight cut at once).
+# 検証する仕様（detailed_design.md §3.1 の DISARM の原則と CLI の `disarm` の列）: 送信機が ARM し（ARM ボタンの押下）、スロットルで機体を浮かせ
+# （stab_flight.scn の手順）、FLYING・STABILIZE の間に CLI の `disarm` を打つと、すぐモータが止まる（パイロットの DISARM の規則: 飛行中の ACRO / STABILIZE は即停止）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/cli_disarm_rc_armed_flying.scn --target vehicle --duration 11000000
+#
+#  <t>  ch   <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    2048  0     4000      50      # A: boot at rest — calibration completes
+   +    rc   2048  2048   2048    2048  1     1000      50      # B: transmitter ARM (rising edge) -> ARMED_GROUND
+   +    rc   3171  2048   2048    2048  1     2000      50      # C: throttle up -> TAKEOFF -> FLYING (STABILIZE), the craft climbs
+   +    rc   3108  2048   2048    2048  1     1500      50      # D: near-hover
+   +    cli  "disarm"                                           # E: CLI DISARM in flight -> immediate motor cut
+   +    rc   3108  2048   2048    2048  1     2000      50      # F: the transmitter still holds the throttle: motors must stay stopped

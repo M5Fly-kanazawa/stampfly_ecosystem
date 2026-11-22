@@ -1,0 +1,18 @@
+# cli_arm_stabilize.expect — CLI `arm` in STABILIZE arms the craft with no transmitter ARM press; CLI `disarm` stops the motors
+# STABILIZE での CLI の `arm` は、送信機の ARM 押下なしに機体を ARM する。CLI の `disarm` はモータを止める
+#
+exit 0
+log_contains any "ok: armed (state ARMED_GROUND, mode STABILIZE)"
+log_contains any "ARM accepted"
+log_contains any "Transition: IDLE_GROUND → ARMED_GROUND"
+log_contains any "ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)"
+log_contains any "DISARM accepted (ARMED_GROUND → IDLE_GROUND)"
+order "ok: armed (state ARMED_GROUND, mode STABILIZE)" "ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)"
+# The two `status` lines: armed after the `arm`, disarmed after the `disarm`.
+# 2 回の `status`: `arm` の後は armed、`disarm` の後は disarmed。
+log_contains out "armed   : yes"
+log_contains out "armed   : no"
+order "armed   : yes" "ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)"
+# Motors stopped from the DISARM (about 5.1 s) on.
+# DISARM（約 5.1 s）以降はモータが止まっている。
+metric duty_max < 0.01 in 5.6 7.0

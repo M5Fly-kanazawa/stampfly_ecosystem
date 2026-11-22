@@ -1,0 +1,19 @@
+# cli_mode.expect — the CLI `mode` selects ACRO / STABILIZE in ARMED_GROUND and keeps it; ALT_HOLD cannot be selected
+# CLI の `mode` は ARMED_GROUND で ACRO / STABILIZE を選び、保たれる。ALT_HOLD は選べない
+#
+exit 0
+log_contains any "ok: mode ACRO (state ARMED_GROUND)"
+log_contains any "Mode change: STABILIZE → ACRO"
+log_contains any "ok: mode STABILIZE (state ARMED_GROUND)"
+log_contains any "Mode change: ACRO → STABILIZE"
+# The neutral switches (1 s of rc after `mode acro`) do not put the mode back: `mode` still shows ACRO.
+# 中立のスイッチ（`mode acro` の後の 1 s の rc）はモードを戻さない: `mode` は ACRO を表示する。
+log_contains out "mode    : ACRO (state ARMED_GROUND)"
+log_contains out "usage: mode [stabilize|acro] - the CLI cannot select ALT_HOLD / POS_HOLD"
+log_contains out "mode    : STABILIZE (state ARMED_GROUND)"
+log_absent any "Mode change: STABILIZE → ALT_HOLD"
+log_absent any "Mode change: ACRO → ALT_HOLD"
+log_absent any "re-leveled"
+order "ok: mode ACRO (state ARMED_GROUND)" "mode    : ACRO (state ARMED_GROUND)"
+order "mode    : ACRO (state ARMED_GROUND)" "ok: mode STABILIZE (state ARMED_GROUND)"
+order "ok: mode STABILIZE (state ARMED_GROUND)" "usage: mode [stabilize|acro] - the CLI cannot select ALT_HOLD / POS_HOLD"

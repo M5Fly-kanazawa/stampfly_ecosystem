@@ -54,6 +54,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `rc_foreign` | `rc` と同じ引数 | **別の（ペアリングされていない）送信機 MAC** から同じ内容を送る。混信フィルタの検証用 |
 | `rc_ramp` | `<throttle\|roll\|pitch\|yaw> <from> <to> <step> <rate_hz> <arm> [alt] [acro]` | 1軸だけを `from`→`to` へ `step` 刻みで掃引（他の軸は中央値2048）。`step` は符号不要（方向は from/to から自動判定）、`rate_hz` は 1〜1000 |
 | `key` | `"<text>"` | ファームのコンソール（CLI）へ文字列をそのまま流し込む。`\n \t \r \\ \"` エスケープ可 |
+| `cli` | `"<line>"` | ファームの CLI 命令を 1 行、`stampfly>` に打ったとおりに実行する（`arm`・`disarm`・`emergency`・`mode`・`status` など。登録済みの実ハンドラを直接呼ぶ）。出力は stdout に出るので `.expect` の `log_contains out` で見られる。ハンドラが状態を待つ間（最長 120 ms）、`rc` は止まる。vehicle ターゲットでは `key` は何も読まないパイプへ書くだけでハンドラに届かないので、CLI 命令の試験はこちらを使う |
 | `api` | `"<command line>"` | Tello 風 API コマンド1行をファームの ApiTask パーサへ直接注入（例: `"forward 50"`）。ApiTask を持つ `vehicle`/`workshop` ターゲットのみ対応、他ターゲットでは「未対応」として記録されるだけで無視される |
 | `wind` | `<fx> <fy> <fz> [dur_ms]` | 機体に加える外乱力、NED座標 [N]。`dur_ms` を指定すると突風パルス（保持後に自動で 0,0,0 へ戻る）、省略すると定常的に加わり続ける |
 | `fault` | `<motor 0-3> <gain 0-1>` | 指定モータの推力健全度を劣化させる（1.0=健全、0.0=完全停止）。以後持続 |
@@ -97,7 +98,7 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 - `rc`: `hold_ms` ぶん先（0 なら単発フレームで時間を消費しない）
 - `rc_ramp`: 掃引に要するフレーム数 × 周期
 - `wind`: `dur_ms` を指定したときだけその時間ぶん（突風パルス）。省略時（定常ステップ）は瞬時
-- それ以外（`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`tof_offline`/`battery`/`baro`/`param`/`handle`/`btn`）: タイムライン上は瞬時（0ms）
+- それ以外（`key`/`cli`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`tof_offline`/`battery`/`baro`/`param`/`handle`/`btn`）: タイムライン上は瞬時（0ms）
 
 ## 3. `.expect` の書き方
 
@@ -341,6 +342,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 | `rc_foreign` | same as `rc` | Injects the same content from a **different (unpaired) transmitter MAC** — used to test the crosstalk filter |
 | `rc_ramp` | `<throttle\|roll\|pitch\|yaw> <from> <to> <step> <rate_hz> <arm> [alt] [acro]` | Sweeps ONE axis from `from` to `to` in `step` increments (other axes stay centred at 2048). `step` is unsigned (direction is inferred from from/to); `rate_hz` is 1..1000 |
 | `key` | `"<text>"` | Feeds the text straight into the firmware's console (CLI). Supports `\n \t \r \\ \"` escapes |
+| `cli` | `"<line>"` | Runs one firmware CLI command as if typed at `stampfly>` (`arm`, `disarm`, `emergency`, `mode`, `status`, ...; the registered real handler is called directly). The output goes to stdout, so `.expect` can read it with `log_contains out`. While a handler waits for the state (at most 120 ms) the `rc` stream pauses. On the vehicle target `key` only writes a pipe nobody reads and cannot reach a handler, so test CLI commands with this channel |
 | `api` | `"<command line>"` | Injects one Tello-style API command line directly into the firmware's ApiTask parser (e.g. `"forward 50"`). Only works on targets with an ApiTask (`vehicle`/`workshop`); on other targets it is silently recorded as unsupported |
 | `wind` | `<fx> <fy> <fz> [dur_ms]` | External disturbance force on the craft, NED [N]. With `dur_ms` it is a gust pulse (reverts to 0,0,0 afterward); without it, the force stays applied |
 | `fault` | `<motor 0-3> <gain 0-1>` | Degrades one motor's thrust health (1.0 = healthy, 0.0 = dead), sustained |
@@ -384,7 +386,7 @@ One event per line. Blank lines and anything after `#` are ignored.
 - `rc`: `hold_ms` later (0 consumes no time — single frame)
 - `rc_ramp`: frame count needed for the sweep × its period
 - `wind`: only if `dur_ms` was given (gust pulse); a sustained step (no `dur_ms`) is instantaneous
-- everything else (`key`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`tof_offline`/`battery`/`baro`/`param`/`handle`/`btn`): instantaneous (0 ms) on the timeline
+- everything else (`key`/`cli`/`api`/`fault`/`bias`/`tof_silent`/`tof_invalid`/`tof_deadzone`/`tof_offline`/`battery`/`baro`/`param`/`handle`/`btn`): instantaneous (0 ms) on the timeline
 
 ## 3. Writing a `.expect` file
 
