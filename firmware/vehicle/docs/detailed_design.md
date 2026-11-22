@@ -954,16 +954,16 @@ TofTask（8KB、優先度 14、30Hz）は底面センサの立ち上げに失敗
 
 #### ループ周期の監視
 
-`sf::LoopTimingMonitor`（`loop_timing.hpp`、純粋なロジック）が、ImuTask と ControlTask のそれぞれについて次を数える。タスク側の薄い包み（`tasks/loop_timing_scope.hpp`）が起床の直後と待つ直前に呼び、毎秒（400 周期）`imu_loop_timing`・`control_loop_timing`（型 `LoopTiming`）へ発行する。CLI の `status` が表示する。
+`sf::LoopTimingMonitor`（`loop_timing.hpp`、純粋なロジック）が、ImuTask と ControlTask のそれぞれについて次を数える。タスク側の薄い包み（`tasks/loop_timing_scope.hpp`）が実行開始の直後と待つ直前に呼び、毎秒（400 周期）`imu_loop_timing`・`control_loop_timing`（型 `LoopTiming`）へ発行する。CLI の `status` が表示する。
 
 | 項目 | 意味 |
 |------|------|
-| `period_max_us` | 連続する 2 回の起床の間隔の最大。2500 µs 前後が健全、5000 µs 前後はティックを 1 つ取りこぼした |
+| `period_max_us` | 連続する 2 回の周期の実行開始の間隔の最大。2500 µs 前後が健全、5000 µs 前後はティックを 1 つ取りこぼした |
 | `late_count` | 間隔が 1.5 周期（3750 µs）を超えた回数 = 400Hz の合図（2.5 ms ごとにタイマが出すティック）の取りこぼし。通常のジッタ（前後数百 µs）は数えない |
-| `busy_max_us`、`over_budget_count` | 起床から次の待ちまでの時間（壁時計。上位タスクに割り込まれた時間を含む）の最大と、1 周期（2500 µs）を超えた回数 |
+| `busy_max_us`、`over_budget_count` | 実行開始から次の待ちまでの時間（壁時計。上位タスクに割り込まれた時間を含む）の最大と、1 周期（2500 µs）を超えた回数 |
 | `armed_*` | 上の 5 項目を ARM 中に始まった周期だけで数えたもの。飛行前の地上待機で薄まらない |
 
-数え方は起動以降の累計。ControlTask の起床は ImuTask の通知に同期するので、ImuTask が遅れると ControlTask の間隔も伸びる（両方に出る）。ControlTask だけに出るなら、制御の計算が 1 周期を超えているか、BMI270 の読み出しに失敗して ImuTask が通知を飛ばした（ControlTask は起こされない）。`imu` の遅れには 400Hz の合図を出す `esp_timer` タスクの遅れも含む。WiFi 取得でも読める: 毎秒のステータスパケット v4 が全項目を運び、バンドルの `loop_timing` ストリーム（`sf log info` が最後の値を表示）になる。ホスト試験は `test/test_log_ring.cpp`・`test/test_log_sink.cpp`・`test/test_loop_timing.cpp`。
+数え方は起動以降の累計。ControlTask の実行開始は ImuTask の通知に同期するので、ImuTask が遅れると ControlTask の間隔も伸びる（両方に出る）。ControlTask だけに出るなら、制御の計算が 1 周期を超えているか、BMI270 の読み出しに失敗して ImuTask が通知を飛ばした（ControlTask は実行を再開しない）。`imu` の遅れには 400Hz の合図を出す `esp_timer` タスクの遅れも含む。WiFi 取得でも読める: 毎秒のステータスパケット v4 が全項目を運び、バンドルの `loop_timing` ストリーム（`sf log info` が最後の値を表示）になる。ホスト試験は `test/test_log_ring.cpp`・`test/test_log_sink.cpp`・`test/test_loop_timing.cpp`。
 
 工程別の所要時間: ImuTask は 1 周期を工程（IMU の読み出し・推定器の予測・下向き ToF／前方 ToF／オプティカルフロー／地磁気／気圧の観測更新・残り）に区切り、`sf::StepTimingStats`（`step_timing.hpp`、純粋なロジック）へ工程ごとの回数・合計・最大を集める。2500 µs（制御周期）を超えた周期（周期超過）については、その周期に処理した観測の種類の組み合わせごとの回数も数える。コンパイル時の定数 `config::IMU_STEP_TIMING_ENABLED`（既定 false）が true のビルドだけで有効になり、false のときは 400 Hz の経路から計測の費用が完全に消える（実機で、有効にすると周期超過が約 3 倍に増えたため。診断のときだけ true にする）。有効時は、60 秒ごとにログシンク経由の INFO 2 行（`step us (n/avg/max)` と `over-budget cycles`）として出し、窓を消す。計測は時刻を読んで足すだけで、制御・推定の計算と順序は変えない。読み方は `operation_manual.md` の「工程別の所要時間の見方」、ホスト試験は `test/test_step_timing.cpp`。
 

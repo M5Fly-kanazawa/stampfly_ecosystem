@@ -142,7 +142,7 @@ sf log info --text --grep "Landing detected"
 sf log info --text --since 12.0 --until 18.5
 ```
 
-診断値のストリーム（`loop_timing`・`nonfinite`・`tof_diagnostics`・`link_health`）や `text_log` を持つ一式では、ストリームの表の後に「Diagnostics」の欄を表示します（取得の最後の値。ループ周期は `late` が遅れた回数・`period_max` が起床間隔の最大・`busy_max` が処理時間の最大、`armed:` は ARM 中だけの値。読み方は `firmware/vehicle/docs/operation_manual.md`）。持たない一式（旧ファームの取得・診断値のないログ）には何も加えず、そのまま動きます。
+診断値のストリーム（`loop_timing`・`nonfinite`・`tof_diagnostics`・`link_health`）や `text_log` を持つ一式では、ストリームの表の後に「Diagnostics」の欄を表示します（取得の最後の値。ループ周期は `late` が遅れた回数・`period_max` が実行開始の間隔の最大・`busy_max` が処理時間の最大、`armed:` は ARM 中だけの値。読み方は `firmware/vehicle/docs/operation_manual.md`）。持たない一式（旧ファームの取得・診断値のないログ）には何も加えず、そのまま動きます。
 
 ### オプション
 

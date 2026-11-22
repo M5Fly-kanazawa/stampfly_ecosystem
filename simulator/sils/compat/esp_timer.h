@@ -47,7 +47,7 @@ int64_t esp_timer_get_time(void);
 // RTOS emulator scheduler (see rtos/esp_timer_shim.cpp); the callback runs in the
 // scheduler's advance phase and typically does xTaskNotifyGive.
 // 周期タイマ API（400Hz IMU ループの駆動に本体が使う部分集合）。SILS では RTOS
-// エミュレータのスケジューラに決定論的な仮想時計起床源を登録する（rtos/
+// エミュレータのスケジューラに決定論的な仮想時計の実行再開源を登録する（rtos/
 // esp_timer_shim.cpp 参照）。コールバックは advance フェーズで動き、通常
 // xTaskNotifyGive を行う。
 // -----------------------------------------------------------------------------

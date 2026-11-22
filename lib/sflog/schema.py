@@ -1596,14 +1596,14 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                        {   'name': 'imu_cycles',
                            'type': 'int',
                            'unit': 'count',
-                           'description_ja': 'ImuTask: 数えた起床の回数。',
+                           'description_ja': 'ImuTask: 数えた周期の実行開始の回数。',
                            'description_en': 'ImuTask: Wakes counted.'},
                        {   'name': 'imu_period_max_us',
                            'type': 'int',
                            'unit': 'us',
-                           'description_ja': 'ImuTask: 連続する 2 回の起床の間隔の最大。400 Hz の周期は '
-                                             '2500 us で、約 5000 us なら 400 Hz のティックを 1 '
-                                             'つ取りこぼした。',
+                           'description_ja': 'ImuTask: 連続する 2 回の周期の実行開始の間隔の最大。400 Hz '
+                                             'の周期は 2500 us で、約 5000 us なら 400 Hz '
+                                             'のティックを 1 つ取りこぼした。',
                            'description_en': 'ImuTask: Longest interval between two '
                                              'wakes. The 400 Hz period is 2500 us; '
                                              'about 5000 us means one 400 Hz tick was '
@@ -1619,7 +1619,7 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                            'type': 'int',
                            'unit': 'us',
                            'description_ja': 'ImuTask: '
-                                             '起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。',
+                                             '実行開始から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。',
                            'description_en': 'ImuTask: Longest time from a wake to the '
                                              'next wait (preemption by higher-priority '
                                              'tasks included).'},
@@ -1632,7 +1632,8 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                        {   'name': 'imu_last_late_us',
                            'type': 'int',
                            'unit': 'us',
-                           'description_ja': 'ImuTask: 最後に遅れた起床の時刻（機体起動基準。0 = まだ無い）。',
+                           'description_ja': 'ImuTask: 最後に実行開始が遅れた周期の時刻（機体起動基準。0 = '
+                                             'まだ無い）。',
                            'description_en': 'ImuTask: Time of the latest late wake '
                                              '(vehicle boot-relative; 0 = none yet).'},
                        {   'name': 'imu_armed_cycles',
@@ -1643,7 +1644,7 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                        {   'name': 'imu_armed_period_max_us',
                            'type': 'int',
                            'unit': 'us',
-                           'description_ja': 'ImuTask: ARM 中の起床間隔の最大。',
+                           'description_ja': 'ImuTask: ARM 中の実行開始の間隔の最大。',
                            'description_en': 'ImuTask: Longest wake interval while '
                                              'armed.'},
                        {   'name': 'imu_armed_late_count',
@@ -1665,13 +1666,13 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                        {   'name': 'control_cycles',
                            'type': 'int',
                            'unit': 'count',
-                           'description_ja': 'ControlTask: 数えた起床の回数。',
+                           'description_ja': 'ControlTask: 数えた周期の実行開始の回数。',
                            'description_en': 'ControlTask: Wakes counted.'},
                        {   'name': 'control_period_max_us',
                            'type': 'int',
                            'unit': 'us',
-                           'description_ja': 'ControlTask: 連続する 2 回の起床の間隔の最大。400 Hz '
-                                             'の周期は 2500 us で、約 5000 us なら 400 Hz '
+                           'description_ja': 'ControlTask: 連続する 2 回の周期の実行開始の間隔の最大。400 '
+                                             'Hz の周期は 2500 us で、約 5000 us なら 400 Hz '
                                              'のティックを 1 つ取りこぼした。',
                            'description_en': 'ControlTask: Longest interval between '
                                              'two wakes. The 400 Hz period is 2500 us; '
@@ -1688,7 +1689,7 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                            'type': 'int',
                            'unit': 'us',
                            'description_ja': 'ControlTask: '
-                                             '起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。',
+                                             '実行開始から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。',
                            'description_en': 'ControlTask: Longest time from a wake to '
                                              'the next wait (preemption by '
                                              'higher-priority tasks included).'},
@@ -1701,7 +1702,7 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                        {   'name': 'control_last_late_us',
                            'type': 'int',
                            'unit': 'us',
-                           'description_ja': 'ControlTask: 最後に遅れた起床の時刻（機体起動基準。0 = '
+                           'description_ja': 'ControlTask: 最後に実行開始が遅れた周期の時刻（機体起動基準。0 = '
                                              'まだ無い）。',
                            'description_en': 'ControlTask: Time of the latest late '
                                              'wake (vehicle boot-relative; 0 = none '
@@ -1715,7 +1716,7 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                        {   'name': 'control_armed_period_max_us',
                            'type': 'int',
                            'unit': 'us',
-                           'description_ja': 'ControlTask: ARM 中の起床間隔の最大。',
+                           'description_ja': 'ControlTask: ARM 中の実行開始の間隔の最大。',
                            'description_en': 'ControlTask: Longest wake interval while '
                                              'armed.'},
                        {   'name': 'control_armed_late_count',

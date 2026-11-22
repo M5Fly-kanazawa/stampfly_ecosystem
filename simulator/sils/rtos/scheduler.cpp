@@ -146,8 +146,8 @@ uint32_t Scheduler::notify_take(bool clear_on_exit, int64_t timeout_us)
         // Arm a timeout deadline so the scheduler can also wake us on time (not only
         // on a notification). INT64_MAX = wait forever (portMAX_DELAY). The scheduler
         // wakes BlockedNotify tasks at wake_us just like BlockedDelay.
-        // タイムアウト期限を設定し、通知だけでなく時刻でも起床できるようにする。
-        // INT64_MAX=無限待ち。スケジューラは BlockedDelay 同様 wake_us で起こす。
+        // タイムアウト期限を設定し、通知だけでなく時刻でも実行を再開できるようにする。
+        // INT64_MAX=無限待ち。スケジューラは BlockedDelay 同様 wake_us で実行を再開させる。
         self->wake_us = (timeout_us < 0) ? INT64_MAX : (now_us_ + timeout_us);
         block_current(TaskState::BlockedNotify);
     }
@@ -332,7 +332,7 @@ void Scheduler::run(int64_t max_sim_us)
 
         // No ready task → advance the virtual clock to the next wake-up: the
         // earliest of a BlockedDelay wake or a periodic-timer fire.
-        // Ready が無い → 仮想時計を次の起床へ進める。BlockedDelay 起床か周期タイマ
+        // Ready が無い → 仮想時計を次の実行再開へ進める。BlockedDelay の再開か周期タイマ
         // 作動のうち最も早いもの。
         int64_t next_wake  = earliest_wake();
         int64_t next_timer = earliest_timer_fire();
@@ -346,7 +346,7 @@ void Scheduler::run(int64_t max_sim_us)
         for (Task* task : tasks_) {
             // Wake both delay-blocked and notify-with-timeout tasks at their deadline.
             // A wait-forever notify (wake_us = INT64_MAX) is never time-woken (only by
-            // a notification). 期限到達で BlockedDelay と timeout 付き BlockedNotify を起床。
+            // a notification). 期限到達で BlockedDelay と timeout 付き BlockedNotify の実行を再開。
             // 無限待ち(wake_us=INT64_MAX)は時刻では起きない（通知のみ）。
             if ((task->state == TaskState::BlockedDelay ||
                  task->state == TaskState::BlockedNotify) && task->wake_us <= now_us_) {
@@ -443,7 +443,7 @@ void vTaskDelayUntil(TickType_t* last_wake, TickType_t period)
 {
     // Absolute periodic wake (no drift), matching FreeRTOS: advance *last_wake
     // by period and sleep until that tick. 1 tick = 1 ms = 1000 us.
-    // 絶対周期起床（ドリフトなし）、FreeRTOS と同じ: *last_wake を period 分
+    // 絶対周期の実行開始（ドリフトなし）、FreeRTOS と同じ: *last_wake を period 分
     // 進め、その tick までスリープする。1 tick = 1 ms = 1000 us。
     *last_wake += period;
     Scheduler::instance().delay_until_us(static_cast<int64_t>(*last_wake) * 1000);

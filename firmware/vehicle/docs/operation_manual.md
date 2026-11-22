@@ -343,8 +343,8 @@ TAB で補完。
 
 | 見る値 | 健全 | 意味 |
 |--------|------|------|
-| `late` | ARM の瞬間に増えない（地上は 0） | 前の起床から 1.5 周期（3.75 ms）を超えて起きた回数。400Hz の合図（2.5 ms ごとにタイマが出すティック）の取りこぼし |
-| `period max` | 地上は 2.5 ms 付近（ジッタで 3 ms 程度まで）。ARM の瞬間の停止が直っていれば 10 ms 未満 | 連続する起床の間隔の最大。5 ms 付近なら 1 ティック、7.5 ms 付近なら 2 ティックを落とした |
+| `late` | ARM の瞬間に増えない（地上は 0） | 前の周期の実行開始から 1.5 周期（3.75 ms）を超えて実行を開始した回数。400Hz の合図（2.5 ms ごとにタイマが出すティック）の取りこぼし |
+| `period max` | 地上は 2.5 ms 付近（ジッタで 3 ms 程度まで）。ARM の瞬間の停止が直っていれば 10 ms 未満 | 連続する周期の実行開始の間隔の最大。5 ms 付近なら 1 ティック、7.5 ms 付近なら 2 ティックを落とした |
 | `busy max`、`over budget` | `busy max` が 2.5 ms 未満、`over budget` が 0 | 1 周期の処理時間（上位タスクに割り込まれた時間を含む）の最大と、2.5 ms を超えた回数 |
 
 **工程別の所要時間の見方**（ログに 60 秒ごとに出る 2 行。USB コンソールで読む）: 1 周期の処理時間が何の工程でかかっているかを、直前の 60 秒の窓で表示する。直前に `ImuTask: 400Hz load: busy_avg=...` の行が出る。この 2 行は `config::IMU_STEP_TIMING_ENABLED`（`main/config.hpp`）を true にしてビルドしたときだけ出る。既定は false で、有効にすると 400Hz の周期に時計の読み出しと集計の費用が加わる（実機では、1 周期の処理時間が制御周期 2.5 ms を超える周期超過が約 3 倍に増えた）ので、診断のときだけ有効にする。
@@ -358,7 +358,7 @@ ImuTask: over-budget cycles 142: flow+tof=88 flow+baro=21 flow=19 tof+mag=9 none
 |--------|------|
 | `step us (n/avg/max)` の各工程 | `n` はその工程が走った周期の数、`avg` は 1 回あたりの平均 [µs]、`max` は最大 [µs]。`read` は BMI270 の SPI 読み出し・座標変換・`sensor_imu` の発行、`predict` は推定器の予測、`tof`・`front`・`flow`・`mag`・`baro` は下向き ToF・前方 ToF（ログ専用）・オプティカルフロー・地磁気・気圧の観測更新、`rest` は周期全体から上の工程を引いた残り（傾きモニタ、`system_status`・`estimate_state` の発行など） |
 | 観測の工程の `n` | その種類の標本があった周期の数。同じ周期に標本が複数あればその周期の合計を 1 回として数える。標本がなかった周期は数えない（問い合わせだけの時間は `rest` に入る） |
-| `over-budget cycles N` | 周期全体（起床から ControlTask への通知まで）が 2500 µs を超えた周期の数。`400Hz load` の `busy` は推定値の発行の手前までなので、数が少し食い違うことがある |
+| `over-budget cycles N` | 周期全体（実行開始から ControlTask への通知まで）が 2500 µs を超えた周期の数。`400Hz load` の `busy` は推定値の発行の手前までなので、数が少し食い違うことがある |
 | `flow+tof=88` など | 超過した周期で、その周期に処理した観測の種類の組み合わせごとの回数（多い順に 8 組まで）。`none` はどの観測もなかった周期。8 組に入らない分は `others=` にまとめる |
 | `max updates in one cycle` | 1 周期に同じ種類の標本を処理した個数の最大 |
 
@@ -383,7 +383,7 @@ ImuTask: over-budget cycles 142: flow+tof=88 flow+baro=21 flow=19 tof+mag=9 none
 
 | 読みたいもの | 読み方 | 見方 |
 |-------------|--------|------|
-| 400Hz ループの周期 | `sf log info flight1` の「Diagnostics」の `imu loop:`・`control loop:` 行（取得の最後の値）。時系列は一式の `loop_timing`（1 Hz、列 `imu_*`・`control_*`） | `status` の `loop` 行と同じ項目: `late` が遅れた回数、`period_max` が起床間隔の最大 [µs]（2500 付近が健全）、`busy_max` が処理時間の最大 [µs]、`over_budget` が 2500 µs を超えた周期。`armed:` 以下は ARM 中だけの値で、飛行の評価にはこちらを見る。数え方は起動以降の累計なので、取得の前に動かしていたぶんを含む。増えた時刻を見るには `loop_timing` の行の差を取る |
+| 400Hz ループの周期 | `sf log info flight1` の「Diagnostics」の `imu loop:`・`control loop:` 行（取得の最後の値）。時系列は一式の `loop_timing`（1 Hz、列 `imu_*`・`control_*`） | `status` の `loop` 行と同じ項目: `late` が遅れた回数、`period_max` が実行開始の間隔の最大 [µs]（2500 付近が健全）、`busy_max` が処理時間の最大 [µs]、`over_budget` が 2500 µs を超えた周期。`armed:` 以下は ARM 中だけの値で、飛行の評価にはこちらを見る。数え方は起動以降の累計なので、取得の前に動かしていたぶんを含む。増えた時刻を見るには `loop_timing` の行の差を取る |
 | 制御値の有限性 | 同じ欄の `nonfinite:` 行。時系列は一式の `nonfinite` | `detected D of N armed cycles`。D が 0 でなければ、`first boundary` の番号が最初に見つかった場所（0 推定値の入力、1 目標値の入力、2 制御器の外側ループの出力、3 制御器の出力、4 ミキサの出力、5 モータ指令。255 は検出なし）。境界ごとの数は `nonfinite` の列 |
 | ToF の測定品質 | 同じ欄の `ToF bottom`・`ToF front` 行（最後の 1 Hz の値）。時系列は一式の `tof_diagnostics` | `signal` は反射信号（小さいほど反射が弱く測距が不安定）、`ambient` は環境光、`sigma` は距離の標準偏差の推定 [mm]、`range_status` は 0 が有効・254 が全ターゲット無効・255 がターゲットなし。ToF が途切れた飛行では、途切れる直前に `signal` が落ち `ambient` や `sigma` が増えていないかを見る（`tof_bottom` の距離・`tof_silence` と合わせる）。前方センサが無いときは `front` がすべて 0。実機の健全な値の目安は取得を重ねて決める |
 | ログ経路の欠落 | 同じ欄の `log paths:` 行。時系列は一式の `link_health` | `log_stream_overflow`・`send_drops`・`entry_drops` が 0 でなければ、数値ストリームのどこかに欠け（`sf log check` の `seq` の飛び）がある。`text_dropped_lines` は機体が断ったテキストログの行数 |

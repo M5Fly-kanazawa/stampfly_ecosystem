@@ -30,10 +30,10 @@
 |------|---------|
 | `plant.cpp` `Plant::step(dt)` | `mj_step(m_, d_)` を呼ぶ。**MuJoCo の `mj_step` は引数 `dt` を無視し、モデル固定 timestep `m_->opt.timestep`（= `stampfly.xml` の `option timestep="0.0025"` = 2.5 ms）を1回だけ進める。** `dt` はモータ一次遅れ `alpha` とノイズ前進にしか使われない。 |
 | `emu_main_generic.cpp` `on_advance(now_us)` / `emu_main.cpp` | スケジューラの**クロック前進イベント毎**に `sils_board_step_plant(now_us-last)` を1回呼ぶ＝ Plant を 0.0025s 1回進める。 |
-| `scheduler.cpp` `Scheduler::run` | 決定論的協調スケジューラ。Ready タスクが無いとき仮想時計 `now_us_` を「次の起床/タイマ作動」へ**不規則にジャンプ**させ、その都度 `on_advance_` を呼ぶ。 |
+| `scheduler.cpp` `Scheduler::run` | 決定論的協調スケジューラ。Ready タスクが無いとき仮想時計 `now_us_` を「次の実行再開／タイマ作動」へ**不規則にジャンプ**させ、その都度 `on_advance_` を呼ぶ。 |
 
 **不整合の核心**: 物理は「`on_advance` 呼び出し回数 × 0.0025s」しか進まない。一方スケジューラ
-仮想時間は実際の起床間隔で進む。**14個のタスクが各々の周期（1ms, 2.5ms, …）で起床するため、
+仮想時間は実際の実行再開の間隔で進む。**14個のタスクが各々の周期（1ms, 2.5ms, …）で実行を開始するため、
 2.5ms あたりの distinct なクロックイベント数は 400Hz の約3倍**。よって:
 
 ```

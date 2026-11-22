@@ -9,7 +9,7 @@
 /**
  * @file loop_timing.hpp
  * @brief Period and busy-time monitor for a task that wakes at a fixed rate (400 Hz)
- *        一定周期（400 Hz）で起きるタスクの周期・処理時間の監視器
+ *        一定周期（400 Hz）で実行を開始するタスクの周期・処理時間の監視器
  *
  * Measures two things per task, with the clock the task already reads:
  *   period : time between two consecutive wakes. A value near 1.0 period is healthy; a value
@@ -25,10 +25,10 @@
  * Cost per cycle: a few integer operations.
  *
  * タスクごとに 2 つを測る（タスクが既に読んでいる時計を使う）:
- *   周期   : 連続する 2 回の起床の間隔。1.0 周期付近なら健全、2.0 周期付近は 400 Hz のティックを
- *            1 つ取りこぼした（タスク、またはタスクを起こすタイマが 1 周期以上止まった）。
- *   処理時間: 起床から次の待ちまでの経過時間（壁時計）。上位タスクに割り込まれた時間を含む。
- * 間隔が 1.5 周期を超えた起床を「遅れ」と数える: 通常のジッタ（前後数百 µs）は数えず、ティックの
+ *   周期   : 連続する 2 回の周期の実行開始の間隔。1.0 周期付近なら健全、2.0 周期付近は 400 Hz のティックを
+ *            1 つ取りこぼした（タスク、またはタスクに通知するタイマが 1 周期以上止まった）。
+ *   処理時間: 実行開始から次の待ちまでの経過時間（壁時計）。上位タスクに割り込まれた時間を含む。
+ * 間隔が 1.5 周期を超えて始まった実行開始を「遅れ」と数える: 通常のジッタ（前後数百 µs）は数えず、ティックの
  * 取りこぼしは必ず数える。
  *
  * 純粋なロジック（FreeRTOS・ESP-IDF なし）: 呼び出し側が時刻 [µs] と ARM 中かを渡すので、ホスト試験
@@ -50,7 +50,7 @@ namespace sf {
 class LoopTimingMonitor {
 public:
     /// A wake whose interval exceeds this many periods (as a fraction 3/2) is late.
-    /// 間隔がこの周期数（3/2 倍）を超えた起床は「遅れ」。
+    /// 間隔がこの周期数（3/2 倍）を超えて始まった実行開始は「遅れ」。
     static constexpr uint32_t kLateNumerator   = 3;
     static constexpr uint32_t kLateDenominator = 2;
 
@@ -58,7 +58,7 @@ public:
 
     /// Call right after the task wakes. now_us is the time of the wake; armed is whether the
     /// craft is armed now. Wrap-around of the 32-bit microsecond clock is handled.
-    /// タスクが起きた直後に呼ぶ。now_us は起床の時刻、armed は今 ARM 中か。32 ビットのマイクロ秒
+    /// タスクが実行を開始した直後に呼ぶ。now_us は実行開始の時刻、armed は今 ARM 中か。32 ビットのマイクロ秒
     /// 時計の桁あふれは扱う。
     void onWake(uint32_t now_us, bool armed)
     {
@@ -76,7 +76,7 @@ public:
     }
 
     /// Call when the task is about to wait for the next wake (the end of the cycle).
-    /// 次の起床を待つ直前（周期の終わり）に呼ぶ。
+    /// 次の実行開始を待つ直前（周期の終わり）に呼ぶ。
     void onDone(uint32_t now_us)
     {
         if (!busy_pending_) {
@@ -135,9 +135,9 @@ private:
     uint32_t   period_us_;
     LoopTiming stats_         = {};
     uint32_t   last_wake_us_  = 0;
-    bool       has_wake_      = false;   // a previous wake exists / 前回の起床がある
-    bool       busy_pending_  = false;   // a wake is waiting for its onDone / onDone を待つ起床がある
-    bool       armed_         = false;   // armed at the latest wake / 直近の起床で ARM 中だったか
+    bool       has_wake_      = false;   // a previous wake exists / 前回の実行開始がある
+    bool       busy_pending_  = false;   // a wake is waiting for its onDone / onDone を待つ実行開始がある
+    bool       armed_         = false;   // armed at the latest wake / 直近の実行開始で ARM 中だったか
 };
 
 }  // namespace sf

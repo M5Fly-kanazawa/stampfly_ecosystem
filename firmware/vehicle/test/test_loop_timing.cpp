@@ -138,7 +138,7 @@ TEST(the_arm_edge_stall_is_counted_as_armed)
     sf::LoopTimingMonitor monitor(kPeriodUs);
     cycle(monitor, 0, 500, false);
     cycle(monitor, 2500, 500, false);
-    cycle(monitor, 52500, 500, true);           // 50 ms after the previous wake, first armed wake / 前回から 50 ms 後、最初の ARM 中の起床
+    cycle(monitor, 52500, 500, true);           // 50 ms after the previous wake, first armed wake / 前回から 50 ms 後、最初の ARM 中の実行開始
     ASSERT_TRUE(monitor.result().armed_period_max_us == 50000);
     ASSERT_TRUE(monitor.result().armed_late_count == 1);
 }
@@ -156,9 +156,9 @@ TEST(uint32_clock_wrap_is_handled)
 TEST(done_without_a_wake_is_ignored)
 {
     sf::LoopTimingMonitor monitor(kPeriodUs);
-    monitor.onDone(5000);                       // the first loop pass has no previous wake / 最初の周回には前の起床がない
+    monitor.onDone(5000);                       // the first loop pass has no previous wake / 最初の周回には前の実行開始がない
     cycle(monitor, 10000, 700);
-    monitor.onDone(99999);                      // a second onDone for the same wake changes nothing / 同じ起床への 2 回目は何も変えない
+    monitor.onDone(99999);                      // a second onDone for the same wake changes nothing / 同じ実行開始への 2 回目は何も変えない
     ASSERT_TRUE(monitor.result().busy_max_us == 700);
 }
 

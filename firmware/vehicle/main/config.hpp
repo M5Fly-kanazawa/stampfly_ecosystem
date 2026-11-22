@@ -149,8 +149,8 @@ inline constexpr float TOF_DT     = 0.033f;    // 30Hz
 // this window (= 4 missed IMU cycles), the IMU pipeline is considered stalled
 // and ControlTask forces the motors to zero. Without this, a dead IMU would
 // leave the LEDC outputs frozen at the last written duty (flyaway).
-// ControlTask 起床ウォッチドッグ: ControlTask は通常、IMU 周期（2.5ms）毎の ImuTask
-// 通知で起きる。この窓（= IMU 4 周期分）内に通知が来なければ IMU パイプライン停止と
+// ControlTask 実行開始ウォッチドッグ: ControlTask は通常、IMU 周期（2.5ms）毎の ImuTask
+// 通知で実行を再開する。この窓（= IMU 4 周期分）内に通知が来なければ IMU パイプライン停止と
 // みなし、モータを強制的にゼロへ。これが無いと IMU 死亡時に LEDC 出力が最後の duty で
 // 固着する（フライアウェイ）。
 inline constexpr uint32_t CONTROL_NOTIFY_TIMEOUT_MS = 10;  // = 4 × IMU period

@@ -132,7 +132,7 @@ public:
     void delay_until_us(int64_t wake_us);
     // timeout_us < 0 = wait forever (portMAX_DELAY); else wake at now+timeout even
     // without a notification (returns 0 on timeout). FreeRTOS ulTaskNotifyTake semantics.
-    // timeout_us<0 で無限待ち、それ以外は通知無しでも now+timeout で起床（timeout 時 0 を返す）。
+    // timeout_us<0 で無限待ち、それ以外は通知無しでも now+timeout で実行を再開（timeout 時 0 を返す）。
     uint32_t notify_take(bool clear_on_exit, int64_t timeout_us);
     void notify_give(Task* target);
     void delete_self();
@@ -148,7 +148,7 @@ public:
     // reproduced on the host. Fired during the all-blocked advance phase, in
     // registration order, for a stable trace.
     // --- 周期タイマ（esp_timer シムが駆動）---
-    // 周期タイマは決定論的な仮想時計の起床源: 時計が next_fire_us に達すると
+    // 周期タイマは決定論的な仮想時計の実行再開源: 時計が next_fire_us に達すると
     // スケジューラが本体コールバック（通常 xTaskNotifyGive）を実行する。これで真の
     // 400Hz esp_timer ループを host 上で再現する。全ブロックの advance 中に登録順で
     // 作動し、トレースを安定させる。

@@ -81,7 +81,7 @@ PC 側の端末（飛行の段階。全て同じ PC、機体の WiFi につな�
 | 一式（`.sflog.zip`） | `sf log wifi` で取得した飛行ログの 1 ファイル。信号ごとの CSV を 1 つの zip にまとめたもの。機体のログの文字（`text_log`）と診断値（`loop_timing`・`nonfinite`・`link_health`・`tof_diagnostics`）を含む |
 | ESKF | 誤差状態カルマンフィルタ。機体の姿勢・位置・速度を推定する推定器。`posvel` の位置は ESKF の推定値 |
 | 400 Hz ループ | ImuTask（センサ読み取りと姿勢推定）と ControlTask（制御計算）が 2.5 ms ごとに繰り返す処理 |
-| `late`、`period max`、`busy max`、`over budget` | `late` = 前の起床から 1.5 周期（3.75 ms）を超えて起きた回数。`period max` = 連続する起床の間隔の最大。`busy max` = 1 周期の処理時間の最大。`over budget` = 処理が 2.5 ms を超えた回数。`status` は ms、一式の診断値は µs で表示する（10 ms = 10000 µs、2.5 ms = 2500 µs） |
+| `late`、`period max`、`busy max`、`over budget` | `late` = 前の周期の実行開始から 1.5 周期（3.75 ms）を超えて実行を開始した回数。`period max` = 連続する周期の実行開始の間隔の最大。`busy max` = 1 周期の処理時間の最大。`over budget` = 処理が 2.5 ms を超えた回数。`status` は ms、一式の診断値は µs で表示する（10 ms = 10000 µs、2.5 ms = 2500 µs） |
 | finite / `nonfinite` | 制御計算の値が NaN（非数）・無限大でないこと。`status` の `finite` 行と一式の `nonfinite` が、ARM 中の周期のうち有限でない値があった数を数える |
 | ログシンク | ログの文字を一旦リングバッファ（円環状に使い回す記憶領域）に入れ、別のタスクだけがコンソールや WiFi へ書き出す仕組み。400 Hz のタスクが出力で待たされないようにする |
 | CLI | 文字で命令を入力する窓口。USB（`sf monitor`）と WiFi（TCP ポート 23）の 2 経路 |

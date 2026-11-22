@@ -372,25 +372,25 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | 列名 | 型 | 単位 | 説明 |
 |---|---|---|---|
 | `timestamp_us` | int | us | 機体起動基準のマイクロ秒タイムスタンプ。ステータスパケットは uptime_ms しか持たないため timestamp_us = uptime_ms * 1000。 |
-| `imu_cycles` | int | count | ImuTask: 数えた起床の回数。 |
-| `imu_period_max_us` | int | us | ImuTask: 連続する 2 回の起床の間隔の最大。400 Hz の周期は 2500 us で、約 5000 us なら 400 Hz のティックを 1 つ取りこぼした。 |
+| `imu_cycles` | int | count | ImuTask: 数えた周期の実行開始の回数。 |
+| `imu_period_max_us` | int | us | ImuTask: 連続する 2 回の周期の実行開始の間隔の最大。400 Hz の周期は 2500 us で、約 5000 us なら 400 Hz のティックを 1 つ取りこぼした。 |
 | `imu_late_count` | int | count | ImuTask: 間隔が 1.5 周期（3750 us）を超えた回数（ティックの取りこぼし）。 |
-| `imu_busy_max_us` | int | us | ImuTask: 起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。 |
+| `imu_busy_max_us` | int | us | ImuTask: 実行開始から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。 |
 | `imu_over_budget_count` | int | count | ImuTask: 処理が 1 周期（2500 us）を超えた周期の数。 |
-| `imu_last_late_us` | int | us | ImuTask: 最後に遅れた起床の時刻（機体起動基準。0 = まだ無い）。 |
+| `imu_last_late_us` | int | us | ImuTask: 最後に実行開始が遅れた周期の時刻（機体起動基準。0 = まだ無い）。 |
 | `imu_armed_cycles` | int | count | ImuTask: ARM 中に始まった周期の数。 |
-| `imu_armed_period_max_us` | int | us | ImuTask: ARM 中の起床間隔の最大。 |
+| `imu_armed_period_max_us` | int | us | ImuTask: ARM 中の実行開始の間隔の最大。 |
 | `imu_armed_late_count` | int | count | ImuTask: ARM 中に遅れた回数。 |
 | `imu_armed_busy_max_us` | int | us | ImuTask: ARM 中の処理時間の最大。 |
 | `imu_armed_over_budget_count` | int | count | ImuTask: ARM 中に処理が 1 周期を超えた周期の数。 |
-| `control_cycles` | int | count | ControlTask: 数えた起床の回数。 |
-| `control_period_max_us` | int | us | ControlTask: 連続する 2 回の起床の間隔の最大。400 Hz の周期は 2500 us で、約 5000 us なら 400 Hz のティックを 1 つ取りこぼした。 |
+| `control_cycles` | int | count | ControlTask: 数えた周期の実行開始の回数。 |
+| `control_period_max_us` | int | us | ControlTask: 連続する 2 回の周期の実行開始の間隔の最大。400 Hz の周期は 2500 us で、約 5000 us なら 400 Hz のティックを 1 つ取りこぼした。 |
 | `control_late_count` | int | count | ControlTask: 間隔が 1.5 周期（3750 us）を超えた回数（ティックの取りこぼし）。 |
-| `control_busy_max_us` | int | us | ControlTask: 起床から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。 |
+| `control_busy_max_us` | int | us | ControlTask: 実行開始から次の待ちまでの最大（上位タスクに割り込まれた時間を含む）。 |
 | `control_over_budget_count` | int | count | ControlTask: 処理が 1 周期（2500 us）を超えた周期の数。 |
-| `control_last_late_us` | int | us | ControlTask: 最後に遅れた起床の時刻（機体起動基準。0 = まだ無い）。 |
+| `control_last_late_us` | int | us | ControlTask: 最後に実行開始が遅れた周期の時刻（機体起動基準。0 = まだ無い）。 |
 | `control_armed_cycles` | int | count | ControlTask: ARM 中に始まった周期の数。 |
-| `control_armed_period_max_us` | int | us | ControlTask: ARM 中の起床間隔の最大。 |
+| `control_armed_period_max_us` | int | us | ControlTask: ARM 中の実行開始の間隔の最大。 |
 | `control_armed_late_count` | int | count | ControlTask: ARM 中に遅れた回数。 |
 | `control_armed_busy_max_us` | int | us | ControlTask: ARM 中の処理時間の最大。 |
 | `control_armed_over_budget_count` | int | count | ControlTask: ARM 中に処理が 1 周期を超えた周期の数。 |

@@ -350,7 +350,7 @@ static constexpr double kMicrosecondsPerSecond = 1000000.0;
 
 /// One line of the 400Hz loop timing: the cycles counted, the longest period between two wakes, the
 /// wakes later than 1.5 periods (a missed 400Hz tick), and the longest/over-budget busy time.
-/// 400Hz ループ周期の 1 行: 数えた周期、連続する起床の最長の間隔、1.5 周期を超えた起床（400Hz ティックの
+/// 400Hz ループ周期の 1 行: 数えた周期、連続する周期の実行開始の最長の間隔、1.5 周期を超えて始まった実行開始（400Hz ティックの
 /// 取りこぼし）、最長の処理時間と 1 周期を超えた回数。
 static void printLoopTimingLine(const char* task_name, const char* scope_name, uint32_t cycles,
                                 uint32_t period_max_us, uint32_t late_count, uint32_t busy_max_us,

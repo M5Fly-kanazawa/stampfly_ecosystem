@@ -1382,7 +1382,7 @@ void ImuTask(void* pvParameters)
     // Period monitor of this loop (imu_loop_timing, read by the CLI `status`): counts the wakes that
     // arrive more than 1.5 periods after the previous one, i.e. the missed 400 Hz ticks.
     // このループの周期監視（imu_loop_timing、CLI の `status` が読む）: 前回から 1.5 周期を超えて来た
-    // 起床、つまり取りこぼした 400 Hz ティックを数える。
+    // 実行開始（周期の開始）の遅れ、つまり取りこぼした 400 Hz ティックを数える。
     sf::tasks::LoopTimingScope loop_timing(sf::imu_loop_timing);
 
     uint32_t cycle_count = 0;          // For temperature/log throttling
@@ -1579,7 +1579,7 @@ void ImuTask(void* pvParameters)
 
         // Close the step statistics with the whole cycle (wake to here), then once a minute log
         // and clear the window, right after the 400Hz load line of this same cycle.
-        // 工程別統計を周期全体（起床からここまで）で閉じ、1 分ごとに、同じ周期の 400Hz load 行の直後に
+        // 工程別統計を周期全体（実行開始からここまで）で閉じ、1 分ごとに、同じ周期の 400Hz load 行の直後に
         // 出して窓を消す。
         if constexpr (kStepTimingEnabled) {
             g_step_timing.endCycle(stepClockUs() - now, kCycleBudgetUs, stepIndex(TimedStep::Rest));

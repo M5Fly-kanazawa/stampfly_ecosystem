@@ -70,7 +70,7 @@ static const char* TAG = "WorkshopControlTask";
 /// not sf::workshop_tasks (control_task.cpp:53-59 has the vehicle original).
 /// WorkshopControlTask のハンドル。タスク自身が起動時に登録し
 /// sf::tasks::control_handle() で公開する。ImuTask（vehicle から無改変で再利用）は
-/// 推定後に起こすため「同じ」accessor を読む — これが sf::workshop_tasks でなく
+/// 推定後に通知して実行を再開させるため「同じ」accessor を読む — これが sf::workshop_tasks でなく
 /// sf::tasks 名前空間に置く理由（vehicle 原本は control_task.cpp:53-59）。
 static TaskHandle_t s_control_handle = nullptr;
 

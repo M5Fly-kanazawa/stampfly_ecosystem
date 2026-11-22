@@ -515,12 +515,12 @@ static_assert(sizeof(WireToFDiagnostic) == 13, "wire drift");
 /// ステータスパケット v4 の、400 Hz タスク 1 本の周期の数え上げ — sf::LoopTiming の項目（意味は data_types.hpp）から
 /// 発行時刻を除いたもの。数え方は起動以降の累計。
 struct WireLoopTiming {
-    uint32_t cycles;                    // wakes counted / 数えた起床の回数
-    uint32_t period_max_us;             // [us] longest interval between two wakes / 連続する 2 回の起床の間隔の最大
+    uint32_t cycles;                    // wakes counted / 数えた周期の実行開始の回数
+    uint32_t period_max_us;             // [us] longest interval between two wakes / 連続する 2 回の周期の実行開始の間隔の最大
     uint32_t late_count;                // intervals longer than 1.5 periods / 間隔が 1.5 周期を超えた回数
-    uint32_t busy_max_us;               // [us] longest wake-to-wait time / 起床から次の待ちまでの最大
+    uint32_t busy_max_us;               // [us] longest wake-to-wait time / 実行開始から次の待ちまでの最大
     uint32_t over_budget_count;         // cycles whose busy time exceeded one period / 処理が 1 周期を超えた周期の数
-    uint32_t last_late_us;              // [us] esp_timer time of the latest late wake (0 = none) / 最後に遅れた起床の時刻（0 = なし）
+    uint32_t last_late_us;              // [us] esp_timer time of the latest late wake (0 = none) / 最後に実行開始が遅れた周期の時刻（0 = なし）
     uint32_t armed_cycles;              // the same counts, armed cycles only: / 同じ数え上げ（ARM 中の周期だけ）:
     uint32_t armed_period_max_us;       // [us]
     uint32_t armed_late_count;

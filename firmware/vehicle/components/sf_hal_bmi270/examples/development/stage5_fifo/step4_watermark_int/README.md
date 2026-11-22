@@ -159,7 +159,7 @@ gpio_isr_handler_add(BMI270_INT1_PIN, bmi270_int1_isr_handler, NULL);
     ↓
 [ISR] セマフォを渡す (xSemaphoreGiveFromISR)
     ↓
-[FIFO読み取りタスク] セマフォ待機中 → 起床
+[FIFO読み取りタスク] セマフォ待機中 → 実行再開
     ↓
 FIFO_LENGTH読み取り → FIFOデータ一括読み取り → パース → 平均値計算 → Teleplot出力
     ↓
@@ -211,7 +211,7 @@ static void fifo_read_task(void *arg)
 6. FIFO読み取りタスク起動（セマフォ待機）
 7. ループ:
    - **割り込み発生** → ISRでセマフォを渡す
-   - タスク起床 → FIFO_LENGTH読み取り
+   - タスクの実行再開 → FIFO_LENGTH読み取り
    - FIFO一括読み取り（バースト転送）
    - フレームパース → データ蓄積
    - 平均値計算 → Teleplot出力

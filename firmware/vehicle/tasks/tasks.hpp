@@ -45,7 +45,7 @@ void start_all();
 /// estimate. Returns nullptr until ControlTask has run its setup. Exposed through
 /// this accessor, not an extern global (R3: no extern task handles).
 /// ControlTask のハンドル。タスク自身が起動時に登録する（xTaskGetCurrentTaskHandle）。
-/// ImuTask が推定後に ControlTask を起こすために読む。ControlTask の setup 実行前は
+/// ImuTask が推定後に ControlTask に通知して実行を再開させるために読む。ControlTask の setup 実行前は
 /// nullptr。extern グローバルでなくこのアクセサで公開する（R3: extern 排除）。
 TaskHandle_t control_handle();
 

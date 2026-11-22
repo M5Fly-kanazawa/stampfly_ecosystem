@@ -51,7 +51,7 @@ static const char* TAG = "ControlTask";
 /// after each estimate. Exposed through an accessor, not an extern global
 /// (R3: no extern task handles).
 /// ControlTask のハンドル。タスク自身が起動時に登録し sf::tasks::control_handle()
-/// で公開する。ImuTask が推定後に起こすために accessor 経由で読む。main.cpp から
+/// で公開する。ImuTask が推定後に通知して実行を再開させるために accessor 経由で読む。main.cpp から
 /// extern グローバルでなくアクセサで公開する（R3: extern 排除）。
 static TaskHandle_t s_control_handle = nullptr;
 
@@ -331,7 +331,7 @@ void ControlTask(void* pvParameters)
     // Period monitor of this loop (control_loop_timing, read by the CLI `status`): the wakes that
     // arrive more than 1.5 periods after the previous one, and the time one cycle takes.
     // このループの周期監視（control_loop_timing、CLI の `status` が読む）: 前回から 1.5 周期を超えて
-    // 来た起床と、1 周期にかかる時間。
+    // 来た実行開始と、1 周期にかかる時間。
     sf::tasks::LoopTimingScope loop_timing(sf::control_loop_timing);
 
     // NaN / infinity check of the control path (nonfinite_status, read by the CLI `status`): counts
@@ -352,7 +352,7 @@ void ControlTask(void* pvParameters)
         // the motors to zero and keep waiting. Recovery is automatic — the next
         // successful IMU cycle re-arms the actuator below (idempotent arm()).
         // IMUタスクからの通知を待つ（400Hz同期）— タイムアウト付き。
-        // モータをゼロにできる唯一の主体は ControlTask だが、起床は ImuTask の通知
+        // モータをゼロにできる唯一の主体は ControlTask だが、実行開始は ImuTask の通知
         // 頼み。飛行中に IMU が停止する（SPI 故障・コネクタ）と ImuTask は通知をスキップし、
         // ControlTask は永久ブロック、LEDC は最後の duty を保持 → フライアウェイ。
         // タイムアウトが安全網: CONTROL_NOTIFY_TIMEOUT_MS 内に通知が無ければモータを

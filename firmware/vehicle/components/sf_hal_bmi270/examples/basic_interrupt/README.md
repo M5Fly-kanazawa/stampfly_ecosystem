@@ -49,7 +49,7 @@ BMI270のDATA_RDY割り込みを使用して、効率的にセンサーデータ
 4. GPIO11をINT1割り込みピンとして設定
 5. BMI270のDATA_RDY割り込みを有効化
 6. **データ準備完了時に割り込み発生**
-7. セマフォでタスクを起床
+7. セマフォでタスクの実行を再開させる
 8. データ読み取り＆出力
 9. タスクがスリープ（次の割り込みまで）
 
@@ -136,7 +136,7 @@ bmi270_write_register(&g_dev, BMI270_REG_INT_MAP_DATA, int_map_data);
 static void IRAM_ATTR bmi270_int1_isr_handler(void* arg)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    // セマフォを渡してタスクを起床
+    // セマフォを渡してタスクの実行を再開させる
     xSemaphoreGiveFromISR(data_ready_sem, &xHigherPriorityTaskWoken);
     if (xHigherPriorityTaskWoken) {
         portYIELD_FROM_ISR();

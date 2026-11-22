@@ -523,7 +523,7 @@ ControlTask [制御 + アクチュエーション]
 
 ### 同期方式
 
-- **IMU → 推定 → 制御**: IMUタスクからTask Notificationで制御タスクを起床（400Hz同期）
+- **IMU → 推定 → 制御**: IMUタスクが Task Notification で制御タスクに通知して実行を再開させる（400Hz同期）
 - **他センサ → 推定**: 非同期。データが到着した周期のみ観測更新
 - **全データ → ログ**: Lock-free Ring Bufferで全サンプル保持
 
