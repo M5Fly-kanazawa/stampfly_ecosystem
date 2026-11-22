@@ -20,20 +20,39 @@
 
 ### 人員と端末
 
-| 手順 | 最少の人数 | 1 人での実施 |
-|------|-----------|-------------|
-| 0、1a〜1f、1h-1、1i | 1 人 | 可 |
-| 1g、1h-2、1h-3 | 2 人（機体を持つ人 + 操作する人） | **不可。1 人で行わない** |
-| 2-1、2-2、2-4 | 操縦者 1 人（取得は飛行前に始めておく）。見張りの 2 人目を推奨 | 可（取得を始めてから送信機を持つ） |
-| 2-3、2-5、2-6、2-7、2-8、2-9、2-10、3 | 2 人（操縦者 + PC 担当者） | **不可。1 人で行わない**（DISARM の用意と PC の入力は同時にできない。2-7・2-8 は通信途絶の後に操縦者の DISARM が無いので、PC 担当者が `sf emergency` を打てる状態で待つ。2-5 は高さを `sf tof` で読む人が要る） |
+実機確認は、**開発者 1 人と Claude Code（PC 側の操作）**で行う（2026-11-22 の決定。2 人目はいない）。**モータを止める手段は人だけが持つ**: Claude Code の応答は数秒遅れうるので、緊急停止は Claude Code に任せない。
 
-PC 担当者の端末（飛行の段階。全て同じ PC、機体の WiFi につないだ状態）:
+| 区分 | 人（開発者） | Claude Code |
+|------|-------------|-------------|
+| 機体・送信機・電池・プロペラ | 触れる操作は全て人（送信機の ARM・DISARM、電池の接続、プロペラの取付） | 触れない |
+| モータを止める | 送信機のスロットル側スティックの押し込み、機体のボタン、電池を外す。異常のときの停止は全てこれ | 任せない。`emergency`（CLI の命令、または `sf emergency`）は頼まれたときに送るが、数秒遅れうるので止める手段に数えない |
+| USB コンソールへの入力 | — | 送ってよい（モータが回る `motor test` を含む）。送る前に、何が起きるかを音声（macOS の `say`）で伝える |
+| CLI の `arm`・`disarm`・`mode`（USB・WiFi） | — | 送ってよい（開発者の承認、2026-11-22）。送る前に音声で伝える |
+| WiFi の取得（`sf log wifi`）・WiFi の CLI（`nc 192.168.10.1 23`） | — | 実行してよい |
+| 飛行の命令（`sf takeoff`・`sf cw` など） | 送信機を持ち、DISARM の用意をする | 取得の開始と、命令の送信まで。飛行の前に目的・操作の順・中止の段を全部伝え、人の合図を受けて送る |
+| 保存された記録の読み取りと合格線との照合 | — | 行う |
+
+手順ごとの分担と、1 人（開発者 1 人 + Claude Code）での実施の可否:
+
+| 手順 | 人が行うこと | Claude Code が行うこと | 1 人での実施 |
+|------|-------------|----------------------|-------------|
+| 0、1a〜1f、1h-1、1i | 機体・送信機・電池の操作、目で見る確認 | USB・WiFi の入力、取得、照合（0-13 の CLI の命令を含む） | 可 |
+| 1g | 片手で機体を持ち上げ、片手で送信機を持つ（スティックの押し込みですぐ止められる）。**プロペラを外して行うことを推奨**する。付けたまま行うかは責任者の判断 | 取得の開始、`status` の読み取り | 可 |
+| 1h-2、1h-3 | 電源装置の電圧の操作、機体を持つ操作 | 取得の開始 | **任意のまま**。電源装置が要る。機体を持つ操作と電圧の操作が重なる場面があるので、1 人で行うかは責任者が判断する。行わなければ「未実施」。後日、緊急電圧のしきい値のパラメータ化が入る予定（電源装置なしで行えるようにするため） |
+| 2-1、2-2、2-4 | 操縦者として送信機を持つ | 飛行の前に取得を始める | 可 |
+| 2-3、2-6、2-9、2-10、3 | 操縦者として送信機を持ち、DISARM の用意をする。**止めるのは人** | 取得の開始、飛行の命令の送信（`sf takeoff` など）。緊急停止は任せない | 可 |
+| 2-5 | 操縦者 + 高さを `sf tof` で読んで伝える人 | — | **不可**（高さの読み取りは数秒の遅れが許されないので Claude Code に任せない。2 人目がいるときだけ行う） |
+| 2-7、2-8 | 送信機の電源を切る操縦者 + `sf emergency` を Enter だけで送れる状態で待つ人 | — | **1 人では行わない**（送信機の電源を切ると、操縦者の DISARM が届かず、人の止める手段が無くなる。Claude Code の `emergency` は数秒遅れうるので代わりにならない。通信途絶の模擬が入るまで、この 2 手順は 2 人目がいるときだけ行う。後日追加の予定） |
+
+PC は、有線 LAN や iPhone の USB テザリングなどでインターネットにつないだまま、WiFi を機体につなぐ同時接続で進められる（2026-11-22 に実機で確認。3 章の「記録の取り方」に macOS での注意がある）。
+
+PC 側の端末（飛行の段階。全て同じ PC、機体の WiFi につないだ状態。Claude Code が使う。「PC 担当者」は、2 人目がいるときにこの役を引き受ける人）:
 
 | 端末 | 持たせるもの |
 |------|-------------|
 | T1 | 取得（`sf log wifi -d <秒> -o ...`）。飛行の前から動かす |
 | T2 | 飛行の命令（`sf takeoff` など）。次の命令を打つ前に前の応答を待つ |
-| T3 | **`sf emergency` を打っておき、Enter だけ押せば送れる状態で待つ**（モータを即停止する最後の手段。`emergency` は `command` を送っていなくても受け付ける: `operation_manual.md` 210 行）。各 `sf` の呼び出しは 1 回ごとに別のソケットを開く（`lib/sfcli/utils/vehicle_api.py` の `send`・`send_urgent`）ので、T2 の命令の待機中でも T3 から送れる |
+| T3 | `sf emergency`（モータを即停止する最後の手段。`emergency` は `command` を送っていなくても受け付ける: `operation_manual.md` 210 行）。各 `sf` の呼び出しは 1 回ごとに別のソケットを開く（`lib/sfcli/utils/vehicle_api.py` の `send`・`send_urgent`）ので、T2 の命令の待機中でも T3 から送れる。**2 人目がいるときは、その人が Enter だけで送れる状態で待つ。開発者 1 人のときは、手が送信機にふさがるので T3 では待たない**（止める手段は人の操作） |
 
 机上の段階（段階 1）: T1 = USB コンソール（`script -q ... sf monitor`）、T2 = 取得または WiFi の CLI（`nc 192.168.10.1 23`）。
 
@@ -100,7 +119,7 @@ PC 担当者の端末（飛行の段階。全て同じ PC、機体の WiFi に�
 |---|------|------|
 | 1 | モータが回りうる間は、全員が保護めがね（目を守る眼鏡）を着ける | プロペラや破片が目に当たるのを防ぐ |
 | 2 | 機体の真上に顔や手を出さない。プロペラの回転面に指を入れない | 手指の怪我を防ぐ |
-| 3 | 操縦者を 1 人決める。**操縦者は、全段階で、送信機のスロットル側スティックを押せる（DISARM できる）状態でいる。** `sf` コマンドで飛ばすときも同じ。PC の操作と記録は別の人が行う（1 章の人員の表） | 異常時に最も速く確実にモータを止める手段が、送信機の DISARM だから |
+| 3 | 操縦者を 1 人決める。**操縦者は、全段階で、送信機のスロットル側スティックを押せる（DISARM できる）状態でいる。** `sf` コマンドで飛ばすときも同じ。PC の操作と記録は Claude Code が行う（1 章の人員の表） | 異常時に最も速く確実にモータを止める手段が、送信機の DISARM だから |
 | 4 | **飛行中の中止の手順（下の「中止の段」）を、飛ばす前に全員が読み、声に出して確認する** | 異常時に迷わないため |
 | 5 | 離陸したら、まず高度と下向き ToF を確かめる。どちらかが異常なら、すぐ着陸させる。<br>・高度の異常: 壁や柱に付けた高さの目印（1.0 m と 1.2 m）を目で見て、1.0 m の目印を超えた、上昇が止まらない、または下がり続ける。<br>・ToF の異常: 本体 LED と StampS3 LED が黄の高速点滅になり、警告音が鳴る（出力停止）。<br>・ACRO・STABILIZE ではファームが強制着陸しないので、操縦者が自分で着陸させる | 高度センサが当てにならない状態で飛び続けるのを避ける。高度の誤りは天井や床への衝突に直結する |
 | 6 | 天井までの高さが 2.0 m 以上ある場所で飛ばす（高度上限 1.2 m に余裕 0.8 m 以上を足した値） | 上昇が行き過ぎたときの天井への衝突を避ける |
@@ -117,8 +136,8 @@ PC 担当者の端末（飛行の段階。全て同じ PC、機体の WiFi に�
 |----|------|------|--------|
 | 1 | ACRO・STABILIZE の飛行中・地上、およびどのモードでも TAKEOFF 中 | 送信機のスロットル側スティックを押す（DISARM） | **即モータ停止**（`operation_manual.md` 136 行）。空中で押すと落下する |
 | 2 | ALT_HOLD・POS_HOLD の FLYING（`sf takeoff` の後を含む） | スティックを 1 回押す（DISARM） | **自動着陸**（約 0.3 m/s の緩降下）。モータは切れない（同 137 行） |
-| 3 | 段 2 の自動着陸が始まらない・降りない（暫定: 押してから 3 秒たっても高さが下がらない）、または傾きが増える・揺れが増える | 2 回目の押し込み、または T3 で `sf emergency` の Enter | 2 回目の DISARM は即モータ停止（同 137 行）。`sf emergency` は送信機に関係なく即停止（同 210 行）。高度 0.5 m 前後からの落下になる |
-| 4 | 送信機の電源を切る試験（1g-2、2-7、2-8）の間 | **送信機を切る前に T3 に `sf emergency` を打っておく**。異常なら Enter | 通信途絶の間、操縦者の DISARM は届かない。`sf emergency` が唯一の停止手段 |
+| 3 | 段 2 の自動着陸が始まらない・降りない（暫定: 押してから 3 秒たっても高さが下がらない）、または傾きが増える・揺れが増える | 2 回目の押し込み。効かなければ電池を外す（2 人目がいるときは、T3 で `sf emergency` の Enter。Claude Code への `sf emergency` の依頼は数秒遅れうるので当てにしない） | 2 回目の DISARM は即モータ停止（同 137 行）。`sf emergency` は送信機に関係なく即停止（同 210 行）。高度 0.5 m 前後からの落下になる |
+| 4 | 送信機の電源を切る試験（1g-2、2-7、2-8）の間 | **送信機を切る前に T3 に `sf emergency` を打っておき、別の人が Enter を押せる状態にする**（2-7・2-8 は 2 人目がいるときだけ行う）。1g-2 は機体を手に持つので、プロペラを外して行い（1 章の推奨）、異常なら電池を外す | 通信途絶の間、操縦者の DISARM は届かない。`sf emergency` が唯一の停止手段 |
 
 **中止の目で見る基準**（暫定。壁や柱の目印と目視で判定する）:
 
@@ -141,7 +160,7 @@ PC 担当者の端末（飛行の段階。全て同じ PC、機体の WiFi に�
 
 ## 3. このドキュメントの使い方
 
-Claude Code を進行役にして進めるときは、リポジトリで Claude Code を起動して `/hardware-checkout` と入力する（`.claude/skills/hardware-checkout/SKILL.md`）。手順を 1 つずつ示し、保存した記録を読んで合格線と照合する。USB コンソールへの入力は、モータが回る命令（`motor test` など）を含めて Claude Code が送ってよい（2026-11-22 の決定）。その間、人は送信機の DISARM または電池を外す操作ですぐ止められる位置にいる。
+Claude Code を進行役にして進めるときは、リポジトリで Claude Code を起動して `/hardware-checkout` と入力する（`.claude/skills/hardware-checkout/SKILL.md`）。手順を 1 つずつ示し、保存した記録を読んで合格線と照合する。Claude Code は、USB コンソールへの入力（モータが回る `motor test` を含む）、WiFi の取得（`sf log wifi`）、WiFi の CLI への入力、CLI の `arm`・`disarm`・`mode` を送ってよい（2026-11-22 の決定）。送る前に、何が起きるかを音声（macOS の `say`）で伝える。Claude Code の応答は数秒遅れうるので、異常のときにモータを止めるのは人である（送信機のスロットル側スティックの押し込み、機体のボタン、電池を外す）。人は、その間いつでもそれらを操作できる位置にいる。
 
 ### 確認項目
 
@@ -201,6 +220,8 @@ Claude Code を進行役にして進めるときは、リポジトリで Claude 
 | 2-10 | 90 | |
 | 3 | 150 | |
 
+**PC の接続（macOS）**: PC は、インターネットにつないだまま WiFi を機体につなぐ同時接続で進められる（2026-11-22 に実機で確認）。ただし、この PC（macOS）では、端末アプリからの Python のローカルネットワーク通信が拒否されることがあり、そのとき `sf log wifi` は `No data received` になる。**見分け方**: `nc -z 192.168.10.1 23` は通るのに、`sf log wifi -d 5 --no-save` はパケットが届かない。**対処**: システム設定の「ローカルネットワーク」で、使っている端末アプリを許可する。別の対処として、UDP の中継を使った。
+
 | 読みたいもの | コマンド |
 |--------------|----------|
 | 取得の開始（保存直後に構造検査が自動実行される） | `sf log wifi -d <秒> -o logs/checkout/<名前>.sflog.zip` |
@@ -255,8 +276,25 @@ Claude Code を進行役にして進めるときは、リポジトリで Claude 
 | 0-10 | 送信機のペアリング（`operation_manual.md` 5 章、`controller.md`）。`status` で `pairing : Paired`、`prearm  : ready` | `status` | 両方そのとおり |
 | 0-11 | 電池: 満充電（4.2 V 付近）から始める。`sensor power`（`power: 4.12 V  100 mA  400 mW` の形） | 電圧 | `safety.md` の表で「飛行可能」 |
 | 0-12 | **モータの位置の確認**（プロペラなし、DISARM、USB コンソール）: `motor test 1 20 2`、`motor test 2 20 2`、`motor test 3 20 2`、`motor test 4 20 2`（M1 = 右前（FR）、M2 = 右後（RR）、M3 = 左後（RL）、M4 = 左前（FL）、デューティ 20 %・2 秒。`operation_manual.md` 322 行）。1 つずつ、その位置のモータだけが回ることを目で見る。回転の向きと、プロペラ（時計回り用・反時計回り用）の取付位置の正しい対応は、リポジトリの文書に見つからない（**未確認**）。モータの軸やプロペラの刻印・機体付属の説明で責任者が確認し、段階 2 の入場の表で再確認する | 各モータの位置と回転の向き | 4 つとも位置が一致 |
+| 0-13 | **CLI の飛行命令の確認**（重りで押さえた机上。CLI の `arm`・`disarm`・`mode` の実機での確認は、この手順で最初に行う。SILS では確かめたが、実機では未確認）。USB コンソールで行い、⑥だけ WiFi の CLI（`nc 192.168.10.1 23`）で行う。送信機は電源を入れ、ペアリング済みにする。ARM でモータがアイドル回転で回るので、保護めがねを着け、プロペラの周りに手を出さない。Claude Code は、各命令を送る前に何が起きるかを音声で伝える。<br>① `arm` → `status` → `mode acro` → `mode stabilize` → `disarm`<br>② `arm` → 送信機のスロットル側スティックを押し込む（人の操作。CLI で ARM した機体を送信機で止める）<br>③ 送信機の押し込みで ARM（人の操作）→ `disarm`<br>④ `arm` → `emergency`<br>⑤ 送信機の左ボタンを 1 回押して ALT_HOLD にし（本体 LED がオレンジ）、`arm`（拒否される）。確かめたら左ボタンをもう 2 回押して OFF に戻す<br>⑥ WiFi の CLI で `arm` → `status` → `disarm`、続けて `arm` → `emergency` | 各命令の表示、`status` の `state`・`mode`・`armed` | 表示が期待どおりで、`status` の状態が一致（期待は下の表） |
 
-**次へ進む条件**: 0-1〜0-12 が全て合格。
+**0-13 の期待される表示**（`cli_task.cpp` の `cmd_arm`・`requestMotorStop`・`printModeResult`・`printArmRefusal` から取った文言）:
+
+| 命令・操作 | 期待される表示 | その後の `status` |
+|-----------|---------------|-------------------|
+| `arm`（DISARM 中、STABILIZE） | `ok: armed (state ARMED_GROUND, mode STABILIZE)` | `state   : ARMED_GROUND`、`armed   : yes` |
+| `arm`（既に ARM 済み） | `no change: already armed (state ARMED_GROUND)` | 変わらない |
+| `mode acro`（ARM 済み） | `ok: mode ACRO (state ARMED_GROUND)` | `mode    : ACRO` |
+| `mode stabilize`（ARM 済み） | `ok: mode STABILIZE (state ARMED_GROUND)` | `mode    : STABILIZE` |
+| `disarm`（ARM 済み） | `ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)` | `state   : IDLE_GROUND`、`armed   : no` |
+| `emergency`（ARM 済み） | `ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)` | 同上 |
+| `disarm`（DISARM 中） | `no change: not armed (state IDLE_GROUND)` | 変わらない |
+| CLI で ARM した後の、送信機の押し込み | CLI には何も表示されない。モータが止まる | `state   : IDLE_GROUND`、`armed   : no` |
+| `arm`（ALT_HOLD） | `` refused: the CLI arms only in STABILIZE or ACRO (mode is ALT_HOLD: an ARM there starts an auto-takeoff) - use `mode stabilize` or `mode acro` `` | `state   : IDLE_GROUND`、`armed   : no` |
+
+地上での `mode` の注意: 地上（IDLE_GROUND）で ARM する前の `mode` は、送信機の電文が届いていると送信機のスイッチ位置に戻されることがある（`changed, then put back to ... by the transmitter's switch position`）。0-13 では ARM の後に `mode` を送るので、この表示にはならない。
+
+**次へ進む条件**: 0-1〜0-13 が全て合格。
 
 ## 5. 段階 1: プロペラを外した机上の確認
 
@@ -296,13 +334,15 @@ Claude Code を進行役にして進めるときは、リポジトリで Claude 
 
 ### 1d ループ周期・有限性・USB の状態（C1・C2・C4）
 
-ARM の瞬間にログを数行出すと、USB の書き出しが滞ったとき（ホストが読まず、機体側の送信が詰まる）、400 Hz のタスクが 5〜50 ms 止まることがあった。ログシンクがそれを防ぐ設計なので、USB の 3 つの状態で確かめる。カウンタは起動以降の累計なので、**条件ごとに電源を入れ直す**。
+ARM の瞬間にログを数行出すと、USB の書き出しが滞ったとき（ホストが読まず、機体側の送信が詰まる）、400 Hz のタスクが 5〜50 ms 止まることがあった。ログシンクがそれを防ぐ設計なので、USB の 3 つの状態で確かめる。カウンタは起動以降の累計なので、**条件ごとに電源を入れ直す**（数えを 0 に戻すのが目的なので、USB につないでいる条件 A・B は、`reboot`（DISARM 中）または USB 経由のリセットで代えてよい。2026-11-22 の実施でそうした。条件 C（USB なし）は電源の入れ直しのまま）。
+
+**ARM・DISARM・モード切替は、CLI の命令で行うのを標準とする**（Claude Code が USB コンソールまたは WiFi の CLI から `arm`・`disarm`・`mode` を送る。送る前に音声で伝える）。下の表の「ARM を押す」は `arm`、「DISARM を押す」は `disarm`、「右ボタンで STABILIZE ⇔ ACRO を切り替える」は `mode acro` と `mode stabilize` を交互に送ることに読み替える。送信機で行う表のとおりの形は、CLI の命令が使えないときの代わりとして残す。CLI の `mode` は、ARM の前の地上では送信機のスイッチ位置に戻されることがあるので、ARM 中に送る。
 
 | 項目 | 内容 |
 |------|------|
 | 入場 | 1a が合格。条件ごとに power cycle |
 | 操作 A（USB を読んでいる） | `sf monitor` を動かしたまま（コンソールは `console_1d_A_1.txt` に記録）、ARM を 1 回押し、**5 秒後に DISARM**し、すぐ `status`（ARM の瞬間の停止を見るため）。続けて、もう一度 ARM し 60 秒保って DISARM、`status` |
-| 操作 B（ホストが読まない + ログ大量） | `script` を使わず `sf monitor` を直接動かす。別の端末で `ps` により `sf monitor` のプロセス番号（PID）を調べ、`kill -STOP <PID>` で一時停止する（USB のホストが読むのをやめる。これで機体側の USB 送信が滞るかは実機で**未確認**）。ARM → DISARM を 20 回（各 2 秒、ARM のたびにログが出る）。さらに ARM 中に右ボタンで STABILIZE ⇔ ACRO を 10 回切り替える（切替のたびに `Mode change: ...`）。WiFi の CLI で `status`。最後に `kill -CONT <PID>` で再開し、端末の出力を `console_1d_B_1.txt` に貼る |
+| 操作 B（ホストが読まない + ログ大量） | `script` を使わず `sf monitor` を直接動かす。別の端末で `ps` により `sf monitor` のプロセス番号（PID）を調べ、`kill -STOP <PID>` で一時停止する（USB のホストが読むのをやめる。ポートを開いたまま読まない方法でもよい。どちらの方法でも、機体側の USB 送信が実際に滞るかは実機で**未確認**）。ARM → DISARM を 20 回（各 2 秒、ARM のたびにログが出る）。さらに ARM 中に右ボタンで STABILIZE ⇔ ACRO を 10 回切り替える（切替のたびに `Mode change: ...`）。WiFi の CLI で `status`。最後に `kill -CONT <PID>` で再開し、端末の出力を `console_1d_B_1.txt` に貼る |
 | 操作 C（USB ケーブルを抜く） | 電池だけで駆動。ARM して 5 秒で DISARM → WiFi の CLI で `status`。もう一度 ARM して 60 秒保ち、DISARM、`status` |
 | 記録 | 各条件で、5 秒の ARM の後と 60 秒の ARM の後の `imu armed`・`control armed`（`cycles`・`period max`・`late`・`busy max`・`over budget`）と `finite` 行。A・B では `W (<時刻 ms>) LogTask: log sink full: <N> lines dropped` が出たか。`status` は ms、一式は µs（10 ms = 10000 µs） |
 | 合格（C1） | 3 条件とも `armed` の `period max` が 10 ms 未満、`busy max` が 2.5 ms 未満、`over budget` が 0、5 秒の ARM の後の `late` が 0 に近い（ARM の瞬間に増えない。`operation_manual.md` 338-342 行）。**暫定**: B・C の `late` ÷ `cycles` が A より明らかに増えない（根拠: 設計文書に条件間の比較の基準は無く、A を基準にした本書の仮の線）。ARM 中に 13〜22% の周期で続く 5 ms 級の遅れは別件（未解決。`detailed_design.md`）である。`late` が 0 にならなくても、これだけでは不合格にしない。記録して責任者が判断する |
@@ -313,8 +353,8 @@ ARM の瞬間にログを数行出すと、USB の書き出しが滞ったとき
 
 | 項目 | 内容 |
 |------|------|
-| 入場 | 1d が合格。機体は床の上。USB コンソールは接続し、`console_1e_<条件>_<回>.txt` に記録する（6 回とも同じ） |
-| 操作（取得なし 3 回・取得あり 3 回で**同じ時刻表**。時刻は緑の常灯の時点を t = 0 とする） | 毎回、power cycle し、緑の常灯を待つ。<br>t = 0: 取得ありの回は `sf log wifi -d 120 -o logs/checkout/s1_1e_cap_on_<回>.sflog.zip` を始める（取得なしの回は何もしない）。<br>t = 5 s: ARM を押す（STABILIZE）。<br>t = 10, 15, 20, ..., 55 s: 右ボタンを押して STABILIZE ⇔ ACRO を切り替える（10 回）。<br>t = 65 s: DISARM を押す。<br>t = 70 s から: ARM を押して 2 秒待ち、DISARM を押して 2 秒待つ、を 5 回（t = 90 s まで）。<br>t = 95 s: 終了。USB で `status`。取得ありの回は取得の終了後に `sf log info <一式>` と `sf log stats loop <一式>` |
+| 入場 | 1d が合格。機体は床の上。ARM・DISARM・モード切替は、1d と同じく CLI の命令（`arm`・`disarm`・`mode`）で時刻表どおりに送るのを標準とし、表の「押す」はその読み替えとする（送信機で行う形は、CLI の命令が使えないときの代わり）。ARM の前の地上の `mode` は送信機のスイッチ位置に戻されることがあるので、ARM 中に送る。USB コンソールは接続し、`console_1e_<条件>_<回>.txt` に記録する（6 回とも同じ） |
+| 操作（取得なし 3 回・取得あり 3 回で**同じ時刻表**。時刻は緑の常灯の時点を t = 0 とする） | 毎回、power cycle し、緑の常灯を待つ（数えを 0 に戻すのが目的なので、1d の条件 A・B と同じく、DISARM 中の `reboot` または USB 経由のリセットで代えてよい。6 回とも同じ方法にそろえる）。<br>t = 0: 取得ありの回は `sf log wifi -d 120 -o logs/checkout/s1_1e_cap_on_<回>.sflog.zip` を始める（取得なしの回は何もしない）。<br>t = 5 s: ARM を押す（STABILIZE）。<br>t = 10, 15, 20, ..., 55 s: 右ボタンを押して STABILIZE ⇔ ACRO を切り替える（10 回）。<br>t = 65 s: DISARM を押す。<br>t = 70 s から: ARM を押して 2 秒待ち、DISARM を押して 2 秒待つ、を 5 回（t = 90 s まで）。<br>t = 95 s: 終了。USB で `status`。取得ありの回は取得の終了後に `sf log info <一式>` と `sf log stats loop <一式>` |
 | 記録 | 各回の `imu armed`・`control armed` の `cycles`・`late`・`period max`・`busy max`・`over budget`。取得ありは加えて `text_dropped_lines` と、`loop` の `text log` の欠落の数 |
 | 合格（C1、**暫定**） | 取得ありの `late`・`over budget` が、取得なしの 3 回と同じ（3 回が互いに違うときはその幅の中）。`period max`・`busy max` が取得なしの 3 回の最小〜最大の幅の中（根拠: 設計文書に比較の基準は無く、取得なしの実測を基準にした本書の仮の線） |
 | 合格（C4） | 取得あり 3 回とも `text_dropped_lines` が 0、`--text` に `*** N lines dropped here ***` が無い |
@@ -333,14 +373,14 @@ CLITask（CLI を担当するタスク）が出す警告は、ログシンクを
 
 ### 1g 手持ちでの離陸判定・通信途絶・離陸中の DISARM（C8・C10・C11・C12）
 
-**2 人で行う。1 人では行わない。** 手動モードでは、スロットルが低いまま浮いた機体を、ToF が 1 秒示すまで「地上」のままにすると、通信途絶や電池の着陸が働かない。機体を手で持ち上げて、判断の部分を実機の ToF で確かめる。
+**1 人（開発者）で行う。片手で機体を持ち、片手で送信機を持つ。** 手動モードでは、スロットルが低いまま浮いた機体を、ToF が 1 秒示すまで「地上」のままにすると、通信途絶や電池の着陸が働かない。機体を手で持ち上げて、判断の部分を実機の ToF で確かめる。
 
 | 項目 | 内容 |
 |------|------|
-| 入場 | プロペラが外れていることを目で確かめた。機体に強い衝撃を与えない（3 G の衝撃検出で DISARM になる。`safety.impact.accel_g` の既定 3.0）。操縦者は送信機を持ち、機体を持つ人は別。`sf log wifi -d 90 -o logs/checkout/s1_1g_handlift_1.sflog.zip` を始め、**T3 に `sf emergency` を打っておく** |
+| 入場 | プロペラが外れていることを目で確かめた。機体に強い衝撃を与えない（3 G の衝撃検出で DISARM になる。`safety.impact.accel_g` の既定 3.0）。1 人で行う: 片手で機体を持ち、片手で送信機を持つ（スティックの押し込みですぐ止められる）。**プロペラを外して行うことを推奨**する（付けたまま行うかは責任者の判断）。`sf log wifi -d 90 -o logs/checkout/s1_1g_handlift_1.sflog.zip` を Claude Code が始める |
 | 操作 1g-1（C8） | STABILIZE で ARM（スロットルは最小）。機体を床から約 20 cm まで水平に持ち上げ、3 秒保つ |
 | 期待 | ToF の 5 cm を超える有効な読みが途切れず 1 秒続いたら `Transition: ARMED_GROUND → TAKEOFF`。さらに 15 cm を超える有効な読みが来たら FLYING（`Takeoff complete → FLYING/STABILIZE`）。スロットルは最小のまま |
-| 操作 1g-2（C8・C12） | 20 cm で持ったまま、**操縦者が送信機の電源を切る**（通信途絶。T3 の `sf emergency` は、異常のときだけ Enter） |
+| 操作 1g-2（C8・C12） | 20 cm で持ったまま、**送信機の電源を切る**（通信途絶。送信機を持つ手で切る。異常なら電池を外す） |
 | 期待 | `Comm lost → hover 3000 ms then LANDING`。約 3.5 秒後（`safety.comm.timeout_ms` の 0.5 秒 + 猶予 3 秒）に `Comm lost → LANDING (hover grace elapsed)`、LANDING。**モータは切れない**（`motor.csv` の duty が LANDING の間 0 より大きい） |
 | 操作 1g-3（C11） | 機体をゆっくり床に置く。期待: `Landing detected (...)`、`Landing complete`、`Transition: LANDING → IDLE_GROUND`、モータ停止 |
 | 操作 1g-4（C10） | 送信機の電源を入れ直す（規則 12。スティックに触れない）。ALT_HOLD にして（左ボタンを 1 回）ARM を押す（機体は床の上）。約 0.3 秒のスプールの後に TAKEOFF になる。**ARM の約 1 秒以内に** DISARM を押す（2 秒以上たつと、床の ToF が無効のとき ToF 無効の規則が TAKEOFF を LANDING に変える） |
@@ -362,7 +402,7 @@ CLITask（CLI を担当するタスク）が出す警告は、ログシンクを
 | 期待 | `W (<時刻 ms>) failsafe: Low battery: 4.0xV` が約 5 秒ごとに繰り返される（10 Hz の更新 50 回。`battery_alert_policy.hpp` 67 行）。`W (<時刻 ms>) StateManager: Low battery warning`。警告音。StampS3 LED がシアンの低速点滅。ARM はできる（状態は変わらない）。復元後は `= 3.4 (float)` |
 | 記録・合格 | 通知の表示、再発報の周期、復元の確認（**復元を 1h-2 の前に必ず終える**） |
 
-**1h-2 緊急（EMERGENCY、3.0 V 未満）。任意の項目（電源装置の導線を責任者が用意しているときだけ行う。用意が無ければ「未実施」）。** 危険電圧の閾値（3.0 V）はパラメータにできないので、電池の代わりに電源装置を電池の接続部につなぎ、電圧を下げて確かめる。電源装置の接続方法（コネクタの形・極性・電流制限の値）は、リポジトリの文書にもファームのソースにも無い（**未確認**）。最低限の注意: 極性を取り違えない（責任者が確認した導線だけを使う）、電流制限を `status` の `battery` の電流に余裕を足した値に設定する、ARM 前の電圧は 3.6 V より上、2 人で行う（機体を持つ人と、電圧を操作する人）、プロペラなし。ARM は 3.3 V 以下（`safety.battery.usb_v`）で拒否されるので、約 3.6 V から始めて ARM し、その後で 3.0 V 未満に下げる。USB コンソールを記録し、`sf log wifi -d 120 -o logs/checkout/s1_1h_battery_<場面>_1.sflog.zip` も取る。**電圧を下げた一式は、1i の `boot` の確認と `re-init` の確認から外し、別に判定する**（低電圧そのものが再起動や ToF の停止を起こしうるため）。
+**1h-2 緊急（EMERGENCY、3.0 V 未満）。任意の項目（電源装置の導線を責任者が用意しているときだけ行う。用意が無ければ「未実施」）。** 危険電圧の閾値（3.0 V）はパラメータにできないので、電池の代わりに電源装置を電池の接続部につなぎ、電圧を下げて確かめる。電源装置の接続方法（コネクタの形・極性・電流制限の値）は、リポジトリの文書にもファームのソースにも無い（**未確認**）。最低限の注意: 極性を取り違えない（責任者が確認した導線だけを使う）、電流制限を `status` の `battery` の電流に余裕を足した値に設定する、ARM 前の電圧は 3.6 V より上、機体を持つ操作と電圧の操作が重なる場面があるので、1 人で行うかは責任者が判断する（1 章の人員の表）、プロペラなし。ARM は 3.3 V 以下（`safety.battery.usb_v`）で拒否されるので、約 3.6 V から始めて ARM し、その後で 3.0 V 未満に下げる。USB コンソールを記録し、`sf log wifi -d 120 -o logs/checkout/s1_1h_battery_<場面>_1.sflog.zip` も取る。**電圧を下げた一式は、1i の `boot` の確認と `re-init` の確認から外し、別に判定する**（低電圧そのものが再起動や ToF の停止を起こしうるため）。
 
 | 場面 | 操作 | 期待される出力・動き |
 |------|------|----------------------|
@@ -408,7 +448,7 @@ CLITask（CLI を担当するタスク）が出す警告は、ログシンクを
 | 順 | 操作 |
 |----|------|
 | 前 | 電池を入れ直し、校正の完了（緑の常灯、ピッ×3）を待つ。WiFi の CLI で `status`: `prearm  : ready`、`pairing : Paired`、`battery` の電圧を記録（4.0 V 以上） |
-| 前 | T1 で `sf log wifi -d <秒> -o logs/checkout/s2_<手順>_<内容>_<回>.sflog.zip`（秒は 3 章の表）。T3 に `sf emergency` を打っておく |
+| 前 | T1 で `sf log wifi -d <秒> -o logs/checkout/s2_<手順>_<内容>_<回>.sflog.zip`（秒は 3 章の表）。2 人目がいるときは、T3 に `sf emergency` を打っておく |
 | 後 | 着陸・DISARM の後、取得の終了を待つ。3 章の「飛行後の共通の確認」を行い、`sf log info <一式> --text --grep Transition` で状態遷移を読む。`--grep "E ("` と `--grep "W ("` でエラー・警告の行を読む（ESP-IDF の行の先頭が `E (`・`W (`。実機の形は未確認） |
 
 `sf` で飛ばす手順（2-3・2-6・2-9・2-10・3）は、次のコマンドで操作する（`--ip` で機体の IP を変えられる。既定は 192.168.10.1）。**`sf takeoff` は機体を自分で ARM し、POS_HOLD で離陸する**（送信機の ARM 操作は不要。1 章の「操作の対応」）:
@@ -432,7 +472,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 項目 | 内容 |
 |------|------|
 | 目的 | スロットルが低いまま浮いたとき、ToF の証拠で ARMED_GROUND から TAKEOFF に移るか。1g-1 で判断は確かめたので、実機の浮き方で確かめる |
-| 入場 | 取得を始めている。STABILIZE（本体 LED が黄緑）。人員: 操縦者 1 人 |
+| 入場 | Claude Code が取得を始めている。STABILIZE（本体 LED が黄緑）。人員: 操縦者（開発者）1 人 |
 | 操作 | ARM を押し、スロットルをゆっくり上げ、浮いたら約 10〜20 cm で 2〜3 秒保ち、スロットルを下げて着陸。高さは 20 cm 以内。**浮かなければ 1 回だけ繰り返し**、それでも浮かなければ記録して終える |
 | 記録 | 浮いたときのスロットル値（一式の `pilot.csv` の `throttle` 列、0〜1。これが 0.5 の閾値（機体内の推力指令）と同じ尺度かは**未確認**）。`--grep Transition` の時刻 |
 | 合格 | 浮いたスロットルが 0.5 以下のとき、ToF の 5 cm 超が 1 秒続いた後に TAKEOFF へ遷移する。0.5 を超えて浮いたときは、スロットルの閾値で TAKEOFF へ遷移するので、**この確認は成立しなかった**と記録する（C8 は 1g の結果で判断する） |
@@ -443,18 +483,18 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 項目 | 内容 |
 |------|------|
 | 目的 | 高度モードの離陸中に DISARM すると、設計どおり即モータ停止か（着陸にしない理由: 床の近くで始めた着陸動作が機体を浮かせることがあるため）。**1g-4 で机上で確かめてから行う（入場）** |
-| 入場 | 1g-4 が合格。C3 が合格した柔らかいマットの上。ALT_HOLD（本体 LED がオレンジ）。人員: 操縦者 1 人 |
+| 入場 | 1g-4 が合格。C3 が合格した柔らかいマットの上。ALT_HOLD（本体 LED がオレンジ）。人員: 操縦者（開発者）1 人 |
 | 操作 | ARM を押す。約 0.3 秒のスプールの後に上昇が始まる。**ARM の約 1 秒後**（高さ 0.3 m 未満）に DISARM を押す。機体は DISARM の後、その高さから落ちる |
 | 記録 | `--grep Transition`: TAKEOFF → IDLE_GROUND（LANDING を経由しない）の時刻。`sf log stats events <一式>` |
 | 合格 | 1g-4 と同じ（LANDING を経由せず、全 duty が 0） |
-| 中止 | 1 秒たっても DISARM が効かない（T3 の `sf emergency` を Enter） |
+| 中止 | 1 秒たっても DISARM が効かない（電池を外す。2 人目がいるときは T3 の `sf emergency` を Enter） |
 
 ### 2-3 離陸の高度保持と通常の着陸、気圧高度の観測（C9・C11・C14）
 
 | 項目 | 内容 |
 |------|------|
 | 目的 | `sf takeoff` が 0.5 m を保持するか。SILS では約 0.84 m まで行き過ぎ、0.5 m に戻るまで約 20 s かかる。実機の値を記録する。続けて `sf land` で接地判定を初めて実機で見る。同じ取得で気圧高度を観測する（観測だけ） |
-| 入場 | 2-2 が合格。人員 2 人。POS_HOLD は `sf takeoff` が切り替える |
+| 入場 | 2-2 が合格。人員: 操縦者（開発者）+ Claude Code（取得と命令の送信。止めるのは操縦者）。POS_HOLD は `sf takeoff` が切り替える |
 | 操作 | `time sf takeoff`。応答が返ったら 30 秒ホバーを見る（操縦者は DISARM に備える。中止の段 2）。その後 `sf land` |
 | 読む | `sf log stats events <一式>`、`--grep "Landing detected"`、ホバーの区間で `sf log stats baro <一式> --since <t0> --until <t1>`、WiFi の CLI の `sensor baro`（`offset age`） |
 | 記録 | `peak ToF height`、`last time outside 0.50 +- 0.07 m`（FLYING 開始との差）、`LANDING` の行の時間、`last valid ToF before stop`、`time sf takeoff` の所要時間、接地の経路、`baro height - ToF` の rms と最大、`learned offset` |
@@ -466,7 +506,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 項目 | 内容 |
 |------|------|
 | 目的 | 接地の 3 つの判定経路（確実な接地: ToF が 5 cm 以下＋静止、降下停滞: 地面効果で降下が止まる、ToF 不感帯: 床近くの有効な読みの後に 0.2 秒無効が続く）が、床の上でだけモータを止めるか |
-| 入場 | 2-3 が合格。**表面ごとに 3 回以上**（1 回ごとに取得、回の番号を付ける）。ALT_HOLD。人員: 操縦者 1 人 |
+| 入場 | 2-3 が合格。**表面ごとに 3 回以上**（1 回ごとに取得、回の番号を付ける）。ALT_HOLD。人員: 操縦者（開発者）1 人 |
 | 操作 | ARM を押し（自動離陸）、0.5 m で保持。DISARM を押す（自動着陸）。**接地してもモータが止まらないときは、押してから 12 秒待って 2 回目の DISARM**（根拠: `sf land` が着陸の完了を待つ時間の前半 12 s。`vehicle_api.py` 64 行。通常の着陸は 0.5 m を約 0.3 m/s で約 2 秒なので、12 秒は 5 倍以上の余裕） |
 | 読む | `--grep "Landing detected"`: `(ground)` / `(stalled descent / ground effect)` / `(ToF dead zone: only invalid samples for N ms after a valid X m)` のどれか。`sf log stats events <一式>` |
 | 記録 | 経路の文言、着陸開始からモータ停止までの時間、`last valid ToF before stop`、直前 0.5 s の無効標本の数。モータが止まったとき機体が床の上にあったか（見ている人・ビデオ） |
@@ -480,7 +520,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 項目 | 内容 |
 |------|------|
 | 目的 | (a) 低いホバーから始めた着陸でも、5 cm を超える高さでモータが止まらない。(b) 接地の静止の判定は、床の上の ToF の読みが 1 秒間 0.02 m の幅に収まること（`kLandingRestBandM`、`kLandingRestHoldMs` 1000 ms）を静止の証拠にする。実機の静止した機体がこの幅に収まるか（過去の実機の記録では 0.022 m で、帯をわずかに超えていた） |
-| 入場 | 2-4 が合格。ALT_HOLD。人員 2 人（操縦者 + 高さを `sf tof` で読む人）。**1 人では行わない** |
+| 入場 | 2-4 が合格。ALT_HOLD。人員: 操縦者 + 高さを `sf tof` で読んで伝える人。**1 人では行わない**（Claude Code の読み取りは数秒遅れうるので任せない。1 章の人員の表） |
 | 操作 | ARM を押し（自動離陸）、操縦者がスロットルスティックを下げて、高さ **0.10〜0.12 m** まで降ろして 2 秒以上保つ（`sf tof` で確かめる）。その 2 秒の区間の始まりと終わりの機体時刻を控える。DISARM を押す（自動着陸）。スティックでそこまで降りられるかは**未確認**（API の下限は 0.2 m。スティック操作の下限はコードに見つからなかった）。降りられなければ、その旨を記録して 2-5 を行わない |
 | 読む | `--grep "Landing detected"`、`sf log stats events <一式>`、**その 2 秒の区間**（`<t0>`〜`<t1>`）で `sf log stats spread <一式> --since <t0> --until <t1>`（区間は 2 秒以上取る） |
 | 記録 | 経路、`LANDING` の行の時間、`last valid ToF before stop`、`largest 1 s spread` と各窓の `spread` [cm] |
@@ -492,7 +532,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 項目 | 内容 |
 |------|------|
 | 目的 | `sf stop` が、そのときの高度を保持するか。`takeoff` の待機中の `stop` は拒否される（`error not flying or guidance released - takeoff/go to re-engage`）ので、離陸が済んだ後の上昇で確かめる |
-| 入場 | 2-3 が合格。人員 2 人。T2 に次の 1 行を用意する |
+| 入場 | 2-3 が合格。人員: 操縦者（開発者）+ Claude Code。T2 に次の 1 行を用意する |
 | 操作 | `sf takeoff`。「整定した」（共通の判定）後に、`sf up 50 & sleep 1 && sf stop; wait`（上昇の約 1 秒後に停止）。続けて `sf land`。`sf up 50` の目標は 1.0 m で、停止が効かなければ 1.0 m に向かう（上限 1.2 m で機体が止める） |
 | 記録 | `sf stop` の応答（`ok`）、`sf up 50` の応答（打ち切られると `error ...`）、`sf log viz <一式> --mode position` で停止した高度と、その後の保持。停止高度の予想は約 0.8 m（0.5 m + 1 秒分の上昇。上昇の速さは設計値 0.3 m/s 前後で実機は未確認） |
 | 合格（**暫定**） | 停止した高度で、停止後 5 秒間の高度の変化が 0.07 m 以内（根拠: 保持の帯 0.5 ± 0.07 m と同じ幅を流用）。高度が 1.2 m を超えない |
@@ -505,7 +545,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 項目 | 内容 |
 |------|------|
 | 目的 | 高度モードの飛行中に送信機が切れたとき、着陸するか |
-| 入場 | 2-3 が合格。ALT_HOLD。人員 2 人（操縦者 + `sf emergency` を打って待つ PC 担当者）。**1 人では行わない** |
+| 入場 | 2-3 が合格。ALT_HOLD。人員 2 人（操縦者 + `sf emergency` を打って待つ PC 担当者）。**開発者 1 人 + Claude Code では行わない**（送信機の電源を切ると人の止める手段が無くなり、Claude Code の `emergency` は数秒遅れうる。通信途絶の模擬が入るまで、2 人目がいるときだけ行う。後日追加の予定） |
 | 操作 | ARM を押し（自動離陸）、0.5 m で保持。PC 担当者が「切る」の声で合図し、操縦者が送信機の電源を切る。**着陸して DISARM（モータ停止）を確かめるまで、送信機の電源を入れ直さない**（規則 12。ARM は押すたびに切り替わるので、再接続の直後にスティックに触れない）。異常なら T3 で Enter |
 | 読む | `--grep "Comm lost"`、`--grep Transition`、`sf log stats events <一式>`、`sf log viz <一式> --mode attitude` |
 | 記録 | 途絶から LANDING までの時間、LANDING の長さ、接地、モータ停止 |
@@ -517,7 +557,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 項目 | 内容 |
 |------|------|
 | 目的 | 手動で浮いて TAKEOFF/FLYING になった後に通信が途絶えたとき、モータを切らずに着陸するか（切ると落下する） |
-| 入場 | 2-1 と 2-7 が合格。STABILIZE。床はマット。人員 2 人（操縦者 + `sf emergency` を待つ PC 担当者）。**1 人では行わない**。操縦者の手は、片手でスティックを持ったまま、もう片方の手で送信機の電源スイッチを切る（**スティックを持ったまま電源を切る手順は両手が要る**。片手で保てなければ、PC 担当者に高さの保持を頼まず、この手順を行わない） |
+| 入場 | 2-1 と 2-7 が合格。STABILIZE。床はマット。人員 2 人（操縦者 + `sf emergency` を待つ PC 担当者）。**開発者 1 人 + Claude Code では行わない**（2-7 と同じ理由）。操縦者の手は、片手でスティックを持ったまま、もう片方の手で送信機の電源スイッチを切る（**スティックを持ったまま電源を切る手順は両手が要る**。片手で保てなければ、PC 担当者に高さの保持を頼まず、この手順を行わない） |
 | 操作 | 高さ約 0.3 m で保ち、合図の後に送信機の電源を切る。以後は 2-7 と同じ（規則 12） |
 | 読む | `--grep "Comm lost"`、`--grep Transition`、`sf log stats events <一式>` |
 | 記録 | 途絶から LANDING までの時間（約 3.5 秒が設計値）、LANDING の間の duty、接地、モータ停止 |
@@ -531,7 +571,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 項目 | 内容 |
 |------|------|
 | 目的 | 回頭が指令どおりの向きと角度か（大きい角度で逆回りしない、回らずに応答しない）。回頭中に高度が下がらず、水平位置がずれないか |
-| 入場 | 2-3・2-6・2-7 が合格。人員 2 人。POS_HOLD |
+| 入場 | 2-3・2-6・2-7 が合格。人員: 操縦者（開発者）+ Claude Code。POS_HOLD |
 | 操作 | `sf takeoff`。「整定した」の後、各回の前に 3 秒待って、次の順: `time sf cw 90` を 4 回（元の向きに戻る）、`time sf cw 360`、`time sf ccw 270`。続けて `sf land` |
 | 読む | 回頭ごとに `ok` までの時間（設計値は 角度 ÷ 57.3 度/s 付近）。区間（その回の `cmd: cw ...` から次の命令まで）で `sf log stats turn <一式> --since <t0> --until <t1>` |
 | 記録 | `yaw change`（指令との差が向きの誤差）、`ToF height` の最小（0.5 m との差が高度の低下）、`horizontal drift`（推定器による水平位置のずれ。実際のずれは床の目印やビデオでも確かめる）、`ok` までの時間 |
@@ -543,7 +583,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 項目 | 内容 |
 |------|------|
 | 目的 | 回頭の途中で `sf stop` を送ると、その向きで止まり、元の向きへ戻ったり回り続けたりしないか |
-| 入場 | 2-9 が合格。人員 2 人。POS_HOLD。T2 に次の 1 行を用意する |
+| 入場 | 2-9 が合格。人員: 操縦者（開発者）+ Claude Code。POS_HOLD。T2 に次の 1 行を用意する |
 | 操作 | `sf takeoff`。「整定した」の後、`sf cw 360 & sleep 3 && sf stop; wait`（約 3 秒後 = 360 度の約半分で停止）。続けて `sf land` |
 | 読む | `sf log info <一式> --text --grep "cmd: stop"` の時刻 `<ts>`。`sf log stats turn <一式> --since <ts> --until <ts + 5>` |
 | 記録 | `sf stop` の応答（`ok`）と `sf cw 360` の応答（`error interrupted by stop`）。停止後 5 秒間の `yaw change` |
@@ -554,13 +594,13 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 
 ## 7. 段階 3: 総合飛行
 
-**入場条件**: **段階 2 の「次へ進む条件」を満たし**（全手順が合格、または責任者の承認つき。承認のあるものは結果表の備考に書いてある）、結果表が埋まっている。段階 2 の入場の表（6 項目）を全部確かめ直す。同じ区域・同じ人員（2 人）・満充電の電池。この飛行は**1 回だけ**行い、目的は、離陸から着陸までを通したときに、部品ごとの確認では現れない異常が無いことを確かめること（C16）。**中止**: 2 章の「中止の段」「段階ごとの中止条件」。
+**入場条件**: **段階 2 の「次へ進む条件」を満たし**（全手順が合格、または責任者の承認つき。承認のあるものは結果表の備考に書いてある）、結果表が埋まっている。段階 2 の入場の表（6 項目）を全部確かめ直す。同じ区域・同じ人員（開発者 1 人 + Claude Code）・満充電の電池。この飛行は**1 回だけ**行い、目的は、離陸から着陸までを通したときに、部品ごとの確認では現れない異常が無いことを確かめること（C16）。**中止**: 2 章の「中止の段」「段階ごとの中止条件」。
 
 | 順 | 操作 | 確認 |
 |----|------|------|
-| 前 | 段階 2 の「共通の手順（前）」。`sf log wifi -d 150 -o logs/checkout/s3_final_1.sflog.zip`、T3 に `sf emergency` | — |
+| 前 | 段階 2 の「共通の手順（前）」。`sf log wifi -d 150 -o logs/checkout/s3_final_1.sflog.zip`。2 人目がいるときは、T3 に `sf emergency` | — |
 | 1 | `sf takeoff` | 応答が返る |
-| 2 | **離陸直後に高度と下向き ToF を確かめる**（規則 5）。操縦者は 1.0 m の目印と LED を見る。PC 担当者は `sf height`・`sf tof` を 1 回ずつ確認する | 高度が 0.5 m 付近、ToF が正常。**どちらかが異常なら、ここで `sf land`（または DISARM）して終える** |
+| 2 | **離陸直後に高度と下向き ToF を確かめる**（規則 5）。操縦者は 1.0 m の目印と LED を見る。Claude Code が `sf height`・`sf tof` を 1 回ずつ読む（応答は数秒遅れうるので、判断は操縦者の目で行い、値は記録とする） | 高度が 0.5 m 付近、ToF が正常。**どちらかが異常なら、ここで `sf land`（または DISARM）して終える** |
 | 3 | 1 回転: `sf cw 90` を 4 回（2-9 が合格していれば `sf cw 360` 1 回でもよい）。各回の前に高度を確かめる | 各 `sf cw` が成功で返る |
 | 4 | `sf land` | 応答が返り、接地でモータが止まる |
 | 後 | DISARM を確かめ、取得の終了を待つ。電源を切る前に WiFi の CLI で `status` を取る | — |
@@ -691,20 +731,39 @@ The **owner** is the repository's owner (the control and hardware engineer), who
 
 ### People and terminals
 
-| Steps | Minimum crew | Done by one person |
-|-------|--------------|--------------------|
-| 0, 1a-1f, 1h-1, 1i | 1 person | Yes |
-| 1g, 1h-2, 1h-3 | 2 people (one holds the vehicle, one operates) | **No. Do not do alone** |
-| 2-1, 2-2, 2-4 | The pilot alone (start the capture before the flight). A second person as lookout is recommended | Yes (start the capture, then pick up the transmitter) |
-| 2-3, 2-5, 2-6, 2-7, 2-8, 2-9, 2-10, 3 | 2 people (pilot + PC operator) | **No. Do not do alone** (being ready to DISARM and typing on the PC cannot be done at once. In 2-7 and 2-8 the pilot's DISARM does not reach the vehicle after the communication loss, so the PC operator waits ready to send `sf emergency`. 2-5 needs someone to read the height with `sf tof`) |
+The hardware checkout is done by **one developer plus Claude Code (the PC-side operations)** (decided 2026-11-22; there is no second person). **Only the person has a way to stop the motors**: Claude Code's reply can be several seconds late, so the emergency stop is not left to Claude Code.
 
-The PC operator's terminals (flight stages; all on the same PC connected to the vehicle's WiFi):
+| Kind | Person (developer) | Claude Code |
+|------|--------------------|-------------|
+| Vehicle, transmitter, battery, propellers | Every operation that touches them (ARM and DISARM on the transmitter, connecting the battery, fitting the propellers) | Does not touch them |
+| Stopping the motors | Pressing the throttle-side stick of the transmitter, the button on the vehicle, removing the battery. Every stop in an abnormal situation is one of these | Not left to it. It sends `emergency` (the CLI command or `sf emergency`) when asked, but it can be several seconds late, so it is not counted as a way to stop |
+| Input to the USB console | — | May send it (`motor test`, which turns the motors, included). Before sending, it says by voice (macOS `say`) what will happen |
+| `arm`, `disarm`, `mode` of the CLI (USB and WiFi) | — | May send them (the developer's approval, 2026-11-22). Before sending, it says by voice what will happen |
+| WiFi capture (`sf log wifi`) and the WiFi CLI (`nc 192.168.10.1 23`) | — | May run them |
+| Flight commands (`sf takeoff`, `sf cw` etc.) | Holds the transmitter and is ready to DISARM | Up to starting the capture and sending the commands. Before the flight it tells the purpose, the order of operations and the abort rungs in full, and sends on the person's signal |
+| Reading the saved records and comparing them with the pass lines | — | Does it |
+
+The division per step, and whether one person (the developer alone plus Claude Code) may do it:
+
+| Steps | What the person does | What Claude Code does | Done by one person |
+|-------|----------------------|-----------------------|--------------------|
+| 0, 1a-1f, 1h-1, 1i | Operations on the vehicle, transmitter and battery; checks by eye | USB and WiFi input, the capture, the comparison (the CLI commands of 0-13 included) | Yes |
+| 1g | Lifts the vehicle with one hand and holds the transmitter with the other (a press of the stick stops it at once). **Removing the propellers is recommended.** Whether to keep them fitted is the owner's decision | Starts the capture, reads `status` | Yes |
+| 1h-2, 1h-3 | Operates the voltage of the power supply and holds the vehicle | Starts the capture | **Optional, as before.** A power supply is needed. Some scenes need holding the vehicle and operating the voltage at the same time, so the owner decides whether one person does them. If not done: "not done". Later, parameterising the critical-voltage threshold is planned (so that it can be done without a power supply) |
+| 2-1, 2-2, 2-4 | Holds the transmitter as the pilot | Starts the capture before the flight | Yes |
+| 2-3, 2-6, 2-9, 2-10, 3 | Holds the transmitter as the pilot and is ready to DISARM. **The person stops it** | Starts the capture and sends the flight commands (`sf takeoff` etc.). The emergency stop is not left to it | Yes |
+| 2-5 | The pilot + a person who reads the height with `sf tof` and tells it | — | **No** (reading the height cannot tolerate a delay of several seconds, so it is not left to Claude Code. Done only when a second person is present) |
+| 2-7, 2-8 | The pilot who switches the transmitter off + a person waiting with `sf emergency` ready to send with only Enter | — | **Do not do alone** (once the transmitter is off, the pilot's DISARM does not arrive and the person has no way to stop; Claude Code's `emergency` can be several seconds late and is no substitute. Until a simulation of communication loss is added, these two steps are done only when a second person is present. Planned for later) |
+
+The PC can be used while connected to the Internet (wired LAN, the USB tethering of an iPhone, etc.) with its WiFi connected to the vehicle at the same time (confirmed on the real vehicle on 2026-11-22; chapter 3, "How to Record", has a macOS note).
+
+The PC-side terminals (flight stages; all on the same PC connected to the vehicle's WiFi; used by Claude Code. The "PC operator" is the person who takes this role when a second person is present):
 
 | Terminal | What it holds |
 |----------|---------------|
 | T1 | The capture (`sf log wifi -d <seconds> -o ...`), running before the flight |
 | T2 | The flight commands (`sf takeoff` etc.). Wait for the reply before typing the next |
-| T3 | **`sf emergency` typed in, so that only Enter has to be pressed** (the last resort that stops the motors at once; `emergency` is accepted even without a `command`: `operation_manual.md` line 210). Every `sf` call opens its own socket (`send` and `send_urgent` in `lib/sfcli/utils/vehicle_api.py`), so T3 can send while a command in T2 is waiting |
+| T3 | `sf emergency` (the last resort that stops the motors at once; `emergency` is accepted even without a `command`: `operation_manual.md` line 210). Every `sf` call opens its own socket (`send` and `send_urgent` in `lib/sfcli/utils/vehicle_api.py`), so T3 can send while a command in T2 is waiting. **When a second person is present, that person waits with only Enter left to press. With the developer alone, T3 is not waited on, since the hands are busy with the transmitter** (the way to stop is the person's own action) |
 
 Bench stage (stage 1): T1 = USB console (`script -q ... sf monitor`), T2 = capture or WiFi CLI (`nc 192.168.10.1 23`).
 
@@ -771,7 +830,7 @@ The priority is POS_HOLD > ALT_HOLD > ACRO > STABILIZE (`operation_manual.md` li
 |---|------|--------|
 | 1 | Everyone wears eye protection whenever a motor can spin | Keeps propeller or debris away from the eyes |
 | 2 | Never put your face or hands above the vehicle or into the propeller plane | Prevents finger injuries |
-| 3 | Name one pilot. **In every stage the pilot stays able to press the throttle-side stick of the transmitter (to DISARM).** The same applies when flying with `sf` commands. A different person operates the PC and records (the crew table in chapter 1) | The transmitter DISARM is the fastest and most reliable way to stop the motors in an abnormal situation |
+| 3 | Name one pilot. **In every stage the pilot stays able to press the throttle-side stick of the transmitter (to DISARM).** The same applies when flying with `sf` commands. Claude Code operates the PC and records (the crew table in chapter 1) | The transmitter DISARM is the fastest and most reliable way to stop the motors in an abnormal situation |
 | 4 | **Before flying, everyone reads the abort ladder below (the "Abort ladder") and says it aloud** | So nobody hesitates in an abnormal situation |
 | 5 | After takeoff, first check the altitude and the downward ToF. If either is abnormal, land immediately.<br>- Abnormal altitude: judged by eye against the height marks (1.0 m and 1.2 m) on a wall or pole: above the 1.0 m mark, still climbing, or sinking steadily.<br>- Abnormal ToF: the body LED and the StampS3 LED blink yellow fast and a warning sound plays (silent).<br>- In ACRO and STABILIZE the firmware does not force a landing, so the pilot lands the vehicle | Avoids flying on when the height sensor cannot be trusted. A wrong altitude leads straight to a ceiling or floor collision |
 | 6 | Fly only where the ceiling is at least 2.0 m high (the 1.2 m altitude limit plus a margin of at least 0.8 m) | Avoids hitting the ceiling if the climb overshoots |
@@ -788,8 +847,8 @@ The priority is POS_HOLD > ALT_HOLD > ACRO > STABILIZE (`operation_manual.md` li
 |------|-----------|--------|-------------|
 | 1 | ACRO or STABILIZE, in flight or on the ground, and TAKEOFF in any mode | Press the throttle-side stick of the transmitter (DISARM) | **The motors stop at once** (`operation_manual.md` line 136). Pressed in the air, the vehicle falls |
 | 2 | FLYING in ALT_HOLD or POS_HOLD (after `sf takeoff` too) | Press the stick once (DISARM) | **Automatic landing** (a slow descent of about 0.3 m/s). The motors are not cut (same, line 137) |
-| 3 | The automatic landing of rung 2 does not start or does not descend (provisional: the height has not decreased 3 s after the press), or the tilt or the oscillation grows | A second press, or Enter on `sf emergency` in T3 | The second DISARM stops the motors at once (same, line 137). `sf emergency` stops them regardless of the transmitter (same, line 210). The vehicle falls from about 0.5 m |
-| 4 | During a test that switches the transmitter off (1g-2, 2-7, 2-8) | **Type `sf emergency` into T3 before switching the transmitter off.** Enter on an abnormality | During the communication loss the pilot's DISARM does not arrive. `sf emergency` is the only way to stop |
+| 3 | The automatic landing of rung 2 does not start or does not descend (provisional: the height has not decreased 3 s after the press), or the tilt or the oscillation grows | A second press. If it does not act, remove the battery (when a second person is present, Enter on `sf emergency` in T3; a request to Claude Code for `sf emergency` can be several seconds late, so do not count on it) | The second DISARM stops the motors at once (same, line 137). `sf emergency` stops them regardless of the transmitter (same, line 210). The vehicle falls from about 0.5 m |
+| 4 | During a test that switches the transmitter off (1g-2, 2-7, 2-8) | **Type `sf emergency` into T3 before switching the transmitter off, and have another person ready to press Enter** (2-7 and 2-8 are done only when a second person is present). 1g-2 is done with the vehicle in the hand and with the propellers removed (the recommendation of chapter 1); on an abnormality remove the battery | During the communication loss the pilot's DISARM does not arrive. `sf emergency` is the only way to stop |
 
 **Visual abort criteria** (provisional; judged by eye against the marks on the wall or pole):
 
@@ -812,7 +871,7 @@ If any of these occurs, stop on the spot (stop the motors, remove the battery, s
 
 ## 3. How to Use This Document
 
-To have Claude Code lead the procedure, start Claude Code in the repository and enter `/hardware-checkout` (`.claude/skills/hardware-checkout/SKILL.md`). It presents one step at a time, reads the saved records and compares them with the pass lines. Claude Code may send USB console commands, including those that turn the motors (such as `motor test`; decided 2026-11-22). Meanwhile a person stays where the motors can be stopped at once by DISARM on the transmitter or by removing the battery.
+To have Claude Code lead the procedure, start Claude Code in the repository and enter `/hardware-checkout` (`.claude/skills/hardware-checkout/SKILL.md`). It presents one step at a time, reads the saved records and compares them with the pass lines. Claude Code may send input to the USB console (`motor test`, which turns the motors, included), run the WiFi capture (`sf log wifi`), type into the WiFi CLI, and send `arm`, `disarm` and `mode` of the CLI (decided 2026-11-22). Before sending, it says by voice (macOS `say`) what will happen. Claude Code's reply can be several seconds late, so the one who stops the motors in an abnormal situation is the person (pressing the throttle-side stick of the transmitter, the button on the vehicle, removing the battery). Meanwhile the person stays where those can be done at any time.
 
 ### Check Items
 
@@ -872,6 +931,8 @@ Unplug the USB cable for flights. Even without USB, the state transitions, the t
 | 2-10 | 90 | |
 | 3 | 150 | |
 
+**PC connection (macOS)**: the PC can be used while connected to the Internet with its WiFi connected to the vehicle at the same time (confirmed on the real vehicle on 2026-11-22). On this PC (macOS), however, the Python network communication from a terminal application can be refused on the local network, and then `sf log wifi` ends with `No data received`. **How to tell**: `nc -z 192.168.10.1 23` succeeds while `sf log wifi -d 5 --no-save` receives no packet. **Remedy**: allow the terminal application in "Local Network" in System Settings. As another remedy, a UDP relay was used.
+
 | What to read | Command |
 |--------------|---------|
 | Start a capture (a structure check runs automatically right after saving) | `sf log wifi -d <seconds> -o logs/checkout/<name>.sflog.zip` |
@@ -926,8 +987,25 @@ The modes of `sf log stats` and the lines to copy into the results sheet (`<seco
 | 0-10 | Pair the transmitter (`operation_manual.md` chapter 5, `controller.md`). `status` shows `pairing : Paired` and `prearm  : ready` | `status` | Both as stated |
 | 0-11 | Battery: start from fully charged (about 4.2 V). `sensor power` (form: `power: 4.12 V  100 mA  400 mW`) | Voltage | "Ready to fly" in the table of `safety.md` |
 | 0-12 | **Check the motor positions** (no propellers, DISARMed, USB console): `motor test 1 20 2`, `motor test 2 20 2`, `motor test 3 20 2`, `motor test 4 20 2` (M1 = front right (FR), M2 = rear right (RR), M3 = rear left (RL), M4 = front left (FL), duty 20 %, 2 s; `operation_manual.md` line 322). One at a time, see by eye that only the motor at that position spins. The correct correspondence of the rotation direction and the mounting position of the propellers (clockwise type and counterclockwise type) was not found in the repository's documents (**unconfirmed**). The owner checks it from the motor shaft, the propeller marking or the vehicle's own instructions, and it is checked again in the entry table of stage 2 | Position and rotation direction of each motor | All four positions match |
+| 0-13 | **Check the CLI flight commands** (on a bench, held down by weights. The check of `arm`, `disarm` and `mode` of the CLI on the real vehicle is done first in this step. They were checked in SILS, not yet on the real vehicle). Use the USB console, and only ⑥ on the WiFi CLI (`nc 192.168.10.1 23`). The transmitter is on and paired. ARM spins the motors at idle, so wear eye protection and keep hands away from the propellers. Before sending each command Claude Code says by voice what will happen.<br>① `arm` -> `status` -> `mode acro` -> `mode stabilize` -> `disarm`<br>② `arm` -> press the throttle-side stick of the transmitter in (the person's action: stopping a vehicle ARMed by the CLI with the transmitter)<br>③ ARM with a press of the transmitter stick (the person's action) -> `disarm`<br>④ `arm` -> `emergency`<br>⑤ Press the transmitter's left button once to select ALT_HOLD (the body LED is orange) and `arm` (it is refused). After checking, press the left button two more times to return to OFF<br>⑥ On the WiFi CLI: `arm` -> `status` -> `disarm`, then `arm` -> `emergency` | The display of each command; `state`, `mode` and `armed` of `status` | The displays are as expected and the state of `status` agrees (the expectations are in the table below) |
 
-**Condition to proceed**: 0-1 to 0-12 all pass.
+**Expected displays of 0-13** (the wording taken from `cmd_arm`, `requestMotorStop`, `printModeResult` and `printArmRefusal` of `cli_task.cpp`):
+
+| Command or operation | Expected display | `status` afterwards |
+|----------------------|------------------|---------------------|
+| `arm` (DISARMed, STABILIZE) | `ok: armed (state ARMED_GROUND, mode STABILIZE)` | `state   : ARMED_GROUND`, `armed   : yes` |
+| `arm` (already ARMed) | `no change: already armed (state ARMED_GROUND)` | Unchanged |
+| `mode acro` (ARMed) | `ok: mode ACRO (state ARMED_GROUND)` | `mode    : ACRO` |
+| `mode stabilize` (ARMed) | `ok: mode STABILIZE (state ARMED_GROUND)` | `mode    : STABILIZE` |
+| `disarm` (ARMed) | `ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)` | `state   : IDLE_GROUND`, `armed   : no` |
+| `emergency` (ARMed) | `ok: motors stopped (state ARMED_GROUND -> IDLE_GROUND)` | Same as above |
+| `disarm` (DISARMed) | `no change: not armed (state IDLE_GROUND)` | Unchanged |
+| A press of the transmitter stick after an ARM by the CLI | Nothing is displayed on the CLI. The motors stop | `state   : IDLE_GROUND`, `armed   : no` |
+| `arm` (ALT_HOLD) | `` refused: the CLI arms only in STABILIZE or ACRO (mode is ALT_HOLD: an ARM there starts an auto-takeoff) - use `mode stabilize` or `mode acro` `` | `state   : IDLE_GROUND`, `armed   : no` |
+
+Note on `mode` on the ground: a `mode` sent on the ground (IDLE_GROUND) before ARM can be put back to the transmitter's switch position once transmitter packets are arriving (`changed, then put back to ... by the transmitter's switch position`). 0-13 sends `mode` after ARM, so this display does not appear.
+
+**Condition to proceed**: 0-1 to 0-13 all pass.
 
 ## 5. Stage 1: Bench Check with the Propellers Removed
 
@@ -967,13 +1045,15 @@ If the floor reading exceeds 5 cm, a vehicle on the ground is not recognized as 
 
 ### 1d Loop timing, finiteness and USB states (C1, C2, C4)
 
-Printing a few log lines at the instant of ARM used to stall the 400 Hz task for 5 to 50 ms when the USB writing stalled (the host does not read and the vehicle's sending is blocked). The log sink is designed to prevent that, so check it in three USB states. The counters are totals since boot, so **power-cycle for each condition**.
+Printing a few log lines at the instant of ARM used to stall the 400 Hz task for 5 to 50 ms when the USB writing stalled (the host does not read and the vehicle's sending is blocked). The log sink is designed to prevent that, so check it in three USB states. The counters are totals since boot, so **power-cycle for each condition** (the aim is to reset the counters to 0, so for conditions A and B, where USB is connected, `reboot` (while DISARMed) or a reset through USB may stand in; this was done in the 2026-11-22 run. Condition C (no USB) stays a power cycle).
+
+**ARM, DISARM and the mode switching are done with CLI commands as the standard** (Claude Code sends `arm`, `disarm` and `mode` from the USB console or the WiFi CLI; it says by voice beforehand). In the table below, "press ARM" reads `arm`, "press DISARM" reads `disarm`, and "press the right button to toggle STABILIZE <-> ACRO" reads sending `mode acro` and `mode stabilize` alternately. The form with the transmitter, as written in the table, remains as the substitute for when the CLI commands cannot be used. The CLI `mode`, before ARM on the ground, may be put back to the transmitter's switch position, so send it while ARMed.
 
 | Item | Content |
 |------|---------|
 | Entry | 1a passed. Power cycle for each condition |
 | Action A (USB being read) | With `sf monitor` running (the console is recorded in `console_1d_A_1.txt`), press ARM once, **DISARM after 5 s**, and run `status` at once (to see the stall at the ARM instant). Then ARM again, hold 60 s, DISARM, `status` |
-| Action B (the host does not read + a lot of logging) | Run `sf monitor` directly, without `script`. In another terminal find the process number (PID) of `sf monitor` with `ps` and pause it with `kill -STOP <PID>` (the USB host stops reading; whether this blocks the vehicle's USB sending is **unconfirmed** on the real vehicle). ARM -> DISARM 20 times (2 s each; every ARM prints log lines). Also, while ARMed, press the right button to toggle STABILIZE <-> ACRO 10 times (every switch prints `Mode change: ...`). `status` on the WiFi CLI. Finally resume with `kill -CONT <PID>` and paste the terminal output into `console_1d_B_1.txt` |
+| Action B (the host does not read + a lot of logging) | Run `sf monitor` directly, without `script`. In another terminal find the process number (PID) of `sf monitor` with `ps` and pause it with `kill -STOP <PID>` (the USB host stops reading; keeping the port open without reading is also acceptable. By either method, whether the vehicle's USB sending actually blocks is **unconfirmed** on the real vehicle). ARM -> DISARM 20 times (2 s each; every ARM prints log lines). Also, while ARMed, press the right button to toggle STABILIZE <-> ACRO 10 times (every switch prints `Mode change: ...`). `status` on the WiFi CLI. Finally resume with `kill -CONT <PID>` and paste the terminal output into `console_1d_B_1.txt` |
 | Action C (USB cable unplugged) | Run on the battery alone. ARM, DISARM after 5 s, `status` on the WiFi CLI. Then ARM again, hold 60 s, DISARM, `status` |
 | Record | For each condition, after the 5 s ARM and after the 60 s ARM: the `imu armed` and `control armed` lines (`cycles`, `period max`, `late`, `busy max`, `over budget`) and the `finite` line. In A and B, whether `W (<time ms>) LogTask: log sink full: <N> lines dropped` appeared. `status` shows ms and the bundle µs (10 ms = 10000 µs) |
 | Pass (C1) | In all three conditions `period max` of `armed` is below 10 ms, `busy max` below 2.5 ms, `over budget` 0, and `late` after the 5 s ARM is near 0 (it does not grow at the instant of ARM; `operation_manual.md` lines 338-342). **Provisional**: `late` / `cycles` of B and C is not clearly larger than A (basis: no design document gives a comparison between conditions; this is a temporary line of this document taking A as the reference). A 5 ms-class delay that continues in 13-22% of the cycles while ARMed is a separate, unresolved issue (`detailed_design.md`). `late` not reaching 0 alone is not a failure. Record it and the owner decides |
@@ -984,8 +1064,8 @@ Printing a few log lines at the instant of ARM used to stall the 400 Hz task for
 
 | Item | Content |
 |------|---------|
-| Entry | 1d passed. The vehicle is on the floor. The USB console is connected and recorded in `console_1e_<condition>_<run>.txt` (the same for all six runs) |
-| Action (the **same time table** for three runs without capture and three with; t = 0 is the moment of the steady green) | Every run: power-cycle and wait for the steady green.<br>t = 0: for the runs with capture start `sf log wifi -d 120 -o logs/checkout/s1_1e_cap_on_<run>.sflog.zip` (nothing for the runs without capture).<br>t = 5 s: press ARM (STABILIZE).<br>t = 10, 15, 20, ..., 55 s: press the right button to toggle STABILIZE <-> ACRO (10 times).<br>t = 65 s: press DISARM.<br>From t = 70 s: press ARM, wait 2 s, press DISARM, wait 2 s, five times (until t = 90 s).<br>t = 95 s: end. `status` on USB. For the runs with capture, after the capture ends run `sf log info <bundle>` and `sf log stats loop <bundle>` |
+| Entry | 1d passed. The vehicle is on the floor. ARM, DISARM and the mode switching are sent as CLI commands (`arm`, `disarm`, `mode`) at the times of the table as the standard, as in 1d, and the "press" of the table reads as that (the form with the transmitter is the substitute for when the CLI commands cannot be used). A `mode` before ARM on the ground may be put back to the transmitter's switch position, so send it while ARMed. The USB console is connected and recorded in `console_1e_<condition>_<run>.txt` (the same for all six runs) |
+| Action (the **same time table** for three runs without capture and three with; t = 0 is the moment of the steady green) | Every run: power-cycle and wait for the steady green (the purpose is to return the counters to 0, so, as in conditions A and B of 1d, a `reboot` while DISARMed or a reset over USB may replace it; use the same method for all six runs).<br>t = 0: for the runs with capture start `sf log wifi -d 120 -o logs/checkout/s1_1e_cap_on_<run>.sflog.zip` (nothing for the runs without capture).<br>t = 5 s: press ARM (STABILIZE).<br>t = 10, 15, 20, ..., 55 s: press the right button to toggle STABILIZE <-> ACRO (10 times).<br>t = 65 s: press DISARM.<br>From t = 70 s: press ARM, wait 2 s, press DISARM, wait 2 s, five times (until t = 90 s).<br>t = 95 s: end. `status` on USB. For the runs with capture, after the capture ends run `sf log info <bundle>` and `sf log stats loop <bundle>` |
 | Record | For every run `cycles`, `late`, `period max`, `busy max`, `over budget` of `imu armed` and `control armed`. With capture also `text_dropped_lines` and the number of losses in the `text log` line of `loop` |
 | Pass (C1, **provisional**) | `late` and `over budget` of the runs with capture are the same as the three without (within their spread when the three differ). `period max` and `busy max` are within the minimum-to-maximum spread of the three without capture (basis: no design document gives a comparison criterion; this is a temporary line of this document taking the runs without capture as the reference) |
 | Pass (C4) | In all three runs with capture `text_dropped_lines` is 0 and `--text` shows no `*** N lines dropped here ***` |
@@ -1004,14 +1084,14 @@ By design the warnings that CLITask (the task in charge of the CLI) raises do no
 
 ### 1g Hand-held takeoff decision, communication loss and DISARM during takeoff (C8, C10, C11, C12)
 
-**Two people. Do not do alone.** In manual mode, if a vehicle that rises at low throttle is treated as "on the ground" until the ToF has shown 1 s, the communication-loss and battery landings do not act. Lift the vehicle by hand and check that decision with the real ToF.
+**One person (the developer) does it, lifting the vehicle with one hand and holding the transmitter with the other.** In manual mode, if a vehicle that rises at low throttle is treated as "on the ground" until the ToF has shown 1 s, the communication-loss and battery landings do not act. Lift the vehicle by hand and check that decision with the real ToF.
 
 | Item | Content |
 |------|---------|
-| Entry | Confirmed by eye that the propellers are removed. Do not give the vehicle a strong shock (a 3 G shock detection causes DISARM; the default of `safety.impact.accel_g` is 3.0). The pilot holds the transmitter and another person holds the vehicle. Start `sf log wifi -d 90 -o logs/checkout/s1_1g_handlift_1.sflog.zip` and **type `sf emergency` into T3** |
+| Entry | Confirmed by eye that the propellers are removed. Do not give the vehicle a strong shock (a 3 G shock detection causes DISARM; the default of `safety.impact.accel_g` is 3.0). One person does it: lift the vehicle with one hand and hold the transmitter with the other (a press of the stick stops it at once). **Removing the propellers is recommended** (whether to keep them fitted is the owner's decision). Claude Code starts `sf log wifi -d 90 -o logs/checkout/s1_1g_handlift_1.sflog.zip` |
 | Action 1g-1 (C8) | ARM in STABILIZE (throttle at minimum). Lift the vehicle level to about 20 cm above the floor and hold it for 3 s |
 | Expected | When ToF readings above 5 cm have lasted unbroken for 1 s: `Transition: ARMED_GROUND → TAKEOFF`. When a valid reading above 15 cm arrives: FLYING (`Takeoff complete → FLYING/STABILIZE`). The throttle stays at minimum |
-| Action 1g-2 (C8, C12) | Keep holding it at 20 cm and **the pilot switches the transmitter off** (communication loss; Enter on T3's `sf emergency` only on an abnormality) |
+| Action 1g-2 (C8, C12) | Keep holding it at 20 cm and **switch the transmitter off** (communication loss; switched off with the hand that holds the transmitter; on an abnormality remove the battery) |
 | Expected | `Comm lost → hover 3000 ms then LANDING`. After about 3.5 s (0.5 s of `safety.comm.timeout_ms` + 3 s of grace) `Comm lost → LANDING (hover grace elapsed)` and LANDING. **The motors are not cut** (the duty in `motor.csv` is above 0 during LANDING) |
 | Action 1g-3 (C11) | Put the vehicle slowly on the floor. Expected: `Landing detected (...)`, `Landing complete`, `Transition: LANDING → IDLE_GROUND`, motors stopped |
 | Action 1g-4 (C10) | Switch the transmitter on again (rule 12; do not touch the sticks). Set ALT_HOLD (left button once) and press ARM (the vehicle is on the floor). After about 0.3 s of spool-up it becomes TAKEOFF. Press DISARM **within about 1 s of ARM** (after 2 s or more, with an invalid floor ToF the ToF-invalid rule turns TAKEOFF into LANDING) |
@@ -1033,7 +1113,7 @@ Confirm by eye that the propellers are removed before starting. Check that the b
 | Expected | `W (<time ms>) failsafe: Low battery: 4.0xV` repeats about every 5 s (50 updates at 10 Hz; `battery_alert_policy.hpp` line 67). `W (<time ms>) StateManager: Low battery warning`. The warning sound. The StampS3 LED blinks cyan slowly. ARM is possible (the state does not change). After the restore: `= 3.4 (float)` |
 | Record, pass | The notices shown, the re-raise period, the confirmation of the restore (**finish the restore before 1h-2**) |
 
-**1h-2 Emergency (EMERGENCY, below 3.0 V). Optional (do it only when the owner has prepared a power-supply lead; otherwise "not done").** The critical-voltage threshold (3.0 V) cannot be a parameter, so connect a power supply to the battery connector instead of the battery and lower the voltage. How to connect the supply (connector shape, polarity, current-limit value) is in neither the repository's documents nor the firmware source (**unconfirmed**). Minimum cautions: do not reverse the polarity (use only a lead the owner has checked), set the current limit to the current shown as `battery` in `status` plus a margin, keep the voltage above 3.6 V before ARM, two people (one holds the vehicle, one controls the voltage), no propellers. ARM is refused at 3.3 V or less (`safety.battery.usb_v`), so start at about 3.6 V, ARM, and lower it below 3.0 V afterwards. Record the USB console and also take `sf log wifi -d 120 -o logs/checkout/s1_1h_battery_<scene>_1.sflog.zip`. **Judge the bundles with the lowered voltage separately, and leave them out of the `boot` check and the `re-init` check of 1i** (the low voltage itself can cause a restart or a ToF stop).
+**1h-2 Emergency (EMERGENCY, below 3.0 V). Optional (do it only when the owner has prepared a power-supply lead; otherwise "not done").** The critical-voltage threshold (3.0 V) cannot be a parameter, so connect a power supply to the battery connector instead of the battery and lower the voltage. How to connect the supply (connector shape, polarity, current-limit value) is in neither the repository's documents nor the firmware source (**unconfirmed**). Minimum cautions: do not reverse the polarity (use only a lead the owner has checked), set the current limit to the current shown as `battery` in `status` plus a margin, keep the voltage above 3.6 V before ARM, some scenes need holding the vehicle and controlling the voltage at the same time, so the owner decides whether one person does it (the crew table in chapter 1), no propellers. ARM is refused at 3.3 V or less (`safety.battery.usb_v`), so start at about 3.6 V, ARM, and lower it below 3.0 V afterwards. Record the USB console and also take `sf log wifi -d 120 -o logs/checkout/s1_1h_battery_<scene>_1.sflog.zip`. **Judge the bundles with the lowered voltage separately, and leave them out of the `boot` check and the `re-init` check of 1i** (the low voltage itself can cause a restart or a ToF stop).
 
 | Scene | Action | Expected output and behavior |
 |-------|--------|------------------------------|
@@ -1079,7 +1159,7 @@ Confirm by eye that the propellers are removed before starting. Check that the b
 | Order | Action |
 |-------|--------|
 | Before | Re-insert the battery and wait for the calibration to finish (steady green, beep x3). `status` on the WiFi CLI: `prearm  : ready`, `pairing : Paired`; record the `battery` voltage (4.0 V or more) |
-| Before | In T1 run `sf log wifi -d <seconds> -o logs/checkout/s2_<step>_<content>_<run>.sflog.zip` (seconds from the table in chapter 3). Type `sf emergency` into T3 |
+| Before | In T1 run `sf log wifi -d <seconds> -o logs/checkout/s2_<step>_<content>_<run>.sflog.zip` (seconds from the table in chapter 3). If a second person is present, type `sf emergency` into T3 |
 | After | After landing and DISARM, wait for the capture to end. Do the "Common check after each flight" of chapter 3 and read the state transitions with `sf log info <bundle> --text --grep Transition`. Read the error and warning lines with `--grep "E ("` and `--grep "W ("` (log lines of ESP-IDF start with `E (` and `W (`; the form on the real vehicle is unconfirmed) |
 
 Steps flown with `sf` (2-3, 2-6, 2-9, 2-10, 3) are operated with these commands (`--ip` changes the vehicle's IP; the default is 192.168.10.1). **`sf takeoff` ARMs the vehicle by itself and takes off in POS_HOLD** (no ARM press on the transmitter; "Operation map" in chapter 1):
@@ -1103,7 +1183,7 @@ Exit codes: 0 success, 1 the vehicle's `error ...` or the PC's refusal of an arg
 | Item | Content |
 |------|---------|
 | Purpose | When the vehicle rises at low throttle, does the ToF evidence move ARMED_GROUND to TAKEOFF? The decision was checked in 1g-1; here it is checked with a real lift |
-| Entry | The capture is started. STABILIZE (the body LED is yellow-green). Crew: the pilot alone |
+| Entry | Claude Code has started the capture. STABILIZE (the body LED is yellow-green). Crew: the pilot (the developer) alone |
 | Action | Press ARM, raise the throttle slowly, and when the vehicle lifts hold about 10-20 cm for 2-3 s, lower the throttle and land. Stay within 20 cm. **If it does not lift, repeat once**; if it still does not lift, record it and finish |
 | Record | The throttle value at lift-off (the `throttle` column of `pilot.csv`, 0 to 1; whether it is the same scale as the threshold 0.5 (the thrust command inside the vehicle) is **unconfirmed**). The times from `--grep Transition` |
 | Pass | When the throttle at lift-off is 0.5 or less, TAKEOFF follows after ToF above 5 cm has lasted 1 s. When it lifted above 0.5, TAKEOFF follows by the throttle threshold, so record that **the check did not hold** (judge C8 by the result of 1g) |
@@ -1114,18 +1194,18 @@ Exit codes: 0 success, 1 the vehicle's `error ...` or the PC's refusal of an arg
 | Item | Content |
 |------|---------|
 | Purpose | Does a DISARM during the takeoff of an altitude mode stop the motors at once as designed? (Why it is not a landing: a landing started near the floor can lift the vehicle.) **It is done after checking it on the bench in 1g-4 (an entry condition)** |
-| Entry | 1g-4 passed. On a soft mat for which C3 passed. ALT_HOLD (the body LED is orange). Crew: the pilot alone |
+| Entry | 1g-4 passed. On a soft mat for which C3 passed. ALT_HOLD (the body LED is orange). Crew: the pilot (the developer) alone |
 | Action | Press ARM. After about 0.3 s of spool-up the climb begins. Press DISARM **about 1 s after ARM** (height below 0.3 m). After the DISARM the vehicle falls from that height |
 | Record | `--grep Transition`: the time of TAKEOFF → IDLE_GROUND (without passing LANDING). `sf log stats events <bundle>` |
 | Pass | Same as 1g-4 (without passing LANDING, all duties 0) |
-| Abort | DISARM does not take effect after 1 s (Enter on `sf emergency` in T3) |
+| Abort | DISARM does not take effect after 1 s (remove the battery; when a second person is present, Enter on `sf emergency` in T3) |
 
 ### 2-3 Altitude hold after takeoff, normal landing, observation of barometric height (C9, C11, C14)
 
 | Item | Content |
 |------|---------|
 | Purpose | Does `sf takeoff` hold 0.5 m? SILS overshoots to about 0.84 m and needs about 20 s to return to 0.5 m. Record the real values. Then `sf land` shows the touchdown decision on the real vehicle for the first time. The same capture observes the barometric height (observation only) |
-| Entry | 2-2 passed. Crew: 2 people. POS_HOLD is switched on by `sf takeoff` |
+| Entry | 2-2 passed. Crew: the pilot (the developer) + Claude Code (the capture and sending the commands; the pilot stops it). POS_HOLD is switched on by `sf takeoff` |
 | Action | `time sf takeoff`. When the reply returns, watch a 30 s hover (the pilot is ready to DISARM; abort ladder rung 2). Then `sf land` |
 | Read | `sf log stats events <bundle>`, `--grep "Landing detected"`, for the hover window `sf log stats baro <bundle> --since <t0> --until <t1>`, `sensor baro` on the WiFi CLI (`offset age`) |
 | Record | `peak ToF height`, `last time outside 0.50 +- 0.07 m` (the difference from the start of FLYING), the time in the `LANDING` line, `last valid ToF before stop`, the elapsed time of `time sf takeoff`, the touchdown path, rms and maximum of `baro height - ToF`, `learned offset` |
@@ -1137,7 +1217,7 @@ Exit codes: 0 success, 1 the vehicle's `error ...` or the PC's refusal of an arg
 | Item | Content |
 |------|---------|
 | Purpose | Do the three touchdown decision paths (firm ground: ToF 5 cm or less plus at rest; stalled descent: the descent stops by ground effect; ToF dead zone: 0.2 s of invalid readings after a valid reading near the floor) stop the motors only on the floor? |
-| Entry | 2-3 passed. Do it **three times or more per surface** (one capture each, with the run number). ALT_HOLD. Crew: the pilot alone |
+| Entry | 2-3 passed. Do it **three times or more per surface** (one capture each, with the run number). ALT_HOLD. Crew: the pilot (the developer) alone |
 | Action | Press ARM (automatic takeoff) and hold 0.5 m. Press DISARM (automatic landing). **If the motors do not stop after touchdown, wait 12 s from the press and press DISARM a second time** (basis: the first half, 12 s, of the time `sf land` waits for the landing to finish, `vehicle_api.py` line 64. A normal landing takes about 2 s from 0.5 m at about 0.3 m/s, so 12 s is more than five times that) |
 | Read | `--grep "Landing detected"`: one of `(ground)` / `(stalled descent / ground effect)` / `(ToF dead zone: only invalid samples for N ms after a valid X m)`. `sf log stats events <bundle>` |
 | Record | The wording of the path, the time from the landing start to the motor stop, `last valid ToF before stop`, the number of invalid samples in the last 0.5 s. Whether the vehicle was on the floor when the motors stopped (the person watching, video) |
@@ -1151,7 +1231,7 @@ There is no way to create on the real vehicle, safely, a situation where LANDING
 | Item | Content |
 |------|---------|
 | Purpose | (a) Even a landing that begins at a low hover does not stop the motors above 5 cm. (b) The rest decision of the touchdown takes the floor ToF readings staying within a 0.02 m width for 1 s (`kLandingRestBandM`, `kLandingRestHoldMs` 1000 ms) as evidence of rest. Does a resting real vehicle fit in this width? (A past real record gave 0.022 m, slightly above the band.) |
-| Entry | 2-4 passed. ALT_HOLD. Crew: 2 people (the pilot + a person who reads the height with `sf tof`). **Do not do alone** |
+| Entry | 2-4 passed. ALT_HOLD. Crew: the pilot + a person who reads the height with `sf tof` and tells it. **Do not do alone** (Claude Code's reading can be several seconds late, so it is not left to it; the crew table in chapter 1) |
 | Action | Press ARM (automatic takeoff), the pilot lowers the throttle stick to a height of **0.10-0.12 m** and holds it for 2 s or more (check with `sf tof`). Note the vehicle times of the start and the end of that 2 s stretch. Press DISARM (automatic landing). Whether the stick can go down that far is **unconfirmed** (the API's lower limit is 0.2 m; the stick's lower limit was not found in the code). If it cannot, record that and skip 2-5 |
 | Read | `--grep "Landing detected"`, `sf log stats events <bundle>`, and for **that 2 s stretch** (`<t0>` to `<t1>`) `sf log stats spread <bundle> --since <t0> --until <t1>` (take a stretch of 2 s or more) |
 | Record | The path, the time in the `LANDING` line, `last valid ToF before stop`, `largest 1 s spread` and the `spread` [cm] of each window |
@@ -1163,7 +1243,7 @@ There is no way to create on the real vehicle, safely, a situation where LANDING
 | Item | Content |
 |------|---------|
 | Purpose | Does `sf stop` hold the altitude it was sent at? A `stop` while waiting for `takeoff` is refused (`error not flying or guidance released - takeoff/go to re-engage`), so check it in a climb after the takeoff is done |
-| Entry | 2-3 passed. Crew: 2 people. Prepare the following line in T2 |
+| Entry | 2-3 passed. Crew: the pilot (the developer) + Claude Code. Prepare the following line in T2 |
 | Action | `sf takeoff`. After "settled" (the common judgement), `sf up 50 & sleep 1 && sf stop; wait` (stop about 1 s after the climb begins). Then `sf land`. The target of `sf up 50` is 1.0 m; if the stop does not work it heads for 1.0 m (the vehicle stops it at the 1.2 m ceiling) |
 | Record | The reply of `sf stop` (`ok`), the reply of `sf up 50` (`error ...` when cut off), the stopped altitude and its later hold with `sf log viz <bundle> --mode position`. The expected stop height is about 0.8 m (0.5 m + 1 s of climb; the climb speed is a design value near 0.3 m/s, unconfirmed on the real vehicle) |
 | Pass (**provisional**) | At the stopped altitude, the altitude changes by 0.07 m or less during the 5 s after the stop (basis: the same width as the hold band 0.5 +- 0.07 m). The altitude does not exceed 1.2 m |
@@ -1176,7 +1256,7 @@ There is no way to create on the real vehicle, safely, a situation where LANDING
 | Item | Content |
 |------|---------|
 | Purpose | When the transmitter is lost in flight of an altitude mode, does the vehicle land? |
-| Entry | 2-3 passed. ALT_HOLD. Crew: 2 people (the pilot + the PC operator waiting with `sf emergency` typed). **Do not do alone** |
+| Entry | 2-3 passed. ALT_HOLD. Crew: 2 people (the pilot + the PC operator waiting with `sf emergency` typed). **Not done by the developer alone plus Claude Code** (once the transmitter is off the person has no way to stop, and Claude Code's `emergency` can be several seconds late. Until a simulation of communication loss is added, done only when a second person is present. Planned for later) |
 | Action | Press ARM (automatic takeoff) and hold 0.5 m. The PC operator signals "switch off" by voice and the pilot switches the transmitter off. **Do not switch the transmitter on again until you have confirmed the vehicle has landed and DISARMed (the motors stopped)** (rule 12; ARM toggles with every press, so do not touch the stick right after the reconnection). On an abnormality press Enter in T3 |
 | Read | `--grep "Comm lost"`, `--grep Transition`, `sf log stats events <bundle>`, `sf log viz <bundle> --mode attitude` |
 | Record | The time from the loss to LANDING, the length of LANDING, touchdown, motor stop |
@@ -1188,7 +1268,7 @@ There is no way to create on the real vehicle, safely, a situation where LANDING
 | Item | Content |
 |------|---------|
 | Purpose | When communication is lost after a manual lift into TAKEOFF/FLYING, does the vehicle land without cutting the motors? (Cutting them would drop it.) |
-| Entry | 2-1 and 2-7 passed. STABILIZE. A mat on the floor. Crew: 2 people (the pilot + the PC operator waiting with `sf emergency` typed). **Do not do alone**. The pilot holds the stick with one hand and switches the transmitter's power off with the other (**switching off while holding the stick needs both hands**; if the height cannot be held with one hand, do not ask the PC operator to hold it, and do not do this step) |
+| Entry | 2-1 and 2-7 passed. STABILIZE. A mat on the floor. Crew: 2 people (the pilot + the PC operator waiting with `sf emergency` typed). **Not done by the developer alone plus Claude Code** (the same reason as 2-7). The pilot holds the stick with one hand and switches the transmitter's power off with the other (**switching off while holding the stick needs both hands**; if the height cannot be held with one hand, do not ask the PC operator to hold it, and do not do this step) |
 | Action | Hold about 0.3 m and switch the transmitter off after the signal. From then on as in 2-7 (rule 12) |
 | Read | `--grep "Comm lost"`, `--grep Transition`, `sf log stats events <bundle>` |
 | Record | The time from the loss to LANDING (about 3.5 s by design), the duties during LANDING, touchdown, motor stop |
@@ -1202,7 +1282,7 @@ There is no way to create on the real vehicle, safely, a situation where LANDING
 | Item | Content |
 |------|---------|
 | Purpose | Does the vehicle turn in the commanded direction by the commanded angle (no reverse turn at large angles, no answering without turning)? Does the altitude not drop and the horizontal position not drift during the turn? |
-| Entry | 2-3, 2-6 and 2-7 passed. Crew: 2 people. POS_HOLD |
+| Entry | 2-3, 2-6 and 2-7 passed. Crew: the pilot (the developer) + Claude Code. POS_HOLD |
 | Action | `sf takeoff`. After "settled", wait 3 s before each turn and run in this order: `time sf cw 90` four times (back to the original heading), `time sf cw 360`, `time sf ccw 270`. Then `sf land` |
 | Read | For each turn the time to `ok` (the design value is near angle / 57.3 deg/s). For the window (from `cmd: cw ...` of that turn to the next command) `sf log stats turn <bundle> --since <t0> --until <t1>` |
 | Record | `yaw change` (its difference from the command is the heading error), the minimum of `ToF height` (the difference from 0.5 m is the altitude drop), `horizontal drift` (the estimator's horizontal position drift; also check the real drift with a mark on the floor or video), the time to `ok` |
@@ -1214,7 +1294,7 @@ There is no way to create on the real vehicle, safely, a situation where LANDING
 | Item | Content |
 |------|---------|
 | Purpose | When `sf stop` is sent in the middle of a turn, does the vehicle stop at that heading, without returning to the original heading or turning on? |
-| Entry | 2-9 passed. Crew: 2 people. POS_HOLD. Prepare the following line in T2 |
+| Entry | 2-9 passed. Crew: the pilot (the developer) + Claude Code. POS_HOLD. Prepare the following line in T2 |
 | Action | `sf takeoff`. After "settled", `sf cw 360 & sleep 3 && sf stop; wait` (stop about 3 s later = about half of 360 degrees). Then `sf land` |
 | Read | The time `<ts>` of `sf log info <bundle> --text --grep "cmd: stop"`. `sf log stats turn <bundle> --since <ts> --until <ts + 5>` |
 | Record | The reply of `sf stop` (`ok`) and the reply of `sf cw 360` (`error interrupted by stop`). `yaw change` for the 5 s after the stop |
@@ -1225,13 +1305,13 @@ There is no way to create on the real vehicle, safely, a situation where LANDING
 
 ## 7. Stage 3: Integrated Flight
 
-**Entry condition**: **the "condition to proceed" of stage 2 is met** (every step passed or approved by the owner; the approvals are written in the notes of the results sheet) and the results sheet is filled in. Check the whole entry table of stage 2 (six items) again. The same area, the same people (2) and a fully charged battery. Make this flight **only once**; its purpose is to confirm that nothing appears, when running from takeoff to landing, that the part-by-part checks did not show (C16). **Abort**: the "Abort ladder" and "Abort Criteria per Stage" in chapter 2.
+**Entry condition**: **the "condition to proceed" of stage 2 is met** (every step passed or approved by the owner; the approvals are written in the notes of the results sheet) and the results sheet is filled in. Check the whole entry table of stage 2 (six items) again. The same area, the same crew (the developer + Claude Code) and a fully charged battery. Make this flight **only once**; its purpose is to confirm that nothing appears, when running from takeoff to landing, that the part-by-part checks did not show (C16). **Abort**: the "Abort ladder" and "Abort Criteria per Stage" in chapter 2.
 
 | Order | Action | Check |
 |-------|--------|-------|
-| Before | The "common procedure (before)" of stage 2. `sf log wifi -d 150 -o logs/checkout/s3_final_1.sflog.zip`, `sf emergency` typed in T3 | — |
+| Before | The "common procedure (before)" of stage 2. `sf log wifi -d 150 -o logs/checkout/s3_final_1.sflog.zip`. If a second person is present, `sf emergency` typed in T3 | — |
 | 1 | `sf takeoff` | The reply returns |
-| 2 | **Check the altitude and the downward ToF right after takeoff** (rule 5). The pilot watches the 1.0 m mark and the LEDs. The PC operator checks `sf height` and `sf tof` once each | Altitude near 0.5 m, ToF normal. **If either is abnormal, end here with `sf land` (or DISARM)** |
+| 2 | **Check the altitude and the downward ToF right after takeoff** (rule 5). The pilot watches the 1.0 m mark and the LEDs. Claude Code reads `sf height` and `sf tof` once each (the reply can be several seconds late, so the judgement is made by the pilot's eye and the values are records) | Altitude near 0.5 m, ToF normal. **If either is abnormal, end here with `sf land` (or DISARM)** |
 | 3 | One full turn: `sf cw 90` four times (one `sf cw 360` is also fine if 2-9 passed). Check the altitude before each | Every `sf cw` returns success |
 | 4 | `sf land` | The reply returns and the motors stop at touchdown |
 | After | Confirm DISARM and wait for the capture to end. Take `status` on the WiFi CLI before powering off | — |
