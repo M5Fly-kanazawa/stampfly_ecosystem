@@ -400,6 +400,41 @@ bool isFlightContinuing()
     return state == sf::FlightState::FLYING || state == sf::FlightState::FLIP;
 }
 
+// True in the five states in which the motors are armed (ARMED_GROUND, TAKEOFF, FLYING, LANDING, FLIP).
+// モータが ARM されている 5 つの状態（ARMED_GROUND・TAKEOFF・FLYING・LANDING・FLIP）なら true。
+bool isArmedState(sf::FlightState state)
+{
+    return state == sf::FlightState::ARMED_GROUND || state == sf::FlightState::TAKEOFF ||
+           state == sf::FlightState::FLYING || state == sf::FlightState::LANDING ||
+           state == sf::FlightState::FLIP;
+}
+
+// The flight state seen by the previous watchDisarmEdge() call / 前回の watchDisarmEdge() が見た飛行状態。
+sf::FlightState g_watched_state = sf::FlightState::INIT;
+
+// The one place that drops the parked lines when the craft goes from armed back to the ground, whatever caused it (a
+// transmitter DISARM, the on-board button, the CLI `disarm` / `emergency`, the API, a failsafe, the abort of a takeoff, the
+// end of a landing): the lines were issued for the flight that has ended, and a parked `takeoff` would otherwise ARM the
+// craft again. The decision stays in StateManager (INV-3): this only watches the published state and manages the task's own queue.
+// Called at every poll of waitUntil (before its predicate, so a state that the predicate treats as the end of the wait is
+// seen first) and at every pass of the main loop. A line that arrives after the edge is not touched.
+// 機体が armed から地上へ戻ったとき、原因を問わず（送信機の DISARM・機体のボタン・CLI の `disarm` / `emergency`・API・
+// フェイルセーフ・離陸の中止・着陸の完了）、後回しの行を捨てる唯一の場所: それらの行は終わった飛行のために出されたもので、
+// 残ると後回しの `takeoff` が機体をまた ARM してしまう。判断は StateManager が持ったまま（INV-3）: ここは発行済みの状態を
+// 観測し、自タスクの待ち行列を管理するだけ。waitUntil の各ポーリング（述語より前。述語が待機の終わりとみなす状態を先に見る
+// ため）と主ループの各周回で呼ぶ。エッジより後に届いた行には触れない。
+// @design detailed_design.md §3.1 — DISARM drops the parked API lines [OK]
+void watchDisarmEdge()
+{
+    const sf::FlightState now_state = currentState();
+    const bool disarmed = isArmedState(g_watched_state) && !isArmedState(now_state);
+    g_watched_state = now_state;
+    if (disarmed) {
+        ESP_LOGW(TAG, "craft disarmed - parked lines cancelled");
+        cancelDeferredLines(kFlightEndedCancelledReply);
+    }
+}
+
 // End the wait in progress because the flight ended, and drop the lines parked behind it: they
 // were issued for that flight, and a parked `takeoff` would otherwise ARM the craft again.
 // 進行中の待機を、飛行が終わったために打ち切り、その後ろに置かれた行を捨てる: それらはその
@@ -428,6 +463,7 @@ bool waitUntil(uint32_t timeout_ms, Pred pred, bool ends_with_flight = false)
     g_wait_interrupt = WaitInterrupt::None;
     const uint32_t start = static_cast<uint32_t>(esp_timer_get_time() / 1000);
     while (static_cast<uint32_t>(esp_timer_get_time() / 1000) - start < timeout_ms) {
+        watchDisarmEdge();   // before pred(): see the edge first / pred() より前: エッジを先に見る
         if (pred()) {
             return true;
         }
@@ -494,8 +530,32 @@ void seedGuidanceAtCurrentPose()
     seedGuidance(sf::estimate_state.latest().position[2]);
 }
 
-// Reason text when a takeoff must be refused before the verb is published, else nullptr.
-// takeoff を verb の publish 前に拒否すべきときの理由文字列。なければ nullptr。
+// Reply text for a pre-arm reason (SystemMode.arm_block) that refuses a takeoff; nullptr for None.
+// ARM 前判定の理由（SystemMode.arm_block）に対する takeoff 拒否の応答文字列。None なら nullptr。
+const char* armBlockRefusalText(sf::ArmBlock block)
+{
+    switch (block) {
+        case sf::ArmBlock::Pairing:      return "error pairing in progress";
+        case sf::ArmBlock::Battery:      return "error battery unsafe - USB power or low voltage";
+        case sf::ArmBlock::Calibrating:  return "error calibrating - keep the craft still";
+        case sf::ArmBlock::BenchRelevel: return "error bench motor test active";
+        case sf::ArmBlock::TiltPending:  return "error attitude check pending - wait a moment";
+        case sf::ArmBlock::TiltMismatch: return "error attitude mismatch - place the craft level";
+        case sf::ArmBlock::TofSilent:    return "error tof silent - check the sensor";
+        case sf::ArmBlock::None:
+        default:                         return nullptr;
+    }
+}
+
+// Reason text when a takeoff must be refused before the verb is published, else nullptr. The pre-arm
+// reason is the one StateManager publishes (single source, StateManager::evaluateArmBlock): a takeoff
+// that its ARM would refuse is answered at once instead of waiting for the takeoff timeout, and leaves
+// nothing behind. The ToF silence applies on the ground in any state (nobody can see the climb); the
+// other reasons only in IDLE_GROUND, the state in which ARM is evaluated (a craft already in ARMED_GROUND is armed).
+// takeoff を verb の publish 前に拒否すべきときの理由文字列。なければ nullptr。ARM 前判定の理由は
+// StateManager が発行したもの（単一の情報源、StateManager::evaluateArmBlock）: ARM が拒否する takeoff を、
+// 離陸のタイムアウトまで待たずにすぐ応答し、何も残さない。ToF の出力停止は地上のどの状態でも適用
+// （上昇を誰も見られない）、他の理由は ARM を判定する状態 IDLE_GROUND でだけ適用（ARMED_GROUND は ARM 済み）。
 const char* takeoffRefusalText()
 {
     const sf::FlightState st = currentState();
@@ -505,13 +565,9 @@ const char* takeoffRefusalText()
     if (!sf::system_status.latest().calibrated) {
         return "error calibrating - keep the craft still";
     }
-    // The published pre-arm reason (single source, StateManager::evaluateArmBlock): do not
-    // start a climb whose altitude nobody can see — the downward ToF has stopped.
-    // 発行済みの ARM 前判定の理由（単一の情報源、StateManager::evaluateArmBlock）: 高度を誰も
-    // 見られない上昇を始めない — 下向き ToF が止まっている。
-    if (static_cast<sf::ArmBlock>(sf::system_mode.latest().arm_block) ==
-        sf::ArmBlock::TofSilent) {
-        return "error tof silent - check the sensor";
+    const auto block = static_cast<sf::ArmBlock>(sf::system_mode.latest().arm_block);
+    if (block == sf::ArmBlock::TofSilent || st == sf::FlightState::IDLE_GROUND) {
+        return armBlockRefusalText(block);
     }
     return nullptr;
 }
@@ -2081,8 +2137,11 @@ void ApiTask(void* /*pvParameters*/)
             }
         }
 
-        // 1a. Commands parked while a blocking command ran, oldest first.
-        // 1a. 待機コマンドの実行中に後回しにした行を古いものから。
+        // 1a. Commands parked while a blocking command ran, oldest first, unless the craft was
+        // disarmed meanwhile (watchDisarmEdge drops them: DISARM wins over every parked line).
+        // 1a. 待機コマンドの実行中に後回しにした行を古いものから。ただしその間に機体が DISARM
+        // されていたら捨てる（watchDisarmEdge。DISARM は後回しのどの行よりも優先）。
+        watchDisarmEdge();
         runDeferredCommands();
 
         // 1. SILS/test injections / SILS・テスト注入

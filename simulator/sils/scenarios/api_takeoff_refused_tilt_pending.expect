@@ -1,0 +1,13 @@
+# api_takeoff_refused_tilt_pending.expect — the refused takeoff is answered at once; a later one flies
+# 拒否された takeoff はすぐ応答され、後の takeoff は飛ぶ
+#
+exit 0
+log_contains any "reply: error takeoff aborted"
+log_contains any "reply: error attitude check pending - wait a moment"
+log_absent any "reply: error takeoff timeout"
+log_contains any "Transition: TAKEOFF → FLYING"
+order "reply: error attitude check pending - wait a moment" "Transition: TAKEOFF → FLYING"
+# From the refusal to the second takeoff the craft is on the floor; afterwards it flies.
+# 拒否から 2 回目の離陸までは床の上、その後は飛ぶ。
+metric duty_max < 0.01 in 7.6 10.9
+metric alt_max > 0.30 in 16.0 21.0

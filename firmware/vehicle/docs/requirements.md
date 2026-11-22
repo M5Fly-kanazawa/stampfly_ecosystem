@@ -68,7 +68,7 @@ IDLE_GROUND
 | LANDING → IDLE_GROUND | 着陸完了（ToF 接地検出 → 本当の DISARM、モータゼロ） |
 | FLYING → ARMED_GROUND | 静かに着陸 / タッチアンドゴー |
 | FLYING → IDLE_GROUND | **衝突検知**（緊急 DISARM）or **ACRO/STABILIZE でのパイロット DISARM**（手動推力モードは自動着陸を持たないため即カット）or **緊急停止**（API `emergency`／着陸中の再 DISARM＝中断）|
-| ARMED_GROUND → IDLE_GROUND | DISARMアクション（地上は常に即カット。送信機・API・CLI のどの入力源からも、誰が ARM したかを問わず受理する）。地上で姿勢推定が重力と不一致の場合は自動 DISARM（§9）。いずれも ESKF をリセットして再水平化（再校正はしない） |
+| ARMED_GROUND → IDLE_GROUND | DISARMアクション（地上は常に即カット。送信機・API・CLI のどの入力源からも、誰が ARM したかを問わず受理する）。地上で姿勢推定が重力と不一致の場合は自動 DISARM（§9）。いずれも ESKF をリセットして再水平化（再校正はしない）。**DISARM はどの経路でも最優先:** 機体が ARM 済みの状態から地上へ戻ったら、API の後回しの列に並んでいた行は全て取り消される（再 ARM・再離陸しない。`detailed_design.md` §3.1） |
 
 ### ペアリング状態（PairingState）
 
@@ -336,7 +336,7 @@ IDLE_GROUND
 | LANDING → IDLE_GROUND | Landing complete (ToF touchdown detection → the real DISARM, motors zero) |
 | FLYING → ARMED_GROUND | Soft landing / touch-and-go |
 | FLYING → IDLE_GROUND | **Crash detection** (emergency DISARM) or **pilot DISARM in ACRO/STABILIZE** (manual-thrust modes have no auto-landing, so cut immediately) or **emergency stop** (API `emergency` / a second DISARM while landing = abort) |
-| ARMED_GROUND → IDLE_GROUND | DISARM action (on the ground always an immediate cut; accepted from the transmitter, the API and the CLI alike, whoever armed the craft) |
+| ARMED_GROUND → IDLE_GROUND | DISARM action (on the ground always an immediate cut; accepted from the transmitter, the API and the CLI alike, whoever armed the craft). **DISARM wins by every route:** when the craft goes from an armed state back to the ground, every line parked in the API's deferred queue is dropped (no re-ARM, no re-takeoff; `detailed_design.md` §3.1) |
 
 ### Pairing State (PairingState)
 

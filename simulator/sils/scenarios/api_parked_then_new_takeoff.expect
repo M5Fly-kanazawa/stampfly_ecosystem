@@ -1,0 +1,15 @@
+# api_parked_then_new_takeoff.expect — A DISARM drops only the lines already parked; a new `takeoff` sent afterwards takes off normally
+# DISARM で捨てるのは並んでいた行だけで、止まった後の新しい `takeoff` は通常どおり離陸する
+#
+exit 0
+log_contains any "reply: error takeoff aborted"
+log_contains any "deferred line cancelled: takeoff"
+log_contains any "reply: error cancelled: flight ended"
+log_absent any "reply: error takeoff timeout"
+log_absent any "reply: error attitude check pending"
+log_contains any "Transition: TAKEOFF → FLYING"
+order "reply: error cancelled: flight ended" "Transition: TAKEOFF → FLYING"
+# Down from the stop to the new takeoff, then it flies.
+# 停止から新しい離陸までは床の上、その後は飛ぶ。
+metric duty_max < 0.01 in 7.6 10.9
+metric alt_max > 0.30 in 16.0 22.0

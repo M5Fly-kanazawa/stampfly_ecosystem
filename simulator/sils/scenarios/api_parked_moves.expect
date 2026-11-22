@@ -1,0 +1,21 @@
+# api_parked_moves.expect — Parked `up 50` and `cw 90` are dropped by a DISARM
+# 後回しの `up 50`・`cw 90` は DISARM で捨てられる
+#
+exit 0
+log_contains any "cmd: takeoff"
+log_contains any "Auto-takeoff engaged"
+log_contains any "reply: error takeoff aborted"
+log_absent any "reply: error takeoff timeout"
+log_absent any "Transition: TAKEOFF → FLYING"
+log_contains any "craft disarmed - parked lines cancelled"
+log_contains any "reply: error cancelled: flight ended"
+log_contains any "deferred line cancelled: up 50"
+log_contains any "deferred line cancelled: cw 90"
+log_contains any "ok: motors stopped"
+log_absent any "reply: error attitude check pending"
+log_absent any "reply: error not flying"
+log_absent any "reply: error not on ground"
+# The parked lines are dropped, not run: no further ARM, no spool, the craft stays on the floor.
+# 後回しの行は実行されず捨てられる: 再 ARM もスプールも無く、機体は床の上のまま。
+metric duty_max < 0.01 in 7.6 27
+metric alt_max < 0.05 in 7.6 27

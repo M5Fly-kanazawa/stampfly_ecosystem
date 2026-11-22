@@ -1,0 +1,17 @@
+# api_parked_takeoff_abort.expect — A parked line is also dropped when the automatic abort of a takeoff (a craft that cannot lift off the floor) brings the craft back to the ground
+# 離陸の自動中止（床の上で浮けない機体）で地上へ戻ったときも、後回しの行は捨てられる
+#
+exit 0
+log_contains any "Auto-takeoff aborted"
+log_contains any "Transition: TAKEOFF → IDLE_GROUND"
+log_contains any "reply: error takeoff aborted"
+log_contains any "craft disarmed - parked lines cancelled"
+log_contains any "deferred line cancelled: takeoff"
+log_contains any "deferred line cancelled: up 50"
+log_contains any "reply: error cancelled: flight ended"
+log_absent any "reply: error takeoff timeout"
+log_absent any "reply: error not flying"
+log_absent any "Transition: TAKEOFF → FLYING"
+order "Auto-takeoff aborted" "reply: error cancelled: flight ended"
+metric alt_max < 0.06 in 5.0 34.0
+metric duty_max < 0.01 in 13.0 34.0

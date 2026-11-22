@@ -4,13 +4,13 @@
 # The API task blocks inside `takeoff` (waitUntil) until the auto-takeoff reaches FLYING. A craft whose motors are too weak to lift (health 0.85) and whose ToF reads the floor validly
 # (`tof_deadzone 0`) stays in TAKEOFF until the system's own abort (5 s after the TAKEOFF began: DISARM, the motors stop). A `land` that arrives meanwhile is parked like every other line (dispatchDuringWait):
 # StateManager::notifyLandingRequest does not accept TAKEOFF, because a LANDING that begins on the floor can float the craft up (detailed_design.md §3 note 5), so the `land` waits until the takeoff has ended.
-# The abort ends the wait ("error takeoff aborted"), the parked `land` then runs on the craft that is no longer flying and answers "error not flying". The craft never leaves the floor and the motors are stopped.
+# The abort ends the wait ("error takeoff aborted"), the abort takes the craft from TAKEOFF back to IDLE_GROUND, which drops the parked `land` (DISARM wins over every parked line, detailed_design.md §3.1): it answers "error cancelled: flight ended" (before this rule it ran on the grounded craft and answered "error not flying"). The craft never leaves the floor and the motors are stopped.
 # Spec under test (detailed_design.md §3.1, TAKEOFF -> IDLE_GROUND row; §3 note 13).
 #
 # `takeoff` が FLYING を待っている間、API タスクは `takeoff` の中（waitUntil）でブロックする。モータが弱すぎて浮けない機体（健全度 0.85）で、ToF が床を有効に読む（`tof_deadzone 0`）と、
 # 機体は、システム自身の中止（TAKEOFF の開始から 5 s 後。DISARM でモータ停止）まで TAKEOFF に留まる。その間に届いた `land` は、他の行と同じく後回しになる（dispatchDuringWait）:
 # StateManager::notifyLandingRequest は TAKEOFF を受け付けない。床の上で始めた LANDING は機体を浮かせうるため（detailed_design.md §3 注5）。`land` は離陸が終わるまで待つ。
-# 中止が待機を終え（"error takeoff aborted"）、後回しの `land` は、もう飛んでいない機体に対して実行され "error not flying" を返す。機体は床を離れず、モータは止まる。
+# 中止が待機を終え（"error takeoff aborted"）、中止で機体は TAKEOFF から IDLE_GROUND へ戻り、後回しの `land` は捨てられる（DISARM は後回しのどの行よりも優先。detailed_design.md §3.1）: "error cancelled: flight ended" を返す（この規則の前は、地上の機体に対して実行され "error not flying" を返した）。機体は床を離れず、モータは止まる。
 # 検証する仕様（detailed_design.md §3.1 の TAKEOFF → IDLE_GROUND の行、§3 注13）。
 #
 # Timeline: takeoff at 6.0 s (ARM, spool, the TAKEOFF begins at about 6.3 s), land at 8.0 s, the abort at about 11.3 s.

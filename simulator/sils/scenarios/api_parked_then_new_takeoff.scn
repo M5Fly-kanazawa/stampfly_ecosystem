@@ -1,0 +1,22 @@
+# api_parked_then_new_takeoff.scn — A DISARM drops only the lines already parked; a new `takeoff` sent afterwards takes off normally
+#                                  DISARM で捨てるのは並んでいた行だけで、止まった後の新しい `takeoff` は通常どおり離陸する
+#
+# After the CLI `disarm` at 7.0 s drops the parked `takeoff`, the craft repeats the attitude check on the ground (about 1 s); a `takeoff` sent anew at 11 s is not refused, reaches FLYING and answers "ok".
+# It shows that the rule does not drop a new command that arrives after the stop.
+#
+# 7.0 s の CLI `disarm` で後回しの `takeoff` を捨てた後、機体は地上で姿勢確認をやり直し（約 1 s）、11 s に新しく送った `takeoff` は拒否されず FLYING まで進んで "ok" を返す。
+# 止まった後の新しい命令まで捨てていないことを確かめる。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_parked_then_new_takeoff.scn --target vehicle --duration 23000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                  # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                  # C: takeoff -> ARM -> auto-takeoff climb; the wait starts (t=6)
+   +    rc         2048  2048   2048    2048  0     800       50      # D: the climb runs (to t=6.8)
+   +    api        "takeoff"                                  # E: parked behind the waiting takeoff (t=6.8)
+   +    rc         2048  2048   2048    2048  0     200       50      # F: (to t=7.0)
+   +    cli        "disarm"                                   # G: t=7.0 s — CLI DISARM while takeoff waits
+   +    rc         2048  2048   2048    2048  0     4000      50      # H: rest; the attitude check passes again (to t=11)
+   +    api        "takeoff"                                  # I: a NEW takeoff after the stop (t=11) — must run normally
+   +    rc         2048  2048   2048    2048  0     11000     50      # J: the craft takes off and hovers (to t=22)

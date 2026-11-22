@@ -1,5 +1,10 @@
-# api_takeoff_refused_mode.scn — an API `takeoff` whose ARM is refused leaves no trace: the flight mode is put back
-#                                ARM が拒否された API `takeoff` は痕跡を残さない: 飛行モードは元に戻る
+# api_takeoff_refused_mode.scn — an API `takeoff` that the pre-arm check refuses leaves no trace: nothing is published, the flight mode is never changed
+#                                ARM 前判定が拒否する API `takeoff` は痕跡を残さない: 何も発行せず、飛行モードは変わらない
+#
+# Since the up-front refusal (takeoffRefusalText reads the published arm_block) the refusal is answered by ApiTask ("error pairing in progress") before the verb is published, so the
+# mode change and StateManager's restore (steps 1-2 below) no longer happen; the restore stays in StateManager as the backstop for a refusal that ApiTask could not know.
+# 上の拒否（takeoffRefusalText が発行済みの arm_block を読む）で、拒否は verb の発行前に ApiTask が "error pairing in progress" で応答するので、
+# モードの切り替えと StateManager の復元（下の 1・2）は起きなくなった。復元は ApiTask が知り得なかった拒否に備える StateManager の最後の備えとして残る。
 #
 # RUN WITH --unpaired so the vehicle boots UNPAIRED (the pairing handshake is then still open and refuses every ARM):
 #   sf sils scenario simulator/sils/scenarios/api_takeoff_refused_mode.scn --target vehicle --unpaired --duration 16000000

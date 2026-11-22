@@ -1,5 +1,5 @@
-# api_land_in_takeoff.expect — `land` during the TAKEOFF wait of a craft that cannot lift: parked, no LANDING, the abort stops the motors on the floor, the parked `land` answers "error not flying"
-# 浮けない機体の TAKEOFF の待機中の `land`: 後回し、LANDING は無い、中止で床の上でモータが止まり、後回しの `land` は "error not flying" を返す
+# api_land_in_takeoff.expect — `land` during the TAKEOFF wait of a craft that cannot lift: parked, no LANDING, the abort stops the motors on the floor, the parked `land` is dropped by the abort and answers "error cancelled: flight ended"
+# 浮けない機体の TAKEOFF の待機中の `land`: 後回し、LANDING は無い、中止で床の上でモータが止まり、後回しの `land` は中止で捨てられ "error cancelled: flight ended" を返す
 #
 exit 0
 log_contains any "cmd: takeoff"
@@ -7,14 +7,15 @@ log_contains any "Auto-takeoff engaged"
 log_contains any "Auto-takeoff aborted"
 log_contains any "Transition: TAKEOFF → IDLE_GROUND"
 log_contains any "reply: error takeoff aborted"
-log_contains any "reply: error not flying"
+log_contains any "reply: error cancelled: flight ended"
+log_absent any "reply: error not flying"
 log_absent any "Landing requested"
 log_absent any "Transition: TAKEOFF → LANDING"
 log_absent any "Transition: TAKEOFF → FLYING"
 log_absent any "cmd: land (during a blocking command"
 order "Auto-takeoff engaged" "Auto-takeoff aborted"
 order "Auto-takeoff aborted" "reply: error takeoff aborted"
-order "reply: error takeoff aborted" "reply: error not flying"
+order "reply: error cancelled: flight ended" "reply: error takeoff aborted"
 # The craft never leaves the floor, and the motors are stopped after the abort.
 # 機体は床を離れず、中止の後はモータが止まる。
 metric alt_max < 0.06 in 5.0 22.0

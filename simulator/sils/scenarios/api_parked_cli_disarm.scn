@@ -1,0 +1,22 @@
+# api_parked_cli_disarm.scn — A CLI `disarm` while `takeoff` waits drops the parked `takeoff`
+#                            `takeoff` の待機中の CLI `disarm` は、後回しの `takeoff` を捨てる
+#
+# Rule (detailed_design.md §3.1, "API lines during a wait and DISARM"): when the craft goes from armed back to the ground, whatever the cause, every line parked in the API's
+# deferred queue is dropped and answered "error cancelled: flight ended". The waiting `takeoff` ends with "error takeoff aborted". Before the fix the parked lines ran: a `takeoff`
+# refused by the attitude check waited 12 s for "error takeoff timeout", and a `takeoff` behind it ARMed the craft about 12 s after the DISARM and flew it.
+#
+# 規則（detailed_design.md §3.1「API の待機中の行と DISARM」）: 機体が armed から地上へ戻ったら、原因が何であっても、API の後回しの列に並んでいる行を全て捨て、
+# それぞれに "error cancelled: flight ended" を返す。待っていた `takeoff` は "error takeoff aborted" で終わる。修正前は並んでいた行がそのまま実行され、
+# 姿勢確認の拒否を待つ `takeoff` が 12 s 待って "error takeoff timeout" になり、その後ろの `takeoff` が DISARM の約 12 s 後に機体を ARM して離陸させた。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_parked_cli_disarm.scn --target vehicle --duration 27000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                  # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                  # C: takeoff -> ARM -> auto-takeoff climb; the wait starts (t=6)
+   +    rc         2048  2048   2048    2048  0     800       50      # D: the climb runs (to t=6.8)
+   +    api        "takeoff"                                  # E: parked behind the waiting takeoff (t=6.8)
+   +    rc         2048  2048   2048    2048  0     200       50      # F: (to t=7.0)
+   +    cli        "disarm"                                   # G: t=7.0 s — CLI DISARM while takeoff waits
+   +    rc         2048  2048   2048    2048  0     20000     50      # H: the craft must stay on the floor, motors off (to t=27.2)

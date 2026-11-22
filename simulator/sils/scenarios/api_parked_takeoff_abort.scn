@@ -1,0 +1,25 @@
+# api_parked_takeoff_abort.scn — A parked line is also dropped when the automatic abort of a takeoff (a craft that cannot lift off the floor) brings the craft back to the ground
+#
+#   離陸の自動中止（床の上で浮けない機体）で地上へ戻ったときも、後回しの行は捨てられる
+#
+# Weak motors (health 0.85) and a valid floor ToF (`tof_deadzone 0`): the auto-takeoff is aborted at about 11.3 s, TAKEOFF -> IDLE_GROUND (the craft of api_land_in_takeoff).
+# The `takeoff` and `up 50` parked during the wait are dropped at the abort and answered "error cancelled: flight ended" (before the fix the `takeoff` waited 12 s for a timeout and `up 50` answered "error not flying").
+#
+# 弱いモータ（健全度 0.85）と有効な床の ToF（`tof_deadzone 0`）で自動離陸は約 11.3 s に中止され TAKEOFF → IDLE_GROUND になる（api_land_in_takeoff と同じ機体）。
+# 待機中に並んだ `takeoff`・`up 50` は、中止の時点で捨てられ "error cancelled: flight ended" を返す（修正前は `takeoff` が 12 s 待って timeout、`up 50` は "error not flying"）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_parked_takeoff_abort.scn --target vehicle --duration 34000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    tof_deadzone 0
+   0    fault 0 0.85
+   0    fault 1 0.85
+   0    fault 2 0.85
+   0    fault 3 0.85
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                  # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                  # C: takeoff -> ARM -> auto-takeoff; the craft cannot lift (t=6)
+   +    rc         2048  2048   2048    2048  0     2000      50      # D: the TAKEOFF runs, the craft stays on the floor (to t=8)
+   +    api        "takeoff"                                  # E: parked behind the waiting takeoff
+   +    api        "up 50"                                    # F: parked behind the waiting takeoff
+   +    rc         2048  2048   2048    2048  0     26000     50      # G: the abort at about 11.3 s drops the parked lines; the motors stay off (to t=34)

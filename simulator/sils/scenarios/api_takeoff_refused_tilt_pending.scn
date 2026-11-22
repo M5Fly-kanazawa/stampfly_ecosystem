@@ -1,0 +1,23 @@
+# api_takeoff_refused_tilt_pending.scn — a `takeoff` that the pre-arm check would refuse is answered at once, not after 12 s
+#                                        ARM 前判定が拒否する `takeoff` は、12 s 待たずにすぐ応答する
+#
+# After a DISARM the attitude check (pre-arm reason TiltPending, about 1 s) must pass again. A `takeoff` sent 0.2 s after the DISARM used to be published, refused by StateManager's ARM
+# (which leaves nothing behind), and then waited the whole 12 s kTakeoffTimeoutMs for "error takeoff timeout". ApiTask now reads the published reason (SystemMode.arm_block) and
+# answers "error attitude check pending - wait a moment" at once. Another `takeoff` 4 s later runs normally.
+# DISARM の後は姿勢確認（ARM 前判定の理由 TiltPending、約 1 s）をやり直す。DISARM の 0.2 s 後の `takeoff` は、以前は発行され、StateManager の ARM に拒否され（何も残らない）、
+# kTakeoffTimeoutMs の 12 s を待ち切って "error takeoff timeout" になった。いまは ApiTask が発行済みの理由（SystemMode.arm_block）を読み、
+# "error attitude check pending - wait a moment" をすぐ返す。4 s 後の `takeoff` は通常どおり実行される。
+#
+# Run: sf sils scenario simulator/sils/scenarios/api_takeoff_refused_tilt_pending.scn --target vehicle --duration 22000000
+#
+#  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
+   +    api        "command"                                          # B: enter SDK mode (t=6)
+   +    api        "takeoff"                                          # C: takeoff -> ARM -> auto-takeoff climb (t=6)
+   +    rc         2048  2048   2048    2048  0     800       50      # D: the climb runs (to t=6.8)
+   +    cli        "disarm"                                           # E: t=6.8 s — CLI DISARM while takeoff waits
+   +    rc         2048  2048   2048    2048  0     200       50      # F: (to t=7.0) the attitude check is pending
+   +    api        "takeoff"                                          # G: t=7.0 s — refused at once (attitude check pending)
+   +    rc         2048  2048   2048    2048  0     4000      50      # H: the attitude check passes (to t=11)
+   +    api        "takeoff"                                          # I: t=11 s — runs normally
+   +    rc         2048  2048   2048    2048  0     11000     50      # J: the craft takes off and hovers (to t=22)
