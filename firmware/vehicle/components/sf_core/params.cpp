@@ -18,6 +18,7 @@
 #include "topics.hpp"
 #include "params.hpp"
 #include "param_range.hpp"   // isFloatInRange: finite and inside the range / 有限かつ範囲内
+#include "param_boot_notice.hpp"   // needsYawRateDerivativeNotice / 保存済みの微分時間の注意の判定
 #include "flight_limits.hpp"   // limits::kBlindTouchdownAccelG (the default of safety.blind_touchdown.accel_g) / 同パラメータの既定値
 #include "esp_log.h"
 #include "esp_timer.h"   // reload-callback timestamps / 再読込コールバックの時刻印
@@ -1091,6 +1092,25 @@ static const ParamEntry* find(const char* name)
 // 公開API実装
 // =============================================================================
 
+/// Log one warning when the yaw-rate derivative time left in NVS is not 0. The default became 0
+/// on 2026-11-22 but a saved 0.01 is not migrated; with it the yaw torque can oscillate at 200 Hz.
+/// The value is NOT rewritten (the user may have set it on purpose). Called once, from init().
+/// NVS に残ったヨー角速度の微分時間が 0 でないとき、警告を 1 行ログに出す。既定値は 2026-11-22 に
+/// 0 になったが、保存済みの 0.01 は移行されず、その値ではヨーのトルクが 200 Hz で振動しうる。
+/// 値は書き換えない（利用者が意図して設定した可能性がある）。init() から 1 回だけ呼ぶ。
+///
+/// @design detailed_design.md §4 — Yaw rate PID: why it has no derivative  [OK]
+static void warnIfYawRateDerivativeSaved()
+{
+    float yaw_rate_td_s = 0.0f;
+    if (!get_float("rate.yaw.td", yaw_rate_td_s)) return;
+    if (!needsYawRateDerivativeNotice(yaw_rate_td_s)) return;
+
+    ESP_LOGW(TAG, "rate.yaw.td = %.4f s (default is 0): the yaw torque may oscillate at 200 Hz. "
+                  "Fix: 'param set rate.yaw.td 0' then 'param save'",
+             static_cast<double>(yaw_rate_td_s));
+}
+
 void init()
 {
     // One-time NVS-key collision check: two names hashing to the same key would
@@ -1110,6 +1130,7 @@ void init()
     }
 
     load();
+    warnIfYawRateDerivativeSaved();
     ESP_LOGI(TAG, "Parameter system initialized (%d params)", TABLE_SIZE);
 }
 

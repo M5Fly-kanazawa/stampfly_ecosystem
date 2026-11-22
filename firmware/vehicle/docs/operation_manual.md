@@ -183,6 +183,12 @@ param set rate.yaw.td 0
 param save
 ```
 
+**起動時の警告。** 保存済みの値が 0 でない機体は、起動のたびに、パラメータの読み込みの直後（シリアルと WiFi のログ）に次の警告を 1 行出す。値は自動では書き換えない（利用者が意図して設定した可能性があるため）。この警告が出たら、上の手順で 0 に直す。直して `param save` したあとの起動では出なくなる。
+
+```
+[WARN] Params: rate.yaw.td = 0.0100 s (default is 0): the yaw torque may oscillate at 200 Hz. Fix: 'param set rate.yaw.td 0' then 'param save'
+```
+
 `param get` が 0.01 と答えた機体だけ、2 行目と 3 行目を実行する。`param reset` は全パラメータを既定値へ戻す（学習済みのホバー推力補正なども失う）ので、`rate.yaw.td` だけを直すなら使わない。利用者が意図して 0.01 以外の値を設定している機体は、その値のままでよい。
 
 ### 離陸・着陸
@@ -589,7 +595,7 @@ identical to the legacy vehicle.**
   stick release is held (P loop on the estimator yaw — no magnetometer). Any yaw input releases it
   instantly. Params: `attitude.yawhold.kp` (3.0, 0 disables), `attitude.yawhold.rate_max` (2.0 rad/s).
   Disabled in ACRO (pure rate control).
-- **Yaw rate PID derivative time `rate.yaw.td`** (default changed to **0** on 2026-11-22; it was 0.01). A value above 0 makes the yaw torque unstable at 200 Hz (a sign flip every sample). `rate.yaw.kp` (8.03e-4), `ti` (0.8) and `max_torque` (1.226e-3) are unchanged. A craft whose NVS already holds 0.01 keeps it after the default changes (`param save` writes every parameter, and there is no migration by version). On such a craft, disarmed: `param get rate.yaw.td`; if it answers 0.01, run `param set rate.yaw.td 0` then `param save`. Do not use `param reset` for this alone: it restores every default (including the learned hover-thrust trim).
+- **Yaw rate PID derivative time `rate.yaw.td`** (default changed to **0** on 2026-11-22; it was 0.01). A value above 0 makes the yaw torque unstable at 200 Hz (a sign flip every sample). `rate.yaw.kp` (8.03e-4), `ti` (0.8) and `max_torque` (1.226e-3) are unchanged. A craft whose NVS already holds 0.01 keeps it after the default changes (`param save` writes every parameter, and there is no migration by version). On such a craft, disarmed: `param get rate.yaw.td`; if it answers 0.01, run `param set rate.yaw.td 0` then `param save`. Do not use `param reset` for this alone: it restores every default (including the learned hover-thrust trim). At every boot, right after the parameters are loaded, a craft whose saved value is not 0 logs one warning line (`rate.yaw.td = 0.0100 s (default is 0): the yaw torque may oscillate at 200 Hz. Fix: 'param set rate.yaw.td 0' then 'param save'`); the value is not rewritten automatically (the user may have set it on purpose). After the fix and `param save` the warning no longer appears.
 - **Yaw during landing**: a neutral yaw stick (including a small offset left beyond the 5 % deadband) holds the heading at the moment the landing began, also after an API takeoff. A deliberate yaw input is followed.
 - **Takeoff**: throttle > 0.5 in ARMED_GROUND → TAKEOFF → FLYING (ToF airborne). A craft that rises with the throttle at or below 0.5 (a gust, a fresh battery, the ground effect) also becomes TAKEOFF, about 1 s after it leaves the floor, once the healthy downward ToF has read heights above 5 cm without a break for 1 s; from then on the rules of the air apply (the comm-loss landing, the ToF-silence warning instead of a motor stop). With the ToF silent or invalid only the throttle decides. **Landing**: throttle
   down / DISARM.
