@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-**状態**: 検討の途中（2026-11-23 作成）。2026-11-23 に開発者が実物で測った部品の質量と寸法、それを使った慣性モーメントの試算、飛行記録からの推定の結果を記録する。**物理パラメータの基準ファイル（`control/models/stampfly_physical.yaml`）と `docs/architecture/stampfly-parameters.md` の値は、この文書では変えていない。** 値を変えるかどうかは開発者がまだ決めていない（8 章）。
+**状態**: 決定済み・実装済み（2026-11-23 作成、同日更新）。2026-11-23 に開発者が実物で測った部品の質量と寸法、それを使った慣性モーメントの試算、飛行記録からの推定の結果を記録する。**同日、開発者が、慣性モーメントの基準の値を 3 軸とも、2点吊り法の実測値から、部品の 3D モデル（STL）と実測の部品の質量からの試算値に替えると決めた。採用値は $I_{xx}$ 11.5、$I_{yy}$ 15.3、$I_{zz}$ 22.6（e-6 kg·m²）。定義は 8 章、計算のスクリプトは 9 章。慣性乗積と重心のずれは採用していない（未対応）。** 基準ファイル（`control/models/stampfly_physical.yaml`）と、それに連動する箇所は同じ日の別コミットで更新した。
 
 ## 1. 概要
 
@@ -29,6 +29,7 @@ StampFly の慣性モーメント（ロール $I_{xx}$・ピッチ $I_{yy}$・�
 | 飛行記録からの推定 | 位置保持の飛行（11/22）は励振が無く、ロールは幅が大きすぎて判定に使えない。宙返りの記録（10/02）は、ロールの見かけの慣性 11.4〜12.3e-6 | 解析の担当による計算 |
 | プロペラ | 0.2525 g。軸まわりの慣性は形状から 1.40e-8 kg·m²（ベンチ実測のロータの慣性の 91 %）。リポジトリの機体定義の 1 枚 0.001 kg は実物の約 4 倍。STL・Web 表示の羽根は実物と違う | 開発者の測定と計算 |
 | 推論 | ロール軸は 3 つの根拠が同じ向きで、2点吊り法の値は約 2 割小さい可能性が高い。ピッチ・ヨーは 5〜8 % の開きで、確かな食い違いとは言えない | 推論（ロール: 中〜強、ピッチ・ヨー: 弱） |
+| 決定（2026-11-23） | 開発者が 3 軸とも試算の値に替えると決めた。採用値は $I_{xx}$ 11.5、$I_{yy}$ 15.3、$I_{zz}$ 22.6（e-6 kg·m²。丸める前は 11.482 / 15.304 / 22.638）。定義は 8 章、スクリプトは 9 章。慣性乗積と重心のずれは未採用 | 開発者の決定、解析の担当による計算 |
 
 ### 対象読者
 
@@ -216,6 +217,20 @@ StampFly の慣性モーメント（ロール $I_{xx}$・ピッチ $I_{yy}$・�
 | 機体側と上側で糸の間隔が違う | 式は平行な糸（上の固定点の間隔 = 機体側の取り付け点の間隔 = $D$）を仮定している。間隔が違う場合、$J$ は（上の間隔）×（機体側の間隔）に比例する。機体側のほうが広ければ、$D^2$ で計算した値は小さく出る | ロール軸の 2 割を説明するには、機体側が約 98 mm（78 mm × 1.25）である必要がある |
 | 糸の曲げ・ねじりの剛性による復元力の上乗せ | 周期 $T$ が短くなり、小さく出る | 機体が軽いので、2 本の糸による復元トルクの係数は $m g D^2/(4h) \approx 1.9\times10^{-3}$ N·m/rad（ロール軸の記録の値で計算）と小さい。糸の剛性がこれに対して無視できるかは未確認 |
 | 軸ごとの吊り直し | 吊る位置のずれで周期が変わる | 3 軸で吊り方が違う（$h$・$D$ が違う） |
+| 糸の取り付け位置が重心を考慮していない（開発者の情報、下の検討） | 取り付け位置と重心のずれでは、ロール軸の値が小さく出ることは説明できない（どちらも大きめに出る向き） | 開発者の測定（取り付けの事実）。影響の検討は推論（未確認） |
+
+#### 糸の取り付け位置と重心の関係（開発者の情報と、その影響の検討）
+
+**開発者の情報（2026-11-23）**: 2点吊り法では、糸をフレームのプロペラガードの付近に取り付けて吊った。重心を考慮した位置への取り付けにはなっていない。
+
+以下は影響についての検討で、**推論（未確認）**である。
+
+| 場合 | 検討 | 影響の向き |
+|---|---|---|
+| 糸を結ぶ 2 点を通る線の方向に、重心が中点から $e$ だけずれている | 2 本の糸の張力が不均等になる。復元トルクの係数は $m g a b / h$（$a$、$b$ は重心から各糸までの距離、$a + b = D$）になる。式は $D^2/4$ を使うので、正しい値は $J = J_\text{式} \times 4ab/D^2 = J_\text{式} \times (1 - (2e/D)^2)$ | **式の値は大きめに出る**。$e$ = 5 mm、$D$ = 78 mm で 1.6 % |
+| 重心が、2 本の糸を含む鉛直面から外れている | 機体が傾いて吊られ、測っている軸が機体の軸から傾く。傾きを $\varphi$ とすると、ロール軸の測定では $I = I_{xx}\cos^2\varphi + (\text{ほかの軸の慣性})\sin^2\varphi$ となる | ロール軸（最小の慣性）では**大きめ**に、ヨー軸（最大の慣性）では**小さめ**に出る |
+
+したがって、取り付け位置と重心の関係だけでは、ロール軸の値が約 2 割小さいことは説明できない（どちらも大きめに出る向き）。糸の剛性、上と機体側の糸の間隔の違いは、引き続き未確認の候補である。
 
 ## 8. 未確認と次の作業
 
@@ -226,7 +241,8 @@ StampFly の慣性モーメント（ロール $I_{xx}$・ピッチ $I_{yy}$・�
 | ピッチ・ヨーの独立の推定 | 外から励振を入れる試験（ホバー中に指令へ決まった入力を加える）で、ピッチとヨーの慣性を飛行記録から決める |
 | 宙返りの最大の指令での推力の尺度 | 飽和時の推力の尺度は、ホバーでの確認の外 |
 | ホバーの推力の尺度の違い | 11/22（保持の記録で 1.08〜1.16）と 10/02（1.009〜1.010）で違う理由 |
-| 基準の値を変えるかどうかの決定 | 開発者の決定を待つ。変える場合に連動する箇所: `control/models/stampfly_physical.yaml`、SILS の機体モデル（`stampfly.xml` の慣性、`fullinertia` と重心 `pos` への置き換えも含む）、URDF（2 本）、制御設計の道具、`sf params check` |
+| 基準の値を変えるかどうかの決定 | **決定済み（2026-11-23）**。開発者が、3 軸とも試算の値に替えると決めた。採用値は $I_{xx}$ 11.5、$I_{yy}$ 15.3、$I_{zz}$ 22.6（e-6 kg·m²）。定義: 質量は実測の中央の値（モータ 17/6 g ×4、電池 8 g、フレーム 3.5 g、StampS3 モジュール 3.25 g、前方 ToF 基板 1 g、プロペラ 1.01/4 g ×4、主基板 = 37 g −（ほかの全部）= 8.907 g）。各部品は STL の体積に一様、主基板の残りは主基板の STL の形に一様。STL（X = 左・Y = 上・Z = 前）から機体座標 FRD（x = +Z、y = −X、z = −Y）。重心まわり。乱数なし、中央の質量での 1 回の計算を有効 3 桁に 1 回だけ丸める。スクリプトは 9 章 |
+| 慣性乗積と重心のずれ | **未採用（未対応）**。今回は対角の 3 成分だけを替えた。試算では $I_{13}$ が約 +0.28e-6（主軸の傾き約 2 度）、重心は STL の原点から x −0.6 mm・z −0.6 mm 程度。SILS の機体モデルの `fullinertia` と重心 `pos` への置き換えは、必要になったときに行う |
 | プロペラの形状データの置き換え | 6 章。URDF の質量、STL、Web 表示（6 か所） |
 | STL の向きの物理的な確認 | X = 左・Y = 上・Z = 前の対応は実物で未確認 |
 | フレームの実物の肉厚 | STL の体積が実物の 1.4〜1.6 倍相当の原因の確認 |
@@ -236,6 +252,7 @@ StampFly の慣性モーメント（ロール $I_{xx}$・ピッチ $I_{yy}$・�
 
 | 内容 | 場所 |
 |---|---|
+| 採用値を出すスクリプト（リポジトリ内、再現可能） | `analysis/scripts/inertia_from_parts_20261123/`（`inertia_from_parts.py`、実行結果 `inertia_from_parts_output.txt`、`README.md`）。プロペラを 0.96 g に戻すと rev4 の中央の質量での結果（11.460 / 15.281 / 22.592）に一致する検算を含む |
 | 3D モデルからの試算（rev4） | 解析の作業ファイル（Git 管理外）。`rev4_log.txt`・`rev4_compare.csv`・`rev4_parts.csv`・`rev4_frame.csv`・`rev4_mc_summary.csv` |
 | 宙返りの再計算 | 解析の作業ファイル（Git 管理外）。`flipJ.log`・`sweep.log` |
 | 飛行記録からの推定 | 解析の作業ファイル（Git 管理外）。事前規則の記録 `plan.md` と集計 |
@@ -248,7 +265,7 @@ StampFly の慣性モーメント（ロール $I_{xx}$・ピッチ $I_{yy}$・�
 
 # Component Mass and Dimension Measurements and a Re-examination of the Moments of Inertia (2026-11-23)
 
-**Status**: Work in progress (written 2026-11-23). This note records the component masses and dimensions the developer measured on the physical vehicle on 2026-11-23, an inertia estimate computed with them, and the result of estimating inertia from flight logs. **The values in the physical-parameter reference file (`control/models/stampfly_physical.yaml`) and in `docs/architecture/stampfly-parameters.md` are not changed by this note.** The developer has not yet decided whether to change them (chapter 8).
+**Status**: Decided and implemented (written 2026-11-23, updated the same day). This note records the component masses and dimensions the developer measured on the physical vehicle on 2026-11-23, an inertia estimate computed with them, and the result of estimating inertia from flight logs. **On the same day the developer decided to replace the reference moments of inertia, on all three axes, from the bifilar (2-point suspension) measurement with the value computed from the part 3D models (STL) and the measured part masses. The adopted values are $I_{xx}$ 11.5, $I_{yy}$ 15.3, $I_{zz}$ 22.6 (e-6 kg·m²). The definition is in chapter 8 and the computing script in chapter 9. Products of inertia and the centre-of-gravity offset are not adopted (not handled yet).** The reference file (`control/models/stampfly_physical.yaml`) and the places linked to it were updated in separate commits on the same day.
 
 ## 1. Overview
 
@@ -275,6 +292,7 @@ Each item carries one of the following labels.
 | Estimate from flight logs | The position-hold flights (11/22) had no excitation; the roll width is too large for a verdict. The flip log (10/02) gives an apparent roll inertia of 11.4-12.3e-6 | Computed by the analysis assistant |
 | Propeller | 0.2525 g. Spin-axis inertia from the shape: 1.40e-8 kg·m² (91 % of the bench-measured rotor inertia). The 0.001 kg per propeller in the repository's vehicle definition is about 4 times the real one. The STL and Web-display blades differ from the real propeller | Developer's measurement and calculation |
 | Inference | On the roll axis three lines of evidence point the same way; the bifilar value is probably about 20 % too small. Pitch and yaw differ by 5-8 %, which is not a clear discrepancy | Inference (roll: medium to strong; pitch and yaw: weak) |
+| Decision (2026-11-23) | The developer decided to use the computed values on all three axes. Adopted values: $I_{xx}$ 11.5, $I_{yy}$ 15.3, $I_{zz}$ 22.6 (e-6 kg·m²; before rounding 11.482 / 15.304 / 22.638). Definition in chapter 8, script in chapter 9. Products of inertia and the centre-of-gravity offset are not adopted | Developer's decision, computed by the analysis assistant |
 
 ### Target Audience
 
@@ -462,6 +480,20 @@ Replacing the shape data (an STL of the measured 4 blades, about 23,000 triangle
 | Different string spacing at the vehicle and the upper end | The formula assumes parallel strings (spacing of the upper fixing points = spacing of the attachment points on the vehicle = $D$). When they differ, $J$ is proportional to (upper spacing) × (vehicle-side spacing). If the vehicle-side spacing is wider, the value computed with $D^2$ comes out too small | Explaining 20 % on the roll axis needs about 98 mm on the vehicle side (78 mm × 1.25) |
 | Restoring torque added by string bending / torsion stiffness | Shortens the period $T$, giving a small value | The vehicle is light, so the restoring-torque coefficient of the two strings is only $m g D^2/(4h) \approx 1.9\times10^{-3}$ N·m/rad (computed from the roll-axis record). Whether the string stiffness is negligible against this has not been checked |
 | Re-hanging for each axis | A shifted hanging point changes the period | The three axes use different hanging ($h$ and $D$ differ) |
+| Strings attached without regard to the centre of gravity (developer's information; discussion below) | An offset between the attachment points and the centre of gravity cannot explain a roll-axis value that is about 20 % small (both effects go toward a larger value) | Developer's measurement (the fact of attachment). The effect analysis is inference (unconfirmed) |
+
+#### Relation between the String Attachment Points and the Centre of Gravity (developer's information and a discussion of its effect)
+
+**Developer's information (2026-11-23)**: In the bifilar measurement the strings were attached to the frame near the propeller guards. The attachment is not at positions chosen with the centre of gravity in mind.
+
+The following is a discussion of the effect and is **inference (unconfirmed)**.
+
+| Case | Discussion | Direction of effect |
+|---|---|---|
+| The centre of gravity is offset by $e$ from the midpoint along the line through the two string attachment points | The tensions of the two strings become unequal. The restoring-torque coefficient becomes $m g a b / h$ ($a$ and $b$ are the distances from the centre of gravity to each string, $a + b = D$). The formula uses $D^2/4$, so the correct value is $J = J_\text{formula} \times 4ab/D^2 = J_\text{formula} \times (1 - (2e/D)^2)$ | **The formula value comes out larger.** 1.6 % for $e$ = 5 mm and $D$ = 78 mm |
+| The centre of gravity is off the vertical plane containing the two strings | The vehicle hangs tilted, and the measured axis is tilted from the vehicle axis. With the tilt $\varphi$, a roll-axis measurement gives $I = I_{xx}\cos^2\varphi + (\text{inertia of the other axis})\sin^2\varphi$ | **Larger** on the roll axis (smallest inertia), **smaller** on the yaw axis (largest inertia) |
+
+Therefore the relation between the attachment points and the centre of gravity alone cannot explain a roll-axis value that is about 20 % small (both go toward a larger value). String stiffness and a difference between the upper and vehicle-side string spacings remain unconfirmed candidates.
 
 ## 8. Unconfirmed Items and Next Work
 
@@ -472,7 +504,8 @@ Replacing the shape data (an STL of the measured 4 blades, about 23,000 triangle
 | Independent estimation of pitch and yaw | An excitation test (applying a prescribed input to the command during hover) to determine pitch and yaw inertia from flight logs |
 | Thrust scale at the maximum flip command | The thrust scale at saturation is outside the hover check |
 | Difference in hover thrust scale | Why 11/22 (1.08-1.16 in the hold logs) and 10/02 (1.009-1.010) differ |
-| Decision on changing the reference values | Awaits the developer. Linked places if changed: `control/models/stampfly_physical.yaml`, the SILS vehicle model (the inertia in `stampfly.xml`, including a switch to `fullinertia` and a centre-of-mass `pos`), the URDF files (2), the control design tools, `sf params check` |
+| Decision on changing the reference values | **Decided (2026-11-23).** The developer decided to use the computed values on all three axes. Adopted: $I_{xx}$ 11.5, $I_{yy}$ 15.3, $I_{zz}$ 22.6 (e-6 kg·m²). Definition: central measured masses (motor 17/6 g x4, battery 8 g, frame 3.5 g, StampS3 module 3.25 g, front ToF board 1 g, propeller 1.01/4 g x4, main board = 37 g - everything else = 8.907 g); each part uniform over its STL volume, the main-board remainder uniform over the main-board STL; STL (X = left, Y = up, Z = front) to body frame FRD (x = +Z, y = -X, z = -Y); about the centre of gravity; no random numbers, one computation with the central masses rounded once to 3 significant digits. Script: chapter 9 |
+| Products of inertia and centre-of-gravity offset | **Not adopted (not handled).** Only the three diagonal terms were replaced. The estimate gives $I_{13}$ of about +0.28e-6 (principal-axis tilt about 2 degrees) and a centre of gravity about x -0.6 mm, z -0.6 mm from the STL origin. Switching the SILS vehicle model to `fullinertia` and a centre-of-mass `pos` is left until needed |
 | Replacing the propeller shape data | Chapter 6. URDF mass, STL, Web display (6 places) |
 | Physical check of the STL orientation | The X = left, Y = up, Z = front correspondence is unconfirmed on the real vehicle |
 | Real wall thickness of the frame | Cause of the STL volume being 1.4-1.6 times the real one |
@@ -482,6 +515,7 @@ Replacing the shape data (an STL of the measured 4 blades, about 23,000 triangle
 
 | Content | Location |
 |---|---|
+| Script that produces the adopted values (in the repository, reproducible) | `analysis/scripts/inertia_from_parts_20261123/` (`inertia_from_parts.py`, its output `inertia_from_parts_output.txt`, `README.md`). It includes a cross-check that, with the propeller set back to 0.96 g, it reproduces the rev4 central-mass result (11.460 / 15.281 / 22.592) |
 | Estimate from the 3D model (rev4) | Analysis working files (not under Git): `rev4_log.txt`, `rev4_compare.csv`, `rev4_parts.csv`, `rev4_frame.csv`, `rev4_mc_summary.csv` |
 | Flip recomputation | Analysis working files (not under Git): `flipJ.log`, `sweep.log` |
 | Estimation from flight logs | Analysis working files (not under Git): the preset-rule record `plan.md` and the aggregation |

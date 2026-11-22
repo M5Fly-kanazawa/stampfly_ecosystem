@@ -678,8 +678,8 @@
                 <div class="param-group">
                     <div class="param-row">
                         <label>慣性モーメント I</label>
-                        <input type="range" id="inertia-slider" min="1" max="100" step="0.1" value="9.16">
-                        <input type="number" id="inertia-input" value="9.16" step="0.1">
+                        <input type="range" id="inertia-slider" min="1" max="100" step="0.1" value="11.5">
+                        <input type="number" id="inertia-input" value="11.5" step="0.1">
                         <span class="unit">×10⁻⁶ kg·m²</span>
                     </div>
                     <div class="param-row">
@@ -880,17 +880,17 @@
                     </div>
                     <div class="param-row">
                         <label><span class="calc-axis-label roll">X</span>Ixx</label>
-                        <input type="number" id="calc-ixx" value="9.16" step="0.01" min="0.1">
+                        <input type="number" id="calc-ixx" value="11.5" step="0.01" min="0.1">
                         <span class="unit">×10⁻⁶ kg·m²</span>
                     </div>
                     <div class="param-row">
                         <label><span class="calc-axis-label pitch">Y</span>Iyy</label>
-                        <input type="number" id="calc-iyy" value="13.3" step="0.01" min="0.1">
+                        <input type="number" id="calc-iyy" value="15.3" step="0.01" min="0.1">
                         <span class="unit">×10⁻⁶ kg·m²</span>
                     </div>
                     <div class="param-row">
                         <label><span class="calc-axis-label yaw">Z</span>Izz</label>
-                        <input type="number" id="calc-izz" value="20.4" step="0.01" min="0.1">
+                        <input type="number" id="calc-izz" value="22.6" step="0.01" min="0.1">
                         <span class="unit">×10⁻⁶ kg·m²</span>
                     </div>
                 </div>
@@ -1203,7 +1203,7 @@
         };
 
         // Axis parameters storage (inertia values from stampfly-parameters.md)
-        // Ixx = 9.16e-6, Iyy = 13.3e-6, Izz = 20.4e-6 kg·m²
+        // Ixx = 11.5e-6, Iyy = 15.3e-6, Izz = 22.6e-6 kg·m²
         //
         // NOTE on kp/ti/td units (2026-07-27 clarified, see getAxisParams() below
         // for the exact scale factors): kp/ti/td here use the SAME physical unit
@@ -1229,16 +1229,16 @@
         // 確定）とは同期していない。axisParams を「現在のファームゲイン」として
         // 扱わないこと——「各軸に反映 / Apply to Tabs」はあくまで出発点として使う。
         const axisParams = {
-            roll: { inertia: 9.16, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
-            pitch: { inertia: 13.3, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
-            yaw: { inertia: 20.4, tau: 20, kp: 0.5, ti: 150, td: 50, eta: 0.1 }
+            roll: { inertia: 11.5, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
+            pitch: { inertia: 15.3, tau: 20, kp: 0.134, ti: 75.6, td: 42.6, eta: 0.1 },
+            yaw: { inertia: 22.6, tau: 20, kp: 0.5, ti: 150, td: 50, eta: 0.1 }
         };
 
         // Physical parameters (from stampfly-parameters.md)
         const physicalParams = {
-            Ixx: 9.16,    // Roll moment of inertia [×10⁻⁶ kg·m²]
-            Iyy: 13.3,    // Pitch moment of inertia [×10⁻⁶ kg·m²]
-            Izz: 20.4,    // Yaw moment of inertia [×10⁻⁶ kg·m²]
+            Ixx: 11.5,    // Roll moment of inertia [×10⁻⁶ kg·m²]
+            Iyy: 15.3,    // Pitch moment of inertia [×10⁻⁶ kg·m²]
+            Izz: 22.6,    // Yaw moment of inertia [×10⁻⁶ kg·m²]
             tau_m: 20     // Motor time constant [ms]
         };
 
@@ -2280,9 +2280,9 @@
         function resetCalcDefaults() {
             const defaults = {
                 'calc-mass': 0.037,        // kg
-                'calc-ixx': 9.16,          // ×10⁻⁶ kg·m²
-                'calc-iyy': 13.3,          // ×10⁻⁶ kg·m²
-                'calc-izz': 20.4,          // ×10⁻⁶ kg·m²
+                'calc-ixx': 11.5,          // ×10⁻⁶ kg·m²
+                'calc-iyy': 15.3,          // ×10⁻⁶ kg·m²
+                'calc-izz': 22.6,          // ×10⁻⁶ kg·m²
                 'calc-rm': 0.593,          // Ω
                 'calc-jmp': 1.375,         // ×10⁻⁸ kg·m²
                 'calc-kt': 5.682,          // ×10⁻⁴ V/(rad/s)

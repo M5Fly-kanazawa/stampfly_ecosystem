@@ -2,7 +2,9 @@
   StampFly flight model for the SILS (MuJoCo, natural ENU / Z-up world; body FLU).
   Physical parameters are the calibrated StampFly values
   (docs/architecture/stampfly-parameters.md, cross-checked with firmware):
-    mass 0.037 kg; inertia Ixx/Iyy/Izz = 9.16 / 13.3 / 20.4 e-6 kg·m²;
+    mass 0.037 kg; inertia Ixx/Iyy/Izz = 11.5 / 15.3 / 22.6 e-6 kg·m²
+    (computed from the part STL meshes and measured masses, 2026-11-23; was the 2-point
+    suspension measurement 9.16 / 13.3 / 20.4 — see control/models/stampfly_physical.yaml);
     motors at ±0.023 m, +0.005 m above CG; X-quad (M1=FR..M4=FL).
 
   StampFly 飛行モデル（MuJoCo, 自然な ENU/Z上 ワールド; 機体 FLU）。
@@ -83,7 +85,7 @@
     <!-- 機体 FLU（X前, Y左, Z上）。0.5 m でホバー開始。 -->
     <body name="drone" pos="0 0 0.5">
       <freejoint name="root"/>
-      <inertial pos="0 0 0" mass="0.037" diaginertia="9.16e-6 13.3e-6 20.4e-6"/>
+      <inertial pos="0 0 0" mass="0.037" diaginertia="11.5e-6 15.3e-6 22.6e-6"/>
 
       <!-- Collision: hidden box approximating the frame. Its half-height (size z) is the
            GROUND STANDOFF: the body origin rests this high above the floor. The emulated

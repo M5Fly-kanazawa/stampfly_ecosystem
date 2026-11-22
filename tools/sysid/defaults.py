@@ -100,17 +100,17 @@ DEFAULT_PARAMS: Dict[str, Any] = {
     # Moments of inertia / 慣性モーメント
     "inertia": {
         "Ixx": {
-            "value": 9.16e-6,  # kg·m²
+            "value": 11.5e-6,  # kg·m²
             "unit": "kg·m²",
             "description": "Roll moment of inertia / ロール慣性モーメント",
         },
         "Iyy": {
-            "value": 13.3e-6,  # kg·m²
+            "value": 15.3e-6,  # kg·m²
             "unit": "kg·m²",
             "description": "Pitch moment of inertia / ピッチ慣性モーメント",
         },
         "Izz": {
-            "value": 20.4e-6,  # kg·m²
+            "value": 22.6e-6,  # kg·m²
             "unit": "kg·m²",
             "description": "Yaw moment of inertia / ヨー慣性モーメント",
         },

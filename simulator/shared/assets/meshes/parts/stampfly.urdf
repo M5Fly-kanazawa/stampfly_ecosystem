@@ -126,9 +126,11 @@
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <!-- Base mass adjusted 0.030->0.033 (2026-07-24) so base(0.033) + 4 props(4x0.001)
            = 0.037 kg total, matching the measured 36.8g vehicle mass (inertia unchanged,
-           measured values). -->
+           measured values). The inertia values were replaced on 2026-11-23 by the value
+           computed from the part STL meshes and measured masses (was 9.16 / 13.3 / 20.4e-6
+           from the 2-point suspension measurement). -->
       <mass value="0.033"/>
-      <inertia ixx="9.16e-6" ixy="0" ixz="0" iyy="13.3e-6" iyz="0" izz="20.4e-6"/>
+      <inertia ixx="11.5e-6" ixy="0" ixz="0" iyy="15.3e-6" iyz="0" izz="22.6e-6"/>
     </inertial>
   </link>
 

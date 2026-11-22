@@ -48,7 +48,7 @@ Pipeline / 手順:
     ループの余裕は数値検証して報告する。
 
 Mechanical-spec default plant / 機械仕様ベースの既定プラント:
-    b = 1/J  (J: Ixx 9.16e-6 / Iyy 13.3e-6 / Izz 20.4e-6 kg m²,
+    b = 1/J  (J: Ixx 11.5e-6 / Iyy 15.3e-6 / Izz 22.6e-6 kg m²,
               docs/architecture/stampfly-parameters.md)
     T = 0.02 s (motor+prop thrust lag — real-hardware structural default; as of
                 2026-07-26 the SILS plant's own lag comes from its motor ODE's
@@ -87,7 +87,7 @@ FS = 400.0                   # Data Stream rate [Hz]
 DT = 1.0 / FS
 
 # Mechanical-spec defaults / 機械仕様の既定値
-SPEC_INERTIA = {"roll": 9.16e-6, "pitch": 13.3e-6, "yaw": 20.4e-6}   # [kg m^2]
+SPEC_INERTIA = {"roll": 11.5e-6, "pitch": 15.3e-6, "yaw": 22.6e-6}   # [kg m^2]
 SPEC_MOTOR_T = 0.02          # [s] motor/prop lag (real-hardware structural default; see module docstring)
 SPEC_DELAY_L = 0.005         # [s] loop dead time (1.5 ctrl periods + IMU filter)
 

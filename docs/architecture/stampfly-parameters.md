@@ -94,9 +94,9 @@ VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulat
 | パラメータ | 記号 | シミュレータ | ファームウェア | 単位 | 備考 |
 |-----------|------|------------|--------------|------|------|
 | 機体質量 | m | 0.037 | 0.037 | kg | バッテリー込み |
-| Roll慣性モーメント | Ixx | 9.16×10⁻⁶ | - | kg·m² | |
-| Pitch慣性モーメント | Iyy | 13.3×10⁻⁶ | - | kg·m² | |
-| Yaw慣性モーメント | Izz | 20.4×10⁻⁶ | - | kg·m² | |
+| Roll慣性モーメント | Ixx | 11.5×10⁻⁶ | - | kg·m² | 部品の STL と実測質量からの試算値（2026-11-23。旧: 2点吊り法 9.16×10⁻⁶） |
+| Pitch慣性モーメント | Iyy | 15.3×10⁻⁶ | - | kg·m² | 部品の STL と実測質量からの試算値（2026-11-23。旧: 2点吊り法 13.3×10⁻⁶） |
+| Yaw慣性モーメント | Izz | 22.6×10⁻⁶ | - | kg·m² | 部品の STL と実測質量からの試算値（2026-11-23。旧: 2点吊り法 20.4×10⁻⁶） |
 
 > **注記（2026-07-24統一済み）:** ファームウェアの機体質量 0.037 kg は高度制御の重力補償（`sf_controller_pid`, `PidController::kMassG` = 0.037×9.80665）で使用される。0.035→0.037への変更は2026-03-31、実測重量（36.8g）に合わせた修正（コミット `43841314` "fix(control): update vehicle mass to 37g for accurate hover thrust"）で、`analysis/reports/param_correction_impact_20260715.md`（撤回・削除済み 2026-08-03）も実測36.8gとして確認済み（変更不要と結論）。シミュレータの 0.035 kg はこの実測反映前の設計値のまま同期されていなかった（個体差ではなくシミュレータ側の更新漏れ）が、2026-07-24に `tools/sysid/defaults.py`・`simulator/genesis/motor_model.py`・`simulator/vpython/scripts/run_sim.py`・`lib/stampfly_edu` フォールバック・URDF（`simulator/shared/assets/meshes/parts/`）を含め全箇所を 0.037 kg へ統一し、ファームウェアと一致した。
 
@@ -141,9 +141,9 @@ VPython版（`simulator/vpython/`）とSILS/Genesis版が並存する（`simulat
 | 記号 | パラメータ | 値 | 単位 | 実測日 | 方法 |
 |---|---|---|---|---|---|
 | mass | 機体質量 | 0.037 | kg | 2026-03-31 | - |
-| Ixx | Roll慣性モーメント | 9.16×10⁻⁶ | kg·m² | unknown | - |
-| Iyy | Pitch慣性モーメント | 1.33×10⁻⁵ | kg·m² | unknown | - |
-| Izz | Yaw慣性モーメント | 2.04×10⁻⁵ | kg·m² | unknown | - |
+| Ixx | Roll慣性モーメント | 1.15×10⁻⁵ | kg·m² | 2026-11-23 | - |
+| Iyy | Pitch慣性モーメント | 1.53×10⁻⁵ | kg·m² | 2026-11-23 | - |
+| Izz | Yaw慣性モーメント | 2.26×10⁻⁵ | kg·m² | 2026-11-23 | - |
 | arm_offset | モーメントアーム | 0.023 | m | unknown | - |
 | Ke | 逆起電力定数（SILS プラント） | 5.905×10⁻⁴ | V·s/rad | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（開回路EMF） |
 | Kt | トルク定数（SILS プラント） | 5.905×10⁻⁴ | N·m/A | 2026-10-15 | ベンチ実測（2026-10-15、公開リポジトリ stampfly-motor-autotest の data/2026-10-15）（Ke と同値） |
@@ -593,9 +593,9 @@ The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coex
 | Parameter | Symbol | Simulator | Firmware | Unit | Notes |
 |-----------|--------|-----------|----------|------|-------|
 | Vehicle Mass | m | 0.037 | 0.037 | kg | Including battery |
-| Roll Moment of Inertia | Ixx | 9.16×10⁻⁶ | - | kg·m² | |
-| Pitch Moment of Inertia | Iyy | 13.3×10⁻⁶ | - | kg·m² | |
-| Yaw Moment of Inertia | Izz | 20.4×10⁻⁶ | - | kg·m² | |
+| Roll Moment of Inertia | Ixx | 11.5×10⁻⁶ | - | kg·m² | Computed from part STL meshes and measured masses (2026-11-23; was bifilar 9.16×10⁻⁶) |
+| Pitch Moment of Inertia | Iyy | 15.3×10⁻⁶ | - | kg·m² | Computed from part STL meshes and measured masses (2026-11-23; was bifilar 13.3×10⁻⁶) |
+| Yaw Moment of Inertia | Izz | 22.6×10⁻⁶ | - | kg·m² | Computed from part STL meshes and measured masses (2026-11-23; was bifilar 20.4×10⁻⁶) |
 
 > **Note (unified 2026-07-24):** The firmware mass of 0.037 kg is used for gravity compensation in altitude control (`sf_controller_pid`, `PidController::kMassG` = 0.037 × 9.80665). The 0.035→0.037 change was made 2026-03-31 to match the measured weight (36.8 g; commit `43841314`, "fix(control): update vehicle mass to 37g for accurate hover thrust"), and `analysis/reports/param_correction_impact_20260715.md` (retracted/deleted 2026-08-03) also confirms 36.8 g measured (concluding no further change needed). The simulator's 0.035 kg was the pre-correction design value that had never been synced (a simulator update gap, not individual-unit variation); on 2026-07-24 every simulator copy (`tools/sysid/defaults.py`, `simulator/genesis/motor_model.py`, `simulator/vpython/scripts/run_sim.py`, the `lib/stampfly_edu` fallback dicts, and the URDF files under `simulator/shared/assets/meshes/parts/`) was unified to 0.037 kg to match the firmware.
 
@@ -640,9 +640,9 @@ The VPython simulator (`simulator/vpython/`) and the SILS/Genesis simulator coex
 | Symbol | Parameter | Value | Unit | Date | Method |
 |---|---|---|---|---|---|
 | mass | Vehicle mass | 0.037 | kg | 2026-03-31 | - |
-| Ixx | Roll moment of inertia | 9.16×10⁻⁶ | kg·m² | unknown | - |
-| Iyy | Pitch moment of inertia | 1.33×10⁻⁵ | kg·m² | unknown | - |
-| Izz | Yaw moment of inertia | 2.04×10⁻⁵ | kg·m² | unknown | - |
+| Ixx | Roll moment of inertia | 1.15×10⁻⁵ | kg·m² | 2026-11-23 | - |
+| Iyy | Pitch moment of inertia | 1.53×10⁻⁵ | kg·m² | 2026-11-23 | - |
+| Izz | Yaw moment of inertia | 2.26×10⁻⁵ | kg·m² | 2026-11-23 | - |
 | arm_offset | Moment arm | 0.023 | m | unknown | - |
 | Ke | Back-EMF constant (SILS plant) | 5.905×10⁻⁴ | V·s/rad | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (open-circuit EMF) |
 | Kt | Torque constant (SILS plant) | 5.905×10⁻⁴ | N·m/A | 2026-10-15 | Bench measurement (2026-10-15, public repository stampfly-motor-autotest, data/2026-10-15) (equal to Ke) |

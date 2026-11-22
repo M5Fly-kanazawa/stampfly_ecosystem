@@ -13,9 +13,9 @@ namespace sils_params {
 
 // --- constants (calibration-independent) / 較正非依存の定数 ---
 constexpr float MASS = 0.037f;  ///< vehicle mass [kg]
-constexpr float IXX = 9.16e-06f;  ///< roll moment of inertia [kg*m^2]
-constexpr float IYY = 1.33e-05f;  ///< pitch moment of inertia [kg*m^2]
-constexpr float IZZ = 2.04e-05f;  ///< yaw moment of inertia [kg*m^2]
+constexpr float IXX = 1.15e-05f;  ///< roll moment of inertia [kg*m^2]
+constexpr float IYY = 1.53e-05f;  ///< pitch moment of inertia [kg*m^2]
+constexpr float IZZ = 2.26e-05f;  ///< yaw moment of inertia [kg*m^2]
 constexpr float ARM_OFFSET = 0.023f;  ///< moment arm [m]
 
 // --- calibration_sets.bench_2026_10_15 (status: adopted, SILS plant propulsion) ---

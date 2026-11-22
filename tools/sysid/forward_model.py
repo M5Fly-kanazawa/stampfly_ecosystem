@@ -62,8 +62,8 @@ Every term below is copied from the plant (file:line of simulator/sils/plant/):
      term IS included (it is the plant's rotor-inertia reaction torque).
      ヨー: モータ毎 (Cq*w^2 + J*dw/dt)。CCW(FR,RL)は -Z_FLU, CW(RR,FL)は +Z_FLU。
      J*dw/dt (ロータ慣性反作用) を含む。
-  7. Rigid body (models/stampfly.xml:86 inertial, diag 9.16e-6 / 13.3e-6 /
-     20.4e-6 kg m^2): MuJoCo integrates I*alpha + w x (I*w) = tau. The
+  7. Rigid body (models/stampfly.xml:86 inertial, diag 11.5e-6 / 15.3e-6 /
+     22.6e-6 kg m^2): MuJoCo integrates I*alpha + w x (I*w) = tau. The
      gyroscopic term w x (I*w) is included when the logged body rates are
      given (`gyro` argument) and omitted otherwise. Aerodynamic drag on the
      body and turbulence/wind torque are NOT modelled by the plant's torque

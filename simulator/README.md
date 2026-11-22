@@ -53,9 +53,9 @@ StampFly Simulatorは、マイクロドローン「StampFly」の動力学をPyt
 | パラメータ | 値 | 単位 |
 |-----------|-----|------|
 | 質量 | 35 | g |
-| 慣性モーメント Ixx | 9.16e-6 | kg·m² |
-| 慣性モーメント Iyy | 13.3e-6 | kg·m² |
-| 慣性モーメント Izz | 20.4e-6 | kg·m² |
+| 慣性モーメント Ixx | 11.5e-6 | kg·m² |
+| 慣性モーメント Iyy | 15.3e-6 | kg·m² |
+| 慣性モーメント Izz | 22.6e-6 | kg·m² |
 | バッテリー電圧 | 3.7 | V |
 
 ## 2. セットアップ
@@ -228,9 +228,9 @@ from simulator.core import multicopter
 # 機体の作成
 mass = 0.037  # 37g
 inertia = [
-    [9.16e-6, 0.0, 0.0],
-    [0.0, 13.3e-6, 0.0],
-    [0.0, 0.0, 20.4e-6]
+    [11.5e-6, 0.0, 0.0],
+    [0.0, 15.3e-6, 0.0],
+    [0.0, 0.0, 22.6e-6]
 ]
 drone = multicopter(mass=mass, inersia=inertia)
 
@@ -551,9 +551,9 @@ StampFly Simulator is a Python-based tool for simulating the dynamics of the "St
 | Parameter | Value | Unit |
 |-----------|-------|------|
 | Mass | 35 | g |
-| Inertia Ixx | 9.16e-6 | kg·m² |
-| Inertia Iyy | 13.3e-6 | kg·m² |
-| Inertia Izz | 20.4e-6 | kg·m² |
+| Inertia Ixx | 11.5e-6 | kg·m² |
+| Inertia Iyy | 15.3e-6 | kg·m² |
+| Inertia Izz | 22.6e-6 | kg·m² |
 | Battery Voltage | 3.7 | V |
 
 ## 2. Setup
@@ -725,9 +725,9 @@ from simulator.core import multicopter
 # Create vehicle
 mass = 0.037  # 37g
 inertia = [
-    [9.16e-6, 0.0, 0.0],
-    [0.0, 13.3e-6, 0.0],
-    [0.0, 0.0, 20.4e-6]
+    [11.5e-6, 0.0, 0.0],
+    [0.0, 15.3e-6, 0.0],
+    [0.0, 0.0, 22.6e-6]
 ]
 drone = multicopter(mass=mass, inersia=inertia)
 

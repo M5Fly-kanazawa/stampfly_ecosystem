@@ -160,10 +160,21 @@ from ._generated_params import EXPECTED_ARM, EXPECTED_FW_KAPPA, EXPECTED_FW_CT, 
 # 言っていた）。EXPECTED_FW_KAPPA/EXPECTED_ARM/EXPECTED_IZZ（物理モデルが
 # 変わるたび `sf params generate` で再生成される）から導出すれば、それらと
 # 独立に値が古くなることが無くなる。
+# On 2026-11-23 the body inertia was replaced by the value computed from the part
+# STL meshes and measured masses (Ixx/Iyy/Izz 9.16/13.3/20.4e-6 -> 11.5/15.3/22.6e-6).
+# The hand gains K = 102 / 70 were fitted with the OLD (2-point suspension) inertia held
+# fixed, so the torque constant below stays tied to that old Ixx and the yaw reference
+# keeps the old Izz: changing them here would silently change the reference gains.
+# 2026-11-23 に機体慣性を部品の STL と実測質量からの試算値へ替えた
+# （9.16/13.3/20.4e-6 -> 11.5/15.3/22.6e-6）。手書きの K = 102 / 70 は旧（2点吊り法の）
+# 慣性を固定して当てはめた値なので、下のトルク定数は旧 Ixx に、ヨーの参照ゲインは
+# 旧 Izz に結びつけたまま残す（ここを新しい値に追従させると参照ゲインが黙って変わる）。
+_LEGACY_IXX_FOR_KM = 9.16e-6  # [kg m^2] inertia held fixed when K=102 was fitted
+_LEGACY_IZZ_FOR_K_YAW = 20.4e-6  # [kg m^2] yaw inertia of the reference derivation
 _ROLL_K_LEGACY = 102.0  # [rad/s^2 per duty] -- hand value, unchanged since L06
 _PITCH_K_LEGACY = 70.0  # [rad/s^2 per duty] -- hand value, unchanged since L06
-_KM_RP = _ROLL_K_LEGACY * EXPECTED_IXX  # N*m -- motor torque constant, roll/pitch
-_YAW_K_DERIVED = (_KM_RP * EXPECTED_FW_KAPPA / EXPECTED_ARM) / EXPECTED_IZZ  # [rad/s^2 per duty]
+_KM_RP = _ROLL_K_LEGACY * _LEGACY_IXX_FOR_KM  # N*m -- motor torque constant, roll/pitch
+_YAW_K_DERIVED = (_KM_RP * EXPECTED_FW_KAPPA / EXPECTED_ARM) / _LEGACY_IZZ_FOR_K_YAW  # [rad/s^2 per duty]
 
 REFERENCE_PLANT_GAINS: Dict[str, float] = {
     'roll': _ROLL_K_LEGACY,    # [rad/s^2 per duty]
