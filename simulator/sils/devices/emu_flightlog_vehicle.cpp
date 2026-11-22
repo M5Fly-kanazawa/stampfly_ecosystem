@@ -521,7 +521,7 @@ void write_diagnostics_rows(int64_t ts)
 // at every step, exactly as the Data Stream does on the vehicle (but without a byte budget: a file has no
 // bandwidth limit). Every line of the log sink therefore appears in the bundle, in order, with its time.
 // ESP_LOG の行を、ログシンクの WiFi 側の出口から取る。記録器が取得クライアントの役を務める: 最初の呼び出しで出口を
-// 有効にし、毎ステップ排出する。機体の Data Stream と同じ動き（ただしバイト数の予算はない: ファイルに帯域の
+// 有効にし、毎ステップ排出する。機体の Data Stream と同じ動き（ただしバイト数の上限はない: ファイルに帯域の
 // 上限はない）。ログシンクの行はすべて、順序どおりに時刻つきで一式に載る。
 
 void write_text_log_row(const sf::log_sink::WifiLineInfo& info, const char* text, size_t length)

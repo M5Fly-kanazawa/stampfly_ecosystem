@@ -219,7 +219,7 @@ TEST(time_stamp_and_truncation_flag_travel_with_the_line)
 
 // oldestLength() answers without removing the line, so a reader with a byte budget can leave a long
 // line for the next cycle.
-// oldestLength() は行を取り出さずに答えるので、バイト数の予算を持つ読み手は長い行を次の周期に残せる。
+// oldestLength() は行を取り出さずに答えるので、バイト数の上限を持つ読み手は長い行を次の周期に残せる。
 TEST(oldest_length_is_seen_without_removing_the_line)
 {
     SmallRing ring;
@@ -285,7 +285,7 @@ TEST(clear_forgets_lines_and_counts)
 }
 
 // One longest line (prefix included) always fits the budget constant the sender uses.
-// 最長の 1 行（接頭辞を含む）は、送信側が使う予算の定数に必ず収まる。
+// 最長の 1 行（接頭辞を含む）は、送信側が使うバイト数の上限の定数に必ず収まる。
 TEST(longest_stored_line_size_is_the_prefix_plus_the_line_limit)
 {
     static_assert(SmallRing::kMaxStoredLineBytes == SmallRing::kPrefixBytes + SmallRing::kMaxLineBytes, "size");

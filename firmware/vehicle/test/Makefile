@@ -106,7 +106,7 @@ TARGET_LOG_RING = test_log_ring
 # 400 Hz loop timing monitor (sf::LoopTimingMonitor, loop_timing.hpp): late-wake threshold (1.5 periods),
 # busy budget, armed split, uint32 wrap. Header-only logic — own binary, no extra sources.
 # 400 Hz ループ周期の監視器（sf::LoopTimingMonitor、loop_timing.hpp）: 遅れの境界（1.5 周期）・処理時間の
-# 予算・ARM 中の別計上・uint32 の桁あふれ。ヘッダのみのロジック — 独自バイナリで追加ソース不要。
+# 上限超過・ARM 中の別計上・uint32 の桁あふれ。ヘッダのみのロジック — 独自バイナリで追加ソース不要。
 SRCS_LOOP_TIMING = test_loop_timing.cpp
 TARGET_LOOP_TIMING = test_loop_timing
 
@@ -114,7 +114,7 @@ TARGET_LOOP_TIMING = test_loop_timing
 # step, the rest of the cycle, over-budget cycles by observation-kind combination, window reset.
 # Header-only logic — own binary, no extra sources.
 # 400 Hz 周期の工程別の所要時間の統計（sf::StepTimingStats、step_timing.hpp）: 工程ごとの回数・合計・最大、周期の
-# 残り、観測の種類の組み合わせごとの予算超過周期、窓のリセット。ヘッダのみのロジック — 独自バイナリで追加ソース不要。
+# 残り、観測の種類の組み合わせごとの周期超過、窓のリセット。ヘッダのみのロジック — 独自バイナリで追加ソース不要。
 SRCS_STEP_TIMING = test_step_timing.cpp
 TARGET_STEP_TIMING = test_step_timing
 

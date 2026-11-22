@@ -135,9 +135,9 @@ inline constexpr uint32_t IMU_PERIOD_US = 2500;  // 400Hz loop period [us] (= IM
 // observation mix of the over-budget cycles, logged every 60 s. Enabling it adds clock reads and
 // bookkeeping to the 400Hz path; on the real craft the over-budget cycles became about 3 times as
 // frequent. Leave it false for flight; set it true only to diagnose.
-// 400Hz の ImuTask の 1 周期の工程別の所要時間（読み出し・予測・観測更新ごと・残り）と、予算超過の周期の
+// 400Hz の ImuTask の 1 周期の工程別の所要時間（読み出し・予測・観測更新ごと・残り）と、周期超過（処理時間が 2500 µs を超えた周期）の
 // 観測の組み合わせを、60 秒ごとにログへ出す。有効にすると 400Hz の経路に時計の読み出しと集計が加わり、
-// 実機では予算超過の周期が約 3 倍に増えた。飛行では false のままにし、診断のときだけ true にする。
+// 実機では周期超過が約 3 倍に増えた。飛行では false のままにし、診断のときだけ true にする。
 inline constexpr bool IMU_STEP_TIMING_ENABLED = false;
 inline constexpr float OPTFLOW_DT = 0.01f;     // 100Hz
 inline constexpr float MAG_DT     = 0.04f;     // 25Hz

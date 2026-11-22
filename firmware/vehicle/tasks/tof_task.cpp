@@ -80,7 +80,7 @@
 static const char* TAG = "TofTask";
 
 /// Cycle period [ticks]: 33ms ≈ 30Hz, matching VL53L3CX timing budget.
-/// 周期 [tick]: 33ms ≈ 30Hz、VL53L3CX のタイミング予算と整合
+/// 周期 [tick]: 33ms ≈ 30Hz、VL53L3CX の測距 1 回の時間設定（timing budget）と整合
 static constexpr TickType_t kPeriodTicks = pdMS_TO_TICKS(33);
 
 /// Throttle interval for read-failure warnings.

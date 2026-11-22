@@ -65,7 +65,7 @@ public:
 
     /// Largest number of bytes one stored line occupies (prefix + longest text); a reader that
     /// budgets bytes per period needs this to know that one line always fits.
-    /// 格納した 1 行が占める最大のバイト数（接頭辞＋最長の本文）。周期ごとにバイト数の予算を持つ読み手は、
+    /// 格納した 1 行が占める最大のバイト数（接頭辞＋最長の本文）。周期ごとに取り出すバイト数の上限を持つ読み手は、
     /// 1 行が必ず収まることを知るのにこれを使う。
     static constexpr size_t kMaxStoredLineBytes = kPrefixBytes + kMaxLineBytes;
 
@@ -153,7 +153,7 @@ public:
 
     /// Length of the oldest stored line (0 when empty), without removing it — a reader with a byte
     /// budget asks this before it pops.
-    /// 最も古い格納済みの行の長さ（空なら 0）。取り出さずに知る — バイト数の予算を持つ読み手が、取り出す前に使う。
+    /// 最も古い格納済みの行の長さ（空なら 0）。取り出さずに知る — バイト数の上限を持つ読み手が、取り出す前に使う。
     size_t oldestLength() const
     {
         if (used_ == 0) {

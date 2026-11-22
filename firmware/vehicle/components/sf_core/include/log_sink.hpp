@@ -122,7 +122,7 @@ void setWifiCapture(bool active);
 /// or the oldest line is longer than the budget and stays for the next cycle). text must have room for
 /// kMaxLineBytes. Copies under the sink's spin lock (about a microsecond for a typical line); the
 /// caller sends outside it.
-/// WiFi 用リングの最古の行を、本文が max_text_bytes 以下のとき取り出す（0 = なし、または最古の行が予算より
+/// WiFi 用リングの最古の行を、本文が max_text_bytes 以下のとき取り出す（0 = なし、または最古の行が max_text_bytes より
 /// 長く次の周期に残る）。text には kMaxLineBytes の領域が要る。シンクのスピンロックの下でコピーする（普通の行
 /// で 1 µs 程度）。送信は呼び出し側がロックの外で行う。
 size_t takeWifiLine(char* text, size_t text_capacity, WifiLineInfo* info, size_t max_text_bytes);

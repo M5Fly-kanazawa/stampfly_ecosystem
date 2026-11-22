@@ -151,7 +151,7 @@ inline constexpr size_t kUnifiedMaxSize   = 1400;
 ///     An ARM-transition burst of about 600 bytes goes out in one packet.
 /// Lines that do not fit wait in the WiFi ring for the next packet; what the ring cannot hold is counted as
 /// dropped (never silent).
-/// テキストログの出口の予算。2 つの定数が費用を抑える:
+/// テキストログの出口の上限（1 パケットのバイト数と送信の頻度）。2 つの定数が費用を抑える:
 ///   kTextLogSendPeriodCycles = 5: テキストパケットは 50 Hz の周期 5 回につき最大 1 個 = 毎秒 10 個まで。根拠: WiFi の
 ///     電波の費用は sendto() の呼び出し 1 回ごとにかかり、約 2.5 ms（udp-telemetry-design.md）。統合パケットは既に毎秒 50 回で、
 ///     ESP-NOW（操縦者の制御リンク）と共有する電波時間の 12.5 % を使う。追加の毎秒 10 回は最大 2.5 %、待つ行が無ければ 0
@@ -830,7 +830,7 @@ public:
     }
 
     /// Longest text the next record can still carry within the budget (0 = the packet is full).
-    /// 予算の範囲で次のレコードが運べる本文の最大長（0 = パケットは満杯）。
+    /// 1 パケットのバイト数の上限の範囲で次のレコードが運べる本文の最大長（0 = パケットは満杯）。
     size_t remainingTextBytes() const
     {
         const size_t left = kTextLogBytesPerPacket - record_bytes_;
@@ -838,7 +838,7 @@ public:
     }
 
     /// Append one record. False when it does not fit in the budget (nothing is written).
-    /// レコードを 1 つ追加する。予算に収まらなければ false（何も書かない）。
+    /// レコードを 1 つ追加する。バイト数の上限に収まらなければ false（何も書かない）。
     bool addLine(uint32_t timestamp_us, uint8_t flags, uint8_t dropped_before, const char* text, size_t text_length)
     {
         if (text_length > remainingTextBytes()) {
@@ -877,7 +877,7 @@ public:
 private:
     uint8_t buffer_[kTextLogPacketMaxSize] = {};
     size_t  length_       = 0;
-    size_t  record_bytes_ = 0;   // bytes of records so far (the budget counts these) / ここまでのレコードのバイト数（予算はこれを数える）
+    size_t  record_bytes_ = 0;   // bytes of records so far (the budget counts these) / ここまでのレコードのバイト数（上限の判定はこれを数える）
     size_t  record_count_ = 0;
 };
 

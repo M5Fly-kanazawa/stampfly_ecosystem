@@ -191,7 +191,7 @@ sf app sils my_ctrl
 | 項目 | 内容 | 対処 |
 |------|------|------|
 | ESP-IDF の `-D` と `-B` | `idf.py -B <dir> -D SF_APP_DIR=...` で sdkconfig の扱いが従来ビルドと変わらないか | Phase 1 で app 無し・有りのビルドを比較 |
-| 400 Hz の予算 | ユーザーの `IController::compute()` が 400 Hz の周期を超えると制御が崩れる | テンプレート README に計測方法（`sf log wifi` の周期統計）と目安を書く。SILS では実時間より速く回るため実機で確認する旨を明記 |
+| 400 Hz の処理時間の上限 | ユーザーの `IController::compute()` の処理時間が 400 Hz の制御周期（2.5 ms）を超えると制御が崩れる | テンプレート README に計測方法（`sf log wifi` の周期統計）と目安を書く。SILS では実時間より速く回るため実機で確認する旨を明記 |
 | 推定器差し替えの影響 | 自作推定器が発散した場合の安全装置（現行の ESKF 発散検知は ESKF 専用か） | Phase 0 で `imu_task.cpp` の発散検知の対象を確認し、`IEstimator` 共通の監視に寄せるか判断 |
 | Windows のパス | CMake 変数に空白・バックスラッシュを含む絶対パスを渡す | 実装は `Path.resolve()` で絶対パス化して `-D SF_APP_DIR=...` に渡す（`app.py`/`sils.py`）。**未検証（2026-09-08 時点）**: `windows-e2e.yml` への `sf app` ケース追加はまだ行っていない。Windows 実機・CI での確認が残作業 |
 | 例題の設計原則との整合 | 「単独ビルド可能」原則との例外を文書で明示しないと、後続の例題が再びベンチ路線に戻る | Phase 0 の設計文書更新を先に行う |

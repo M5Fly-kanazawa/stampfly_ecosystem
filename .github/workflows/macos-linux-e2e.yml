@@ -73,7 +73,7 @@ jobs:
     # Same generous budget as windows-e2e.yml: ESP-IDF's own install script
     # downloads a whole compiler toolchain the first time (no cache yet on a
     # fresh branch/PR).
-    # windows-e2e.yml と同じ余裕を持たせた予算: ESP-IDF自身のインストール
+    # windows-e2e.yml と同じ余裕を持たせた時間の上限（timeout-minutes）: ESP-IDF自身のインストール
     # スクリプトは初回にコンパイラツールチェーン一式をダウンロードする
     # （新規ブランチ/PRではキャッシュがまだ無い）。
     timeout-minutes: 90

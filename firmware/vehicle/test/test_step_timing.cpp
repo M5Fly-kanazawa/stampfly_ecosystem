@@ -25,7 +25,7 @@
 #include "step_timing.hpp"
 
 // Same value as config::IMU_PERIOD_US (main/config.hpp) — the cycle budget at 400 Hz.
-// config::IMU_PERIOD_US（main/config.hpp）と同じ値 — 400 Hz の周期の予算。
+// config::IMU_PERIOD_US（main/config.hpp）と同じ値 — 400 Hz の周期（処理時間の上限）。
 static constexpr uint32_t kBudgetUs = 2500;
 
 // Step and kind numbers used by the tests (the task defines its own).
@@ -119,7 +119,7 @@ TEST(over_budget_cycles_are_counted_by_kind_combination)
     // Fast cycle with flow: not an over-budget cycle / 速い周期（超過に数えない）
     stats.noteUpdate(kKindFlow);
     stats.endCycle(1200, kBudgetUs, kStepRest);
-    // Exactly on the budget is not over / ちょうど予算は超過ではない
+    // Exactly on the budget is not over / ちょうど上限は周期超過ではない
     stats.noteUpdate(kKindTof);
     stats.endCycle(kBudgetUs, kBudgetUs, kStepRest);
     // Slow cycle with flow + tof again / もう一度フロー + ToF

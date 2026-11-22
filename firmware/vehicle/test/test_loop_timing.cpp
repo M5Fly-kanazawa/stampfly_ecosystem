@@ -106,7 +106,7 @@ TEST(interval_of_exactly_one_and_a_half_periods_is_not_late)
 TEST(busy_longer_than_a_period_is_over_budget)
 {
     sf::LoopTimingMonitor monitor(kPeriodUs);
-    cycle(monitor, 0, 2500);       // exactly one period: within budget / ちょうど 1 周期: 予算内
+    cycle(monitor, 0, 2500);       // exactly one period: within budget / ちょうど 1 周期: 上限の内側
     cycle(monitor, 2500, 2501);    // one microsecond over / 1 µs 超過
     cycle(monitor, 5000, 4800);
     const sf::LoopTiming& t = monitor.result();

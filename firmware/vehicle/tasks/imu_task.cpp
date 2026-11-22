@@ -465,7 +465,7 @@ enum class TimedStep : size_t {
 };
 
 /// Observation kinds whose samples are counted per cycle (bit k of the over-budget combination).
-/// 周期ごとに標本数を数える観測の種類（予算超過の組み合わせのビット k）。
+/// 周期ごとに標本数を数える観測の種類（周期超過の組み合わせのビット k）。
 enum class ObservationKind : size_t { Tof = 0, FrontTof, Flow, Mag, Baro, Count };
 static_assert(static_cast<size_t>(ObservationKind::Count) == sf::StepTimingStats::kMaxKinds,
               "StepTimingStats kind count must match ObservationKind");
@@ -1192,7 +1192,7 @@ static void initToFVerticalPolicy()
 static constexpr uint32_t kLoadLogEveryCycles = 24000;
 
 /// Cycle budget [us] that a cycle must not exceed (the 400Hz period).
-/// 周期が超えてはならない予算 [µs]（400Hz の周期）。
+/// 1 周期の処理時間の上限 [µs]（400Hz の周期）。これを超えたものが周期超過。
 static constexpr uint32_t kCycleBudgetUs = config::IMU_PERIOD_US;
 
 /// Longest step-timing log line [bytes]; the log sink accepts up to 384 (sf::LogRing::kMaxLineBytes).
@@ -1200,7 +1200,7 @@ static constexpr uint32_t kCycleBudgetUs = config::IMU_PERIOD_US;
 static constexpr size_t kStepLogLineBytes = 384;
 
 /// Over-budget combinations printed individually; the rest are summed as "others".
-/// 個別に出す予算超過の組み合わせの数。残りは "others" に合算する。
+/// 個別に出す周期超過の組み合わせの数。残りは "others" に合算する。
 static constexpr size_t kPrintedCombinations = 8;
 
 /// Append formatted text to buffer[0..capacity), advancing length; the text is cut at the end.
@@ -1226,7 +1226,7 @@ static void appendText(char* buffer, size_t capacity, size_t& length, const char
 
 /// Log the per-step time of the window: one line of steps (runs/average/longest, us) and one line
 /// of the over-budget breakdown. ESP_LOGI goes through the log sink, so the 400Hz loop does not wait.
-/// 窓の工程別の所要時間を出す: 工程の行（回数/平均/最大、µs）と、予算超過の内訳の行。ESP_LOGI は
+/// 窓の工程別の所要時間を出す: 工程の行（回数/平均/最大、µs）と、周期超過の内訳の行。ESP_LOGI は
 /// ログシンクを通るので 400Hz ループは待たされない。
 static void logStepTiming()
 {
@@ -1536,7 +1536,7 @@ void ImuTask(void* pvParameters)
         // once a minute. KEPT (not a temporary diag): core-1 saturation at -Og
         // starved StateTask into the INIT-stuck bug, and this number is the
         // early warning if estimator/control cost ever creeps back up.
-        // CPU 負荷ウォーターマーク: 周期あたり busy 時間 vs 予算 2500µs を毎分ログ。
+        // CPU 負荷ウォーターマーク: 周期あたり busy 時間 vs 処理時間の上限 2500µs を毎分ログ。
         // 恒久採用（一時診断ではない）: -Og 時のコア1 飽和が StateTask を飢餓させ
         // INIT 停止バグになった。推定・制御のコストが再び肥大したときの早期警報。
         {

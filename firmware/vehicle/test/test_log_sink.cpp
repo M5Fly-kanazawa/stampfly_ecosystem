@@ -89,7 +89,7 @@ struct TakenLine {
     sf::log_sink::WifiLineInfo info;
 };
 
-/// Take every line the WiFi exit holds (no budget). / WiFi 側の出口が持つ行を（予算なしで）すべて取り出す。
+/// Take every line the WiFi exit holds (no budget). / WiFi 側の出口が持つ行を（バイト数の上限なしで）すべて取り出す。
 std::vector<TakenLine> takeAllWifiLines()
 {
     std::vector<TakenLine> lines;
@@ -248,9 +248,9 @@ TEST(the_readers_byte_budget_leaves_a_longer_line_for_the_next_packet)
     ESP_LOGI(kTag, "%s", std::string(200, 'y').c_str());
     char text[sf::log_sink::kMaxLineBytes];
     sf::log_sink::WifiLineInfo info;
-    ASSERT_TRUE(sf::log_sink::takeWifiLine(text, sizeof(text), &info, 100) == 0);   // too long for the budget: it stays / 予算に収まらない: 残る
+    ASSERT_TRUE(sf::log_sink::takeWifiLine(text, sizeof(text), &info, 100) == 0);   // too long for the budget: it stays / バイト数の上限に収まらない: 残る
     const size_t length = sf::log_sink::takeWifiLine(text, sizeof(text), &info, 300);
-    ASSERT_TRUE(length > 200);                                                     // the next cycle's budget takes it / 次の周期の予算で取れる
+    ASSERT_TRUE(length > 200);                                                     // the next cycle's budget takes it / 次の周期の上限なら取れる
     ASSERT_TRUE(sf::log_sink::takeWifiLine(text, sizeof(text), &info, 300) == 0);   // now empty / 空になった
     sf::log_sink::setWifiCapture(false);
 }

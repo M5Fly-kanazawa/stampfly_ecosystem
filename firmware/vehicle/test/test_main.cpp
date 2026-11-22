@@ -1199,7 +1199,7 @@ TEST(wire_status_v4_conversions_copy_every_field)
 }
 
 // Text-log packet 0x51: layout, the per-cycle byte budget, the longest line, and what does not fit stays out.
-// テキストログのパケット 0x51: レイアウト、1 周期のバイト数の予算、最長の行、収まらないものは入れない。
+// テキストログのパケット 0x51: レイアウト、1 周期のバイト数の上限、最長の行、収まらないものは入れない。
 TEST(wire_text_log_packet)
 {
     using namespace sf::datastream;
@@ -1242,14 +1242,14 @@ TEST(wire_text_log_budget_and_longest_line)
     ASSERT_TRUE(builder.recordCount() == longest_lines);
 
     // A shorter line that fits the rest is accepted, and the budget then reads zero.
-    // 残りに収まる、より短い行は受け付け、その後の予算は 0 になる。
+    // 残りに収まる、より短い行は受け付け、その後の残り容量は 0 になる。
     const size_t rest = builder.remainingTextBytes();
     ASSERT_TRUE(rest < sizeof(longest));
     ASSERT_TRUE(builder.addLine(3, 0, 0, longest, rest));
     ASSERT_TRUE(builder.remainingTextBytes() == 0);
     ASSERT_TRUE(!builder.addLine(4, 0, 0, "y", 1));
     const size_t length = builder.finish();
-    ASSERT_TRUE(length == kTextLogPacketMaxSize);   // the budget is used up exactly / 予算をちょうど使い切る
+    ASSERT_TRUE(length == kTextLogPacketMaxSize);   // the budget is used up exactly / 上限のバイト数をちょうど使い切る
     ASSERT_TRUE(length == 1029 && length <= kUnifiedMaxSize);
     printf("\n    text-log packet: at most %zu B (cap %zu B), at most %d packets/s (every %dth 50 Hz cycle) = %zu B/s\n",
            length, kUnifiedMaxSize, 50 / kTextLogSendPeriodCycles, kTextLogSendPeriodCycles,

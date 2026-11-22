@@ -10,7 +10,7 @@
  * @file step_timing.hpp
  * @brief Per-step time statistics of one 400 Hz cycle, and which observation updates ran in the
  *        cycles that overran the budget
- *        400 Hz の 1 周期の工程別の所要時間の統計と、予算を超えた周期でどの観測更新が走ったか
+ *        400 Hz の 1 周期の工程別の所要時間の統計と、周期超過（1 周期の処理時間が上限を超えた周期）でどの観測更新が走ったか
  *
  * LoopTimingMonitor says HOW LONG a cycle took; this class says WHERE the time went. The task
  * cuts its cycle into steps (read, predict, one step per observation kind, the rest) and hands
@@ -30,7 +30,7 @@
  * タスクは周期を工程（読み出し・予測・観測の種類ごとの更新・残り）に区切り、各工程の所要時間を
  * recordStep() に渡す。工程ごとに実行回数・合計・最大を持ち、平均（合計 / 回数）は読む側が出す
  * （400 Hz の経路に除算を入れない）。観測の種類については、タスクが標本 1 個ごとに noteUpdate() を呼ぶ
- * ので、endCycle() は (a) 1 周期に同じ種類を処理した個数の最大と、(b) 予算を超えた周期について、走った
+ * ので、endCycle() は (a) 1 周期に同じ種類を処理した個数の最大と、(b) 周期超過の周期について、走った
  * 種類の組み合わせ（ビットの組: ビット k = 種類 k がその周期に走った）ごとの回数を持てる。窓の終わりに
  * アクセサで読み、reset() で消す。
  *
@@ -57,7 +57,7 @@ struct StepStat {
 };
 
 /// One entry of the over-budget breakdown: a combination of observation kinds and its cycle count.
-/// 予算超過の内訳の 1 項目: 観測の種類の組み合わせと、その周期の数。
+/// 周期超過の内訳の 1 項目: 観測の種類の組み合わせと、その周期の数。
 struct KindCombination {
     uint32_t mask  = 0;   ///< bit k set = kind k ran / ビット k = 種類 k が走った
     uint32_t count = 0;   ///< over-budget cycles with exactly this combination / ちょうどこの組み合わせだった超過周期の数
@@ -99,7 +99,7 @@ public:
     /// Close the cycle. cycle_us = the whole cycle; the part not covered by recordStep() goes to
     /// rest_step. A cycle longer than budget_us adds one to its kind combination.
     /// 周期を閉じる。cycle_us = 周期全体。recordStep() で数えなかった残りは rest_step へ入れる。
-    /// 予算 budget_us を超えた周期は、その種類の組み合わせに 1 を足す。
+    /// 処理時間の上限 budget_us を超えた周期（周期超過）は、その種類の組み合わせに 1 を足す。
     void endCycle(uint32_t cycle_us, uint32_t budget_us, size_t rest_step)
     {
         const uint32_t covered = cycle_step_sum_us_ > UINT32_MAX
