@@ -468,6 +468,8 @@ Paired}` として設計する。FAILSAFE と同様、状態管理（StateManage
 | FLIP Spin/Brake | Sequence(レート) | Sequence(推力) | — | Sequence(0) |
 | 同定励振（診断） | Sequence(レート注入・1軸) | Pilot | Pilot | Pilot |
 
+> **ヨーの「Pilot」の中身（2026-11-22）:** ヨースティックが中立のときは、ヘディングホールド（[`detailed_design.md`](detailed_design.md) §4）が方位を保つ — 「向きを保つ」が操縦者の意図である。これは TAKEOFF・LANDING でも変わらず、誘導の印が立ったままでも、モードやスロットルの値によらない（ヘディングホールドを止めてよいのは、誘導が実際にヨー角速度を駆動している間だけ）。ヨースティックを意図して倒せば、その入力に従う。
+
 ### リセット処理の2層分類（クラスA / クラスB）
 
 reset には性質の異なる **2つの層** がある。「reset は onExit/onEnter に集約」という方針が成り立つのは、reset が状態遷移に紐づく離散イベントである場合に限る。推定器の一部の reset は **センサ事象に紐づく連続系の同期点** であり、別のタイミング論理（センサ1サンプル精度）を持つため、この方針の対象外である。
@@ -861,6 +863,8 @@ Control / TL Manager: operate according to target mode
 **DISARM principle (INV-4, 2026-11-22).** An explicit DISARM request (the transmitter's ARM-button edge, the API's `disarm` / `emergency`, the CLI's `disarm` / `emergency`) is always accepted in an armed state from every source, whoever armed the craft; an unmanned craft must never be left unstoppable. The on-board button click is the exception (ignored in flight). ARM conditions may differ per source: the CLI ARM requires STABILIZE / ACRO. See `detailed_design.md` §3.1 "CLI input columns".
 
 **Cross-cutting rules for the ToF episode (the Japanese section has the full R1-R16 / INV-1..4 tables).** R16: timeouts are judged on the subscriber side with `sf::SilenceWatch`; Failsafe owns the judgement and hands it over as an EVENT (`system_alert`) and a LEVEL (`failsafe_status`); every reader passes the level through `sf::FailsafeStatusGuard`, so a status nobody refreshes reads as silent. INV-3: detection and decision are separate: ImuTask publishes the facts (`tof_health`: the estimator adopted N samples in a row with a small innovation and the ToF has been alive for 1 s; only invalid samples while flying), Failsafe judges the episode, StateManager decides through the pure functions of `tof_silence_policy.hpp` and is the only transition executor; while an episode lasts ImuTask never trusts the raw ground-contact flag (`groundContactTrusted()`: armed = airborne), which `TakeoffLandingMgr::markAirborne()` has flipped to the safe side. INV-4: every (state x mode x input) cell is in the normative table (`detailed_design.md` §3.1) and checked on the host (`test/test_tof_silence.cpp`, `test/test_tof_health.cpp`, `test/test_takeoff_policy.cpp`). The TAKEOFF decisions (manual / auto completion, the abort on the POSITIVE floor evidence of a healthy ToF, the comm-loss landing from TAKEOFF / FLYING) are the pure functions of `takeoff_policy.hpp`; the floor evidence is detected in ImuTask (`TakeoffFloorWatch`, published as `tof_health.floor_stays`) and executed by StateTask / StateManager. A missing proof is never taken as proof that the craft is on the floor: no safety decision is gated on an accelerometer-only "left the floor".
+
+> **What "Pilot" means for yaw (2026-11-22):** with the yaw stick neutral, the heading hold (`detailed_design.md` §4) keeps the heading: "hold the heading" is the pilot's intent. This is the same in TAKEOFF and LANDING, with the guidance flag still set, whatever the mode or the throttle value (the heading hold may be skipped only while guidance actually drives the yaw rate). A deliberate yaw stick input is followed.
 
 ## 5. Data Flow Design
 

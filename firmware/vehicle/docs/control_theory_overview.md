@@ -260,6 +260,10 @@ NED で計算した目標加速度をヨーで機体座標へ回し、`÷g` で�
 
 これは推測の混入を防ぐプロジェクトの規律で、§5.1–5.4 の同定駆動アプローチと一体である。
 
+### 5.6 離散化のナイキストでのゲイン — ヨーの微分を使わない理由（2026-11-22）
+
+不完全微分を双線形変換で離散化した PID は、$T_d > 0$ なら $T_d$ に依らず、ナイキスト周波数（制御周期の半分。400 Hz 制御では 200 Hz）で $|C(-1)| = k_p(1 + 1/\eta)$（$\eta = 0.125$ で $9\,k_p$）のゲインを持つ（$\eta$ は微分フィルタ係数。導出は `detailed_design.md` §4）。低い周波数の位相余裕だけを見て $T_d$ を選ぶと、この帯域は見落とされる。ヨー軸ではモータの回転体の慣性による反トルクが高域でも入力にほぼ遅れなく現れる項として残り、$9\,k_p$ との積が 1 を超えて、200 Hz で 1 標本ごとに符号が反転する持続振動になった（実機の手動 STABILIZE で、200 Hz の成分が大きい時間の割合が 98.2 % → $T_d = 0$ で 0.0 %。各 1 回の飛行）。そこでヨーの既定は $T_d = 0$ とした。ロール（$T_d = 0.002$）とピッチ（$T_d = 0.025$）も同じ $9\,k_p$ を持つが、今回は変えていない。位相余裕の計算（§5.3）に、ナイキストでのゲインの確認を加えるべきである。
+
 ## 6. まとめ ── この設計の特徴
 
 | 観点 | 本設計の立場 |
@@ -445,6 +449,10 @@ The biggest lesson: **gains optimised in SILS oscillate on hardware.** The SILS 
 > **Every proposed change to a control parameter (PID gain, filter constant, limit) must be quantitatively confirmed by a numerical simulation on real flight-log data BEFORE it is proposed.** No qualitative guessing ("shorten Ti and it'll improve"). If the simulation shows it backfires, it is not proposed.
 
 This discipline against guesswork is of a piece with the identification-driven approach of §5.1–5.4.
+
+### 5.6 Nyquist gain of the discretised PID — why yaw has no derivative (2026-11-22)
+
+A PID whose incomplete derivative is discretised with the bilinear transform has $|C(-1)| = k_p(1 + 1/\eta)$ ($= 9\,k_p$ for $\eta = 0.125$) at the Nyquist frequency (200 Hz at a 400 Hz control rate) for any $T_d > 0$, independent of $T_d$. Choosing $T_d$ from low-frequency phase margin alone misses this band. On the yaw axis the rotor-inertia reaction torque stays as a term that follows the input almost without delay at high frequency; times $9\,k_p$ the loop gain exceeded 1 and the yaw torque flipped sign every sample (hardware, manual STABILIZE: share of time with a large 200 Hz component 98.2 % to 0.0 % with $T_d = 0$; one flight per setting). The yaw default is therefore $T_d = 0$. Roll ($T_d = 0.002$) and pitch ($T_d = 0.025$) have the same $9\,k_p$ and were not changed this time. The loop-shaping check (§5.3) should include the Nyquist gain.
 
 ## 6. Summary — what's distinctive
 

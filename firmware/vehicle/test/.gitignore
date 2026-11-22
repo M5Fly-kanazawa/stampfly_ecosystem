@@ -22,3 +22,5 @@ test_param_range
 test_log_sink
 test_barometric_height
 test_failsafe
+test_pid_derivative
+test_yaw_heading_landing

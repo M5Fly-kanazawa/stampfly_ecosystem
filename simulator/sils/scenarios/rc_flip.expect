@@ -48,6 +48,12 @@
 #   Left    (19.7-22.9): flip_roll_deg=-360.1 alt_drop_max=0.082 alt_rise_max=0.149 settle_time_s=0.64
 #   default (22.9-27.4): flip_roll_deg=360.3  alt_drop_max=0.093 alt_rise_max=0.145 settle_time_s=0.65
 #   Forward (48.3-53.3): flip_pitch_deg=-360.4 alt_drop_max=0.993 alt_rise_max=0.157 settle_time_s=0.67 alt_min=0.155
+# (The Forward line above is from the pre-R_out ODE plant. Measured 2026-11-22 on the R_out plant: alt_drop_max=0.160 alt_min=0.842
+# with rate.yaw.td=0.01, alt_drop_max=0.140 alt_min=0.862 with the new default td=0. The bound alt_drop_max<1.1 below is
+# therefore much wider than needed now; it is left as it is — tightening it is a separate decision.)
+# （上の Forward の行は R_out 化より前の ODE プラントの値。2026-11-22 に R_out プラントで測定: rate.yaw.td=0.01 では
+# alt_drop_max=0.160・alt_min=0.842、新しい既定値 td=0 では alt_drop_max=0.140・alt_min=0.862。下の alt_drop_max<1.1 は
+# いまでは必要より大幅に広いが、そのままにする。狭めるかどうかは別に決める。）
 # Roll-window thresholds are the same as api_flip_roll.expect. The Forward window's alt_drop_max /
 # alt_min are NOT aligned with api_flip_pitch.expect (alt_drop_max<0.40).
 # Root cause (simulation-policy.md backlog #12): the

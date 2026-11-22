@@ -106,7 +106,7 @@ SPEC_DELAY_L = 0.005         # [s] loop dead time (1.5 ctrl periods + IMU filter
 DEFAULT_GAINS = {
     "roll":  {"kp": 1.0e-3,      "ti": 0.7, "td": 0.002, "limit": 5.2e-3},
     "pitch": {"kp": 1.426432e-3, "ti": 0.7, "td": 0.025, "limit": 5.2e-3},
-    "yaw":   {"kp": 8.029796e-4, "ti": 0.8, "td": 0.01,  "limit": 1.226e-3},
+    "yaw":   {"kp": 8.029796e-4, "ti": 0.8, "td": 0.0,   "limit": 1.226e-3},   # td 0.01 until 2026-11-22; logs flown before that need --td 0.01 / 2026-11-22 まで 0.01。それ以前の記録は --td 0.01 が必要
 }
 
 

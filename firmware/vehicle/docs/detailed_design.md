@@ -317,6 +317,7 @@ TAKEOFF / LANDING / FLIP はいずれも「有限時間の専用シーケンス�
 | API 誘導目標（move/rotate/rc 等） | 拒否 |
 | DISARM / `emergency` / IMPACT | 即時（IDLE_GROUND へ、既存の無条件停止と同じ） |
 | 接地リセット | 無し（空中シーケンスのため対象外） |
+| ヨーの向き（空中でヨースティックが中立） | ヘディングホールドが働く。TAKEOFF の上昇中・LANDING でも、誘導の印やモードやスロットルの値によらず向きを保つ。リンク途絶なら角速度の目標 0（FLIP は専用の保持則） |
 | 新規シーケンス要求（TAKEOFF/LANDING/FLIP） | 拒否（busy） |
 
 **シーケンスごとの差分**
@@ -391,6 +392,7 @@ INV-2「シーケンスは有限時間で、終了は単一の判定で通常則
 **注6（着陸則の統一＝Landing を VerticalPhase 化・操縦可能化, INV-1/INV-2）:** 自動着陸の降下中も姿勢をパイロットに渡す（設計不変条件（[`architecture.md`](architecture.md) INV-1/INV-2）に基づく）。**理由＝着陸を並列の制御経路にしない:** §② の「鉛直のみ自動・姿勢は常にパイロット」原則は離陸（TakeoffClimb）にも着陸にも適用する。着陸を「フェイルセーフ専用・スティック無視」という前提の別経路にすると、パイロット起動の着陸でその前提が崩れ、「着陸中ロール/ピッチが効かない」。
 - **構成:** 着陸専用の関数は持たず、Landing を `VerticalPhase`（Grounded/TakeoffClimb/Airborne/**Landing**）の一フェーズとして `compute()` の**単一姿勢＋レートパイプラインに統合**（INV-1）。フェーズが変えるのは鉛直チャネル（`landing_descent_rate_` で降下, モード非依存＝ACRO/STABILIZE からの通信途絶着陸にも対応）と接地条件のみ。姿勢は他フェーズと同じ1本道。
 - **操縦/水平の作り分け（INV-2, 単一判定）:** Landing 中、**リンク生存中はパイロットが roll/pitch/yaw を保つ**（パイロット指令の着陸は操縦可）。**リンク途絶（通信途絶フェイルセーフ＝パイロット不在）なら単一の水平判定で roll/pitch/yaw を 0 に強制**。生存判定は設定点の新鮮さ `(state.timestamp − setpoint.timestamp) < kLandingLinkStaleUs(500ms, R16)` で行い、**StateManager からフラグを配線しない**（新鮮さだけでパイロット在否が分かり、降下中にリンクが切れても自動で水平化する）。
+- **ヨー（向きの保持）:** LANDING でも、ヨースティックが中立ならヘディングホールドが LANDING に入った時点の向きを保つ（上の「ヘディングホールド」の LANDING の行）。ヘディングホールドを止めてよいのは「誘導がヨー角速度を実際に駆動している間」だけで、誘導の印 `guidance_active_` が立っているだけでは止めない（`PidController::guidanceOwnsYaw()`）。リンク途絶では上の水平判定が角速度の目標を 0 にする。
 - **検証:** 新 SILS 2 本＝`alt_disarm_land_steer`（リンク生存のパイロット着陸: 降下中にロール保持→`tilt_max=11°`＝操縦可。着陸を別経路にした場合は≈0 で FAIL）/`commloss_land_level`（フェイルセーフ着陸: 猶予中 FLYING は古いロールで `tilt 11.6°` だが LANDING 突入後は水平判定で `tilt 3.6°` に水平化＝INV-2 の敵対ガード）。再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験）SILS 29/29・host 25/25・実機ビルド OK。
 
 **注7（地面効果フロート対策＝降下停滞による接地検出, INV-3）:** 実機で「ある程度の高度で手動 DISARM しないと着地しない／地面付近は予想より小さい Duty で浮く」現象（パイロット報告）。真因＝**地面効果**（接地近傍でローター揚力が増し、機体が低推力で高度を保つ）で一定速度降下が 5cm 地上閾値の上で停滞し、**ToF のみ（<5cm 必須）で判定する着陸検出器は作動しない**。
@@ -583,7 +585,25 @@ public:
 | 積分の保持 | `integration_enabled=false` で積分値を保持（リセットせず蓄積しない、P/D は通常）。`Grounded` の間の姿勢/レート PID に適用（注11）|
 | 微分（bilinear）| α = 2·η·Td/dt、a = (α−1)/(α+1)、b = 2·Td/(dt·(α+1))<br>`d[n] = a·d[n−1] + b·(e[n] − e[n−1])`<br>Kp は filter 外で適用: `d_term = kp · d[n]` |
 
-η = 0.125、Td = 0.01、dt = 0.0025 で α = 1.0、a = 0、b = 4.0 の安定動作。定量的な検証は、新しい物理真値の判定 **G1〜G4**（`../../../simulator/sils/RESET_PLAN.md` §4）で取得する。
+η = 0.125、Td = 0.01、dt = 0.0025 のとき α = 1.0、a = 0、b = 4.0 となり、微分フィルタは消えて**素の 1 段差分**（$-4\,k_p\,\Delta y$）に退化する（Td = 0.002 のロールは α = 0.2、Td = 0.025 のピッチは α = 2.5）。この退化そのものは数値的に安定だが、次項の理由でヨーの既定は Td = 0 である。定量的な検証は、新しい物理真値の判定 **G1〜G4**（`../../../simulator/sils/RESET_PLAN.md` §4）で取得する。
+
+#### ヨーの角速度 PID: 微分を使わない理由（2026-11-22 決定）
+
+**ヨーの角速度 PID（`rate.yaw.*`）は、既定で微分項を使わない（`rate.yaw.td` = 0）。** 実機の飛行（2026-11-22）で、ヨーのトルク指令がナイキスト周波数（制御周期 400 Hz の半分の 200 Hz。1 標本ごとに符号が反転する成分）で不安定になり、上限 `rate.yaw.max_torque`（1.226e-3 N·m）いっぱいで振れていた。
+
+- **離散化した制御器のナイキストでのゲイン。** 上の双線形変換で、微分項の伝達関数は $D(z) = k_p\,\dfrac{2T_d}{\Delta t\,(\alpha+1)}\,\dfrac{1 - z^{-1}}{1 - a\,z^{-1}}$（測定値微分なので符号は負）である。$z=-1$（ナイキスト）では
+
+$$|D(-1)| = k_p\,\frac{2T_d}{\Delta t\,(\alpha+1)}\cdot\frac{2}{1+a} = k_p\,\frac{2T_d}{\Delta t\,\alpha} = \frac{k_p}{\eta}$$
+
+  となり、$T_d$ に依らない（$\alpha = 2\eta T_d/\Delta t$、$a = (\alpha-1)/(\alpha+1)$。$\Delta t$ は制御周期 [s]、$\eta$ は微分フィルタ係数）。積分項（台形則）は $z=-1$ で 0 になるので、比例＋積分＋微分の制御器のゲインは
+
+$$|C(-1)| = k_p\left(1 + \frac{1}{\eta}\right) = 9\,k_p \qquad (\eta = 0.125,\; T_d > 0)$$
+
+  である。$T_d$ を変えてもナイキストでのゲインは下がらない（$T_d = 0.01$ でも 0.002 でも 0.025 でも $9\,k_p$）。$T_d = 0$ なら微分経路が無く $|C(-1)| = k_p$（9 分の 1）。
+- **プラント側の速い項。** モータの回転体の慣性による反トルク（回転体の角加速度に比例し、抗力のトルクと同符号。`yaw_axis_model.md` §3.3 の $\tau_{react}$）は、高い周波数でも、入力にほぼ遅れなく現れる項として残る。制御器の $9\,k_p$ との積である一巡のゲイン $|L(-1)|$ が 1 を超えると 200 Hz で不安定になる。物理定数から見積もった $|L(-1)|$ は、$T_d = 0.01$ で 1.03（記録から、0.7〜1.1 で安定の限界をまたぐ見積もり）、$T_d = 0$ で 0.11 である。トルクの上限とデューティの 0 での切り捨てが、振幅を上限いっぱいに抑えた持続振動にする。
+- **実機の比較（同じ版 77574dd1、`param set rate.yaw.td` だけを変更。記録は `logs/checkout/` の各 `.sflog.zip`）。** 手動 STABILIZE の飛行（`s2_2-1_manual_hover_1` と `s7_td0_manual_stabilize_1`）で、ヨーのトルクの 200 Hz の成分が 5e-4 N·m を超えた時間の割合は 98.2 %（$T_d = 0.01$）→ 0.0 %（$T_d = 0$）、duty の最大 − 最小の平均は 0.84 → 0.14、機首の角速度の標準偏差は 0.452 → 0.072 rad/s、ヨー角の範囲は 114 度 → 12 度。API の離陸 → 保持 → 着陸の飛行（`s5_base_takeoff_hold_land_1` と `s6_td0_takeoff_hold_land_1`）で、LANDING 中の割合は 88.6 % → 0 %、LANDING の長さは 6.42 s → 3.26 s（振動中は平均の推力が指令より増え、降下が約 4.5 s 遅れていた）。POS_HOLD の保持中は $T_d = 0.01$ でも 0 でも 0 %。各 1 回の飛行の比較であり、統計的な検証ではない。
+- **ロールとピッチは変えていない。** 同じ `pid.hpp` を使うので、$T_d > 0$ のロール（`rate.roll.td` = 0.002）とピッチ（`rate.pitch.td` = 0.025）も、ナイキストでのゲインは $9\,k_p$（ロール 9.0e-3、ピッチ 1.28e-2 N·m/(rad/s)）である。ヨーの振動中にロールのトルクも 1 標本ごとに反転していた。ロール・ピッチの扱いは別に決める（バックログ #12）。
+- **保存済みの値。** NVS（本体の不揮発メモリ）に 0.01 が保存されている機体は、既定値を変えても 0.01 のままである。`param save` は全パラメータを書くので、保存操作を一度でもした機体は 0.01 を保存している可能性が高い。そうした機体は `param set rate.yaw.td 0` → `param save`（または `param reset`）を実行する（`operation_manual.md`）。パラメータの版による自動移行の仕組みは無い。
 
 ### ヘディングホールド（STABILIZE 以上）
 
@@ -591,12 +611,15 @@ public:
 
 | 項目 | 内容 |
 |------|------|
-| 係合 | ヨースティック中立（\|yaw\| < 0.03）かつ空中（STABILIZE: throttle > 0.25 / ALT_HOLD 以上: VerticalPhase == Airborne）|
+| 係合 | ヨースティック中立（\|yaw\| < 0.03）かつ空中（STABILIZE: throttle > 0.25 または LANDING。ACRO は LANDING のときだけ（それ以外は姿勢の外側ループが動かない）/ ALT_HOLD 以上: VerticalPhase が Grounded でない = TakeoffClimb・Airborne・Landing）。2026-11-22 に、旧記述（「ALT_HOLD 以上: Airborne」「除外: 自動離陸中」）をコードに合わせて直した。コードは以前から TakeoffClimb でも保持していた（ただし誘導の印が立っている間は止めていた。上の「除外」参照）|
 | 目標捕捉 | 係合エッジで現在の推定ヨー角を捕捉。スティック入力で即解除（パイロット優先）、次の中立で再捕捉 |
 | 制御則 | `rate_ref_yaw = clamp(kp · wrap(ψ_target − ψ), ±rate_max)` — 誘導ヨー則と同形 |
-| 除外 | ACRO（純レート制御）、誘導アクティブ中（誘導がヨー所有）、自動離陸中、墜落リセット・モード切替で解除 |
+| 除外 | ACRO（純レート制御。ただし LANDING 中は下の行のとおり働く）、誘導がヨー角速度を実際に駆動している間（POS_HOLD 以上かつ `VerticalPhase::Airborne` でだけ。判定は `PidController::guidanceOwnsYaw()` の 1 か所）、Grounded、墜落リセット・モード切替で解除。誘導が手を離した時点で目標の方位は捨て、次の周期にいまの方位を捕捉し直す |
+| LANDING | **どのモードでも空中扱い**（スロットルスティックの値を見ない）。LANDING に入った時点（誘導が立ったままでも）で、ヨースティックが中立（\|yaw\| < 0.03）ならヘディングホールドが「いまの方位」を保つ。誘導が持っていた目標の方位は引き継がない（INV-2: 着陸中の姿勢は操縦者が持つ。誘導の目標は着陸の命令で終わる）。ヨースティックを意図して倒せば操縦者に従い、離せば離した方位を再捕捉する。リンク途絶（スティックの時刻印が `kLandingLinkStaleUs` = 500 ms を超えて古い）なら、既存の水平判定が角速度の目標を 0 に強制する（ヘディングホールドの出力より後に適用） |
+| 2026-11-22 の不具合 | API の `takeoff` で立つ誘導の印 `guidance_active_` は LANDING でも下りない。誘導ブロックは Airborne でしか動かないのに、ヘディングホールドが印だけで止まっていたため、LANDING 中はヨーを誰も持たず、ヨースティックの中立のずれ（記録で −0.0265）× `max_yaw_rate`（5 rad/s）= −0.13 rad/s がそのまま角速度の目標になり、着陸の 3.3 s で機首が約 35 度回った（`s6_td0_takeoff_hold_land_1`）。同じ欠陥が TakeoffClimb（誘導が立った自動離陸の上昇中）にもあった |
 | パラメータ | `attitude.yawhold.kp`（既定 3.0 [1/s]、0 で無効）、`attitude.yawhold.rate_max`（既定 2.0 [rad/s]）|
 | 検証 | フライトログ再生で方位ずれ 12.3°→5.7°（平均）。SILS 判定 `yaw_hold.scn`: M1 80% 故障下 8 秒手放しで yaw_band < 1.5°（無効化対照 3.1° 単調流出）|
+| 検証（LANDING） | ホスト試験 `test_yaw_heading_landing`（誘導が立ったままの LANDING・位置誘導が未完の目標を持つ LANDING・低いスロットルの手動 LANDING・TakeoffClimb・意図したスティックと再捕捉・リンク途絶）。SILS `api_land_yaw_offset`（ヨースティックに −0.03 の中立のずれを与えたまま API で着陸し、着陸中の機首の向きの変化が小さいこと）|
 
 ## 5. 状態推定インターフェース定義
 
@@ -1345,6 +1368,18 @@ public:
 > **レート内ループの帰還（angular_rate）:** `compute()` は最内ループ（角速度制御）の帰還量を `StateEstimate.angular_rate[3]`（機体 FRD・推定器でバイアス補正済み）から読む。推定器（ESKF 実装では `predict` 内の `gyro_raw − gyro_bias`）がこのフィールドを毎サイクル埋める。アルゴリズム非依存：相補/Madgwick 等に差し替えても、角速度を出す推定器ならこのフィールド経由で同じレート制御が閉じる。
 >
 > *Rate inner-loop feedback: `compute()` reads the innermost (angular-rate) feedback from `StateEstimate.angular_rate[3]` (body-FRD, bias-corrected by the estimator). Any estimator that produces a body rate fills this field, so the rate loop closes regardless of the estimation algorithm.*
+
+### Yaw rate PID: no derivative term (decided 2026-11-22)
+
+**The yaw rate PID (`rate.yaw.*`) has no derivative term by default (`rate.yaw.td` = 0).** In the 2026-11-22 flights the yaw torque command was unstable at the Nyquist frequency (200 Hz, half of the 400 Hz control rate: a sign flip every sample) and swung between the limits of `rate.yaw.max_torque` (1.226e-3 N·m).
+
+- **Controller gain at Nyquist.** With the bilinear derivative of §4 (`\alpha = 2\eta T_d/\Delta t`, `a = (\alpha-1)/(\alpha+1)`), the derivative path has $|D(-1)| = k_p/\eta$ at $z=-1$ for ANY $T_d > 0$ (the integral path is 0 there), so $|C(-1)| = k_p(1 + 1/\eta) = 9\,k_p$ for $\eta = 0.125$, independent of $T_d$. With $T_d = 0$ the gain is $k_p$.
+- **Plant.** The reaction torque of the motor rotor inertia is a fast term (see `yaw_axis_model.md` §3.3). Times the controller's $9\,k_p$, the loop gain at Nyquist is about 1.03 (estimated from physical constants) for $T_d = 0.01$ and 0.11 for $T_d = 0$. The torque cap and the clipping of the duty at 0 turn this into a sustained oscillation at the cap.
+- **Hardware comparison (same build 77574dd1, only `rate.yaw.td` changed).** Manual STABILIZE flight: time with the 200 Hz yaw-torque component above 5e-4 N·m, 98.2 % ($T_d = 0.01$) to 0.0 % ($T_d = 0$); yaw-angle range 114 deg to 12 deg. API takeoff-hold-land flight: 88.6 % to 0 % during LANDING; LANDING lasted 6.42 s to 3.26 s. One flight per setting; not a statistical validation.
+- **Roll and pitch are unchanged.** They use the same `pid.hpp`, so with $T_d > 0$ their Nyquist gain is also $9\,k_p$.
+- **Saved values.** A craft whose NVS holds 0.01 keeps it after the default changes. Run `param set rate.yaw.td 0` then `param save` (or `param reset`). There is no automatic migration by parameter version.
+
+**Heading hold through LANDING.** The heading hold is skipped only while guidance really drives the yaw rate (POS_HOLD and above, `VerticalPhase::Airborne`; `PidController::guidanceOwnsYaw()`), not merely while the guidance flag is set. In LANDING (every mode, regardless of the throttle stick) a neutral yaw stick (|yaw| < 0.03) holds the heading at the moment LANDING began; a deliberate stick input is followed (INV-2) and the hold re-captures on release. On a stale link (older than `kLandingLinkStaleUs`, 500 ms) the existing level gate forces the yaw-rate setpoint to 0. Before this fix the flag stayed set into LANDING, so a yaw-stick offset of -0.0265 became a yaw-rate setpoint of -0.13 rad/s and the nose turned about 35 deg in 3.3 s.
 
 ## 5. Estimation Interface Definition
 

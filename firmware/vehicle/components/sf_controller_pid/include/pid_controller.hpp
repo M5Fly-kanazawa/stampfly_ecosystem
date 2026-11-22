@@ -347,6 +347,22 @@ private:
     static constexpr float kDoubletHalfS = 0.3f;   // [s] doublet half period
 
     bool  guidance_active_   = false;
+
+    /// True only while guidance really drives the yaw rate: the guidance block in compute()
+    /// runs in POS_HOLD and above, in the Airborne vertical phase. The heading hold must be
+    /// skipped under exactly this condition and no other. `guidance_active_` alone is not
+    /// enough: it stays set through TakeoffClimb and LANDING, where the guidance block does
+    /// not run, so a yaw-stick offset would become the yaw-rate setpoint (2026-11-22 flight).
+    /// @design detailed_design.md §4 — heading hold through LANDING (INV-2, §3 note 6, §3.1 sequence default row)   [OK]
+    /// guidance がヨー角速度を実際に駆動しているときだけ真。compute() の guidance ブロックは
+    /// POS_HOLD 以上かつ Airborne でだけ動く。ヘディングホールドを止めるのはこの条件だけ。
+    /// `guidance_active_` だけでは足りない: TakeoffClimb と LANDING でも立ったままで、そこでは
+    /// guidance ブロックが動かないため、ヨースティックのずれが角速度の目標になる（2026-11-22 の飛行）。
+    bool guidanceOwnsYaw() const
+    {
+        return guidance_active_ && current_mode_ >= FlightMode::POS_HOLD &&
+               phase_ == VerticalPhase::Airborne;
+    }
     uint8_t guide_mode_      = 0;          // 1=position seek, 2=velocity(rc) / 1=位置シーク,2=速度
     float guide_pos_[3]      = {0, 0, 0};  // [m] NED target (mode 1) / NED 目標
     float guide_yaw_         = 0;          // [rad] target yaw (mode 1) / 目標ヨー

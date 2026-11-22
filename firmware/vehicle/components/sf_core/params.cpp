@@ -202,7 +202,22 @@ namespace param_vars {
     // `param reset`（または rate.yaw.* の明示再設定）が必須。
     float rate_yaw_kp     = 8.029796e-4f;  // = 1.901691e-3 × 4.10/9.71 (kp/κ held at the flight-proven value)
     float rate_yaw_ti     = 0.8f;
-    float rate_yaw_td     = 0.01f;
+    // Yaw derivative time Td [s] = 0: NO derivative term on the yaw rate loop. With
+    // eta = 0.125 the discretised derivative has a gain of kp/eta = 8*kp at the Nyquist
+    // frequency (200 Hz) for ANY Td > 0, so the loop gain there is 9*kp; together with the
+    // reaction torque of the rotor inertia this made the yaw torque flip sign every sample
+    // (2026-11-22 flights: simulation-policy.md backlog #12, detailed_design.md §4 yaw PID).
+    // With Td = 0 the Nyquist gain is kp. An NVS-saved 0.01 is NOT migrated: on a craft that
+    // has already saved its parameters run `param set rate.yaw.td 0` and `param save`
+    // (or `param reset`).
+    // ヨーの微分時間 Td [s] = 0: ヨーのレートループに微分項を置かない。η = 0.125 では、離散化した
+    // 微分項のナイキスト周波数（200 Hz）でのゲインは Td > 0 なら Td によらず kp/η = 8·kp で、
+    // 一巡のゲインは 9·kp になる。回転体の慣性による反トルクとの積で、ヨーのトルクが 1 標本ごとに
+    // 符号を反転していた（2026-11-22 の飛行。simulation-policy.md バックログ #12、
+    // detailed_design.md §4 のヨー PID）。Td = 0 ならナイキストでのゲインは kp。NVS に保存済みの
+    // 0.01 は移行されない: 既にパラメータを保存した機体では `param set rate.yaw.td 0` と
+    // `param save`（または `param reset`）を実行する。
+    float rate_yaw_td     = 0.0f;
 
     // Yaw torque cap [Nm] for the rate-PID output clamp / anti-windup (loaded by
     // pid_controller loadParams). Runtime-tunable because a constant CW/CCW trim
@@ -790,7 +805,7 @@ static const ParamEntry table[] = {
     {"rate.pitch.td",   ParamType::FLOAT, &rate_pitch_td,  0.025f,    0.0f,  1.0f,   &notifyControllerReload},
     {"rate.yaw.kp",     ParamType::FLOAT, &rate_yaw_kp,    8.029796e-4f, 0.0f, 0.01f,  &notifyControllerReload},
     {"rate.yaw.ti",     ParamType::FLOAT, &rate_yaw_ti,    0.8f,      0.01f, 100.0f, &notifyControllerReload},
-    {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.01f,     0.0f,  1.0f,   &notifyControllerReload},
+    {"rate.yaw.td",     ParamType::FLOAT, &rate_yaw_td,    0.0f,      0.0f,  1.0f,   &notifyControllerReload},
     // Yaw torque cap — see the param_vars comment (NT-Kanazawa saturation treatment).
     // ヨートルク上限 — param_vars のコメント参照（NT金沢飽和の治療）。
     {"rate.yaw.max_torque", ParamType::FLOAT, &rate_yaw_max_torque, 1.226e-3f, 1.0e-4f, 1.41e-3f, &notifyControllerReload},

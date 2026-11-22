@@ -55,6 +55,10 @@
 # stays NotSteady (C4) no matter how long the wait is. `--param
 # rate.yaw.td=0` clears the sink (alt_drop_max 0.993->0.119 m) but is a
 # control-parameter change, out of scope here (owner decision).
+# UPDATE 2026-11-22: rate.yaw.td now defaults to 0 (backlog #12). The numbers above (alt_drop_max 0.993) were measured on the
+# pre-R_out ODE plant. On the current R_out plant this scenario's Forward window already measured alt_drop_max 0.160 with
+# td=0.01 and measures 0.140 with the new default td=0, so the 200 Hz limit cycle is NOT reproduced here by either setting
+# (the noise-free run is never excited; see backlog #12). Root cause #2 (3rd-takeoff divergence) is likewise not observed.
 #
 # ROOT CAUSE #2 (tracked as
 # docs/architecture/simulation-policy.md backlog #16 — a CONSEQUENCE of
@@ -106,6 +110,10 @@
 # 続ける。`--param rate.yaw.td=0` で沈下は解消する（alt_drop_max
 # 0.993→0.119m）が制御パラメータ変更であり本シナリオの対象外（オーナー
 # 判断）。
+# 更新 2026-11-22: rate.yaw.td の既定値は 0 になった（バックログ #12）。上の数値（alt_drop_max 0.993）は R_out 化より前の ODE
+# プラントでの測定値。現在の R_out プラントでは、このシナリオの Forward 窓は td=0.01 でも alt_drop_max 0.160、新しい既定値
+# td=0 で 0.140 となり、200Hz のリミットサイクルはどちらの設定でもここでは再現しない（ノイズなしの実行では励起されない。
+# バックログ #12 参照）。原因#2（3 回目の離陸の発散）も同様に観測されない。
 #
 # ROOT CAUSE #2（原因B、
 # docs/architecture/simulation-policy.md バックログ #16 として追跡 —

@@ -126,7 +126,7 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 | ピッチ | 前後傾斜 | 中央2048、±でピッチ |
 | ヨー | 旋回 | 中央2048、±でヨーレート |
 
-中央付近はデッドバンド（±0.05）で 0 に丸める。
+中央付近はデッドバンド（±0.05）で 0 に丸める。記録（2026-11-22 の飛行）では、ヨースティックが操作されていないのに不感帯のあとの値が約 −0.02（−0.0198〜−0.0234）で、不感帯の前に戻すと中央から約 7 % ずれていた計算になる（ロールとピッチは 0 だった）。このずれの原因（送信機のスティックの中央、ADC の値、較正のどれか）は未確認。ヘディングホールドはこの程度のずれを中立とみなす（|yaw| < 0.03）。
 
 ### ARM / DISARM
 
@@ -166,6 +166,25 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 | `attitude.yawhold.kp` | 3.0 | 方位 P ゲイン [1/s]。**0 で機能無効** |
 | `attitude.yawhold.rate_max` | 2.0 | 補正回頭率の上限 [rad/s] |
 
+#### ヨーの角速度 PID の微分時間（`rate.yaw.td`、2026-11-22 に既定値を 0 へ変更）
+
+| パラメータ | 既定値 | 意味 |
+|-----------|--------|------|
+| `rate.yaw.kp` | 8.03e-4 | ヨーの角速度の比例ゲイン [N·m/(rad/s)]（変更なし）|
+| `rate.yaw.ti` | 0.8 | 積分時間 [s]（変更なし）|
+| `rate.yaw.td` | **0**（旧 0.01）| 微分時間 [s]。0 は微分項なし。0 より大きいと、ヨーのトルクが 200 Hz（1 標本ごとに符号が反転）で不安定になり、機体が振動して降下や姿勢が乱れうる（理由は `detailed_design.md` §4「ヨーの角速度 PID」）|
+| `rate.yaw.max_torque` | 1.226e-3 | ヨーのトルクの上限 [N·m]（変更なし）|
+
+**既に 0.01 を保存している機体の手順。** 既定値を変えても、本体の不揮発メモリ（NVS）に 0.01 が保存されている機体は 0.01 のままである（`param save` は全パラメータを書くので、保存操作をしたことがある機体はほぼ該当する。パラメータの版による自動移行の仕組みは無い）。確かめて直す手順（機体は DISARM、USB のシリアル、または WiFi の CLI）:
+
+```bash
+param get rate.yaw.td
+param set rate.yaw.td 0
+param save
+```
+
+`param get` が 0.01 と答えた機体だけ、2 行目と 3 行目を実行する。`param reset` は全パラメータを既定値へ戻す（学習済みのホバー推力補正なども失う）ので、`rate.yaw.td` だけを直すなら使わない。利用者が意図して 0.01 以外の値を設定している機体は、その値のままでよい。
+
 ### 離陸・着陸
 
 | 操作 | 動作 |
@@ -175,7 +194,7 @@ ControlPacket 14B）に準拠してデコードする。**操作は旧 vehicle �
 | スロットルを下げる（ALT/POS, 中央より下）| その場から降下（中央で再び保持）|
 | **DISARM（ALT/POS 飛行中）**| **自動着陸**: 緩降下で接地まで（FLYING → LANDING → IDLE_GROUND）。途中でもう一度 DISARM すれば即カット |
 
-ALT/POS の自動離陸は**鉛直（高度）だけが自動**で、上昇中も**ロール/ピッチ/ヨーはパイロットが操縦できる**（スティック中立なら水平で真上）。**自動着陸（DISARM 起動）の降下も同じ — 降下中もロール/ピッチ/ヨーで操縦できる**（鉛直だけ自動降下）。ただし**通信途絶のフェイルセーフ着陸**はパイロット不在のため水平降下になる（リンク途絶を検出して自動で水平化）。**飛行中に STABILIZE/ACRO から ALT_HOLD/POS_HOLD へ切り替えた場合も**、切替時の高度を捕捉し、再センターロックが掛かる（スロットルを中央に通すまで高度ジャンプしない）。
+ALT/POS の自動離陸は**鉛直（高度）だけが自動**で、上昇中も**ロール/ピッチ/ヨーはパイロットが操縦できる**（スティック中立なら水平で真上）。**自動着陸（DISARM 起動）の降下も同じ — 降下中もロール/ピッチ/ヨーで操縦できる**（鉛直だけ自動降下）。**着陸中のヨー: ヨースティックが中立なら、着陸に入った時点の機首の向きを保つ**（API の離陸・着陸でも同じ。スティックの中立のわずかなずれ — 送信機の中央が 5 % の不感帯から少し外れている場合 — では機首は回らない）。ヨースティックを意図して倒せば、その入力に従って回る。ただし**通信途絶のフェイルセーフ着陸**はパイロット不在のため水平降下になる（リンク途絶を検出して自動で水平化）。**飛行中に STABILIZE/ACRO から ALT_HOLD/POS_HOLD へ切り替えた場合も**、切替時の高度を捕捉し、再センターロックが掛かる（スロットルを中央に通すまで高度ジャンプしない）。
 
 ### 操作フロー全体
 
@@ -570,6 +589,8 @@ identical to the legacy vehicle.**
   stick release is held (P loop on the estimator yaw — no magnetometer). Any yaw input releases it
   instantly. Params: `attitude.yawhold.kp` (3.0, 0 disables), `attitude.yawhold.rate_max` (2.0 rad/s).
   Disabled in ACRO (pure rate control).
+- **Yaw rate PID derivative time `rate.yaw.td`** (default changed to **0** on 2026-11-22; it was 0.01). A value above 0 makes the yaw torque unstable at 200 Hz (a sign flip every sample). `rate.yaw.kp` (8.03e-4), `ti` (0.8) and `max_torque` (1.226e-3) are unchanged. A craft whose NVS already holds 0.01 keeps it after the default changes (`param save` writes every parameter, and there is no migration by version). On such a craft, disarmed: `param get rate.yaw.td`; if it answers 0.01, run `param set rate.yaw.td 0` then `param save`. Do not use `param reset` for this alone: it restores every default (including the learned hover-thrust trim).
+- **Yaw during landing**: a neutral yaw stick (including a small offset left beyond the 5 % deadband) holds the heading at the moment the landing began, also after an API takeoff. A deliberate yaw input is followed.
 - **Takeoff**: throttle > 0.5 in ARMED_GROUND → TAKEOFF → FLYING (ToF airborne). A craft that rises with the throttle at or below 0.5 (a gust, a fresh battery, the ground effect) also becomes TAKEOFF, about 1 s after it leaves the floor, once the healthy downward ToF has read heights above 5 cm without a break for 1 s; from then on the rules of the air apply (the comm-loss landing, the ToF-silence warning instead of a motor stop). With the ToF silent or invalid only the throttle decides. **Landing**: throttle
   down / DISARM.
 

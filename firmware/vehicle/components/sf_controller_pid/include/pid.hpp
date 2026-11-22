@@ -30,6 +30,19 @@
  * キックだけを除去する。飛行実績のある別ファーム（sf_algo_pid）と同じ
  * 構成であり、その調整済みゲインがそのまま使える。
  *
+ * Nyquist gain: for ANY td > 0 the derivative path has a gain of kp/eta at the
+ * Nyquist frequency (z = -1, a sign flip every sample), so P + D give 1 + 1/eta
+ * (= 9 for eta = 0.125) times kp there, independent of td. A loop whose plant has a
+ * fast reaction (the rotor-inertia torque on the yaw axis) can therefore go unstable
+ * at fs/2 whatever td is; td = 0 removes the derivative path (gain kp at fs/2).
+ * See detailed_design.md §4 (yaw rate PID) and simulation-policy.md backlog #12.
+ * ナイキストでのゲイン: td > 0 なら、微分経路のナイキスト周波数（z = -1、1 標本ごとの
+ * 符号反転）でのゲインは td によらず kp/eta になり、P + D で kp の 1 + 1/eta 倍
+ * （eta = 0.125 で 9 倍）になる。プラントに速い反応（ヨー軸では回転体の慣性による
+ * 反トルク）があると、td をどう選んでも fs/2 で不安定になりうる。td = 0 は微分経路を
+ * 外す（fs/2 でのゲインは kp）。detailed_design.md §4（ヨーの角速度 PID）と
+ * simulation-policy.md バックログ #12 を参照。
+ *
  * Anti-windup: conditional integration (stop integrating while the output is
  * saturated in the same direction). The firmware with flight records (sf_algo_pid) uses back-calculation
  * (Tt = √(Ti·Td)) instead; both act only DURING saturation, so the linear
@@ -111,6 +124,12 @@ struct PID {
                 deriv_filter = a * deriv_filter - b * (measurement - prev_measurement);
                 d_term = kp * deriv_filter;
             }
+        } else {
+            // td == 0: no derivative term. Clear the filter state so that a later
+            // live change of td back above 0 does not resume from a stale value.
+            // td == 0: 微分項なし。フィルタ状態を消し、後で td を 0 より大きく戻したとき
+            // に古い値から再開しないようにする。
+            deriv_filter = 0;
         }
         prev_measurement = measurement;
         first_run = false;

@@ -1,0 +1,26 @@
+# api_land_yaw_offset.scn — API takeoff, hold, land with a yaw-stick offset: the heading must not turn in LANDING
+# API の離陸・保持・着陸で、ヨースティックに中立のずれを与えたまま着陸する: LANDING 中に機首が回らないこと
+#
+# Real-flight defect (2026-11-22, s6_td0_takeoff_hold_land_1): after an API `takeoff` the controller's guidance flag
+# stayed set into LANDING. The guidance block (which drives the yaw rate) runs only in the Airborne phase, and the
+# heading hold was skipped whenever the flag was set, so nobody owned the yaw. The yaw-stick offset of -0.0265 (after the
+# 5 % command deadband) became a yaw-rate setpoint of -0.0265 x 5 rad/s = -0.13 rad/s and the nose turned about 35 degrees
+# in 3.3 s of landing. The offset here is the same one: raw 1894 is 7.5 % below centre (2048 - 154), which is -0.0265 after
+# the deadband (|v| - 0.05) / 0.95. The stick is held at this value from the start, so the guidance's cancel-on-stick-move rule
+# (a stick moving away from the value at the guidance's start) never fires. Fixed by skipping the heading hold only while
+# guidance really drives the yaw rate (POS_HOLD and above, Airborne).
+# 実機の不具合（2026-11-22、s6_td0_takeoff_hold_land_1）: API の `takeoff` のあと、制御器の誘導の印が LANDING まで立ったまま
+# だった。ヨー角速度を駆動する誘導ブロックは Airborne でしか動かず、ヘディングホールドは印が立っている間止まっていたため、
+# ヨーを誰も持たなかった。ヨースティックの中立のずれ −0.0265（指令の 5 % 不感帯のあと）× 5 rad/s = −0.13 rad/s が
+# そのまま角速度の目標になり、着陸の 3.3 s で機首が約 35 度回った。ここで与えるずれは同じ値: raw 1894 は中央から
+# 7.5 %（2048 − 154）で、不感帯のあと (|v| − 0.05)/0.95 = −0.0265 になる。スティックは最初からこの値に固定するので、
+# 誘導の「スティックが動いたら解除」（誘導の開始時の値から離れたとき）は働かない。直し方は、ヘディングホールドを止めるのを
+# 「誘導がヨー角速度を実際に駆動している間（POS_HOLD 以上かつ Airborne）」だけにすること。
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
+   0    rc   2048  2048   2048    1894  0     6000      50       # A: boot at rest with the yaw offset — still calibration completes
+   +    api  "command"                                                           # B: enter SDK mode (t=6)
+   +    api  "takeoff"                                                           # C: take off → POS_HOLD hover at 0.5 m
+   +    rc   2048  2048   2048    1894  0     12000     50       # D: the offset stays while the API flies (t=6-18)
+   +    api  "land"                                                              # E: autonomous landing (t=18)
+   +    rc   2048  2048   2048    1894  0     8000      50       # F: the offset stays through touchdown (t=18-26)

@@ -224,6 +224,23 @@ $\{b, T, \tau_z\}$ を自由、**$L$ は共通遅れ 5 ms に固定**して同�
 
 **最重要**：ヨーの $T$ がロール/ピッチの $T$ と数 ms 以内で一致すれば「$L=5$ ms固定が正しい・$\tau_z$ が本物の零点」の確証。大きくズレたら $L_0$ が誤り。$\tau_z$ が境界に張り付いていたら励振不足/モデル不足のサイン。
 
+### 9.3 実機での 200 Hz の不安定（2026-11-22、事実の記録）
+
+上の §3 は低い周波数（数 Hz）のモデルである。ナイキスト周波数（制御周期 400 Hz の半分、200 Hz。1 標本ごとに符号が反転する成分）では、反トルク項 $\tau_{react}(s) = g_r\,s\,\delta/(\tau_m s+1)$ が高域で $g_r\,\delta/\tau_m$ に近い、入力にほぼ遅れなく現れる項として残り、離散化した PID のナイキストでのゲイン $|C(-1)| = k_p(1 + 1/\eta) = 9\,k_p$（$T_d > 0$。$T_d$ に依らない。導出は `detailed_design.md` §4「ヨーの角速度 PID」）と掛け合わさる。一巡のゲイン $|L(-1)|$ の見積もり（物理定数から）は $T_d = 0.01$ で 1.03、$T_d = 0$ で 0.11 で、前者は安定の限界をまたぐ。
+
+実機の観測（同じ版 77574dd1、`param set rate.yaw.td` だけを変更、各 1 回の飛行）:
+
+| 飛行 | 指標 | $T_d = 0.01$ | $T_d = 0$ |
+|------|------|-------------|-----------|
+| 手動 STABILIZE（`s2_2-1_manual_hover_1` と `s7_td0_manual_stabilize_1`） | ヨーのトルクの 200 Hz の成分が 5e-4 N·m を超えた時間の割合 | 98.2 % | 0.0 % |
+| 同上 | duty の最大 − 最小の平均 | 0.84 | 0.14 |
+| 同上 | 機首の角速度の標準偏差 [rad/s] | 0.452 | 0.072 |
+| 同上 | ヨー角の範囲 [度] | 114 | 12 |
+| API の離陸 → 保持 → 着陸（`s5_base_takeoff_hold_land_1` と `s6_td0_takeoff_hold_land_1`） | LANDING 中の同じ割合 | 88.6 % | 0 % |
+| 同上 | LANDING の長さ [s] | 6.42 | 3.26 |
+
+4 つの duty の平均が低いほど出やすい（0.45〜0.60 で 97〜100 % の時間、0.75 以上で 0 %）。振動中の平均の推力は指令の 1.19〜1.25 倍（記録の duty から回転体の運動方程式を積分した見積もり）で、着陸が約 4.5 s 降りなかった原因と合う。机上（機体を重りと床の摩擦で拘束）では、どちらの設定でも強い振動は出なかった。このため、ヨー軸の一巡が閉じることがこの現象の条件と考えられる。SILS（`simulation-policy.md` バックログ #12）での再現の状態もそこに記す。
+
 ---
 
 <a id="english"></a>
@@ -316,3 +333,10 @@ Hardware acceptance (`autotune yaw`, default $\omega_c=18$, then `param save`):
 The yaw GM floor was lowered 8→6 dB: the old 8 dB compensated for the unmodelled zero (unreliable margin); with the zero now modelled + the wc cap, a sound yaw design (~7-8 dB GM) applies instead of being blocked.
 
 **Key check:** yaw $T$ matching roll/pitch $T$ (within a few ms) confirms $L_0=5$ ms is the right common delay and $\tau_z$ is a real zero; a large mismatch means $L_0$ is wrong; $\tau_z$ pinned at a bound signals weak excitation / model gaps.
+
+### 9.3 The 200 Hz instability on hardware (2026-11-22, a record of facts)
+
+§3 above is a low-frequency (few Hz) model. At the Nyquist frequency (200 Hz, half of the 400 Hz control rate) the reaction term $g_r\,s\,\delta/(\tau_m s+1)$ stays as a term that follows the input almost without delay, and it multiplies the discretised PID's Nyquist gain $|C(-1)| = k_p(1+1/\eta) = 9\,k_p$ for any $T_d > 0$ (derivation: `detailed_design.md` §4, yaw rate PID). The estimated loop gain $|L(-1)|$ from physical constants is 1.03 for $T_d = 0.01$ (across the stability limit) and 0.11 for $T_d = 0$.
+
+Hardware (same build 77574dd1, only `rate.yaw.td` changed, one flight per setting): manual STABILIZE, share of time with the 200 Hz yaw-torque component above 5e-4 N·m, 98.2 % to 0.0 %; mean duty max-min 0.84 to 0.14; yaw-rate std 0.452 to 0.072 rad/s; yaw-angle range 114 to 12 deg. API takeoff-hold-land: 88.6 % to 0 % during LANDING; LANDING 6.42 s to 3.26 s. On the bench (craft held by a weight and floor friction) no strong oscillation appeared at either setting, so closing the yaw loop in the air appears to be a condition.
+

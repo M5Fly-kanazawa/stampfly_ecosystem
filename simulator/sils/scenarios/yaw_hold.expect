@@ -23,6 +23,11 @@
 # pos_flight/pos_yaw と同根（ヨー軸忠実度のギャップ。ODE プラントは反トルク零点を再現
 # するが、静的曲線にはそれが無い）。simulation-policy.md バックログ#11（ヨー判定の
 # 4パラフィット化）/#12（ファームヨートルク権限余裕）参照。
+# UPDATE 2026-11-22 (rate.yaw.td default 0.01 -> 0, backlog #12): yaw_band in [11.5,19.0] 1.98 deg -> 1.95 deg and alt_max
+# in [7.0,20.5] 1.017 -> 1.016 m: the two failing checks are essentially unchanged by the derivative term, so the xfail
+# stays (its reason, a yaw-axis fidelity gap, is not resolved by td = 0).
+# 更新 2026-11-22（rate.yaw.td の既定値 0.01 → 0、バックログ #12）: 窓 [11.5,19.0] の yaw_band は 1.98 度 → 1.95 度、窓 [7.0,20.5] の
+# alt_max は 1.017 → 1.016 m。不合格の 2 つの判定は微分項でほとんど変わらないので、xfail は残す（理由のヨー軸の忠実度の差は td = 0 では解消しない）。
 xfail: yaw-band degradation under the ODE motor plant, same root cause as pos_flight/pos_yaw (yaw-axis fidelity gap, simulation-policy backlog #11/#12)
 exit 0
 log_contains any "ARM accepted"                       # G1: IDLE_GROUND → ARMED_GROUND

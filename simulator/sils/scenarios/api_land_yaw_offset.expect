@@ -1,0 +1,28 @@
+# api_land_yaw_offset.expect — the heading holds through an API landing with a yaw-stick offset
+# yaw スティックに中立のずれがあっても、API の着陸中に向きが保たれる
+#
+# Before the fix the nose turned about 35 degrees in 3.3 s of landing (real flight s6_td0_takeoff_hold_land_1) because
+# the offset -0.0265 became a yaw-rate setpoint of -0.13 rad/s. The gates: the landing happens; the true heading changes by
+# less than 5 degrees from the landing command to the end (the hold keeps the heading captured when LANDING begins; a
+# heading hold that does not engage turns the craft by the offset times the landing time).
+# 修正前は、ずれ −0.0265 が −0.13 rad/s の角速度の目標になり、着陸の 3.3 s で機首が約 35 度回った（実機 s6_td0_takeoff_hold_land_1）。
+# 判定: 着陸が起きること、着陸の命令から終わりまでの真の向きの変化が 5 度未満であること（保持は LANDING に入った時点の向きを
+# 保つ。保持が係合しないと、ずれ × 着陸の時間だけ回る）。
+exit 0
+log_contains any "cmd: takeoff"
+log_contains any "Auto-takeoff engaged"
+log_contains any "Guidance target"
+log_contains any "cmd: land"
+log_contains any "Autonomous landing engaged"
+log_absent  any "Guidance cancelled by pilot stick"
+order "Auto-takeoff engaged" "cmd: land"
+order "cmd: land" "Autonomous landing engaged"
+# Hovering at the takeoff height before the landing command. / 着陸の命令の前に離陸の高さでホバー。
+metric alt_mean > 0.30 in 14.0 17.5
+metric alt_mean < 0.70 in 14.0 17.5
+# The heading change from the landing command (t=18) to the end of the scenario, signed (clockwise +).
+# 着陸の命令（t=18）からシナリオの終わりまでの向きの変化（符号付き、時計回りが正）。
+metric yaw_turn_deg > -5.0 in 18.0 26.0
+metric yaw_turn_deg < 5.0 in 18.0 26.0
+# Landed at the end. / 最後は接地。
+metric alt_max < 0.10 in 24.0 26.0

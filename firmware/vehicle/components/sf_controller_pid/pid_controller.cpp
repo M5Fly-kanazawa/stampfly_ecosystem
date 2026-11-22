@@ -701,8 +701,13 @@ ControlOutput PidController::compute(
         // 誘導: POS_HOLD 設定点を目標へ歩かせ、yaw はレート制限付き P で向ける。
         // 下のカスケードは歩く設定点を追従する — 実績の保持ループは無改変で、
         // 目標だけが動く。
-        if (guidance_active_ && current_mode_ >= FlightMode::POS_HOLD &&
-            phase_ == VerticalPhase::Airborne) {
+        if (guidanceOwnsYaw()) {
+            // Guidance owns the heading now: drop the hold so that it re-captures the
+            // heading at the moment guidance lets go (e.g. at the start of LANDING)
+            // instead of resuming an old target.
+            // guidance が方位を所有する間はヘディングホールドを解く。guidance が手を離した時点
+            // （例: LANDING の開始）の方位を捕捉し直し、古い目標へ戻らないようにする。
+            yaw_hold_active_ = false;
             if (guide_mode_ == 2) {
                 // Velocity guidance (Tello `rc`). R16 staleness auto-release: if the
                 // client stopped sending, decay the velocities to 0 so the craft
@@ -755,13 +760,19 @@ ControlOutput PidController::compute(
         // 有効（空中の全フェーズで姿勢はパイロットのもの）— 誘導がヨーを所有している間・地上では
         // スキップ。STABILIZE ではスロットル床値が、ALT_HOLD 以上では Grounded でないことが
         // 空中判定。ヨースティック入力で即解除（パイロット優先）し、次の中立で再捕捉する。
-        if (yaw_hold_kp_ > 0.0f && !guidance_active_ &&
+        if (yaw_hold_kp_ > 0.0f && !guidanceOwnsYaw() &&
             !(current_mode_ >= FlightMode::ALT_HOLD &&
               phase_ == VerticalPhase::Grounded)) {
             const bool stick_neutral =
                 fabsf(setpoint.yaw) < kYawHoldStickDeadband;
+            // LANDING counts as airborne in every mode: the throttle stick of a landing
+            // (comm loss, battery emergency, disarm request) is low or meaningless, and
+            // the heading must still be held until touchdown.
+            // LANDING はどのモードでも空中扱い: 着陸（通信途絶・電池緊急・DISARM 要求）の
+            // スロットルスティックは低いか意味を持たないが、接地まで方位は保つ。
             const bool airborne =
                 (current_mode_ >= FlightMode::ALT_HOLD) ||
+                (phase_ == VerticalPhase::Landing) ||
                 (setpoint.throttle > kYawHoldThrottleFloor);
             if (stick_neutral && airborne) {
                 if (!yaw_hold_active_) {
