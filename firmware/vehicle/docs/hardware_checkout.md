@@ -2,7 +2,7 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
-実機の vehicle ファームウェアが、飛行安全に関わる機能（400 Hz ループの周期、有限でない数の監視、離着陸の判定、電池・通信途絶の処置、回頭、気圧高度の観測）を設計どおりに実行するかを、人が手で確かめる手順書である。推力の無い机上の確認から低空の飛行へ、危険の小さい順に進み、最後に 1 回の総合飛行で締める。
+実機の vehicle ファームウェアが、飛行安全に関わる機能（400 Hz ループの周期、有限でない数の監視、離着陸の判定、電池・通信途絶の処置、回頭、気圧高度の観測）を設計どおりに実行するかを、人が手で確かめる手順書である。プロペラを付けたまま機体を固定して行う机上の確認から低空の飛行へ、危険の小さい順に進み、最後に 1 回の総合飛行で締める。
 
 **責任者**とは、このリポジトリの責任者（制御・ハードウェアの専門家）で、この手順の合否と、不合格のまま進むかの最終判断をする人である。章番号と段階の対応: 段階 N は **N + 4 章**（段階 0 = 4 章 … 段階 4 = 8 章）。
 
@@ -12,8 +12,8 @@
 
 | 段階 | 目的 | 目安の時間 | プロペラ |
 |------|------|-----------|---------|
-| 0 準備 | プロペラを外し、試験するファームの確定、ビルド・書き込み、設定値・送信機・電池・モータの位置の確認 | 1〜1.5 時間 | **外す** |
-| 1 机上 | 推力の無い状態で、ループ周期・有限性・床の ToF・ログ・WiFi の CLI・離陸判定・通信途絶・電池・ToF 再初期化の有無を確かめる（1a〜1i） | 4〜6 時間 | **外す** |
+| 0 準備 | 機体の固定（重り、またはベンチ台）、試験するファームの確定、ビルド・書き込み、設定値・送信機・電池・モータの位置の確認 | 1〜1.5 時間 | 付けたまま（固定する） |
+| 1 机上 | 機体を固定した状態で、ループ周期・有限性・床の ToF・ログ・WiFi の CLI・離陸判定・通信途絶・電池・ToF 再初期化の有無を確かめる（1a〜1i） | 4〜6 時間 | 付けたまま（固定する。1g は手で持つ） |
 | 2 低空の自由飛行 | 危険の小さい順に 10 種の飛行（手順 2-1〜2-10。2-4 は表面ごとに 3 回以上）。1 回の飛行は 1 つの目的 | 4〜6 時間（電池交換を含む） | 付ける |
 | 3 総合飛行 | 離陸・1 回転・着陸を 1 回で通す（C16）。段階 2 が全て合格してから | 30〜45 分 | 付ける |
 | 4 取りまとめ | 記録の回収、パラメータの復元、結果表 | 30 分 | — |
@@ -24,7 +24,7 @@
 
 | 区分 | 人（開発者） | Claude Code |
 |------|-------------|-------------|
-| 機体・送信機・電池・プロペラ | 触れる操作は全て人（送信機の ARM・DISARM、電池の接続、プロペラの取付） | 触れない |
+| 機体・送信機・電池・プロペラ | 触れる操作は全て人（送信機の ARM・DISARM、電池の接続、重り・固定具の設置、プロペラの取付） | 触れない |
 | モータを止める | 送信機のスロットル側スティックの押し込み、機体のボタン、電池を外す。異常のときの停止は全てこれ | 任せない。`emergency`（CLI の命令、または `sf emergency`）は頼まれたときに送るが、数秒遅れうるので止める手段に数えない |
 | USB コンソールへの入力 | — | 送ってよい（モータが回る `motor test` を含む）。送る前に、何が起きるかを音声（macOS の `say`）で伝える |
 | CLI の `arm`・`disarm`・`mode`（USB・WiFi） | — | 送ってよい（開発者の承認、2026-11-22）。送る前に音声で伝える |
@@ -37,7 +37,7 @@
 | 手順 | 人が行うこと | Claude Code が行うこと | 1 人での実施 |
 |------|-------------|----------------------|-------------|
 | 0、1a〜1f、1h-1、1i | 機体・送信機・電池の操作、目で見る確認 | USB・WiFi の入力、取得、照合（0-13 の CLI の命令を含む） | 可 |
-| 1g | 片手で機体を持ち上げ、片手で送信機を持つ（スティックの押し込みですぐ止められる）。**プロペラを外して行うことを推奨**する。付けたまま行うかは責任者の判断 | 取得の開始、`status` の読み取り | 可 |
+| 1g | 片手で機体を持ち上げ、片手で送信機を持つ（スティックの押し込みですぐ止められる）。プロペラは付けたまま行う（外して行ってもよい）。指を回転面に入れない | 取得の開始、`status` の読み取り | 可 |
 | 1h-2、1h-3 | 電源装置の電圧の操作、機体を持つ操作 | 取得の開始 | **任意のまま**。電源装置が要る。機体を持つ操作と電圧の操作が重なる場面があるので、1 人で行うかは責任者が判断する。行わなければ「未実施」。後日、緊急電圧のしきい値のパラメータ化が入る予定（電源装置なしで行えるようにするため） |
 | 2-1、2-2、2-4 | 操縦者として送信機を持つ | 飛行の前に取得を始める | 可 |
 | 2-3、2-6、2-9、2-10、3 | 操縦者として送信機を持ち、DISARM の用意をする。**止めるのは人** | 取得の開始、飛行の命令の送信（`sf takeoff` など）。緊急停止は任せない | 可 |
@@ -130,6 +130,8 @@ PC 側の端末（飛行の段階。全て同じ PC、機体の WiFi につな�
 | 11 | 合格しなかった項目があるまま次の段階へ進むときは、責任者がその判断と理由を結果表の備考に書く | 未解決の項目を気づかずに抱えたまま飛ばさない |
 | 12 | **送信機の電源を入れ直すときは、スロットル側スティックに触れない。** 機体が着陸して DISARM（またはモータ停止）したことを確かめてから入れる | ARM / DISARM は押すたびに切り替わるので、再接続の直後に押すと ARM または DISARM が反転する。再接続の所要時間と、再接続の直後のモード指定の挙動は**未確認**（`controller.md` 3 章は自動で再接続すると述べるだけ） |
 
+規則 1（保護めがね）と規則 2（回転面に指を入れない）は、プロペラを付けたまま行う段階 0・1 にも適用する。
+
 ### 中止の段（飛行中に異常が出たとき。段階 2・3 の全ての飛行手順がここを参照する）
 
 | 段 | 状況 | 操作 | 効き方 |
@@ -137,7 +139,7 @@ PC 側の端末（飛行の段階。全て同じ PC、機体の WiFi につな�
 | 1 | ACRO・STABILIZE の飛行中・地上、およびどのモードでも TAKEOFF 中 | 送信機のスロットル側スティックを押す（DISARM） | **即モータ停止**（`operation_manual.md` 136 行）。空中で押すと落下する |
 | 2 | ALT_HOLD・POS_HOLD の FLYING（`sf takeoff` の後を含む） | スティックを 1 回押す（DISARM） | **自動着陸**（約 0.3 m/s の緩降下）。モータは切れない（同 137 行） |
 | 3 | 段 2 の自動着陸が始まらない・降りない（暫定: 押してから 3 秒たっても高さが下がらない）、または傾きが増える・揺れが増える | 2 回目の押し込み。効かなければ電池を外す（2 人目がいるときは、T3 で `sf emergency` の Enter。Claude Code への `sf emergency` の依頼は数秒遅れうるので当てにしない） | 2 回目の DISARM は即モータ停止（同 137 行）。`sf emergency` は送信機に関係なく即停止（同 210 行）。高度 0.5 m 前後からの落下になる |
-| 4 | 送信機の電源を切る試験（1g-2、2-7、2-8）の間 | **送信機を切る前に T3 に `sf emergency` を打っておき、別の人が Enter を押せる状態にする**（2-7・2-8 は 2 人目がいるときだけ行う）。1g-2 は機体を手に持つので、プロペラを外して行い（1 章の推奨）、異常なら電池を外す | 通信途絶の間、操縦者の DISARM は届かない。`sf emergency` が唯一の停止手段 |
+| 4 | 送信機の電源を切る試験（1g-2、2-7、2-8）の間 | **送信機を切る前に T3 に `sf emergency` を打っておき、別の人が Enter を押せる状態にする**（2-7・2-8 は 2 人目がいるときだけ行う）。1g-2 は機体を手に持つので、プロペラを付けたまま、指を回転面に入れずに行い、異常なら機体を床に置いて電池を外す | 通信途絶の間、操縦者の DISARM は届かない。`sf emergency` が唯一の停止手段 |
 
 **中止の目で見る基準**（暫定。壁や柱の目印と目視で判定する）:
 
@@ -154,8 +156,8 @@ PC 側の端末（飛行の段階。全て同じ PC、機体の WiFi につな�
 | 段階 | 中止条件 |
 |------|----------|
 | 全段階 | `status` の `finite` 行、または取得した一式の `nonfinite` が、有限でない値の検出を示した。ARM 中の `period max` が 10 ms 以上になった。予定外の再起動（起動の表示が出る、LED が白に戻る）。スタックあふれの表示。LED が赤の高速点滅 |
-| 段階 0 | `sf doctor` がエラーを出す。ビルド・書き込みが失敗する。`param get` の値が 0-7 の表と異なり、理由が分からない。`motor test` で位置が合わないモータがある |
-| 段階 1 | 床の ToF が 5 cm を超える有効値を出す表面（C3 不合格）。ARM が拒否され理由が分からない。想定外の状態遷移。ToF が自然に止まった（1i の記録をとって責任者へ報告し、段階 2 へ進まない） |
+| 段階 0 | `sf doctor` がエラーを出す。ビルド・書き込みが失敗する。`param get` の値が 0-7 の表と異なり、理由が分からない。`motor test` で位置が合わないモータがある。機体が動いた、重りや固定具がずれた、固定具やケーブルがプロペラに触れた（すぐ DISARM し、電池を外して固定をやり直す） |
+| 段階 1 | 床の ToF が 5 cm を超える有効値を出す表面（C3 不合格）。ARM が拒否され理由が分からない。想定外の状態遷移。ToF が自然に止まった（1i の記録をとって責任者へ報告し、段階 2 へ進まない）。機体が動いた、重りや固定具がずれた、固定具やケーブルがプロペラに触れた（すぐ DISARM し、電池を外して固定をやり直す。1g は固定を外して手で持つので、この条件の対象外） |
 | 段階 2・3 | 上の「中止の目で見る基準」。黄の高速点滅と警告音。想定外の状態遷移。電池の警告音。通信が切れて想定外の挙動。回頭（2-9・2-10）では、ToF の高さが 0.30 m を下回る、または区域の中央から 0.5 m を超えて水平位置がずれる。段階 3 は、手順のどこかで異常が出たら着陸して終える |
 
 ## 3. このドキュメントの使い方
@@ -185,7 +187,7 @@ Claude Code を進行役にして進めるときは、リポジトリで Claude 
 | C15 | 下向き ToF の再初期化（地上で標本を出さなくなったときだけ働く）が、正常な運用中は 1 度も働かない。自然に止まったときは、その経過を記録する | 健全なセンサが無用にリセットされる。止まったまま戻らない・ARM できてしまう | 1i、段階 2・3 の各飛行後 |
 | C16 | 総合飛行: 離陸、高度と ToF の確認、1 回転、着陸を 1 回の飛行で通し、取得した一式に警告・異常が残らない | 部品ごとには合格しても、通すと現れる問題 | 3 |
 
-拘束またはプロペラ付きの手持ちで低空の制御を確かめる段階は設けない（そのための既存の手順が無い。`development_roadmap.md` 3.0.2 の拘束試験は推力測定であり、`operation_manual.md` の `motor` コマンドはモータ単体の確認である）。代わりに、段階 1 の手持ち（プロペラなし）と、段階 2 の最低高度の飛行で確かめる。
+拘束した機体や手持ちの機体で、スロットルを上げて低空の制御を確かめる段階は設けない（そのための既存の手順が無い。`development_roadmap.md` 3.0.2 の拘束試験は推力測定であり、`operation_manual.md` の `motor` コマンドはモータ単体の確認である）。代わりに、段階 1 の手持ち（1g。スロットルは最低のまま）と、段階 2 の最低高度の飛行で確かめる。
 
 ### コマンドと出力の形について
 
@@ -260,11 +262,11 @@ Claude Code を進行役にして進めるときは、リポジトリで Claude 
 
 ## 4. 段階 0: 準備
 
-**入場条件**: なし。**目的**: プロペラを外し、試験するファームを確定し、記録を取れる状態にする。**中止**: 2 章の表（全段階・段階 0）。
+**入場条件**: なし。**目的**: 機体を固定し、試験するファームを確定し、記録を取れる状態にする。**中止**: 2 章の表（全段階・段階 0）。
 
 | 手順 | 操作 | 記録 | 合格 |
 |------|------|------|------|
-| 0-1 | **最初に、プロペラ全 4 枚を外す**（以後、段階 2 の入場まで付けない）。写真を撮る | 写真 | 4 枚とも外れている |
+| 0-1 | **最初に、機体を固定する**（プロペラは付けたまま。下の「0-1 固定の条件」の表を全て満たす）。写真を撮る | 固定の方法、重りの重さ、写真 | 下の表の条件を満たす。0-12 の `motor test` と 0-13 の `arm` で、機体が動かないことを目で確かめる（動いたら DISARM して固定をやり直す） |
 | 0-2 | 試験するコミットを確定する。`git status --short`（`firmware/` と `lib/sfcli/` 配下に差分が無いこと）と `git log -1 --format=%H`。以後、機体に書き込むファームは必ずこの状態からビルドする | コミットの ID | 差分なし |
 | 0-3 | `source setup_env.sh`、`sf doctor` | 結果 | エラーなし |
 | 0-4 | `sf build vehicle`（成功で `Build successful`） | 結果 | 成功 |
@@ -275,8 +277,8 @@ Claude Code を進行役にして進めるときは、リポジトリで Claude 
 | 0-9 | PC を機体の WiFi（SSID `StampFly-XXYY`、XXYY は機体 MAC の下 4 桁。既定パスワード `stampfly`。`docs/guides/block_programming.md`）につなぎ、`sf log wifi -d 5 --no-save` | 統計 | パケットが届く |
 | 0-10 | 送信機のペアリング（`operation_manual.md` 5 章、`controller.md`）。`status` で `pairing : Paired`、`prearm  : ready` | `status` | 両方そのとおり |
 | 0-11 | 電池: 満充電（4.2 V 付近）から始める。`sensor power`（`power: 4.12 V  100 mA  400 mW` の形） | 電圧 | `safety.md` の表で「飛行可能」 |
-| 0-12 | **モータの位置の確認**（プロペラなし、DISARM、USB コンソール）: `motor test 1 20 2`、`motor test 2 20 2`、`motor test 3 20 2`、`motor test 4 20 2`（M1 = 右前（FR）、M2 = 右後（RR）、M3 = 左後（RL）、M4 = 左前（FL）、デューティ 20 %・2 秒。`operation_manual.md` 322 行）。1 つずつ、その位置のモータだけが回ることを目で見る。回転の向きと、プロペラ（時計回り用・反時計回り用）の取付位置の正しい対応は、リポジトリの文書に見つからない（**未確認**）。モータの軸やプロペラの刻印・機体付属の説明で責任者が確認し、段階 2 の入場の表で再確認する | 各モータの位置と回転の向き | 4 つとも位置が一致 |
-| 0-13 | **CLI の飛行命令の確認**（重りで押さえた机上。CLI の `arm`・`disarm`・`mode` の実機での確認は、この手順で最初に行う。SILS では確かめたが、実機では未確認）。USB コンソールで行い、⑥だけ WiFi の CLI（`nc 192.168.10.1 23`）で行う。送信機は電源を入れ、ペアリング済みにする。ARM でモータがアイドル回転で回るので、保護めがねを着け、プロペラの周りに手を出さない。Claude Code は、各命令を送る前に何が起きるかを音声で伝える。<br>① `arm` → `status` → `mode acro` → `mode stabilize` → `disarm`<br>② `arm` → 送信機のスロットル側スティックを押し込む（人の操作。CLI で ARM した機体を送信機で止める）<br>③ 送信機の押し込みで ARM（人の操作）→ `disarm`<br>④ `arm` → `emergency`<br>⑤ 送信機の左ボタンを 1 回押して ALT_HOLD にし（本体 LED がオレンジ）、`arm`（拒否される）。確かめたら左ボタンをもう 2 回押して OFF に戻す<br>⑥ WiFi の CLI で `arm` → `status` → `disarm`、続けて `arm` → `emergency` | 各命令の表示、`status` の `state`・`mode`・`armed` | 表示が期待どおりで、`status` の状態が一致（期待は下の表） |
+| 0-12 | **モータの位置の確認**（0-1 で固定したまま、DISARM、USB コンソール）: `motor test 1 20 2`、`motor test 2 20 2`、`motor test 3 20 2`、`motor test 4 20 2`（M1 = 右前（FR）、M2 = 右後（RR）、M3 = 左後（RL）、M4 = 左前（FL）、デューティ 20 %・2 秒。`operation_manual.md` 322 行）。1 つずつ、その位置のモータだけが回ることを目で見る。回転の向きと、プロペラ（時計回り用・反時計回り用）の取付位置の正しい対応は、リポジトリの文書に見つからない（**未確認**）。モータの軸やプロペラの刻印・機体付属の説明で責任者が確認し、段階 2 の入場の表で再確認する | 各モータの位置と回転の向き | 4 つとも位置が一致 |
+| 0-13 | **CLI の飛行命令の確認**（0-1 で固定した机上。CLI の `arm`・`disarm`・`mode` の実機での確認は、この手順で最初に行う。SILS では確かめたが、実機では未確認）。USB コンソールで行い、⑥だけ WiFi の CLI（`nc 192.168.10.1 23`）で行う。送信機は電源を入れ、ペアリング済みにする。ARM でモータがアイドル回転で回るので、保護めがねを着け、プロペラの周りに手を出さない。Claude Code は、各命令を送る前に何が起きるかを音声で伝える。<br>① `arm` → `status` → `mode acro` → `mode stabilize` → `disarm`<br>② `arm` → 送信機のスロットル側スティックを押し込む（人の操作。CLI で ARM した機体を送信機で止める）<br>③ 送信機の押し込みで ARM（人の操作）→ `disarm`<br>④ `arm` → `emergency`<br>⑤ 送信機の左ボタンを 1 回押して ALT_HOLD にし（本体 LED がオレンジ）、`arm`（拒否される）。確かめたら左ボタンをもう 2 回押して OFF に戻す<br>⑥ WiFi の CLI で `arm` → `status` → `disarm`、続けて `arm` → `emergency` | 各命令の表示、`status` の `state`・`mode`・`armed` | 表示が期待どおりで、`status` の状態が一致（期待は下の表） |
 
 **0-13 の期待される表示**（`cli_task.cpp` の `cmd_arm`・`requestMotorStop`・`printModeResult`・`printArmRefusal` から取った文言）:
 
@@ -294,11 +296,28 @@ Claude Code を進行役にして進めるときは、リポジトリで Claude 
 
 地上での `mode` の注意: 地上（IDLE_GROUND）で ARM する前の `mode` は、送信機の電文が届いていると送信機のスイッチ位置に戻されることがある（`changed, then put back to ... by the transmitter's switch position`）。0-13 では ARM の後に `mode` を送るので、この表示にはならない。
 
+#### 0-1 固定の条件
+
+機体は小さく危険が小さいこと、プロペラが無いとモータが回っているかを目で判断しにくいことから、段階 0・1 はプロペラを付けたまま、機体を固定して行う（開発者の決定、2026-11-22）。
+
+| 項目 | 内容 |
+|------|------|
+| 固定の方法 | 重りで押さえる、またはベンチ台（機体を固定する台）に固定する |
+| 条件 (a) 動かない | ARM 中と `motor test` の間に、機体が動かない・浮かない。重りの重さの目安は、機体の最大推力（全モータの合計）を上回る重さ。全モータの合計は 0.672 N（`docs/guides/custom_program.md` 538 行の `kMaxThrustN`。ファームの `pid_controller.hpp` の 1 モータ 0.168 N の 4 倍と同じ値。0.15 N の系列では 0.60 N）で、重さにすると約 69 g（0.672 N ÷ 9.81 m/s²）なので、**約 70 g 以上**を目安にする。ただしこの推力は実測で確かめられていない（**未確認**。`tools/params_audit/params_manifest.py` 237〜275 行。ベンチの実測は duty 0.9 で 1 モータ 0.108 N）。実際に動かないかは、この表の「合格」の行の目視で確かめる |
+| 条件 (b) 視野 | 下向き ToF とオプティカルフロー（機体底面）の視野を、重り・固定具・机の縁でふさがない（1b の ARM でも同じ） |
+| 条件 (c) 回転面 | プロペラの回転面に、重り・固定具・ケーブル（USB を含む）が触れない |
+| 条件 (d) 水平 | 機体が水平。傾いていると ARM が拒否される、または ARMED_GROUND で自動 DISARM になる（`operation_manual.md` 143 行付近） |
+| 条件 (e) 位置 | 机の端から落ちない位置に置く |
+| 記録 | 固定の方法、重りの重さ [g]、写真 |
+| 合格 | 上の条件を満たす。0-12 の `motor test` と 0-13 の `arm` で、機体が動かないことを目で確かめる。動いたら DISARM して固定をやり直す |
+
+この手順書は、StampFly の大きさ（質量 37 g。`control/models/stampfly_physical.yaml` 64〜67 行の `mass`）を前提にしている。大型の機体には、プロペラを付けたままの机上の確認をこの手順のまま当てはめない。
+
 **次へ進む条件**: 0-1〜0-13 が全て合格。
 
-## 5. 段階 1: プロペラを外した机上の確認
+## 5. 段階 1: 机上の確認（機体を固定して行う）
 
-**入場条件**: 段階 0 が完了し、プロペラが 4 枚とも外れている（**1g と 1h の前にも、もう一度 4 枚とも外れていることを目で確かめる**）。電池で駆動し、USB のコンソールを接続する（USB 給電だけでは ARM が拒否される）。機体は、段階 2 で使う床の表面に置く。**目的**: 推力が出ないので、失敗しても機体は動かない。飛ばす前に、机上でできる部分を全部確かめる。**中止**: 2 章の表（全段階・段階 1）。
+**入場条件**: 段階 0 が完了し、0-1 の固定が保たれている（**各手順の前に、固定の方法・重り・ケーブルが 0-1 の条件を満たしていることを目で確かめる。1g は機体を手で持つので、そのときだけ固定を外す**）。電池で駆動し、USB のコンソールを接続する（USB 給電だけでは ARM が拒否される）。機体は、段階 2 で使う床の表面に置く。**目的**: プロペラが付いていて、ARM でモータが回る。固定が外れると机上でも機体は動きうるので、固定を保ったまま、飛ばす前に机上でできる部分を全部確かめる。**中止**: 2 章の表（全段階・段階 1）。
 
 ### 1a 起動直後の基準値（C1・C2 の基準）
 
@@ -316,7 +335,7 @@ Claude Code を進行役にして進めるときは、リポジトリで Claude 
 
 | 項目 | 内容 |
 |------|------|
-| 入場 | 表面に機体を水平に置く。プロペラは外れている |
+| 入場 | 表面に機体を水平に置き、重りで押さえる（重りが ToF の視野に入らない位置にする。0-1 の条件 (b)） |
 | 操作 | 1. `sensor tof` を 3 回（`tof  : 0.034 m  status=0 valid=yes` の形）。<br>2. `sf log wifi -d 60 -o logs/checkout/s1_1b_tof_<表面名>_1.sflog.zip` を始める。<br>3. 15 秒以内に送信機で ARM する（STABILIZE にしてスロットル側スティックを押す）。`status` で `state   : ARMED_GROUND`。機体を動かさず 40 秒待つ。<br>4. 同じスティックを押して DISARM。取得の終了後に次を読む |
 | 読む | `sf log stats tof logs/checkout/s1_1b_tof_<表面名>_1.sflog.zip`、`sf log info <一式>` の `ToF bottom:` の行。`status` に `tof     : SILENT` が無いこと |
 | 記録 | 表面名、`valid minimum` / `valid maximum` [cm]、`valid above 5 cm` の個数と時刻・値、`ToF samples` の `valid` と `invalid`（**有効な標本がその表面にあるか、無いか**を明記する。1h-2 は有効な標本のある表面を要する）、`signal`・`ambient`（Mcps）・`sigma`（mm） |
@@ -377,10 +396,10 @@ CLITask（CLI を担当するタスク）が出す警告は、ログシンクを
 
 | 項目 | 内容 |
 |------|------|
-| 入場 | プロペラが外れていることを目で確かめた。機体に強い衝撃を与えない（3 G の衝撃検出で DISARM になる。`safety.impact.accel_g` の既定 3.0）。1 人で行う: 片手で機体を持ち、片手で送信機を持つ（スティックの押し込みですぐ止められる）。**プロペラを外して行うことを推奨**する（付けたまま行うかは責任者の判断）。`sf log wifi -d 90 -o logs/checkout/s1_1g_handlift_1.sflog.zip` を Claude Code が始める |
+| 入場 | プロペラは付けたまま行う（外して行ってもよい。外すと回転が目で見えにくい）。機体は胴体の下側を持ち、指を回転面に入れない。スロットルは最低のままにする。異常のときは、送信機のスロットル側スティックを押し込む（1g-2 で送信機の電源を切っている間は、機体を床に置いて電池を外す）。機体に強い衝撃を与えない（3 G の衝撃検出で DISARM になる。`safety.impact.accel_g` の既定 3.0）。1 人で行う: 片手で機体を持ち、片手で送信機を持つ（スティックの押し込みですぐ止められる）。`sf log wifi -d 90 -o logs/checkout/s1_1g_handlift_1.sflog.zip` を Claude Code が始める |
 | 操作 1g-1（C8） | STABILIZE で ARM（スロットルは最小）。機体を床から約 20 cm まで水平に持ち上げ、3 秒保つ |
 | 期待 | ToF の 5 cm を超える有効な読みが途切れず 1 秒続いたら `Transition: ARMED_GROUND → TAKEOFF`。さらに 15 cm を超える有効な読みが来たら FLYING（`Takeoff complete → FLYING/STABILIZE`）。スロットルは最小のまま |
-| 操作 1g-2（C8・C12） | 20 cm で持ったまま、**送信機の電源を切る**（通信途絶。送信機を持つ手で切る。異常なら電池を外す） |
+| 操作 1g-2（C8・C12） | 20 cm で持ったまま、**送信機の電源を切る**（通信途絶。送信機を持つ手で切る。異常なら機体を床に置いて電池を外す） |
 | 期待 | `Comm lost → hover 3000 ms then LANDING`。約 3.5 秒後（`safety.comm.timeout_ms` の 0.5 秒 + 猶予 3 秒）に `Comm lost → LANDING (hover grace elapsed)`、LANDING。**モータは切れない**（`motor.csv` の duty が LANDING の間 0 より大きい） |
 | 操作 1g-3（C11） | 機体をゆっくり床に置く。期待: `Landing detected (...)`、`Landing complete`、`Transition: LANDING → IDLE_GROUND`、モータ停止 |
 | 操作 1g-4（C10） | 送信機の電源を入れ直す（規則 12。スティックに触れない）。ALT_HOLD にして（左ボタンを 1 回）ARM を押す（機体は床の上）。約 0.3 秒のスプールの後に TAKEOFF になる。**ARM の約 1 秒以内に** DISARM を押す（2 秒以上たつと、床の ToF が無効のとき ToF 無効の規則が TAKEOFF を LANDING に変える） |
@@ -391,18 +410,18 @@ CLITask（CLI を担当するタスク）が出す警告は、ログシンクを
 
 ### 1h 電池（C7）と、手持ちで上昇中に始める着陸（C11）
 
-プロペラが外れていることを目で確かめてから始める。電池の通知が出て再発報されること、状態ごとの動きが設計どおりかを確かめる。
+固定が 0-1 の条件を満たしていることを目で確かめてから始める。電池の通知が出て再発報されること、状態ごとの動きが設計どおりかを確かめる。
 
 **1h-1 警告（WARNING）: パラメータで確かめる。**
 
 | 項目 | 内容 |
 |------|------|
-| 入場 | DISARM、プロペラなし。`status` の `battery` の値 V を読む。`low_v` の許容範囲は 3.0〜4.2 V なので、**`battery` が 4.15 V 未満**であること（満充電に近いときは、段階 1 の作業で電圧が下がってから行う） |
+| 入場 | DISARM、固定は 0-1 のとおり。`status` の `battery` の値 V を読む。`low_v` の許容範囲は 3.0〜4.2 V なので、**`battery` が 4.15 V 未満**であること（満充電に近いときは、段階 1 の作業で電圧が下がってから行う） |
 | 操作 | `param set safety.battery.low_v <battery の値 + 0.05>`（小数 2 桁。例: 4.08 V なら 4.13）→ `param save` → `reboot`。起動後、USB コンソール（または取得した一式の `--text`）を見る。ARM する（地上）。**最後に復元する**: `param set safety.battery.low_v 3.4` → `param save` → `reboot` → `param get safety.battery.low_v` |
 | 期待 | `W (<時刻 ms>) failsafe: Low battery: 4.0xV` が約 5 秒ごとに繰り返される（10 Hz の更新 50 回。`battery_alert_policy.hpp` 67 行）。`W (<時刻 ms>) StateManager: Low battery warning`。警告音。StampS3 LED がシアンの低速点滅。ARM はできる（状態は変わらない）。復元後は `= 3.4 (float)` |
 | 記録・合格 | 通知の表示、再発報の周期、復元の確認（**復元を 1h-2 の前に必ず終える**） |
 
-**1h-2 緊急（EMERGENCY、3.0 V 未満）。任意の項目（電源装置の導線を責任者が用意しているときだけ行う。用意が無ければ「未実施」）。** 危険電圧の閾値（3.0 V）はパラメータにできないので、電池の代わりに電源装置を電池の接続部につなぎ、電圧を下げて確かめる。電源装置の接続方法（コネクタの形・極性・電流制限の値）は、リポジトリの文書にもファームのソースにも無い（**未確認**）。最低限の注意: 極性を取り違えない（責任者が確認した導線だけを使う）、電流制限を `status` の `battery` の電流に余裕を足した値に設定する、ARM 前の電圧は 3.6 V より上、機体を持つ操作と電圧の操作が重なる場面があるので、1 人で行うかは責任者が判断する（1 章の人員の表）、プロペラなし。ARM は 3.3 V 以下（`safety.battery.usb_v`）で拒否されるので、約 3.6 V から始めて ARM し、その後で 3.0 V 未満に下げる。USB コンソールを記録し、`sf log wifi -d 120 -o logs/checkout/s1_1h_battery_<場面>_1.sflog.zip` も取る。**電圧を下げた一式は、1i の `boot` の確認と `re-init` の確認から外し、別に判定する**（低電圧そのものが再起動や ToF の停止を起こしうるため）。
+**1h-2 緊急（EMERGENCY、3.0 V 未満）。任意の項目（電源装置の導線を責任者が用意しているときだけ行う。用意が無ければ「未実施」）。** 危険電圧の閾値（3.0 V）はパラメータにできないので、電池の代わりに電源装置を電池の接続部につなぎ、電圧を下げて確かめる。電源装置の接続方法（コネクタの形・極性・電流制限の値）は、リポジトリの文書にもファームのソースにも無い（**未確認**）。最低限の注意: 極性を取り違えない（責任者が確認した導線だけを使う）、電流制限を `status` の `battery` の電流に余裕を足した値に設定する、ARM 前の電圧は 3.6 V より上、機体を持つ操作と電圧の操作が重なる場面があるので、1 人で行うかは責任者が判断する（1 章の人員の表）、固定は 0-1 のとおり。ARM は 3.3 V 以下（`safety.battery.usb_v`）で拒否されるので、約 3.6 V から始めて ARM し、その後で 3.0 V 未満に下げる。USB コンソールを記録し、`sf log wifi -d 120 -o logs/checkout/s1_1h_battery_<場面>_1.sflog.zip` も取る。**電圧を下げた一式は、1i の `boot` の確認と `re-init` の確認から外し、別に判定する**（低電圧そのものが再起動や ToF の停止を起こしうるため）。
 
 | 場面 | 操作 | 期待される出力・動き |
 |------|------|----------------------|
@@ -435,7 +454,7 @@ CLITask（CLI を担当するタスク）が出す警告は、ログシンクを
 | # | 確認 | 内容 |
 |---|------|------|
 | 1 | 段階 1 の結果 | C1〜C5 が合格。1g-1（C8）と 1g-4（C10）が合格。C3 が合格した表面の上で飛ばす。1h-1 が合格。**1h-2 が「未実施」のとき**: 責任者が承認し、段階 2 の全ての飛行を高さ 0.5 m 以下で行い、電池の通知（低電圧のシアン点滅と警告音）が出たら直ちに着陸する（危険電圧の動作は実機で未確認のため） |
-| 2 | プロペラ | 損傷・変形の無い 4 枚を、モータの位置（0-12 で確認）と回転の向きに合わせて付け、保護ガードの損傷を確かめる（`safety.md` の飛行前チェックリスト 1・2）。時計回り用と反時計回り用の取り違えが無いこと（正しい対応は**未確認**: 責任者が確認する）。**付けた後は、モータを回すコマンド（`motor`）を使わない** |
+| 2 | プロペラ・固定具 | プロペラは段階 0 から付いている。損傷・変形が無いこと、モータの位置（0-12 で確認）と回転の向きに合った取付（時計回り用・反時計回り用の取り違えが無いこと。正しい対応は**未確認**: 責任者が確認する）であること、取付に緩みが無いことを確かめ、保護ガードの損傷を確かめる（`safety.md` の飛行前チェックリスト 1・2）。**重り・固定具・ケーブルを外したことを確かめる。段階 2 では、モータを回すコマンド（`motor`）を使わない** |
 | 3 | パラメータ | `param get safety.battery.low_v` が `= 3.4 (float)`、`flip.enable` が `= 0 (int)`（3 章の「変更するパラメータ」の表） |
 | 4 | 電池 | 満充電に近く、**各飛行の開始が 4.0 V 以上**（暫定。根拠: `safety.md` の表で通常の 3.7〜4.0 V が「飛行可能」の下限 3.7 V に、飛行ごとの降下の余裕を足した本書の仮の線）。飛行の終わりに 3.7 V 未満、または警告音が出たら、その飛行で終え、電池を替える（`safety.md`: 3.5〜3.7 V は着陸推奨、3.5 V 以下は即時着陸。`safety.battery.low_v` 3.4 V は警告） |
 | 5 | 人員・端末・区域 | 1 章の表の人員。T1〜T3。天井 2.0 m 以上、ネットの 2 m × 2 m 以上、壁や柱の 1.0 m と 1.2 m の目印。中止の段を全員が読んだ |
@@ -637,7 +656,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 
 | 手順（項目） | 回 | 開始電圧 | 基準 | 測定値 | 合否 | 一式／記録のファイル名 | 備考 |
 |--------------|----|---------|------|--------|------|------------------------|------|
-| 0-1 | 1 | — | プロペラ 4 枚が外れている | | | | |
+| 0-1 | 1 | — | 固定の条件を満たす（方法・重り [g]・写真） | | | | |
 | 0-2 | 1 | — | 差分なし | コミット ID: | | | |
 | 0-3〜0-4 | 1 | — | `sf doctor` エラーなし、ビルド成功 | | | | |
 | 0-5〜0-6 | 1 | — | 起動する | `version`: | | | |
@@ -713,7 +732,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 
 <a id="english"></a>
 
-This is a manual procedure for verifying, on the real vehicle, that the vehicle firmware performs its flight-safety functions as designed: the 400 Hz loop timing, the monitor for non-finite numbers, the takeoff and landing decisions, the battery and communication-loss actions, turning, and the observation of barometric height. It moves from a thrust-free bench check to low-altitude flight in order of increasing risk, and closes with one integrated flight.
+This is a manual procedure for verifying, on the real vehicle, that the vehicle firmware performs its flight-safety functions as designed: the 400 Hz loop timing, the monitor for non-finite numbers, the takeoff and landing decisions, the battery and communication-loss actions, turning, and the observation of barometric height. It moves from a bench check done with the propellers fitted and the vehicle fixed in place to low-altitude flight in order of increasing risk, and closes with one integrated flight.
 
 The **owner** is the repository's owner (the control and hardware engineer), who makes the final decision on the pass or fail of this procedure and on whether to go on with an item that failed. Stage N is **chapter N + 4** (stage 0 = chapter 4 ... stage 4 = chapter 8).
 
@@ -723,8 +742,8 @@ The **owner** is the repository's owner (the control and hardware engineer), who
 
 | Stage | Purpose | Estimated time | Propellers |
 |-------|---------|----------------|-----------|
-| 0 Preparation | Remove the propellers, fix the firmware under test, build and flash, check settings, transmitter, battery and motor positions | 1-1.5 h | **Removed** |
-| 1 Bench | Without thrust, check loop timing, finiteness, floor ToF, logging, WiFi CLI, takeoff decision, communication loss, battery, and whether the ToF re-initialisation ever acts (1a-1i) | 4-6 h | **Removed** |
+| 0 Preparation | Fix the vehicle in place (weights or a bench stand), fix the firmware under test, build and flash, check settings, transmitter, battery and motor positions | 1-1.5 h | Fitted (vehicle fixed) |
+| 1 Bench | With the vehicle fixed in place, check loop timing, finiteness, floor ToF, logging, WiFi CLI, takeoff decision, communication loss, battery, and whether the ToF re-initialisation ever acts (1a-1i) | 4-6 h | Fitted (vehicle fixed; held by hand in 1g) |
 | 2 Low free flight | Ten kinds of flight in order of increasing risk (steps 2-1 to 2-10; 2-4 is repeated three or more times per surface). One purpose per flight | 4-6 h (battery changes included) | Fitted |
 | 3 Integrated flight | Takeoff, one full turn and landing in one flight (C16), after everything in stage 2 passed | 30-45 min | Fitted |
 | 4 Wrap-up | Collect records, restore parameters, results sheet | 30 min | — |
@@ -735,7 +754,7 @@ The hardware checkout is done by **one developer plus Claude Code (the PC-side o
 
 | Kind | Person (developer) | Claude Code |
 |------|--------------------|-------------|
-| Vehicle, transmitter, battery, propellers | Every operation that touches them (ARM and DISARM on the transmitter, connecting the battery, fitting the propellers) | Does not touch them |
+| Vehicle, transmitter, battery, propellers | Every operation that touches them (ARM and DISARM on the transmitter, connecting the battery, placing the weights and fixtures, fitting the propellers) | Does not touch them |
 | Stopping the motors | Pressing the throttle-side stick of the transmitter, the button on the vehicle, removing the battery. Every stop in an abnormal situation is one of these | Not left to it. It sends `emergency` (the CLI command or `sf emergency`) when asked, but it can be several seconds late, so it is not counted as a way to stop |
 | Input to the USB console | — | May send it (`motor test`, which turns the motors, included). Before sending, it says by voice (macOS `say`) what will happen |
 | `arm`, `disarm`, `mode` of the CLI (USB and WiFi) | — | May send them (the developer's approval, 2026-11-22). Before sending, it says by voice what will happen |
@@ -748,7 +767,7 @@ The division per step, and whether one person (the developer alone plus Claude C
 | Steps | What the person does | What Claude Code does | Done by one person |
 |-------|----------------------|-----------------------|--------------------|
 | 0, 1a-1f, 1h-1, 1i | Operations on the vehicle, transmitter and battery; checks by eye | USB and WiFi input, the capture, the comparison (the CLI commands of 0-13 included) | Yes |
-| 1g | Lifts the vehicle with one hand and holds the transmitter with the other (a press of the stick stops it at once). **Removing the propellers is recommended.** Whether to keep them fitted is the owner's decision | Starts the capture, reads `status` | Yes |
+| 1g | Lifts the vehicle with one hand and holds the transmitter with the other (a press of the stick stops it at once). Done with the propellers fitted (it may also be done with them removed). Keep fingers out of the propeller plane | Starts the capture, reads `status` | Yes |
 | 1h-2, 1h-3 | Operates the voltage of the power supply and holds the vehicle | Starts the capture | **Optional, as before.** A power supply is needed. Some scenes need holding the vehicle and operating the voltage at the same time, so the owner decides whether one person does them. If not done: "not done". Later, parameterising the critical-voltage threshold is planned (so that it can be done without a power supply) |
 | 2-1, 2-2, 2-4 | Holds the transmitter as the pilot | Starts the capture before the flight | Yes |
 | 2-3, 2-6, 2-9, 2-10, 3 | Holds the transmitter as the pilot and is ready to DISARM. **The person stops it** | Starts the capture and sends the flight commands (`sf takeoff` etc.). The emergency stop is not left to it | Yes |
@@ -841,6 +860,8 @@ The priority is POS_HOLD > ALT_HOLD > ACRO > STABILIZE (`operation_manual.md` li
 | 11 | When moving to the next stage with an item that did not pass, the owner writes the decision and its reason in the notes column of the results sheet | Prevents flying with an unresolved item that nobody noticed |
 | 12 | **When powering the transmitter on again, do not touch the throttle-side stick.** Power it on only after confirming that the vehicle has landed and DISARMed (or the motors have stopped) | ARM / DISARM toggles with every press, so pressing right after the reconnection reverses the state. The time to reconnect and the mode behavior right after the reconnection are **unconfirmed** (`controller.md` chapter 3 only says it reconnects automatically) |
 
+Rule 1 (eye protection) and rule 2 (no fingers in the propeller plane) also apply to stages 0 and 1, which are done with the propellers fitted.
+
 ### Abort ladder (when something abnormal appears in flight; every flight step of stages 2 and 3 refers here)
 
 | Rung | Situation | Action | How it acts |
@@ -848,7 +869,7 @@ The priority is POS_HOLD > ALT_HOLD > ACRO > STABILIZE (`operation_manual.md` li
 | 1 | ACRO or STABILIZE, in flight or on the ground, and TAKEOFF in any mode | Press the throttle-side stick of the transmitter (DISARM) | **The motors stop at once** (`operation_manual.md` line 136). Pressed in the air, the vehicle falls |
 | 2 | FLYING in ALT_HOLD or POS_HOLD (after `sf takeoff` too) | Press the stick once (DISARM) | **Automatic landing** (a slow descent of about 0.3 m/s). The motors are not cut (same, line 137) |
 | 3 | The automatic landing of rung 2 does not start or does not descend (provisional: the height has not decreased 3 s after the press), or the tilt or the oscillation grows | A second press. If it does not act, remove the battery (when a second person is present, Enter on `sf emergency` in T3; a request to Claude Code for `sf emergency` can be several seconds late, so do not count on it) | The second DISARM stops the motors at once (same, line 137). `sf emergency` stops them regardless of the transmitter (same, line 210). The vehicle falls from about 0.5 m |
-| 4 | During a test that switches the transmitter off (1g-2, 2-7, 2-8) | **Type `sf emergency` into T3 before switching the transmitter off, and have another person ready to press Enter** (2-7 and 2-8 are done only when a second person is present). 1g-2 is done with the vehicle in the hand and with the propellers removed (the recommendation of chapter 1); on an abnormality remove the battery | During the communication loss the pilot's DISARM does not arrive. `sf emergency` is the only way to stop |
+| 4 | During a test that switches the transmitter off (1g-2, 2-7, 2-8) | **Type `sf emergency` into T3 before switching the transmitter off, and have another person ready to press Enter** (2-7 and 2-8 are done only when a second person is present). 1g-2 is done with the vehicle in the hand, the propellers fitted and the fingers out of the propeller plane; on an abnormality put the vehicle on the floor and remove the battery | During the communication loss the pilot's DISARM does not arrive. `sf emergency` is the only way to stop |
 
 **Visual abort criteria** (provisional; judged by eye against the marks on the wall or pole):
 
@@ -865,8 +886,8 @@ If any of these occurs, stop on the spot (stop the motors, remove the battery, s
 | Stage | Abort criterion |
 |-------|-----------------|
 | All stages | The `finite` line of `status`, or the `nonfinite` of the captured bundle, shows a detection of non-finite values. The `period max` while ARMed reaches 10 ms or more. An unplanned reboot (a boot message appears, the LED returns to white). A stack-overflow report. A red fast-blinking LED |
-| Stage 0 | `sf doctor` reports an error. Build or flash fails. A `param get` value differs from the table in 0-7 and the reason is unknown. A `motor test` shows a motor in the wrong position |
-| Stage 1 | A surface whose floor ToF gives a valid reading above 5 cm (C3 fails). ARM is refused for an unknown reason. An unexpected state transition. The ToF stopped on its own (take the records of 1i, report to the owner, and do not go on to stage 2) |
+| Stage 0 | `sf doctor` reports an error. Build or flash fails. A `param get` value differs from the table in 0-7 and the reason is unknown. A `motor test` shows a motor in the wrong position. The vehicle moved, a weight or fixture slipped, or a fixture or cable touches a propeller (DISARM at once, remove the battery and redo the fixing) |
+| Stage 1 | A surface whose floor ToF gives a valid reading above 5 cm (C3 fails). ARM is refused for an unknown reason. An unexpected state transition. The ToF stopped on its own (take the records of 1i, report to the owner, and do not go on to stage 2). The vehicle moved, a weight or fixture slipped, or a fixture or cable touches a propeller (DISARM at once, remove the battery and redo the fixing; 1g is out of scope of this condition because the fixing is removed and the vehicle is held by hand) |
 | Stages 2 and 3 | The visual abort criteria above. Yellow fast blinking and the warning sound. An unexpected state transition. The battery warning sound. Unexpected behavior after a communication loss. In the turns (2-9, 2-10): the ToF height falls below 0.30 m, or the horizontal position drifts more than 0.5 m from the center of the area. Stage 3 ends with a landing as soon as anything abnormal appears in the sequence |
 
 ## 3. How to Use This Document
@@ -896,7 +917,7 @@ Each item has an ID (C1 to C16). The results sheet (chapter 8) has one row per e
 | C15 | The re-initialisation of the downward ToF (it acts only when the sensor stops delivering samples on the ground) never acts during normal operation. If the sensor does stop on its own, record the course | A healthy sensor is reset for no reason. A stopped sensor never comes back, or ARM is possible with it | 1i, after every flight of stages 2 and 3 |
 | C16 | Integrated flight: takeoff, a check of altitude and ToF, one full turn and landing in one flight, with no warning or abnormality left in the captured bundle | Problems that appear only when everything is run together, although each part passed | 3 |
 
-There is no stage that checks low-altitude control with a restrained vehicle or a hand-held vehicle with propellers (no existing procedure covers it: the restrained test in `development_roadmap.md` 3.0.2 measures thrust, and the `motor` command of `operation_manual.md` checks a single motor). The hand-held check without propellers (stage 1) and the lowest flights of stage 2 take its place.
+There is no stage that checks low-altitude control by raising the throttle with a restrained or hand-held vehicle (no existing procedure covers it: the restrained test in `development_roadmap.md` 3.0.2 measures thrust, and the `motor` command of `operation_manual.md` checks a single motor). The hand-held check (1g, throttle kept at minimum) in stage 1 and the lowest flights of stage 2 take its place.
 
 ### About Command Forms and Outputs
 
@@ -971,11 +992,11 @@ The modes of `sf log stats` and the lines to copy into the results sheet (`<seco
 
 ## 4. Stage 0: Preparation
 
-**Entry condition**: none. **Purpose**: remove the propellers, fix the firmware under test and get into a state where records can be taken. **Abort**: the table in chapter 2 (all stages, stage 0).
+**Entry condition**: none. **Purpose**: fix the vehicle in place, fix the firmware under test and get into a state where records can be taken. **Abort**: the table in chapter 2 (all stages, stage 0).
 
 | Step | Action | Record | Pass |
 |------|--------|--------|------|
-| 0-1 | **First, remove all four propellers** (do not fit them again until the entry of stage 2). Take a photo | Photo | All four are removed |
+| 0-1 | **First, fix the vehicle in place** (the propellers stay fitted; satisfy every condition of the table "0-1 Fixing conditions" below). Take a photo | Fixing method, weight of the weights, photo | The conditions of the table below are met. In the `motor test` of 0-12 and the `arm` of 0-13, check by eye that the vehicle does not move (if it moves, DISARM and redo the fixing) |
 | 0-2 | Fix the commit under test. `git status --short` (no differences under `firmware/` and `lib/sfcli/`) and `git log -1 --format=%H`. From now on, always build the firmware that goes on the vehicle from this state | Commit ID | No differences |
 | 0-3 | `source setup_env.sh`, `sf doctor` | Result | No errors |
 | 0-4 | `sf build vehicle` (success prints `Build successful`) | Result | Success |
@@ -986,8 +1007,8 @@ The modes of `sf log stats` and the lines to copy into the results sheet (`<seco
 | 0-9 | Connect the PC to the vehicle's WiFi (SSID `StampFly-XXYY`, XXYY = the last four digits of the vehicle's MAC; the default password is `stampfly`; `docs/guides/block_programming.md`) and run `sf log wifi -d 5 --no-save` | Statistics | Packets arrive |
 | 0-10 | Pair the transmitter (`operation_manual.md` chapter 5, `controller.md`). `status` shows `pairing : Paired` and `prearm  : ready` | `status` | Both as stated |
 | 0-11 | Battery: start from fully charged (about 4.2 V). `sensor power` (form: `power: 4.12 V  100 mA  400 mW`) | Voltage | "Ready to fly" in the table of `safety.md` |
-| 0-12 | **Check the motor positions** (no propellers, DISARMed, USB console): `motor test 1 20 2`, `motor test 2 20 2`, `motor test 3 20 2`, `motor test 4 20 2` (M1 = front right (FR), M2 = rear right (RR), M3 = rear left (RL), M4 = front left (FL), duty 20 %, 2 s; `operation_manual.md` line 322). One at a time, see by eye that only the motor at that position spins. The correct correspondence of the rotation direction and the mounting position of the propellers (clockwise type and counterclockwise type) was not found in the repository's documents (**unconfirmed**). The owner checks it from the motor shaft, the propeller marking or the vehicle's own instructions, and it is checked again in the entry table of stage 2 | Position and rotation direction of each motor | All four positions match |
-| 0-13 | **Check the CLI flight commands** (on a bench, held down by weights. The check of `arm`, `disarm` and `mode` of the CLI on the real vehicle is done first in this step. They were checked in SILS, not yet on the real vehicle). Use the USB console, and only ⑥ on the WiFi CLI (`nc 192.168.10.1 23`). The transmitter is on and paired. ARM spins the motors at idle, so wear eye protection and keep hands away from the propellers. Before sending each command Claude Code says by voice what will happen.<br>① `arm` -> `status` -> `mode acro` -> `mode stabilize` -> `disarm`<br>② `arm` -> press the throttle-side stick of the transmitter in (the person's action: stopping a vehicle ARMed by the CLI with the transmitter)<br>③ ARM with a press of the transmitter stick (the person's action) -> `disarm`<br>④ `arm` -> `emergency`<br>⑤ Press the transmitter's left button once to select ALT_HOLD (the body LED is orange) and `arm` (it is refused). After checking, press the left button two more times to return to OFF<br>⑥ On the WiFi CLI: `arm` -> `status` -> `disarm`, then `arm` -> `emergency` | The display of each command; `state`, `mode` and `armed` of `status` | The displays are as expected and the state of `status` agrees (the expectations are in the table below) |
+| 0-12 | **Check the motor positions** (fixed as in 0-1, DISARMed, USB console): `motor test 1 20 2`, `motor test 2 20 2`, `motor test 3 20 2`, `motor test 4 20 2` (M1 = front right (FR), M2 = rear right (RR), M3 = rear left (RL), M4 = front left (FL), duty 20 %, 2 s; `operation_manual.md` line 322). One at a time, see by eye that only the motor at that position spins. The correct correspondence of the rotation direction and the mounting position of the propellers (clockwise type and counterclockwise type) was not found in the repository's documents (**unconfirmed**). The owner checks it from the motor shaft, the propeller marking or the vehicle's own instructions, and it is checked again in the entry table of stage 2 | Position and rotation direction of each motor | All four positions match |
+| 0-13 | **Check the CLI flight commands** (on a bench, fixed as in 0-1. The check of `arm`, `disarm` and `mode` of the CLI on the real vehicle is done first in this step. They were checked in SILS, not yet on the real vehicle). Use the USB console, and only ⑥ on the WiFi CLI (`nc 192.168.10.1 23`). The transmitter is on and paired. ARM spins the motors at idle, so wear eye protection and keep hands away from the propellers. Before sending each command Claude Code says by voice what will happen.<br>① `arm` -> `status` -> `mode acro` -> `mode stabilize` -> `disarm`<br>② `arm` -> press the throttle-side stick of the transmitter in (the person's action: stopping a vehicle ARMed by the CLI with the transmitter)<br>③ ARM with a press of the transmitter stick (the person's action) -> `disarm`<br>④ `arm` -> `emergency`<br>⑤ Press the transmitter's left button once to select ALT_HOLD (the body LED is orange) and `arm` (it is refused). After checking, press the left button two more times to return to OFF<br>⑥ On the WiFi CLI: `arm` -> `status` -> `disarm`, then `arm` -> `emergency` | The display of each command; `state`, `mode` and `armed` of `status` | The displays are as expected and the state of `status` agrees (the expectations are in the table below) |
 
 **Expected displays of 0-13** (the wording taken from `cmd_arm`, `requestMotorStop`, `printModeResult` and `printArmRefusal` of `cli_task.cpp`):
 
@@ -1005,11 +1026,28 @@ The modes of `sf log stats` and the lines to copy into the results sheet (`<seco
 
 Note on `mode` on the ground: a `mode` sent on the ground (IDLE_GROUND) before ARM can be put back to the transmitter's switch position once transmitter packets are arriving (`changed, then put back to ... by the transmitter's switch position`). 0-13 sends `mode` after ARM, so this display does not appear.
 
+#### 0-1 Fixing conditions
+
+Because the vehicle is small and the risk is small, and because without propellers it is hard to tell by eye whether a motor is spinning, stages 0 and 1 are done with the propellers fitted and the vehicle fixed in place (the developer's decision, 2026-11-22).
+
+| Item | Content |
+|------|---------|
+| Fixing method | Hold it down with weights, or fix it to a bench stand (a stand that holds the vehicle) |
+| Condition (a) Does not move | The vehicle neither moves nor lifts while ARMed or during `motor test`. The guide for the weight is more than the maximum thrust of the vehicle (all motors together). The total of all motors is 0.672 N (`kMaxThrustN` at line 538 of `docs/guides/custom_program.md`; the same value as four times the 0.168 N per motor of `pid_controller.hpp` in the firmware; 0.60 N in the 0.15 N family), which is about 69 g as a weight (0.672 N / 9.81 m/s^2), so use **about 70 g or more** as the guide. This thrust has not been confirmed by measurement, however (**unconfirmed**; `tools/params_audit/params_manifest.py` lines 237-275; the bench measurement is 0.108 N per motor at duty 0.9). Whether the vehicle really stays still is checked by the visual pass check above |
+| Condition (b) Field of view | Do not block the field of view of the downward ToF and the optical flow sensor (on the underside of the vehicle) with weights, fixtures or the edge of the desk (also when ARMing in 1b) |
+| Condition (c) Propeller plane | No weight, fixture or cable (the USB cable included) touches the propeller plane |
+| Condition (d) Level | The vehicle is level. If it is tilted, ARM is refused, or the vehicle DISARMs automatically in ARMED_GROUND (around line 143 of `operation_manual.md`) |
+| Condition (e) Position | Place it where it cannot fall off the edge of the desk |
+| Record | Fixing method, weight of the weights [g], photo |
+| Pass | The conditions above are met. In the `motor test` of 0-12 and the `arm` of 0-13, check by eye that the vehicle does not move. If it moves, DISARM and redo the fixing |
+
+This procedure assumes the size of the StampFly (mass 37 g; `mass` at lines 64-67 of `control/models/stampfly_physical.yaml`). Do not apply this bench check with the propellers fitted to a large vehicle as it stands.
+
 **Condition to proceed**: 0-1 to 0-13 all pass.
 
-## 5. Stage 1: Bench Check with the Propellers Removed
+## 5. Stage 1: Bench Check (with the Vehicle Fixed in Place)
 
-**Entry condition**: stage 0 is complete and all four propellers are removed (**check by eye once more, before 1g and before 1h, that all four are removed**). Run on the battery with the USB console connected (USB power alone makes ARM refused). Place the vehicle on the floor surface that stage 2 will use. **Purpose**: no thrust is produced, so a failure does not move the vehicle. Before flying, check everything that the bench can show. **Abort**: the table in chapter 2 (all stages, stage 1).
+**Entry condition**: stage 0 is complete and the fixing of 0-1 is kept (**before each step, check by eye that the fixing method, the weights and the cables meet the conditions of 0-1. 1g holds the vehicle by hand, so the fixing is removed only then**). Run on the battery with the USB console connected (USB power alone makes ARM refused). Place the vehicle on the floor surface that stage 2 will use. **Purpose**: the propellers are fitted and ARM spins the motors, so if the fixing comes off the vehicle can move even on the desk. Keeping the fixing, check before flying everything that the bench can show. **Abort**: the table in chapter 2 (all stages, stage 1).
 
 ### 1a Baseline right after boot (baseline for C1, C2)
 
@@ -1027,7 +1065,7 @@ If the floor reading exceeds 5 cm, a vehicle on the ground is not recognized as 
 
 | Item | Content |
 |------|---------|
-| Entry | Place the vehicle level on the surface. The propellers are removed |
+| Entry | Place the vehicle level on the surface and hold it down with weights (put the weights where they stay out of the ToF's field of view; condition (b) of 0-1) |
 | Action | 1. `sensor tof` three times (form: `tof  : 0.034 m  status=0 valid=yes`).<br>2. Start `sf log wifi -d 60 -o logs/checkout/s1_1b_tof_<surface>_1.sflog.zip`.<br>3. Within 15 s ARM with the transmitter (set STABILIZE and press the throttle-side stick). `status` shows `state   : ARMED_GROUND`. Do not move the vehicle for 40 seconds.<br>4. Press the same stick to DISARM. When the capture has ended, read the following |
 | Read | `sf log stats tof logs/checkout/s1_1b_tof_<surface>_1.sflog.zip`, the `ToF bottom:` line of `sf log info <bundle>`. `status` must have no `tof     : SILENT` |
 | Record | Surface name, `valid minimum` / `valid maximum` [cm], the number of `valid above 5 cm` with times and values, `valid` and `invalid` of `ToF samples` (**state whether valid samples exist on that surface**; 1h-2 needs a surface with valid samples), `signal`, `ambient` (Mcps), `sigma` (mm) |
@@ -1088,10 +1126,10 @@ By design the warnings that CLITask (the task in charge of the CLI) raises do no
 
 | Item | Content |
 |------|---------|
-| Entry | Confirmed by eye that the propellers are removed. Do not give the vehicle a strong shock (a 3 G shock detection causes DISARM; the default of `safety.impact.accel_g` is 3.0). One person does it: lift the vehicle with one hand and hold the transmitter with the other (a press of the stick stops it at once). **Removing the propellers is recommended** (whether to keep them fitted is the owner's decision). Claude Code starts `sf log wifi -d 90 -o logs/checkout/s1_1g_handlift_1.sflog.zip` |
+| Entry | Done with the propellers fitted (it may also be done with them removed; without them the rotation is hard to see). Hold the vehicle by the underside of the body and keep fingers out of the propeller plane. Keep the throttle at minimum. On an abnormality press the throttle-side stick of the transmitter (while the transmitter is switched off in 1g-2, put the vehicle on the floor and remove the battery). Do not give the vehicle a strong shock (a 3 G shock detection causes DISARM; the default of `safety.impact.accel_g` is 3.0). One person does it: lift the vehicle with one hand and hold the transmitter with the other (a press of the stick stops it at once). Claude Code starts `sf log wifi -d 90 -o logs/checkout/s1_1g_handlift_1.sflog.zip` |
 | Action 1g-1 (C8) | ARM in STABILIZE (throttle at minimum). Lift the vehicle level to about 20 cm above the floor and hold it for 3 s |
 | Expected | When ToF readings above 5 cm have lasted unbroken for 1 s: `Transition: ARMED_GROUND → TAKEOFF`. When a valid reading above 15 cm arrives: FLYING (`Takeoff complete → FLYING/STABILIZE`). The throttle stays at minimum |
-| Action 1g-2 (C8, C12) | Keep holding it at 20 cm and **switch the transmitter off** (communication loss; switched off with the hand that holds the transmitter; on an abnormality remove the battery) |
+| Action 1g-2 (C8, C12) | Keep holding it at 20 cm and **switch the transmitter off** (communication loss; switched off with the hand that holds the transmitter; on an abnormality put the vehicle on the floor and remove the battery) |
 | Expected | `Comm lost → hover 3000 ms then LANDING`. After about 3.5 s (0.5 s of `safety.comm.timeout_ms` + 3 s of grace) `Comm lost → LANDING (hover grace elapsed)` and LANDING. **The motors are not cut** (the duty in `motor.csv` is above 0 during LANDING) |
 | Action 1g-3 (C11) | Put the vehicle slowly on the floor. Expected: `Landing detected (...)`, `Landing complete`, `Transition: LANDING → IDLE_GROUND`, motors stopped |
 | Action 1g-4 (C10) | Switch the transmitter on again (rule 12; do not touch the sticks). Set ALT_HOLD (left button once) and press ARM (the vehicle is on the floor). After about 0.3 s of spool-up it becomes TAKEOFF. Press DISARM **within about 1 s of ARM** (after 2 s or more, with an invalid floor ToF the ToF-invalid rule turns TAKEOFF into LANDING) |
@@ -1102,18 +1140,18 @@ By design the warnings that CLITask (the task in charge of the CLI) raises do no
 
 ### 1h Battery (C7) and a landing that begins during a hand-held climb (C11)
 
-Confirm by eye that the propellers are removed before starting. Check that the battery notices appear and are re-raised, and that the action per state is as designed.
+Confirm by eye that the fixing meets the conditions of 0-1 before starting. Check that the battery notices appear and are re-raised, and that the action per state is as designed.
 
 **1h-1 Warning (WARNING): check with a parameter.**
 
 | Item | Content |
 |------|---------|
-| Entry | DISARMed, no propellers. Read the `battery` value in V of `status`. The allowed range of `low_v` is 3.0-4.2 V, so **`battery` must be below 4.15 V** (when it is nearly full, do this after the work of stage 1 has lowered it) |
+| Entry | DISARMed, fixed as in 0-1. Read the `battery` value in V of `status`. The allowed range of `low_v` is 3.0-4.2 V, so **`battery` must be below 4.15 V** (when it is nearly full, do this after the work of stage 1 has lowered it) |
 | Action | `param set safety.battery.low_v <battery value + 0.05>` (two decimals; e.g. for 4.08 V use 4.13) -> `param save` -> `reboot`. After boot, watch the USB console (or `--text` of a captured bundle). ARM (on the ground). **Restore at the end**: `param set safety.battery.low_v 3.4` -> `param save` -> `reboot` -> `param get safety.battery.low_v` |
 | Expected | `W (<time ms>) failsafe: Low battery: 4.0xV` repeats about every 5 s (50 updates at 10 Hz; `battery_alert_policy.hpp` line 67). `W (<time ms>) StateManager: Low battery warning`. The warning sound. The StampS3 LED blinks cyan slowly. ARM is possible (the state does not change). After the restore: `= 3.4 (float)` |
 | Record, pass | The notices shown, the re-raise period, the confirmation of the restore (**finish the restore before 1h-2**) |
 
-**1h-2 Emergency (EMERGENCY, below 3.0 V). Optional (do it only when the owner has prepared a power-supply lead; otherwise "not done").** The critical-voltage threshold (3.0 V) cannot be a parameter, so connect a power supply to the battery connector instead of the battery and lower the voltage. How to connect the supply (connector shape, polarity, current-limit value) is in neither the repository's documents nor the firmware source (**unconfirmed**). Minimum cautions: do not reverse the polarity (use only a lead the owner has checked), set the current limit to the current shown as `battery` in `status` plus a margin, keep the voltage above 3.6 V before ARM, some scenes need holding the vehicle and controlling the voltage at the same time, so the owner decides whether one person does it (the crew table in chapter 1), no propellers. ARM is refused at 3.3 V or less (`safety.battery.usb_v`), so start at about 3.6 V, ARM, and lower it below 3.0 V afterwards. Record the USB console and also take `sf log wifi -d 120 -o logs/checkout/s1_1h_battery_<scene>_1.sflog.zip`. **Judge the bundles with the lowered voltage separately, and leave them out of the `boot` check and the `re-init` check of 1i** (the low voltage itself can cause a restart or a ToF stop).
+**1h-2 Emergency (EMERGENCY, below 3.0 V). Optional (do it only when the owner has prepared a power-supply lead; otherwise "not done").** The critical-voltage threshold (3.0 V) cannot be a parameter, so connect a power supply to the battery connector instead of the battery and lower the voltage. How to connect the supply (connector shape, polarity, current-limit value) is in neither the repository's documents nor the firmware source (**unconfirmed**). Minimum cautions: do not reverse the polarity (use only a lead the owner has checked), set the current limit to the current shown as `battery` in `status` plus a margin, keep the voltage above 3.6 V before ARM, some scenes need holding the vehicle and controlling the voltage at the same time, so the owner decides whether one person does it (the crew table in chapter 1), fixed as in 0-1. ARM is refused at 3.3 V or less (`safety.battery.usb_v`), so start at about 3.6 V, ARM, and lower it below 3.0 V afterwards. Record the USB console and also take `sf log wifi -d 120 -o logs/checkout/s1_1h_battery_<scene>_1.sflog.zip`. **Judge the bundles with the lowered voltage separately, and leave them out of the `boot` check and the `re-init` check of 1i** (the low voltage itself can cause a restart or a ToF stop).
 
 | Scene | Action | Expected output and behavior |
 |-------|--------|------------------------------|
@@ -1146,7 +1184,7 @@ Confirm by eye that the propellers are removed before starting. Check that the b
 | # | Check | Content |
 |---|-------|---------|
 | 1 | Results of stage 1 | C1 to C5 pass. 1g-1 (C8) and 1g-4 (C10) pass. Fly over a surface for which C3 passed. 1h-1 passes. **When 1h-2 is "not done"**: the owner approves, all flights of stage 2 stay at 0.5 m or lower, and the vehicle lands at once when a battery notice (the cyan blink and the warning sound) appears (the critical-voltage action is unconfirmed on the real vehicle) |
-| 2 | Propellers | Fit four undamaged, undeformed propellers matching the motor positions (checked in 0-12) and the rotation directions, and check the guards for damage (items 1 and 2 of the pre-flight checklist in `safety.md`). No mix-up of the clockwise and counterclockwise types (the correct correspondence is **unconfirmed**: the owner checks). **After fitting them, do not use the motor-running command (`motor`)** |
+| 2 | Propellers and fixtures | The propellers have been fitted since stage 0. Check that they are undamaged and undeformed, that they are mounted to match the motor positions (checked in 0-12) and the rotation directions (no mix-up of the clockwise and counterclockwise types; the correct correspondence is **unconfirmed**: the owner checks), and that the mounting is not loose, and check the guards for damage (items 1 and 2 of the pre-flight checklist in `safety.md`). **Check that the weights, fixtures and cables are removed. In stage 2, do not use the motor-running command (`motor`)** |
 | 3 | Parameters | `param get safety.battery.low_v` is `= 3.4 (float)` and `flip.enable` is `= 0 (int)` (the table "Parameters that are changed" in chapter 3) |
 | 4 | Battery | Nearly full, and **every flight starts at 4.0 V or more** (provisional; basis: the table of `safety.md` calls 3.7-4.0 V normal and ready to fly, and this is its lower bound 3.7 V plus a margin for the voltage drop of a flight). If the voltage is below 3.7 V after a flight, or a warning sound appears, end with that flight and change the battery (`safety.md`: 3.5-3.7 V is land recommended, 3.5 V or below is land at once. `safety.battery.low_v` 3.4 V is the warning) |
 | 5 | Crew, terminals, area | The crew of the table in chapter 1. T1 to T3. A ceiling of 2.0 m or higher, a netted area of at least 2 m x 2 m, marks at 1.0 m and 1.2 m on a wall or pole. Everyone has read the abort ladder |
@@ -1348,7 +1386,7 @@ One execution is one row. When a step is repeated, add a row with a larger "Run"
 
 | Step (items) | Run | Start V | Criterion | Measured value | Result | Bundle / record file | Notes |
 |--------------|-----|---------|-----------|----------------|--------|----------------------|-------|
-| 0-1 | 1 | — | All four propellers removed | | | | |
+| 0-1 | 1 | — | Fixing conditions met (method, weight [g], photo) | | | | |
 | 0-2 | 1 | — | No differences | Commit ID: | | | |
 | 0-3 to 0-4 | 1 | — | No `sf doctor` errors, build succeeds | | | | |
 | 0-5 to 0-6 | 1 | — | It boots | `version`: | | | |
