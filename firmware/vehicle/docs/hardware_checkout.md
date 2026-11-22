@@ -141,7 +141,7 @@ PC 担当者の端末（飛行の段階。全て同じ PC、機体の WiFi に�
 
 ## 3. このドキュメントの使い方
 
-Claude Code を進行役にして進めるときは、リポジトリで Claude Code を起動して `/hardware-checkout` と入力する（`.claude/skills/hardware-checkout/SKILL.md`）。手順を 1 つずつ示し、保存した記録を読んで合格線と照合する。モータが回りうる命令は、その場合も人が入力する。
+Claude Code を進行役にして進めるときは、リポジトリで Claude Code を起動して `/hardware-checkout` と入力する（`.claude/skills/hardware-checkout/SKILL.md`）。手順を 1 つずつ示し、保存した記録を読んで合格線と照合する。USB コンソールへの入力は、モータが回る命令（`motor test` など）を含めて Claude Code が送ってよい（2026-11-22 の決定）。その間、人は送信機の DISARM または電池を外す操作ですぐ止められる位置にいる。
 
 ### 確認項目
 
@@ -812,7 +812,7 @@ If any of these occurs, stop on the spot (stop the motors, remove the battery, s
 
 ## 3. How to Use This Document
 
-To have Claude Code lead the procedure, start Claude Code in the repository and enter `/hardware-checkout` (`.claude/skills/hardware-checkout/SKILL.md`). It presents one step at a time, reads the saved records and compares them with the pass lines. Every command that can turn the motors is still typed by a person.
+To have Claude Code lead the procedure, start Claude Code in the repository and enter `/hardware-checkout` (`.claude/skills/hardware-checkout/SKILL.md`). It presents one step at a time, reads the saved records and compares them with the pass lines. Claude Code may send USB console commands, including those that turn the motors (such as `motor test`; decided 2026-11-22). Meanwhile a person stays where the motors can be stopped at once by DISARM on the transmitter or by removing the battery.
 
 ### Check Items
 

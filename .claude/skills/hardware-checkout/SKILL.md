@@ -14,11 +14,13 @@ description: 機体ファームの実機確認（firmware/vehicle/docs/hardware_
 | 誰が | すること |
 |------|----------|
 | Claude Code | 次の手順の提示、入場条件・人数の確認、保存済みの記録の読み取り（`sf log info`・`sf log stats`・`sf log check`・`sf log viz --save`）、合格線との照合、進行記録の更新、`git`・`sf doctor`・`sf build vehicle` |
-| 利用者（人） | 機体・送信機・電池・プロペラに触れる全ての操作。**モータが回りうる命令の入力は全て人が行う**（`motor test`、`sf takeoff`・`sf land`・`sf up` などの飛行命令、`sf rc`、送信機の ARM）。`sf emergency` と `sf stop` も人が打つ。USB コンソール（`sf monitor`）と WiFi の CLI への入力、`sf log wifi` の取得も人が端末で行う |
+| 利用者（人） | 機体・送信機・電池・プロペラに触れる全ての操作（送信機の ARM・DISARM を含む）。モータが回っている間は、送信機の DISARM または電池を外す操作ですぐ止められる位置にいる。PC が機体の WiFi だけにつながる間の操作（`sf log wifi`、WiFi の CLI、`sf takeoff` などの飛行命令、`sf emergency`・`sf stop`） |
 | 利用者の承諾を得て Claude Code | `sf flash vehicle`（手順 0-5。その都度「書き込んでよいか」を聞く） |
 
-- Claude Code は、ARM・モータ・飛行に関わる命令を**自分では実行しない**。応答に数秒以上かかることがあり、
-  停止の操作を任せられないため。頼まれても、人が打つよう案内する。
+- USB コンソールへの入力は、モータが回る命令（`motor test` など）を含めて Claude Code が送ってよい
+  （2026-11-22、利用者の決定。それまでの「モータが回りうる命令は全て人が入力する」は廃止）。
+  送る前に、何が回るかを利用者に伝える（音声の読み上げを使う）。Claude Code の応答には数秒以上かかる
+  ことがあるので、異常のときにモータを止めるのは利用者（送信機の DISARM、電池を外す）である。
 - 飛行中は指示を出さない。飛行の前に「この飛行の目的・操作の順・中止の段」を全部伝え、着陸とモータ停止の
   報告を受けてから次へ進む。
 
