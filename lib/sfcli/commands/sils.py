@@ -1080,6 +1080,20 @@ def _bundle_metric(bundle_path: Optional[Path], name: str, t0=None, t1=None):
     if name == "horizontal_drift_max":   # G3: max planar distance from the window's start
         px, py = truth["pos_x"].to_numpy(), truth["pos_y"].to_numpy()
         return float(np.max(np.hypot(px - px[0], py - py[0])))
+    if name in ("launch_offset_max", "launch_offset_last"):
+        # True planar distance from the LAUNCH point: the true horizontal position of the first row of
+        # the whole run (the craft rests on the floor until its takeoff), NOT of the window. The max
+        # (launch_offset_max) or the last value (launch_offset_last) of that distance inside the window.
+        # Truth, not the estimate: the estimator pins its position at 0 until the craft is 0.15 m up, so
+        # the estimate cannot show where the craft is relative to the floor point it started from.
+        # 離陸点からの真の水平距離: 窓でなく「実行全体の最初の行」の真の水平位置（離陸まで機体は床に静止
+        # している）を基準にする。窓の中のその距離の最大（launch_offset_max）または最後の値
+        # （launch_offset_last）。推定でなく真値: 推定器は機体が 0.15 m 上がるまで位置を 0 に固定するので、
+        # 推定では、出発した床の点に対する機体の位置は分からない。
+        first = log.streams["truth"].sort_values("timestamp_us").iloc[0]
+        px, py = truth["pos_x"].to_numpy(), truth["pos_y"].to_numpy()
+        distance = np.hypot(px - float(first["pos_x"]), py - float(first["pos_y"]))
+        return float(np.max(distance)) if name == "launch_offset_max" else float(distance[-1])
     if name == "tilt_max":                # G3: max true tilt magnitude (no tumble)
         return float(np.max(np.hypot(roll, pitch)))
     if name == "alt_band":                # G3: peak-to-peak altitude over the window
@@ -1426,7 +1440,8 @@ def _eval_expect(expect_path: Path, out_text: str, err_text: str, exit_code: int
                                               in SI units (rad/m — see _bundle_metric()).
                                               op ∈ < <= > >= ; optional "in t0 t1"
                                               restricts to a phase. names:
-                                              horizontal_drift_max, roll_rmse,
+                                              horizontal_drift_max, launch_offset_max,
+                                              launch_offset_last, roll_rmse,
                                               pitch_rmse, att_rmse, alt_rmse, tilt_max,
                                               alt_band, alt_mean, alt_min, alt_max,
                                               duty_max, duty_spread_max, yaw_band, yaw_turn_deg, flip_roll_deg,

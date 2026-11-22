@@ -369,6 +369,35 @@ def test_bundle_metric_horizontal_drift_max_zero(tmp_path):
     assert _bundle_metric(bundle_path, "horizontal_drift_max") == pytest.approx(0.0, abs=1e-9)
 
 
+def test_bundle_metric_launch_offset_uses_the_run_start_not_the_window_start(tmp_path):
+    """The launch point is the first row of the WHOLE run: a craft that sits 0.30 m from it for the whole window
+    reports 0.30 m for launch_offset_max / launch_offset_last, while horizontal_drift_max (relative to the
+    window's start) reports 0. A window that ends back at the launch point reports a last value of 0.
+    離陸点は実行全体の最初の行: 窓の間ずっとそこから 0.30 m にいる機体は launch_offset_max / launch_offset_last が
+    0.30 m で、窓の開始が基準の horizontal_drift_max は 0。窓が離陸点に戻って終わるなら最後の値は 0。
+    """
+    bundle_path = _build_metric_bundle(tmp_path)
+    log = sflog.FlightLog.load(bundle_path)
+    truth = log.streams["truth"].copy()
+    truth["pos_x"] = truth["pos_x"].astype(float)
+    offset_m = 0.30
+    third = len(truth) // 3
+    truth.loc[truth.index[third:2 * third], "pos_x"] = offset_m   # away from the launch point, then back / 離陸点から離れ、戻る
+    log.streams["truth"] = truth
+    key = str(bundle_path)
+    from sfcli.commands import sils as sils_module
+    sils_module._BUNDLE_METRIC_CACHE[key] = log
+    t_away_start = float(truth["timestamp_us"].iloc[third]) / 1e6
+    t_away_end = float(truth["timestamp_us"].iloc[2 * third - 1]) / 1e6
+    t_end = float(truth["timestamp_us"].iloc[-1]) / 1e6
+    away = (t_away_start, t_away_end)
+    assert _bundle_metric(bundle_path, "launch_offset_max", *away) == pytest.approx(offset_m)
+    assert _bundle_metric(bundle_path, "launch_offset_last", *away) == pytest.approx(offset_m)
+    assert _bundle_metric(bundle_path, "horizontal_drift_max", *away) == pytest.approx(0.0, abs=1e-9)
+    assert _bundle_metric(bundle_path, "launch_offset_max", t_away_start, t_end) == pytest.approx(offset_m)
+    assert _bundle_metric(bundle_path, "launch_offset_last", t_away_start, t_end) == pytest.approx(0.0, abs=1e-9)
+
+
 def test_bundle_metric_unknown_name_returns_none(tmp_path):
     bundle_path = _build_metric_bundle(tmp_path)
     assert _bundle_metric(bundle_path, "not_a_real_metric") is None

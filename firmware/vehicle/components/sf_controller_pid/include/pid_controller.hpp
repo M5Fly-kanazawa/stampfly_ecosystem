@@ -57,6 +57,7 @@ public:
     float verticalVelocityUp() const override { return vertical_velocity_.velocityUp(); }
     float blindThrustRatio() const override { return blind_descent_.thrustRatio(); }
     float verticalRiseM() const override { return vertical_velocity_.riseM(); }
+    bool positionHoldTarget(float& north_m, float& east_m) const override;
     void setGuidanceTarget(const GuidanceTarget& target,
                            const CommandSetpoint& current_sticks) override;
     bool isGuidanceActive() const override { return guidance_active_; }

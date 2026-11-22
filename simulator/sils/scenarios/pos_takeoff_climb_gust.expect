@@ -1,0 +1,33 @@
+# pos_takeoff_climb_gust.expect — a POS_HOLD auto-takeoff started by the transmitter ARM keeps the launch point (the point where the estimator released its pin) through the same gust
+#                                 送信機の ARM で始めた POS_HOLD の自動離陸は、同じ突風の中でも発進点（推定器が固定を解いた点）を保持する
+#
+# Measured (truth and estimate, noise off, gust 0.04 N behind the craft during the climb only; the same numbers before the fix (b0171c10) and after it, because this path never took the estimate):
+#   the craft 0.22 m from the launch point at the completion (9.3-9.5 s): 0.222
+#   the estimate (posvel.pos_x) in the hold, 12-20.4 s: min -0.016, max +0.062
+#   the true distance from the launch point in the hold, 12-20.4 s: max 0.105; after the landing, 24-26.5 s: 0.083
+# Bounds: the estimate -0.10 .. +0.10 m (the API takeoff before the fix: -0.21 .. -0.11); the true distance in the hold 0.20 m (the measured maximum 0.105 rounded up, a runaway check); the landing 0.12 m
+# (0.083 measured; the descent moves the craft about 0.1 m in the gust direction). The reference the API takeoff (api_takeoff_climb_gust) is brought to: same gates, same bounds.
+# SILS has no flow-sensor error at low height, so this is a check of HOW the target is taken, not of the size of the drift of a real flight.
+# 実測（真値と推定、ノイズなし、上昇中だけ機体の後ろ向き 0.04 N の突風。修正前（b0171c10）と修正後で数値は同じ: この経路は推定を目標にしたことがない）:
+#   完了（9.3〜9.5 s）で離陸点から 0.22 m: 0.222
+#   保持 12〜20.4 s の推定（posvel.pos_x）: 最小 -0.016・最大 +0.062
+#   保持 12〜20.4 s の離陸点からの真の距離: 最大 0.105、着陸の後 24〜26.5 s: 0.083
+# 上限: 推定 -0.10〜+0.10 m（修正前の API の離陸は -0.21〜-0.11）、保持の真の距離 0.20 m（実測の最大 0.105 を切り上げた、暴走の検出）、着陸の後 0.12 m（実測 0.083。降下は機体を突風の向きへ約 0.1 m 動かす）。
+# API の `takeoff`（api_takeoff_climb_gust）を合わせる基準: 同じ判定、同じ上限。
+# SILS は低い高さのフローの誤差を持たないので、これは目標の取り方の確認であり、実機のずれの大きさの確認ではない。
+exit 0
+log_contains any "Mode change: STABILIZE → POS_HOLD"
+log_contains any "Auto-takeoff complete — normal mode law engaged"
+log_absent any "Takeoff hold: target"
+log_absent any "Auto-takeoff aborted"
+metric launch_offset_max > 0.10 in 9.3 9.5
+metric launch_offset_max < 0.30 in 9.3 9.5
+bundle_value posvel.pos_x min > -0.10 in 12.0 20.4
+bundle_value posvel.pos_x max < 0.10 in 12.0 20.4
+metric launch_offset_max < 0.20 in 12.0 20.4
+metric alt_mean > 0.40 in 12.0 20.4
+metric alt_mean < 0.55 in 12.0 20.4
+metric launch_offset_last < 0.12 in 24.0 26.5
+metric alt_max < 0.05 in 24.0 26.5
+metric tilt_max < 0.25 in 7.0 26.5
+metric duty_max < 0.92 in 7.0 26.5

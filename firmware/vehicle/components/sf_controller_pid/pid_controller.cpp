@@ -2141,6 +2141,18 @@ void PidController::setGuidanceTarget(const GuidanceTarget& target,
     }
 }
 
+bool PidController::positionHoldTarget(float& north_m, float& east_m) const
+{
+    // A captured target exists in POS_HOLD once the deferred capture (capture_pos_) has run.
+    // POS_HOLD で、遅延取り込み（capture_pos_）が済んでいれば取り込み済みの目標がある。
+    if (current_mode_ < FlightMode::POS_HOLD || capture_pos_) {
+        return false;
+    }
+    north_m = pos_setpoint_x_;
+    east_m  = pos_setpoint_y_;
+    return true;
+}
+
 void PidController::startExcitation(const SysidCommand& cmd)
 {
     // Same FLIP-owns-every-channel rejection as setGuidanceTarget() above —

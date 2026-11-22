@@ -685,6 +685,16 @@ struct ControllerStatus {
     float    vertical_velocity_up;  // [m/s] vertical velocity estimate, up positive / 鉛直速度の推定（上が正）
     float    blind_thrust_ratio;    // [-] commanded / support thrust (0 = no blind descent) / 指令÷支持推力（0=ToF なし降下なし）
     float    vertical_rise_m;       // [m] estimated rise since the craft last rested on the ground (0 at rest; an accelerometer integral: it may drift on the floor, so it is used only where an error is harmless) / 地上で最後に静止してからの上昇量の推定（静止中は 0。加速度の積分なので床の上でもずれうる: 誤っても害の無い使い方だけをする）
+    // Horizontal hold target of the position cascade (NED north, east [m]) and whether it is valid: the point
+    // the controller holds in POS_HOLD (captured at the takeoff, moved by a stick reposition or a guidance
+    // target). ApiTask reads it at the end of an API takeoff so that the guidance target it seeds keeps this
+    // point instead of the estimate of that moment. Valid only when the controller holds a captured target.
+    // 位置カスケードの水平の保持目標（NED の北・東 [m]）と、その有効の印: 制御器が POS_HOLD で保持している点
+    // （離陸のときに取り込み、スティックの再配置や誘導目標で動く）。API の離陸の終わりに ApiTask が読み、
+    // 初期化する誘導目標がその時点の推定の位置でなくこの点を保つようにする。制御器が取り込み済みの目標を
+    // 持つときだけ有効。
+    bool     position_hold_valid;
+    float    position_hold_ned[2];
     // Flip maneuver status (flip-maneuver-plan.md §4.1/§4.3). Detection layer
     // facts published by the flip sequencer (sf_controller_pid, a later task);
     // StateManager/state_task read them to judge/execute the FLYING<->FLIP

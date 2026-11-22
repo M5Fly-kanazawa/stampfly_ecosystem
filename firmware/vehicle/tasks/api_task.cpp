@@ -507,16 +507,18 @@ float estimateYaw(const sf::StateEstimate& est)
     return atan2f(2.0f * (w * z + x * y), 1.0f - 2.0f * (y * y + z * z));
 }
 
-// Seed the guidance target at the CURRENT position and heading, at the altitude `down_m` (NED
-// down [m], negative above the origin), and publish it. Shared by cmdTakeoff (the auto-takeoff
-// target altitude) and cmdStop (the altitude the craft is at).
-// 誘導目標を「現在」の位置と向きで、高度 `down_m`（NED の下向き [m]、原点より上は負）に初期化
-// して publish する。cmdTakeoff（自動離陸の目標高度）と cmdStop（いまの高度）が共有する。
-void seedGuidance(float down_m)
+// Seed the guidance target at the altitude `down_m` (NED down [m], negative above the origin) and the
+// CURRENT heading, and publish it. The horizontal part is the point `hold_ned` (north, east [m]) when
+// one is given, else the CURRENT position. Shared by cmdTakeoff (the auto-takeoff target altitude, the
+// controller's hold point) and cmdStop (the altitude the craft is at, where it is).
+// 誘導目標を高度 `down_m`（NED の下向き [m]、原点より上は負）と「現在」の向きで初期化して publish する。
+// 水平の部分は、`hold_ned`（北・東 [m]）が与えられればその点、なければ「現在」の位置。cmdTakeoff
+// （自動離陸の目標高度、制御器の保持点）と cmdStop（いまの高度、いまの位置）が共有する。
+void seedGuidance(float down_m, const float* hold_ned = nullptr)
 {
     const sf::StateEstimate est = sf::estimate_state.latest();
-    g_target_ned[0] = est.position[0];
-    g_target_ned[1] = est.position[1];
+    g_target_ned[0] = (hold_ned != nullptr) ? hold_ned[0] : est.position[0];
+    g_target_ned[1] = (hold_ned != nullptr) ? hold_ned[1] : est.position[1];
     g_target_ned[2] = down_m;
     g_target_yaw    = estimateYaw(est);
     g_target_valid  = true;
@@ -596,6 +598,31 @@ bool waitTakeoffChain()
     });
 }
 
+// Seed the guidance target after an auto-takeoff: the auto-takeoff target altitude (NED down =
+// -altitude) and the controller's horizontal hold point, read from controller_status. The hold point
+// is the one the controller captured at the takeoff (the point where the estimator released its
+// ground pin); the climb's drift is not taken into the target. A controller that publishes no hold
+// point (position_hold_valid false) leaves the target at the current position, as before. One log
+// line gives the target and its offset from the estimate of this moment.
+// 自動離陸の後の誘導目標を初期化する: 自動離陸の目標高度（NED 下向き = -高度）と、controller_status
+// から読む制御器の水平の保持点。保持点は、制御器が離陸のときに取り込んだ点（推定器が地上の固定を解いた
+// 点）で、上昇中のずれは目標に取り込まない。保持点を publish しない制御器（position_hold_valid が false）
+// では、従来どおり現在の位置を目標にする。目標と、この瞬間の推定の位置とのずれを 1 行のログに出す。
+void seedGuidanceAtTakeoffHold()
+{
+    const sf::ControllerStatus controller = sf::controller_status.latest();
+    const float* hold_ned = controller.position_hold_valid ? controller.position_hold_ned : nullptr;
+    seedGuidance(-sf::limits::kAutoTakeoffTargetAltitudeM, hold_ned);   // NED down = -altitude / NED 下向き = -高度
+
+    const sf::StateEstimate est = sf::estimate_state.latest();
+    ESP_LOGI(TAG, "Takeoff hold: target N %.3f E %.3f m (%s), estimate N %.3f E %.3f m, target - estimate N %.3f E %.3f m",
+             static_cast<double>(g_target_ned[0]), static_cast<double>(g_target_ned[1]),
+             controller.position_hold_valid ? "controller hold point" : "current estimate",
+             static_cast<double>(est.position[0]), static_cast<double>(est.position[1]),
+             static_cast<double>(g_target_ned[0] - est.position[0]),
+             static_cast<double>(g_target_ned[1] - est.position[1]));
+}
+
 void cmdTakeoff()
 {
     const char* refusal = takeoffRefusalText();
@@ -616,12 +643,16 @@ void cmdTakeoff()
 
     // FLYING ends the auto-takeoff, which holds its target altitude from here on (the same as
     // after a transmitter ARM), also when its time limit ended the climb below the target.
-    // Seed the guidance target at the current position and heading and at that target altitude,
-    // so the craft keeps climbing to it. Composing subsequent moves from the TARGET starts here.
+    // Seed the guidance target at the auto-takeoff target altitude and the current heading, so the
+    // craft keeps climbing to it, and at the controller's horizontal hold point, NOT at the
+    // estimate of this moment: the drift of the climb stays corrected, as after a transmitter ARM.
+    // Composing subsequent moves from the TARGET starts here.
     // FLYING で自動離陸が終わり、以降は目標高度を保持する（送信機の ARM の後と同じ）。上昇が
-    // 時間切れで目標に届かずに終わった場合も同じ。誘導目標を現在の位置と向き・その目標高度で
-    // 初期化し、機体が目標まで上昇を続けるようにする。以降の移動合成はこの「目標」から始まる。
-    seedGuidance(-sf::limits::kAutoTakeoffTargetAltitudeM);   // NED down = -altitude / NED 下向き = -高度
+    // 時間切れで目標に届かずに終わった場合も同じ。誘導目標を、自動離陸の目標高度と現在の向き
+    // （機体が目標まで上昇を続けるようにする）、水平は制御器の保持点で初期化する。この瞬間の
+    // 推定の位置にはしない: 上昇中に生じたずれは、送信機の ARM の後と同じく戻される。
+    // 以降の移動合成はこの「目標」から始まる。
+    seedGuidanceAtTakeoffHold();
     reply("ok");
 }
 

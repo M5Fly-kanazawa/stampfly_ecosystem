@@ -185,6 +185,19 @@ public:
     /// ToF なし降下の間は 指令推力 ÷ 支持推力、それ以外は 0。verticalVelocityUp() と同様に publish する。既定 0。
     virtual float blindThrustRatio() const { return 0.0f; }
 
+    /// Horizontal hold target of the position cascade (NED north, east [m]). Returns false when the
+    /// controller holds no captured target (not in POS_HOLD, or the capture is still pending); the task
+    /// layer publishes it on controller_status. Default false (controllers without a position hold).
+    /// 位置カスケードの水平の保持目標（NED の北・東 [m]）。取り込み済みの目標を持たないとき（POS_HOLD でない、
+    /// または取り込みがまだ保留中）は false を返す。タスク層が controller_status で publish する。
+    /// 既定 false（位置保持を持たない制御器）。
+    virtual bool positionHoldTarget(float& north_m, float& east_m) const
+    {
+        (void)north_m;
+        (void)east_m;
+        return false;
+    }
+
     /// Estimated rise since the craft last rested on the ground [m] (integral of the vertical velocity
     /// estimate; 0 at rest). Published like verticalVelocityUp(); the ToF health tracker uses it to tell a craft
     /// that has left the floor from one still in the sensor's dead zone. Default 0.

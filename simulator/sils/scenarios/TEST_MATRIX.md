@@ -169,6 +169,8 @@ vehicle の飛行を SILS（物理真値）で検証するシナリオスイー�
 | `api_emergency_without_command` | **`command` なしの `emergency`**: 送信機の ARM（ARMED_GROUND）の後、`land` は `error not in command mode`、`emergency` はモータを止める（`EMERGENCY STOP`）。`--duration 12000000` | vehicle |
 | `api_takeoff_refused_mode` | **ARM 前判定が拒否する API `takeoff` はモードを残さない**: `--unpaired` でペアリングが開いたままの機体に `takeoff` → ApiTask が発行前に `error pairing in progress` で拒否し（12 s 待たない）、モードの切り替えも起きない。後の送信機の ARM は受理され、自動離陸は始まらない。（以前は POS_HOLD への切り替え・ARM の拒否・STABILIZE への復元を検査していた。復元は StateManager の最後の備えとして残るが、SILS ではこの経路を通らなくなった）`--unpaired --duration 16000000` | vehicle |
 | `api_takeoff_slow_target` | **上昇が遅く、時間切れで FLYING になった機体の API `takeoff` は、到達した高度でなく自動離陸の目標高度（0.5 m）を保持する**（モータの健全度 0.88・`tof_deadzone 0`、`--duration 50000000`）: 約 11.5 s に機体が約 0.23 m で `TAKEOFF → FLYING`、`takeoff` は `ok` を返し、誘導目標は `-0.50`（NED 下向き）。機体は約 0.79 m まで行き過ぎ（上限 1.2 m に触れない）、目標へ数十秒かけて戻る。FLYING 付近の最大高度 < 0.40 m（時間切れの場合であること）、12〜20 s の最大高度 < 0.95 m（実測 0.79 m）、整定後の 40〜49 s の平均高度 0.45〜0.55 m（実測 0.483 m）・最大高度 < 0.55 m（0.496 m）・最小高度 > 0.40 m（0.462 m）を確認する（到達した高度を目標にすると同じ区間で 0.17 m に留まり不合格） | vehicle |
+| `api_takeoff_climb_gust` | **API `takeoff` の後の保持の目標は、完了の時点の推定でなく発進点（推定器が固定を解いた点）**（2026-11-22。上昇中だけ機体の後ろ向き 0.04 N の突風、`--duration 28000000`）: 完了のとき離陸点から 0.23 m（真値）。保持 12〜19.8 s の推定（`posvel.pos_x`）が -0.10〜+0.10 m（修正後 -0.008〜+0.060、修正前 -0.182〜-0.106）、着陸後 24〜26.5 s の離陸点からの真の距離 `launch_offset_last` < 0.12 m（修正後 0.041、修正前 0.221）。保持の間の真の距離 < 0.20 m は二つを分けない（修正後 0.143、修正前 0.107。SILS の位置の推定が引き戻しの間に 0.05〜0.1 m ずれるため）。SILS は低い高さのフローの誤差を持たないので、目標の取り方の確認であり、実機のずれの大きさの確認ではない | vehicle |
+| `pos_takeoff_climb_gust` | **送信機の ARM の POS_HOLD 自動離陸も、同じ突風の中で発進点を保持する**（上と同じ外乱と判定、基準。修正の前後で数値は同じ。推定 -0.016〜+0.062、着陸後 0.083 m、`--duration 28000000`） | vehicle |
 | `api_parked_cli_disarm` | **`takeoff` の待機中の CLI `disarm` は、後回しの `takeoff` を捨てる**（`--duration 27000000`）: 7.0 s の `disarm` で待っていた `takeoff` は `error takeoff aborted`、並んでいた `takeoff` は `error cancelled: flight ended` で捨てられ、`error takeoff timeout` は出ず、7.6 s 以降 `duty_max` 0（モータは回らない）・`alt_max` 0.021 m。修正前のビルドは `error takeoff timeout`（並んでいた `takeoff` が実行され、12 s 待つ） | vehicle |
 | `api_parked_rc_disarm` | 同、送信機の DISARM（`arm` 列の 200 ms のパルス）（`--duration 27000000`） | vehicle |
 | `api_parked_cli_emergency` | 同、CLI の `emergency`（`--duration 27000000`） | vehicle |
@@ -293,6 +295,7 @@ sf sils scenario simulator/sils/scenarios/pos_flight.scn --target vehicle --vide
 `metric` メトリクス名一覧（`lib/sfcli/commands/sils.py` `_traj_metric`）:
 `horizontal_drift_max`, `roll_rmse`, `pitch_rmse`, `att_rmse`, `alt_rmse`,
 `tilt_max`, `alt_band`, `alt_mean`, `alt_min`, `alt_max`, `duty_max`。
+2026-11-22 追加: `launch_offset_max`・`launch_offset_last`（離陸点からの真の水平距離の窓内の最大・最後の値。窓の開始時点が基準の `horizontal_drift_max` では見えない「離陸点へ戻るか」を見る。詳細は `docs/scenario_tutorial.md`）。
 
 ## 4. カバレッジ状況（2026-06-06）
 

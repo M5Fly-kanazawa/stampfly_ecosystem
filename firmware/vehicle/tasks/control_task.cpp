@@ -254,6 +254,8 @@ static sf::ControllerStatus publishControllerStatus(sf::IController& controller)
     status.vertical_velocity_up = controller.verticalVelocityUp();   // blind-touchdown detector (ImuTask) / ToF なし接地検出器（ImuTask）
     status.blind_thrust_ratio   = controller.blindThrustRatio();
     status.vertical_rise_m      = controller.verticalRiseM();   // ToF health tracker (ImuTask) / ToF 健全性トラッカー（ImuTask）
+    status.position_hold_valid = controller.positionHoldTarget(status.position_hold_ned[0],   // POS_HOLD hold target for ApiTask / ApiTask 用の POS_HOLD 保持目標
+                                                               status.position_hold_ned[1]);
     status.timestamp = static_cast<uint32_t>(esp_timer_get_time());
     sf::controller_status.publish(status);
     return status;   // the log stream records the same facts / ログのストリームも同じ事実を記録する

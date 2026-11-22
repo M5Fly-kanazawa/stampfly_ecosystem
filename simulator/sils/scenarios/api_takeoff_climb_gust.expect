@@ -1,0 +1,51 @@
+# api_takeoff_climb_gust.expect — after an API `takeoff` the hold target is the launch point (the point where the estimator released its pin), not the estimate at the completion
+#                                 API の `takeoff` の後、保持の目標は完了の時点の推定でなく、発進点（推定器が固定を解いた点）
+#
+# Measured (truth and estimate, noise off, gust 0.04 N behind the craft during the climb only), before the fix (b0171c10) -> after the fix:
+#   the craft 0.23 m from the launch point at the completion (7.8-8.0 s): 0.225 -> 0.225 (the same, the fix changes nothing before the completion)
+#   the estimate (posvel.pos_x, the craft's forward) in the hold, 12-19.8 s: min -0.182, max -0.106 -> min -0.008, max +0.060   <- the gate that tells the two apart
+#   the true distance from the launch point in the hold, 12-19.8 s: max 0.107 -> 0.143   <- NOT a discriminating gate (see below)
+#   the true distance from the launch point after the landing, 24-26.5 s: 0.221 -> 0.041   <- the gate that tells the two apart
+# Run with the build before the fix, the estimate gate and the landing gate FAIL (and the checks of the new log line, which that build does not print); the other checks pass. After the fix all pass.
+# The true distance in the hold does not tell the two apart: the position estimate of SILS drifts by 0.05-0.1 m during the pull-back (the altitude overshoot to 0.8 m disturbs the flow-based
+# velocity), so a craft held at the estimate's zero sits 0.1 m on the other side of the launch point, as far as a craft held at the old target. Its bound 0.20 m is the measured after-fix maximum
+# 0.143 rounded up; it only catches a hold that runs away. The descent moves the craft 0.16 m in the gust direction in both builds (a constant velocity of about -0.07 m/s of the descent), so the
+# landing distance is the difference of the two holds plus that drift; its bound 0.12 m lies between 0.041 (after) and 0.221 (before). The estimate bounds -0.10 .. +0.10 m lie between the
+# after-fix range (-0.008 .. +0.060) and the before-fix range (-0.182 .. -0.106). The gust is 0.04 N: 0.03 N gave an offset of 0.14 m at the completion and a landing distance of 0.099 (before) against
+# 0.053 (after), too close; 0.05 N gave 0.30 (before) against 0.0075 (after) but an estimate offset of 0.195 m, at the edge of the 0.1-0.2 m of the flight.
+# SILS has no flow-sensor error at low height, so this is a check of HOW the target is taken, not of the size of the drift of a real flight.
+# 実測（真値と推定、ノイズなし、上昇中だけ機体の後ろ向き 0.04 N の突風）、修正前（b0171c10）→ 修正後:
+#   完了（7.8〜8.0 s）での離陸点からの距離 0.23 m: 0.225 → 0.225（同じ。修正は完了より前に何も変えない）
+#   保持 12〜19.8 s の推定（posvel.pos_x、機体の前方）: 最小 -0.182・最大 -0.106 → 最小 -0.008・最大 +0.060   ← 二つを分ける判定
+#   保持 12〜19.8 s の離陸点からの真の距離: 最大 0.107 → 0.143   ← 二つを分ける判定ではない（下記）
+#   着陸の後 24〜26.5 s の離陸点からの真の距離: 0.221 → 0.041   ← 二つを分ける判定
+# 修正前のビルドで実行すると、推定の判定と着陸の判定が不合格（と、そのビルドが出さない新しいログ行の検査）で、他は合格する。修正後は全て合格する。
+# 保持の間の真の距離は二つを分けない: SILS の位置の推定は引き戻しの間に 0.05〜0.1 m ずれ（高度の 0.8 m への行き過ぎがフローによる速度を乱す）、推定の 0 を保つ機体は離陸点の反対側 0.1 m にいて、
+# 従来の目標を保つ機体と同じ距離になる。その上限 0.20 m は修正後の実測の最大 0.143 を切り上げた値で、保持が暴走することだけを検出する。降下は両ビルドで機体を突風の向きへ 0.16 m 動かす（降下中の
+# 約 -0.07 m/s の一定の速度）ので、着陸の後の距離は二つの保持の差にその移動を足した値になる。その上限 0.12 m は 0.041（修正後）と 0.221（修正前）の間に置いた。推定の範囲 -0.10〜+0.10 m は修正後
+# の範囲（-0.008〜+0.060）と修正前の範囲（-0.182〜-0.106）の間に置いた。突風は 0.04 N: 0.03 N は完了で 0.14 m のずれ、着陸の後の距離は 0.099（修正前）対 0.053（修正後）で近すぎた。0.05 N は
+# 0.30（修正前）対 0.0075（修正後）だが推定のずれが 0.195 m で、実機の 0.1〜0.2 m の端になる。
+# SILS は低い高さのフローの誤差を持たないので、これは目標の取り方の確認であり、実機のずれの大きさの確認ではない。
+exit 0
+log_contains any "Auto-takeoff complete — normal mode law engaged"
+log_contains any "Takeoff hold: target N 0.000 E 0.000 m (controller hold point)"
+log_absent any "(current estimate)"
+log_contains any "Guidance target: NED [0.00 0.00 -0.50]"
+# The line of ApiTask comes before the line the controller prints when it takes the guidance target. / ApiTask の行は、制御器が誘導目標を受け取るときに出す行より前に出る。
+order "Takeoff hold: target" "Guidance target: NED"
+log_absent any "Auto-takeoff aborted"
+# The condition of the scenario: the craft is 0.1-0.3 m from the launch point at the completion. / シナリオの条件: 完了のとき機体は離陸点から 0.1〜0.3 m にいる。
+metric launch_offset_max > 0.10 in 7.8 8.0
+metric launch_offset_max < 0.30 in 7.8 8.0
+# The hold target is the release point: the estimate stays near 0 (before the fix: about -0.15). / 保持の目標は解除の点: 推定は 0 の近くに留まる（修正前は約 -0.15）。
+bundle_value posvel.pos_x min > -0.10 in 12.0 19.8
+bundle_value posvel.pos_x max < 0.10 in 12.0 19.8
+# The true distance from the launch point in the hold stays bounded (not a discriminating gate). / 保持の間の離陸点からの真の距離は有界（二つを分ける判定ではない）。
+metric launch_offset_max < 0.20 in 12.0 19.8
+metric alt_mean > 0.40 in 12.0 19.8
+metric alt_mean < 0.55 in 12.0 19.8
+# After the landing the craft is near the launch point (before the fix: 0.221). / 着陸の後、機体は離陸点の近くにいる（修正前は 0.221）。
+metric launch_offset_last < 0.12 in 24.0 26.5
+metric alt_max < 0.05 in 24.0 26.5
+metric tilt_max < 0.25 in 7.0 26.5
+metric duty_max < 0.92 in 7.0 26.5

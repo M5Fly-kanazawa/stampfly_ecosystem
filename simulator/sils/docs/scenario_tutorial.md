@@ -140,6 +140,8 @@ SILS（Software-in-the-Loop＝実機ファームを無改変のままPC上の物
 | `duty_max` | 比（0〜1） | 窓内の4モータ duty の最大値（飽和していないことの確認） |
 | `duty_spread_max` | 比（0〜1） | 窓内で、同時刻の4モータ duty の（最大−最小）の最大値（モータ間の偏り。地上での積分巻き上がり検出に使う） |
 | `horizontal_drift_max` | m | 窓の**開始時点**からの水平面内の最大距離（位置保持の逸脱量） |
+| `launch_offset_max` | m | **離陸点**（実行全体の最初の真値の水平位置。離陸まで機体は床に静止している）から、窓の中の水平面内の真の最大距離。`horizontal_drift_max` は窓の開始時点が基準なので、離陸点へ戻るかどうかは見えない。こちらは推定でなく真値（推定器は 0.15 m まで位置を 0 に固定する）。離陸の前に機体を動かすシナリオ（`handle` など）では使わない |
+| `launch_offset_last` | m | 同じ距離の、窓の最後の行の値（着陸の後の離陸点からのずれなど） |
 | `flip_roll_deg` | deg（**度**、上記の角度系とは異なりラジアンではない） | 窓内で真値の機体角速度 `rate_x`（ロール p、FRD）を時間積分した符号付き回転角。FLIP（宙返り）の実回転量の確認用（`docs/plans/flip-maneuver-plan.md` §5.2） |
 | `flip_pitch_deg` | deg（度） | 同上、`rate_y`（ピッチ q）を積分 |
 | `descent_speed_max` | m/s | 窓内の真値の最大「降下」速度（下向き正の `vel_z` の最大値、上昇のみの窓は 0）。接地速度の確認用（`tof_silent_*.scn` の ToF なしの着陸） |
@@ -428,6 +430,8 @@ Computed from the streams inside the run's flight-log bundle (the zip-format log
 | `duty_max` | ratio (0..1) | max of the four motors' duty over the window (saturation check) |
 | `duty_spread_max` | ratio (0..1) | max over the window of (max − min) across the four motors' duty at the same instant (imbalance; used to catch integrator windup on the ground) |
 | `horizontal_drift_max` | m | max planar distance from the window's **start** point |
+| `launch_offset_max` | m | max true planar distance inside the window from the **launch point** (the true horizontal position of the first row of the whole run; the craft rests on the floor until its takeoff). `horizontal_drift_max` is relative to the window's start, so it cannot show whether the craft returns to the launch point. This one uses the truth, not the estimate (the estimator pins its position at 0 until 0.15 m). Do not use it in a scenario that moves the craft before the takeoff (`handle`, ...) |
+| `launch_offset_last` | m | the same distance at the window's last row (for example the offset from the launch point after a landing) |
 | `flip_roll_deg` | deg (**degrees**, unlike the radian-valued angular metrics above) | signed rotation angle from integrating the truth body angular rate `rate_x` (roll p, FRD) over the window in time. For checking the actual rotation of a FLIP maneuver (`docs/plans/flip-maneuver-plan.md` §5.2) |
 | `flip_pitch_deg` | deg | same, integrating `rate_y` (pitch q) |
 | `descent_speed_max` | m/s | largest truth **downward** speed in the window (max of the NED-down `vel_z`; 0 for a climb-only window). Touchdown-speed check (blind landing, `tof_silent_*.scn`) |
