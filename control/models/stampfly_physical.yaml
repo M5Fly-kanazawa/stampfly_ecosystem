@@ -139,14 +139,16 @@ constants:
       = 0.065 m（アーム長 0.0325 m = arm_offset×√2、docs/architecture/
       stampfly-parameters.md §2「機体形状」参照）。
   urdf_base_mass:
-    value: 0.033
+    value: 0.03599
     unit: "kg"
-    date: "2026-07-24"
+    date: "2026-11-23"
     source: >
       simulator/shared/assets/meshes/parts/stampfly.urdf の base_link
-      単体質量。base_link(0.033) + 4×プロペラリンク(各0.001) = mass(0.037)。
-      独立した実測値ではなく mass からの差し引きで決まる表現上の値
-      （tools/params_audit/params_manifest.py EXPECTED_URDF_BASE_MASS 参照）。
+      単体質量。base_link(0.03599) + 4×プロペラリンク(各0.0002525、実物の実測 0.2525 g、
+      2026-11-23) = mass(0.037)。独立した実測値ではなく mass からの差し引きで決まる表現上の値
+      （tools/params_audit/params_manifest.py EXPECTED_URDF_BASE_MASS 参照）。以前は
+      base_link 0.033 + 4×0.001 だった（プロペラのリンクが実物の約 4 倍の質量）。
+      プロペラ 1 枚の質量と形状は simulator/shared/assets/meshes/propeller_geometry.json。
 
 # ==============================================================================
 # Motor/propeller electromechanical coefficient sets. Values inside ONE set

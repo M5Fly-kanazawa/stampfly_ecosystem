@@ -120,7 +120,7 @@ EXPECTED_IXX = 1.15e-05
 EXPECTED_IYY = 1.53e-05
 EXPECTED_IZZ = 2.26e-05
 EXPECTED_ARM = 0.023
-EXPECTED_URDF_BASE_MASS = 0.033
+EXPECTED_URDF_BASE_MASS = 0.03599
 
 # --- superseded measured_2026_07 comparison values (tools/params_audit) ---
 # Used for the D*V-drive copies that have not migrated yet (Genesis, VPython,

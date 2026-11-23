@@ -124,12 +124,13 @@
     </collision>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <!-- Base mass adjusted 0.030->0.033 (2026-07-24) so base(0.033) + 4 props(4x0.001)
-           = 0.037 kg total, matching the measured 36.8g vehicle mass (inertia unchanged,
-           measured values). The inertia values were replaced on 2026-11-23 by the value
-           computed from the part STL meshes and measured masses (was 9.16 / 13.3 / 20.4e-6
-           from the 2-point suspension measurement). -->
-      <mass value="0.033"/>
+      <!-- Base mass = 0.037 kg total - 4 x 0.0002525 kg (measured propeller mass, 2026-11-23)
+           = 0.03599 kg, so the vehicle total stays 0.037 kg (measured 36.8 g; was 0.033 + 4 x 0.001
+           before the propeller mass was measured). Inertia unchanged. The inertia values were
+           replaced on 2026-11-23 by the value computed from the part STL meshes and measured
+           masses (was 9.16 / 13.3 / 20.4e-6 from the 2-point suspension measurement).
+           ベース質量 = 全体 0.037 kg - 4 x 0.0002525 kg(プロペラ実測)= 0.03599 kg。機体全体は 0.037 kg のまま。 -->
+      <mass value="0.03599"/>
       <inertia ixx="11.5e-6" ixy="0" ixz="0" iyy="15.3e-6" iyz="0" izz="22.6e-6"/>
     </inertial>
   </link>
@@ -146,8 +147,11 @@
     </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.001"/>
-      <inertia ixx="1e-9" ixy="0" ixz="0" iyy="1e-9" iyz="0" izz="1e-9"/>
+      <!-- One real propeller: 0.2525 g measured (2026-11-23). Inertia from the display shape at uniform
+           density (propeller_derived.json): axis 13.71e-9, in-plane 7.01e-9 kg m^2. The joint axis is z.
+           実物のプロペラ 1 枚(実測 0.2525 g)。慣性は表示用形状の一様密度の計算値(軸 13.71e-9、面内 7.01e-9)。 -->
+      <mass value="0.0002525"/>
+      <inertia ixx="7.01e-9" ixy="0" ixz="0" iyy="7.01e-9" iyz="0" izz="13.71e-9"/>
     </inertial>
   </link>
 
@@ -170,8 +174,11 @@
     </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.001"/>
-      <inertia ixx="1e-9" ixy="0" ixz="0" iyy="1e-9" iyz="0" izz="1e-9"/>
+      <!-- One real propeller: 0.2525 g measured (2026-11-23). Inertia from the display shape at uniform
+           density (propeller_derived.json): axis 13.71e-9, in-plane 7.01e-9 kg m^2. The joint axis is z.
+           実物のプロペラ 1 枚(実測 0.2525 g)。慣性は表示用形状の一様密度の計算値(軸 13.71e-9、面内 7.01e-9)。 -->
+      <mass value="0.0002525"/>
+      <inertia ixx="7.01e-9" ixy="0" ixz="0" iyy="7.01e-9" iyz="0" izz="13.71e-9"/>
     </inertial>
   </link>
 
@@ -194,8 +201,11 @@
     </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.001"/>
-      <inertia ixx="1e-9" ixy="0" ixz="0" iyy="1e-9" iyz="0" izz="1e-9"/>
+      <!-- One real propeller: 0.2525 g measured (2026-11-23). Inertia from the display shape at uniform
+           density (propeller_derived.json): axis 13.71e-9, in-plane 7.01e-9 kg m^2. The joint axis is z.
+           実物のプロペラ 1 枚(実測 0.2525 g)。慣性は表示用形状の一様密度の計算値(軸 13.71e-9、面内 7.01e-9)。 -->
+      <mass value="0.0002525"/>
+      <inertia ixx="7.01e-9" ixy="0" ixz="0" iyy="7.01e-9" iyz="0" izz="13.71e-9"/>
     </inertial>
   </link>
 
@@ -218,8 +228,11 @@
     </visual>
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="0.001"/>
-      <inertia ixx="1e-9" ixy="0" ixz="0" iyy="1e-9" iyz="0" izz="1e-9"/>
+      <!-- One real propeller: 0.2525 g measured (2026-11-23). Inertia from the display shape at uniform
+           density (propeller_derived.json): axis 13.71e-9, in-plane 7.01e-9 kg m^2. The joint axis is z.
+           実物のプロペラ 1 枚(実測 0.2525 g)。慣性は表示用形状の一様密度の計算値(軸 13.71e-9、面内 7.01e-9)。 -->
+      <mass value="0.0002525"/>
+      <inertia ixx="7.01e-9" ixy="0" ixz="0" iyy="7.01e-9" iyz="0" izz="13.71e-9"/>
     </inertial>
   </link>
 
