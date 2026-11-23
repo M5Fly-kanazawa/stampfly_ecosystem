@@ -396,13 +396,15 @@ PID は時定数形式（Kp/Ti/Td）を使用する（「PID 表記の違い」�
 
 | Kp | Ti [s] | OutputMax [m/s] | 備考 |
 |-----|--------|-----------------|------|
-| 0.45 | 7.0 | 0.5（`altitude.climb_rate`） | 下降レート上限は別パラメータ `altitude.descent_rate`（既定 0.5 m/s） |
+| 0.85 | 7.0 | 0.5（`altitude.climb_rate`） | 下降レート上限は別パラメータ `altitude.descent_rate`（既定 0.5 m/s）。Kp は 2026-11-23 に 0.45 から変更（下の注記） |
 
 #### 速度 PID（速度→推力補正）
 
-| Kp | Ti [s] | OutputMax [N] |
-|-----|--------|---------------|
-| 0.1 | 2.5 | 0.15 |
+| Kp | Ti [s]（上昇・着陸） | Ti [s]（保持中、`altitude.vel.ti_hover`） | OutputMax [N] |
+|-----|--------|--------|---------------|
+| 0.12 | 2.5 | 2.0 | 0.15 |
+
+> **注記（2026-11-23、高さのゲインを 3 つ変更）:** `altitude.alt.kp` 0.45 → 0.85、`altitude.vel.kp` 0.1 → 0.12、`altitude.vel.ti_hover` 2.5 → 2.0。下向き ToF（高さの距離センサ）のヒストグラム併合を切った（読みの遅れが約 220 ms → 約 50〜75 ms）のと対の値である。**併合ありのままでこの値を使うと位相余裕が 28 度まで下がる**（モデルでの見積もり）。併合の設定は `VL53L3CXWrapper::Config::histogram_merge_enabled`（`defaultBottom()` は `false`）。保存済みの値は新しい既定に置き換わらない（`param save` は全パラメータを書く。着陸が地上で終わるときの自動保存も全件を書く）ため、古い機体では `param set` 3 つと `param save` が要る。根拠と未確認の点は `firmware/vehicle/docs/detailed_design.md` §4「高さの制御のゲイン」。
 
 #### ホバー推力フィードフォワード（新規）
 
@@ -893,13 +895,15 @@ Parameter namespace: `altitude.*` (PI only — no Td)
 
 | Kp | Ti [s] | OutputMax [m/s] | Notes |
 |-----|--------|-----------------|-------|
-| 0.45 | 7.0 | 0.5 (`altitude.climb_rate`) | Descent rate limit is a separate parameter, `altitude.descent_rate` (default 0.5 m/s) |
+| 0.85 | 7.0 | 0.5 (`altitude.climb_rate`) | Descent rate limit is a separate parameter, `altitude.descent_rate` (default 0.5 m/s). Kp changed from 0.45 on 2026-11-23 (note below) |
 
 #### Velocity PID (velocity → thrust correction)
 
-| Kp | Ti [s] | OutputMax [N] |
-|-----|--------|---------------|
-| 0.1 | 2.5 | 0.15 |
+| Kp | Ti [s] (climb, landing) | Ti [s] (hover, `altitude.vel.ti_hover`) | OutputMax [N] |
+|-----|--------|--------|---------------|
+| 0.12 | 2.5 | 2.0 | 0.15 |
+
+> **Note (2026-11-23, three altitude gains changed):** `altitude.alt.kp` 0.45 to 0.85, `altitude.vel.kp` 0.1 to 0.12, `altitude.vel.ti_hover` 2.5 to 2.0. They are the counterpart of switching the histogram merge of the downward ToF (the height distance sensor) off (reading age about 220 ms to about 50-75 ms). **With the merge back on, these gains give a phase margin of only 28 degrees** (model estimate). The merge setting is `VL53L3CXWrapper::Config::histogram_merge_enabled` (`false` in `defaultBottom()`). A saved value is not replaced by the new default (`param save` writes every parameter, and so does the automatic save when a landing ends on the ground), so an older craft needs three `param set` commands and `param save`. Evidence and the unconfirmed points: `firmware/vehicle/docs/detailed_design.md` §4, "Altitude control gains".
 
 #### Hover-Thrust Feedforward (new)
 

@@ -203,7 +203,11 @@ private:
     // 抑制）、hover は Airborne のみ（低周波の電池電圧低下外乱を除去する強い積分）。
     // alt_vel_.ti の唯一の書き手は applyAltVelTiForPhase()（定義は pid_controller.cpp）。
     float alt_vel_ti_climb_ = 2.5f;
-    float alt_vel_ti_hover_ = 2.5f;
+    // Initial values only: loadParams() overwrites both from the table (altitude.vel.ti_hover
+    // default 2.0, the counterpart of the merge-off ToF; see params.cpp).
+    // 初期値のみ。loadParams() が table から両方を上書きする（altitude.vel.ti_hover の既定 2.0。
+    // 併合なしの ToF と対。params.cpp 参照）。
+    float alt_vel_ti_hover_ = 2.0f;
 
     // Position control PIDs / 位置制御PID
     PID pos_x_, pos_y_;

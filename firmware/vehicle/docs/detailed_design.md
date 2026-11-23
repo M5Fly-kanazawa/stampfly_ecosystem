@@ -657,6 +657,37 @@ $$|C(-1)| = k_p\left(1 + \frac{1}{\eta}\right) = 9\,k_p \qquad (\eta = 0.125,\; 
 | 検証 | フライトログ再生で方位ずれ 12.3°→5.7°（平均）。SILS 判定 `yaw_hold.scn`: M1 80% 故障下 8 秒手放しで yaw_band < 1.5°（無効化対照 3.1° 単調流出）|
 | 検証（LANDING） | ホスト試験 `test_yaw_heading_landing`（誘導が立ったままの LANDING・位置誘導が未完の目標を持つ LANDING・低いスロットルの手動 LANDING・TakeoffClimb・意図したスティックと再捕捉・リンク途絶）。SILS `api_land_yaw_offset`（ヨースティックに −0.03 の中立のずれを与えたまま API で着陸し、着陸中の機首の向きの変化が小さいこと）|
 
+### 高さの制御のゲイン（2026-11-23 変更。下向き ToF の併合なしと対）
+
+高さの制御は、位置の PI（`altitude.alt.kp`・`altitude.alt.ti`。高さの誤差 → 目標の上昇速度）と速度の PI（`altitude.vel.kp`・`altitude.vel.ti`・`altitude.vel.ti_hover`。速度の誤差 → 推力の補正 [N]）の 2 段である。**下向き ToF（高さの距離センサ）のヒストグラム併合を切ったこと（§5「下向き・前方 ToF のヒストグラム併合」）と対で、次の 3 つの既定値を変えた。** 併合の設定とゲインは対であり、片方だけを戻してはならない。
+
+| パラメータ | 変更前 | 既定 | 備考 |
+|------|------|------|------|
+| `altitude.alt.kp`（位置ループの比例ゲイン [1/s]） | 0.45 | **0.85** | 自動離陸の上昇（目標高さ → 上昇速度。離陸の上昇率 0.3 m/s で制限）、保持、高さの上限の手前で上昇速度を絞る計算に使われる。スティックで上昇・降下しているあいだは位置ループの出力を使わない |
+| `altitude.vel.kp`（速度ループの比例ゲイン [N/(m/s)]） | 0.1 | **0.12** | 速度ループは自動離陸の上昇・保持・スティックの上昇・着陸の降下のすべてで、速度の目標に追従するのに使う |
+| `altitude.vel.ti_hover`（速度ループの積分時間 [s]、保持中） | 2.5 | **2.0** | 保持中（Airborne）だけに使う。離陸の上昇・着陸は `altitude.vel.ti`（2.5 s）で、2 つが異なるのでフェーズ別の切り替え（INV-1。`applyAltVelTiForPhase()`）が既定で初めて働く |
+
+`altitude.alt.ti`（7 s）と `altitude.vel.ti`（2.5 s）は変えていない。
+
+**波及（INV の確認で見つけた副作用）。** 高さの上限（1.2 m）の手前で上昇の指令を絞る計算 `room_rate = altitude.alt.kp × (上限 − 高さ)`（スティック・rc 誘導・API の上昇に効く。`pid_controller.cpp`）は、`altitude.alt.kp` をそのまま使う。0.45 → 0.85 で、この上限は約 1.9 倍になる: スティックの全開（`altitude.climb_rate` = 0.5 m/s）を絞り始める高さは、0.45 のとき約 0.09 m（0.5 m/s ÷ 0.45 = 1.11 m を上限から引いた高さ）で、高さ 0.6 m では 0.27 m/s まで絞られていた。0.85 では約 0.61 m まで絞られず、高さ 0.6 m でも 0.5 m/s で上がれる。SILS の `tof_silent_alt_climb` で、スティックで上がっている途中に ToF が止まったときの頂点が 0.858 → 1.102 m（線 1.1 m）になったのはこれが原因（絞りの上限 0.28 → 0.5 m/s）。実機で絞りが効いていたかは未確認。
+
+**事実（根拠）**
+
+- **古いゲインの前提。** 変更前のゲインは、ToF の読みが約 220 ms 古い（併合あり）条件で調整されていた。その条件では、位相余裕 50 度を保ったままゲインを上げる余地が無かった。併合なしの読みの遅れは約 50〜75 ms（§5）。
+- **モデルでの見積もり**（PC 上のモデル。飛行 13 の励振の記録で検証。推力 → 加速度のゲイン 19.6 (m/s²)/N、遅れ 37 ms）: 一巡の交差角周波数 1.9 → 2.3 rad/s、位相余裕 52 度（機体のゲイン ±15 %・遅れ +10 ms の端で 50.1 度）、感度の山 1.35、推力が 5 % ずれたときの高さのずれ 176 → 106 mm、突風での高さのずれ 147 → 114 mm、センサの雑音による推力の指令の標準偏差 3.0 → 3.7 mN。**併合ありに戻すと位相余裕は 28 度**。
+- **実機の飛行 15**（2026-11-23。併合なし＋このゲイン。推力の 5 % の多重正弦波の励振）: 感度（推力の指令 ÷ 加えた励振）の最大 1.21（0.4 Hz 1.19 ± 0.44、1.1 Hz 1.09 ± 0.08、1.7 Hz 1.21 ± 0.08、2.7 Hz 以上 0.95〜1.01）。保持の高さの標準偏差 12.4 mm（8 s の窓 2 つ）。離陸の行き過ぎ 9.5 cm。0.2 m の上昇の行き過ぎ 7.0 cm（35 %。変更前のゲインの飛行 12・13 でも 5.9・7.9 cm）。励振の間の高さのずれの最大 45 mm（飛行 13 は 79 mm）。悪くなった点は見つかっていない。
+- **先に決めた合格の線のうち 2 つは割っている**: 1.7 Hz の感度の上限 1.15（実測 1.21。モデルの予測は 0.98）、0.2 m の上昇の行き過ぎ 20 %（実測 35 %）。**保持の改善は、1 回の飛行では証明できていない。** この変更は「合格した」のではなく、利用者の決定（2026-11-23）による。
+
+**未確認**
+
+- 保持の改善（標準偏差・感度の山）を、複数回の飛行と電池の状態を変えて確かめていない。
+- 着陸と、高さの上限の手前の挙動を、新しいゲインで実機では確かめていない（モデルの位相余裕は保持の区間のもの）。
+- SILS の ToF のモデルは読みの古さを表さない（`simulation-policy.md` のバックログ #25）ので、**SILS の合格は、併合と対になった位相余裕の証拠にならない**（併合ありに戻した場合の劣化を SILS は検出できない）。
+
+**保存済みの値と起動時の注意。** NVS（本体の不揮発メモリ）の保存値は、起動時に既定値を上書きする。`param save` は全パラメータを書く。**さらに、オンボード学習（`attitude.trim.learn`・`hover.thrust.learn`。どちらも既定で有効）が、着陸が地上で終わる辺（空中または着陸フェーズから接地へ）で `params::save()` を呼ぶので、そうして着陸した機体は、その時点の高さのゲインを全部保存している**（`param save` を手で実行していなくても。実機の記録に「Saved 144 parameters to NVS」が見えるのは、2026-11 の記録では穏やかに着陸した飛行 1 回だけ）。**接地の衝撃で緊急 DISARM になった飛行 15 の着陸では、記録に保存の行が無い**（記録は着陸の後も続いているので、保存されなかったと読める。機体で `param get altitude.alt.kp` を実行するまでは未確認）。古い機体は 0.45 / 0.1 / 2.5 のまま起動し、新しい既定は効かない。この古い組は併合なしに対して余裕が大きい側（位相余裕が大きい）なので危険ではないが、新しい既定の性能にはならない。起動時の `params::init()` が NVS の読み込みの直後に、3 つのうち 1 つでも古い既定値（0.45 / 0.1 / 2.5）と一致していれば、警告を 1 行出す（値は書き換えない）。対処は `param set altitude.alt.kp 0.85`・`param set altitude.vel.kp 0.12`・`param set altitude.vel.ti_hover 2.0` の後に、着陸・DISARM してから `param save`（`param reset` は学習したホバー推力・トリムを含む全パラメータを既定に戻すので勧めない）。
+
+**併合の設定との対を守る手段。** 実機の経路では、全センサの設定は `VL53L3CXWrapper::Config::defaultBottom()` / `defaultFront()` を通り、どちらも併合なしで、設定または読み戻しの失敗はセンサの初期化の失敗になる（併合ありのまま飛ぶ経路は無い）。併合を実行時に切り替えるパラメータは無い。ワークショップ版（`firmware/workshop`）は vehicle のコンポーネントを使うので同じ。SILS は併合の有無を表さない（上記）。新しいゲインだけを、併合なしのコミットの無い枝へ持っていく経路は、コード上では防げない（この文書と `params.cpp` のコメント、`Config::histogram_merge_enabled` のコメントが相互に参照している）。
+
 ## 5. 状態推定インターフェース定義
 
 ESKF/EKF/Complementary Filterを差し替え可能にするための統一インターフェース。
@@ -724,6 +755,7 @@ ST のドライバは既定で、同じ発光の設定の過去最大 6 フレ�
 - **前方 ToF:** 利用者の決定で下向きと同じ（併合なし）。**実機で併合なしを確かめたのは下向きの 1.5 m までで、前方の 1.5 m を超える距離（壁まで 1 m・2 m・3 m）での有効な読みの割合と雑音は未確認**（PC 上の合成の試算では 1.4 m 以上で測距が成立しにくくなる結果があったが、光子の数は仮の値）。前方は記録・表示専用で、判定・制御・推定には使わない。
 - **設定の失敗:** 設定または読み戻しの失敗は、そのセンサの初期化の失敗として扱う（`hardware_init.md` §5。下向きは Recoverable、前方は Optional）。既定の併合ありのまま続けると、読みの古さが 220 ms に戻っても気づけないので、続行しない。
 - **SILS:** 下向き ToF は同じ ST のドライバを通り、起動の経路（`init()`）も同じなので併合なしになる。SILS の ToF のモデルはセンサが光を集める時間の窓や読み出しの古さを表さないため、併合なしの SILS の遅れは実機（約 50 ms）より小さい（`docs/architecture/simulation-policy.md`）。前方 ToF の模擬は SILS に無い。
+- **高さのゲインとの対:** 高さの制御のゲイン（`altitude.alt.kp`・`altitude.vel.kp`・`altitude.vel.ti_hover`）は併合なしの読みの古さに合わせて選んだ値である。**併合を戻すときは、ゲインも選び直す**（§4「高さの制御のゲイン」。併合ありのままでは位相余裕が 28 度）。
 - **確認:** 起動のログ `VL53L3CX (BOTTOM|FRONT) initialized at address 0x.., histogram merge off`（ドライバから読み戻した設定）。ホスト試験 `test_tof_histogram_merge`（定数とドライバの既定・記録配列の上限の整合）。
 
 ### ESKF 実装の特性
@@ -1473,6 +1505,37 @@ public:
 
 **Heading hold through LANDING.** The heading hold is skipped only while guidance really drives the yaw rate (POS_HOLD and above, `VerticalPhase::Airborne`; `PidController::guidanceOwnsYaw()`), not merely while the guidance flag is set. In LANDING (every mode, regardless of the throttle stick) a neutral yaw stick (|yaw| < 0.03) holds the heading at the moment LANDING began; a deliberate stick input is followed (INV-2) and the hold re-captures on release. On a stale link (older than `kLandingLinkStaleUs`, 500 ms) the existing level gate forces the yaw-rate setpoint to 0. Before this fix the flag stayed set into LANDING, so a yaw-stick offset of -0.0265 became a yaw-rate setpoint of -0.13 rad/s and the nose turned about 35 deg in 3.3 s.
 
+### Altitude control gains (changed 2026-11-23; the counterpart of the merge-off downward ToF)
+
+The altitude control has two stages: a position PI (`altitude.alt.kp`, `altitude.alt.ti`; height error to target climb rate) and a velocity PI (`altitude.vel.kp`, `altitude.vel.ti`, `altitude.vel.ti_hover`; velocity error to thrust correction [N]). **Three defaults changed together with switching the histogram merge of the downward ToF (the height distance sensor) off (§5, "Histogram merge of the downward and front ToF").** The merge setting and the gains are a pair; one must not be reverted without the other.
+
+| Parameter | Before | Default | Notes |
+|------|------|------|------|
+| `altitude.alt.kp` (position-loop proportional gain [1/s]) | 0.45 | **0.85** | Used by the auto-takeoff climb (target height to climb rate, limited to the takeoff climb rate 0.3 m/s), the hold and the climb-rate taper below the altitude ceiling; not used while the stick is climbing or descending |
+| `altitude.vel.kp` (velocity-loop proportional gain [N/(m/s)]) | 0.1 | **0.12** | The velocity loop follows its velocity target in the auto-takeoff climb, the hold, the stick climb and the landing descent alike |
+| `altitude.vel.ti_hover` (velocity-loop integral time while holding [s]) | 2.5 | **2.0** | Used only while holding (Airborne). Take-off climb and landing use `altitude.vel.ti` (2.5 s); the two differ, so the phase schedule (INV-1, `applyAltVelTiForPhase()`) is active by default for the first time |
+
+`altitude.alt.ti` (7 s) and `altitude.vel.ti` (2.5 s) are unchanged.
+
+**Ripple (a side effect found in the INV check).** The calculation that tapers a climb command below the altitude ceiling (1.2 m), `room_rate = altitude.alt.kp x (ceiling - height)` (it acts on the stick, rc guidance and the API climb; `pid_controller.cpp`), uses `altitude.alt.kp` directly. From 0.45 to 0.85 this limit becomes about 1.9 times larger: a full stick (`altitude.climb_rate` = 0.5 m/s) used to be tapered from a height of about 0.09 m upwards (1.2 m minus 0.5 / 0.45 = 1.11 m), and at 0.6 m it was limited to 0.27 m/s. With 0.85 it is not tapered below about 0.61 m, and at 0.6 m the craft may climb at 0.5 m/s. This is why, in SILS `tof_silent_alt_climb`, the peak after the ToF stopped during a stick climb rose from 0.858 to 1.102 m (line 1.1 m): the taper limit went from 0.28 to 0.5 m/s. Whether the taper was effective on a real craft is not confirmed.
+
+**Facts (evidence)**
+
+- **Premise of the old gains.** They were tuned for a ToF reading about 220 ms old (merge on). Under that condition there was no room to raise the gains while keeping a 50 degree phase margin. With the merge off the reading age is about 50-75 ms (§5).
+- **Model estimate** (PC model, validated on the excitation record of flight 13; thrust-to-acceleration gain 19.6 (m/s^2)/N, delay 37 ms): loop crossover 1.9 to 2.3 rad/s, phase margin 52 degrees (50.1 degrees at the edge of +-15 % plant gain and +10 ms delay), sensitivity peak 1.35, height error for a 5 % thrust offset 176 to 106 mm, height error for a gust 147 to 114 mm, standard deviation of the thrust command from sensor noise 3.0 to 3.7 mN. **With the merge back on the phase margin is 28 degrees.**
+- **Real flight 15** (2026-11-23; merge off plus these gains; 5 % multisine thrust excitation): maximum sensitivity (thrust command / applied excitation) 1.21 (0.4 Hz 1.19 +- 0.44, 1.1 Hz 1.09 +- 0.08, 1.7 Hz 1.21 +- 0.08, 2.7 Hz and above 0.95-1.01). Standard deviation of the hold height 12.4 mm (two 8 s windows). Take-off overshoot 9.5 cm. Overshoot of a 0.2 m climb 7.0 cm (35 %; with the old gains flights 12 and 13 gave 5.9 and 7.9 cm). Largest height deviation between the excitations 45 mm (flight 13: 79 mm). No point got worse.
+- **Two of the acceptance lines set beforehand were missed**: the upper limit of the sensitivity at 1.7 Hz, 1.15 (measured 1.21; the model predicted 0.98), and the overshoot of the 0.2 m climb, 20 % (measured 35 %). **An improvement of the hold is not proven by one flight.** The change rests on the user's decision (2026-11-23), not on a passed test.
+
+**Not confirmed**
+
+- The hold improvement (standard deviation, sensitivity peak) over several flights and battery states.
+- The landing and the behaviour near the altitude ceiling with the new gains on a real craft (the model's phase margin is for the hold).
+- The SILS ToF model has no reading age (`simulation-policy.md` backlog #25), so **a SILS pass is not evidence of the phase margin that depends on the merge** (SILS cannot detect the degradation if the merge were turned back on).
+
+**Saved values and the boot notice.** A value saved in NVS (the on-board non-volatile memory) overrides the default at boot. `param save` writes every parameter. **In addition, the on-board learning (`attitude.trim.learn` and `hover.thrust.learn`, both on by default) calls `params::save()` at the edge where a landing ends on the ground (from the air or the landing phase to the ground phase), so a craft that landed that way has saved all the altitude gains that were live at that moment** (even if `param save` was never run by hand; in the 2026-11 flight records a "Saved 144 parameters to NVS" line appears for one gently landed flight only). **The landing of flight 15, which ended by the impact emergency DISARM, left no save line in the record** (the record continues after the landing, so it reads as not saved; unconfirmed until `param get altitude.alt.kp` is run on the craft). An older craft therefore boots with 0.45 / 0.1 / 2.5 and the new defaults do not take effect. That old set has a large margin against the merge-off sensor, so it is not dangerous, but it does not give the new default's behaviour. Right after the NVS load, `params::init()` logs one warning line when at least one of the three equals an old default (0.45 / 0.1 / 2.5); the value is not rewritten. The fix is `param set altitude.alt.kp 0.85`, `param set altitude.vel.kp 0.12`, `param set altitude.vel.ti_hover 2.0`, then `param save` after landing and DISARM (`param reset` is not recommended: it also resets the learned hover thrust and trim).
+
+**How the pairing with the merge setting is kept.** On a real craft every sensor setting goes through `VL53L3CXWrapper::Config::defaultBottom()` / `defaultFront()`, both with the merge off, and a failure to set or read back is a sensor bring-up failure (there is no path that flies with the merge on). There is no parameter that switches the merge at run time. The workshop build (`firmware/workshop`) uses the vehicle components and is the same. SILS does not represent the merge (above). Carrying only the new gains to a branch without the merge-off commit cannot be prevented in code (this document, the comment in `params.cpp` and the comment of `Config::histogram_merge_enabled` refer to each other).
+
 ## 5. Estimation Interface Definition
 
 ```cpp
@@ -1511,6 +1574,7 @@ By default the ST driver adds up the photon counts (histograms) of the last (up 
 - **Front ToF:** the same (off) by the user's decision. **On hardware merging off was checked only for the downward sensor up to 1.5 m; the share of valid readings and the noise of the front sensor beyond 1.5 m (walls at 1 m, 2 m, 3 m) are NOT confirmed** (a synthetic estimate on a PC gave ranging that becomes hard beyond 1.4 m, with an assumed photon count). The front ToF is for log and display only; no judgement, control or estimation uses it.
 - **Setting failure:** a failure to set or read back is a failure of that sensor's initialisation (`hardware_init.md` §5: Recoverable for the downward sensor, Optional for the front). Carrying on with the default merge would hide a return of the 220 ms staleness, so it does not.
 - **SILS:** the downward ToF goes through the same ST driver and the same `init()` path, so merging is off there. The SILS ToF model does not represent the sensor's light-collection window or readout staleness, so the SILS delay with merging off is smaller than on hardware (about 50 ms) (`docs/architecture/simulation-policy.md`). SILS has no front ToF model.
+- **Pairing with the altitude gains:** the altitude gains (`altitude.alt.kp`, `altitude.vel.kp`, `altitude.vel.ti_hover`) were chosen for the reading age of merge off. **If the merge is turned back on, choose the gains again** (§4, "Altitude control gains"; with the merge on these gains give a phase margin of 28 degrees).
 - **Check:** boot log `VL53L3CX (BOTTOM|FRONT) initialized at address 0x.., histogram merge off` (the setting read back from the driver); host test `test_tof_histogram_merge` (constants against the driver default and the record-array limit).
 
 ### Barometric height (observation only)

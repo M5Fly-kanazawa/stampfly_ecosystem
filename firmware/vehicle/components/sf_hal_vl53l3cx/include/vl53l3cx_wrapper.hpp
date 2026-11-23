@@ -94,7 +94,13 @@ public:
             config.location = ToFLocation::BOTTOM;
             config.timing_budget_ms = 33;  // 30Hz
             // Merging off: no ~220 ms staleness and no multi-centimetre jump for the height estimator.
+            // PAIRED with the altitude gains (params.cpp: altitude.alt.kp 0.85, altitude.vel.kp 0.12,
+            // altitude.vel.ti_hover 2.0), which were chosen for the ~50-75 ms reading age of merge off; with merging
+            // ON they leave a phase margin of only ~28 degrees (model). Do not turn merging on without redoing them.
             // 併合なし: 高さの推定にとって、約 220 ms の古さと数 cm の跳びが無くなる。
+            // 高さのゲイン（params.cpp: altitude.alt.kp 0.85、altitude.vel.kp 0.12、altitude.vel.ti_hover 2.0）と対:
+            // ゲインは併合なしの読みの古さ約 50〜75 ms に合わせて選んだ値で、併合ありでは位相余裕が約 28 度しか
+            // 残らない（モデル）。併合を有効にするときは、ゲインを選び直すこと。
             config.histogram_merge_enabled = false;
             return config;
         }

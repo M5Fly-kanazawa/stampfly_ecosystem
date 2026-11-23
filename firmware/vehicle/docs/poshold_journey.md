@@ -219,7 +219,7 @@ POS_HOLD 成立後も残る2つの微小振動。**どちらもハードがボ�
 | # | 症状 | 真因 | 対策の方向 |
 |---|------|------|-----------|
 | #6 | 水平 ~1Hz のフラフラ（±0.43°） | 高 vel.kp が **フロー速度ノイズを傾き指令に増幅**（コヒーレンス 0.72）。`vel.kp·σ_v/g = 3.0×0.025/9.81 = 0.43°` | **速度ローパス**（~0.5Hz）で締まりを保ったままノイズだけ除去。位相余裕の確認必須（[`poshold_wobble_velocity_noise.md`](poshold_wobble_velocity_noise.md)） |
-| #7 | 高度の長周期上下動（±6cm） | **モータ/プロペラ応答遅れ ~110ms** に対し高度ループの減衰不足（ToF 30Hz・ESKF 鉛直速度は健全・無遅れと実測済み） | `alt.kp 0.6→0.45` で 38% 緩和済。精密化には鉛直の同定飛行が必要 ※2026-11-23 の注記: この「無遅れ」は、ToF のヒストグラム併合（既定の設定）が有効だった時期の判断で、その後の実機の試験で、併合ありの ToF は動きの遅いとき約 220 ms 古いと分かった（併合なしでは約 50〜75 ms、実機の試験による。内訳は未確認）。`detailed_design.md` §5「下向き・前方 ToF のヒストグラム併合」を参照。 |
+| #7 | 高度の長周期上下動（±6cm） | **モータ/プロペラ応答遅れ ~110ms** に対し高度ループの減衰不足（ToF 30Hz・ESKF 鉛直速度は健全・無遅れと実測済み） | `alt.kp 0.6→0.45` で 38% 緩和済。精密化には鉛直の同定飛行が必要 ※2026-11-23 の注記: この「無遅れ」は、ToF のヒストグラム併合（既定の設定）が有効だった時期の判断で、その後の実機の試験で、併合ありの ToF は動きの遅いとき約 220 ms 古いと分かった（併合なしでは約 50〜75 ms、実機の試験による。内訳は未確認）。`detailed_design.md` §5「下向き・前方 ToF のヒストグラム併合」を参照。 ※2026-11-23 の注記（ゲインの更新）: `altitude.alt.kp` の既定は 0.85、`altitude.vel.kp` は 0.12、`altitude.vel.ti_hover` は 2.0 に変えた（併合なしの ToF と対。`detailed_design.md` §4「高さの制御のゲイン」。上の「0.45 が最適」「vel.kp を上げるのは逆効果」は、併合あり（読みが約 220 ms 古い）の条件での結論）。 |
 
 ## 9. 確定パラメータ（2026-06-22 時点）
 
@@ -229,7 +229,7 @@ POS_HOLD 成立後も残る2つの微小振動。**どちらもハードがボ�
 | `position.vel.kp` | 3.0 | 内ループ強化（K 不足補償） |
 | `position.stick_vel` | 0.4 m/s | スティック再配置速度 |
 | `attitude.*.ti` | 2.0 | パイロット好み |
-| `altitude.alt.kp` | 0.45 | 高度上下動 38% 緩和 |
+| `altitude.alt.kp` | 0.45 | 高度上下動 38% 緩和 ※2026-11-23: 既定は 0.85 に変更（併合なしの ToF と対。`detailed_design.md` §4） |
 | `eskf.accel_comp.*` | enable 1 / alpha 0.2 / beta 0.02 / max 5.0 | 運動加速度補償 |
 
 > ⚠️ **実機適用は WiFi で `param set` → `param save` が必須。** トリム学習器が着陸ごとに自動 save するため、再フラッシュ単独では旧値（NVS）で上書きされる。詳細は [`../README`](../) 系の param SSOT 規約参照。
@@ -366,7 +366,7 @@ With fixed-point hold complete, a **velocity-command repositioning** stick schem
 | # | Symptom | Root cause | Direction |
 |---|---------|------------|-----------|
 | #6 | Horizontal ~1 Hz wobble (±0.43°) | high vel.kp amplifies flow-velocity noise into tilt commands (coherence 0.72); `vel.kp·σ_v/g = 3.0×0.025/9.81 = 0.43°` | velocity low-pass (~0.5 Hz) to strip the noise while keeping tightness; mandatory phase-margin check ([`poshold_wobble_velocity_noise.md`](poshold_wobble_velocity_noise.md)) |
-| #7 | Slow altitude bob (±6 cm) | ~110 ms motor/prop actuation lag vs under-damped altitude loop (ToF 30 Hz and ESKF vertical velocity are healthy and lag-free, measured) | `alt.kp 0.6→0.45` damped 38%; precise tuning needs a vertical identification flight |
+| #7 | Slow altitude bob (±6 cm) | ~110 ms motor/prop actuation lag vs under-damped altitude loop (ToF 30 Hz and ESKF vertical velocity are healthy and lag-free, measured) | `alt.kp 0.6→0.45` damped 38%; precise tuning needs a vertical identification flight Note (2026-11-23, gain update): the defaults are now `altitude.alt.kp` 0.85, `altitude.vel.kp` 0.12 and `altitude.vel.ti_hover` 2.0, the counterpart of the merge-off ToF (`detailed_design.md` §4, "Altitude control gains"). The "0.45 is optimal" and "raising vel.kp is counterproductive" above are conclusions for the merge-on condition (reading about 220 ms old). |
 
 ## 9. Final parameters (as of 2026-06-22)
 
@@ -376,7 +376,7 @@ With fixed-point hold complete, a **velocity-command repositioning** stick schem
 | `position.vel.kp` | 3.0 | inner-loop authority (K-shortfall compensation) |
 | `position.stick_vel` | 0.4 m/s | stick reposition speed |
 | `attitude.*.ti` | 2.0 | pilot-preferred |
-| `altitude.alt.kp` | 0.45 | altitude bob damped 38% |
+| `altitude.alt.kp` | 0.45 | altitude bob damped 38% (2026-11-23: default changed to 0.85, the counterpart of the merge-off ToF; `detailed_design.md` §4) |
 | `eskf.accel_comp.*` | enable 1 / alpha 0.2 / beta 0.02 / max 5.0 | acceleration compensation |
 
 > ⚠️ **Applying to hardware requires `param set` → `param save` over WiFi.** The trim learner auto-saves on each landing, so re-flashing alone is overwritten by the old NVS values.

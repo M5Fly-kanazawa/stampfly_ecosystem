@@ -18,7 +18,7 @@
 #include "topics.hpp"
 #include "params.hpp"
 #include "param_range.hpp"   // isFloatInRange: finite and inside the range / 有限かつ範囲内
-#include "param_boot_notice.hpp"   // needsYawRateDerivativeNotice / 保存済みの微分時間の注意の判定
+#include "param_boot_notice.hpp"   // needsYawRateDerivativeNotice, needsAltitudeGainNotice / 保存済みの値の注意の判定
 #include "flight_limits.hpp"   // limits::kBlindTouchdownAccelG (the default of safety.blind_touchdown.accel_g) / 同パラメータの既定値
 #include "esp_log.h"
 #include "esp_timer.h"   // reload-callback timestamps / 再読込コールバックの時刻印
@@ -404,66 +404,103 @@ namespace param_vars {
     float att_yawhold_kp       = 3.0f;
     float att_yawhold_rate_max = 2.0f;
 
-    // Altitude control — cascade alt → vertical-velocity → thrust [N].
-    // Values are the flight-proven gains of the original firmware (config.hpp
-    // altitude_control, "PI-v1": alt 0.6/7.0 → vel 0.1/2.5). Its velocity loop also
-    // output physical thrust [N] (VEL_OUTPUT_MAX 0.15 N), so the units match and the
-    // gains transfer 1:1. They are used instead of the stronger SILS-tuned values
-    // (1.5/8 → 0.3/2) because they are hardware-proven.
-    // alt.kp = 0.45 (the proven set has 0.6): real-flight tuned to damp a slow altitude bob.
-    // The bob is the altitude loop being marginally under-damped against the ~110 ms
-    // MOTOR/PROP ACTUATION lag (thrust cmd -> actual vertical accel, MEASURED from a
-    // hover log; the ToF at 30 Hz and the ESKF vertical velocity are both clean/un-lagged,
-    // so the lag is in the thrust path, not sensing). Lowering alt.kp drops the loop
-    // crossover -> more phase margin against the lag -> the bob damps. Sweet spot: a sim
-    // sweep + flight both put the best damping at 0.45 (0.4/0.35 are worse; raising
-    // alt.vel.kp HURTS because the damping path sees the same actuation lag). Real flight:
-    // altitude RMS 53 mm at 0.6 vs 33 mm at 0.45 (-38%), period 5 vs 11.5 s. Residual
-    // ~±6 cm long-period bob is the actuation-lag limit (hardware). KEEP EQUAL to the
-    // table default. See poshold_accel_compensation.md remaining issue #7.
-    // 高度制御 — カスケード 高度→鉛直速度→推力[N]。値はオリジナルファームの飛行実績ゲイン
-    // （config.hpp altitude_control「PI-v1」: alt 0.6/7.0 → vel 0.1/2.5）。その速度ループも
-    // 物理推力[N]出力（VEL_OUTPUT_MAX 0.15N）で単位が一致し、そのまま移植できる。強めの SILS
-    // 調整値（1.5/8 → 0.3/2）ではなく、実機実績のあるこの値を使う。
-    // alt.kp = 0.45（実績値は 0.6）: 遅い高度上下動を減衰させる実機調整。上下動は高度ループが
-    // モータ/プロペラの応答遅れ ~110ms（推力指令→実鉛直加速度、ホバーログで実測。ToF 30Hz も
-    // ESKF 鉛直速度も健全・無遅れゆえ遅れは推力経路）に対し減衰不足なため。alt.kp を下げると
-    // ループのクロスオーバーが下がり位相余裕が増えて上下動が減衰。最適点は sim+実機とも 0.45
-    // （0.4/0.35 は悪化、alt.vel.kp を上げるのは逆効果＝減衰経路が同じ遅れを見るため）。実機:
-    // 高度 RMS は 0.6 で 53mm、0.45 で 33mm(−38%)、周期 5s→11.5s。残る±6cm 長周期はアクチュエーション
-    // 遅れの限界（ハード）。table 既定と必ず一致させる。poshold_accel_compensation.md 残課題 #7 参照。
-    float alt_alt_kp      = 0.45f;
+    // Altitude control — cascade alt → vertical-velocity → thrust [N]: the position loop
+    // outputs a climb rate [m/s], the velocity loop a thrust correction [N] (like the
+    // flight-proven original firmware, config.hpp altitude_control "PI-v1": alt 0.6/7.0 →
+    // vel 0.1/2.5, VEL_OUTPUT_MAX 0.15 N, so units match). The values below are NOT those: they are the user's decision of
+    // 2026-11-23 and the COUNTERPART of switching the downward ToF histogram merge OFF
+    // (tof_histogram_merge.hpp, VL53L3CXWrapper::Config::histogram_merge_enabled = false in
+    // defaultBottom()). Do not revert one without the other.
+    //
+    // History. 0.45 / 0.1 / 2.5 (through 2026-11-22) were tuned against a ToF reading about
+    // 220 ms old (merge on) plus the thrust actuation lag; with that delay there was no room
+    // to raise the gains while keeping a 50 degree phase margin (real flight: altitude RMS
+    // 53 mm at alt.kp 0.6 vs 33 mm at 0.45). The earlier remark "the ToF is lag-free" was
+    // wrong: the merged ToF was ~220 ms old; with merge off it is ~50-75 ms.
+    //
+    // Now alt.kp 0.85 / vel.kp 0.12 / vel.ti_hover 2.0 (alt.ti 7 s and vel.ti 2.5 s unchanged):
+    //  - Model (PC model validated on the flight-13 excitation record; thrust->accel gain
+    //    19.6 (m/s^2)/N, delay 37 ms): crossover 1.9 -> 2.3 rad/s, phase margin 52 deg (50.1 deg
+    //    at plant gain +-15 % and +10 ms delay), sensitivity peak 1.35, height error for a 5 %
+    //    thrust offset 176 -> 106 mm, for a gust 147 -> 114 mm, thrust command noise from the
+    //    sensor 3.0 -> 3.7 mN. With the merge back ON the phase margin is 28 deg.
+    //  - Real flight 15 (2026-11-23, merge off + these gains, 5 % multisine thrust excitation):
+    //    sensitivity (thrust command / excitation) max 1.21 (1.7 Hz 1.21 +- 0.08, 1.1 Hz
+    //    1.09 +- 0.08, >= 2.7 Hz 0.95-1.01), hold-height standard deviation 12.4 mm, take-off
+    //    overshoot 9.5 cm, 0.2 m climb overshoot 7.0 cm (35 %; flights 12 and 13 with the old
+    //    gains: 5.9 and 7.9 cm), largest deviation between excitations 45 mm (flight 13: 79 mm).
+    //  - TWO PRE-SET ACCEPTANCE LINES WERE MISSED: the 1.7 Hz sensitivity limit 1.15 (measured
+    //    1.21; model 0.98) and the 0.2 m climb overshoot limit 20 % (measured 35 %). The hold
+    //    improvement is NOT proven by one flight; this is adopted by the user's decision, not
+    //    because a test passed.
+    //  - NOT confirmed: the hold improvement over several flights and battery states; landing
+    //    and the approach to the altitude ceiling on a real craft (the phase margin is for the
+    //    hold). SILS cannot check the pairing with the merge: its ToF model has no reading age
+    //    (simulation-policy.md backlog #25).
+    // Saved values: NVS overrides these defaults, and the on-board learning saves ALL
+    // parameters when a landing ends on the ground (not after an impact emergency DISARM). params::init() logs a notice when a saved value equals an
+    // old default (param_boot_notice.hpp). See detailed_design.md §4 "Altitude control gains".
+    // 高度制御 — カスケード 高度→鉛直速度→推力[N]: 位置ループは上昇速度[m/s]、速度ループは
+    // 推力補正[N]を出力する（飛行実績のあるオリジナルファーム config.hpp altitude_control
+    // 「PI-v1」: alt 0.6/7.0 → vel 0.1/2.5、VEL_OUTPUT_MAX 0.15N と単位が一致）。下の値はその値ではなく、
+    // 2026-11-23 の利用者の決定による値で、下向き ToF のヒストグラム併合を切ったこと
+    // （tof_histogram_merge.hpp、defaultBottom() の histogram_merge_enabled = false）と対である。
+    // 片方だけを戻してはならない。
+    //
+    // 経緯。0.45 / 0.1 / 2.5（2026-11-22 まで）は、ToF の読みが約 220 ms 古い（併合あり）条件と
+    // 推力の応答遅れに対して調整した値で、その遅れでは位相余裕 50 度を保ってゲインを上げる余地が
+    // 無かった（実機: 高度 RMS は alt.kp 0.6 で 53mm、0.45 で 33mm）。以前の「ToF は遅れなし」
+    // という記述は誤りで、併合ありの ToF は約 220 ms 古かった（併合なしで約 50〜75 ms）。
+    //
+    // 現在は alt.kp 0.85 / vel.kp 0.12 / vel.ti_hover 2.0（alt.ti 7 s・vel.ti 2.5 s は不変）:
+    //  - モデル（PC 上のモデル。飛行 13 の励振の記録で検証。推力→加速度のゲイン 19.6 (m/s²)/N、
+    //    遅れ 37 ms）: 交差 1.9 → 2.3 rad/s、位相余裕 52 度（機体のゲイン ±15 %・遅れ +10 ms の端で
+    //    50.1 度）、感度の山 1.35、推力が 5 % ずれたときの高さのずれ 176 → 106 mm、突風 147 → 114 mm、
+    //    センサの雑音による推力の指令 3.0 → 3.7 mN。併合ありに戻すと位相余裕は 28 度。
+    //  - 実機の飛行 15（2026-11-23、併合なし＋このゲイン、推力 5 % の多重正弦波の励振）: 感度（推力の
+    //    指令 ÷ 励振）の最大 1.21（1.7 Hz 1.21 ± 0.08、1.1 Hz 1.09 ± 0.08、2.7 Hz 以上 0.95〜1.01）、
+    //    保持の高さの標準偏差 12.4 mm、離陸の行き過ぎ 9.5 cm、0.2 m の上昇の行き過ぎ 7.0 cm
+    //    （35 %。変更前のゲインの飛行 12・13 は 5.9・7.9 cm）、励振の間の高さのずれの最大 45 mm
+    //    （飛行 13 は 79 mm）。
+    //  - 先に決めた合格の線のうち 2 つを割っている: 1.7 Hz の感度の上限 1.15（実測 1.21、モデルは
+    //    0.98）と、0.2 m の上昇の行き過ぎの上限 20 %（実測 35 %）。保持の改善は 1 回の飛行では
+    //    証明できていない。試験に合格したからではなく、利用者の決定で採用した。
+    //  - 未確認: 保持の改善を複数回の飛行・電池の状態で確かめていないこと、実機での着陸と高さの
+    //    上限の手前の挙動（位相余裕は保持の区間のもの）。SILS は併合との対を確かめられない
+    //    （ToF のモデルに読みの古さが無い。simulation-policy.md バックログ #25）。
+    // 保存値: NVS の値はこの既定値を上書きし、オンボード学習は着陸が地上で終わったとき（接地の衝撃での
+    // 緊急 DISARM の後を除く）に全パラメータを保存する。
+    // 保存値が古い既定値と一致するときは params::init() が注意を出す（param_boot_notice.hpp）。
+    // detailed_design.md §4「高さの制御のゲイン」参照。
+    float alt_alt_kp      = 0.85f;
     float alt_alt_ti      = 7.0f;
-    float alt_vel_kp      = 0.1f;
+    float alt_vel_kp      = 0.12f;
     float alt_vel_ti      = 2.5f;
-    // Phase-scheduled hover-only vel-loop Ti (VerticalPhase::Airborne).
-    // DEFAULT 2.5 = no-op (same as alt_vel_ti); 1.5 is the flight-validated opt-in,
-    // especially in combination with the DOB.
-    // Rationale: real hover shows low-freq battery-sag thrust disturbance that a
-    // shorter Ti rejects, but a uniformly shorter alt_vel_ti worsens auto-takeoff
-    // capture overshoot (integrator windup, +60% in sim/flight). Splitting
-    // Ti by phase (climb=alt_vel_ti, hover=alt_vel_ti_hover) keeps
-    // TakeoffClimb unchanged (SILS isolation proof: takeoff overshoot
-    // 9.96 cm vs 9.22 cm with ti_hover=1.5). Flight A/B
-    // (logs 224906/231940): standalone effect is band reshaping (~neutral
-    // total std) — but WITH the altitude DOB (altitude.dob.fc=1.5) the 1.5/2.5
-    // choice matters: same-log replay gives
-    // DOB+ti1.5 = 94.2 mm vs DOB+ti2.5 = 107.1 mm, and the -67% flight
-    // validation (log 022929) flew the 1.5 combination.
+    // Phase-scheduled hover-only vel-loop Ti (VerticalPhase::Airborne). Default 2.0 differs
+    // from alt_vel_ti (2.5, climb / landing), so the phase schedule is active by default
+    // (it was a no-op while both were 2.5). The 2.0 is part of the merge-off set above.
+    // Earlier evidence for a shorter hover Ti (kept as history): real hover shows a
+    // low-frequency battery-voltage-drop thrust disturbance that a shorter Ti rejects, but a
+    // uniformly shorter alt_vel_ti worsens the auto-takeoff capture overshoot (integrator
+    // windup, +60 % in sim/flight); splitting Ti by phase (climb = alt_vel_ti, hover =
+    // alt_vel_ti_hover) leaves TakeoffClimb unchanged (SILS isolation proof: take-off overshoot
+    // 9.96 cm vs 9.22 cm with ti_hover = 1.5). Flight A/B (logs 224906/231940): on its own the
+    // effect is band reshaping (~neutral total std); WITH the altitude DOB (altitude.dob.fc =
+    // 1.5) the choice matters: same-log replay gives DOB + ti 1.5 = 94.2 mm vs DOB + ti 2.5 =
+    // 107.1 mm, and the -67 % flight validation (log 022929) flew the 1.5 combination.
     // See PidController::applyAltVelTiForPhase() (architecture.md INV-1).
-    // フェーズ別 hover 専用の速度ループ Ti（VerticalPhase::Airborne）。
-    // 既定2.5=no-op（alt_vel_ti と同じ）。1.5は実飛行検証済みのopt-in値で、特にDOB併用時に有効。
-    // 根拠: 実ホバーの低周波電池電圧低下
-    // 外乱は短いTiで除去できるが、alt_vel_ti の一律短縮は自動離陸の捕捉オーバー
-    // シュートを悪化させる（積分巻き上がり、シム/実機+60%）。フェーズ分離
-    // （climb=alt_vel_ti, hover=alt_vel_ti_hover）で TakeoffClimb は不変
-    // （SILS分離実証: 離陸OS 9.96cm に対し ti_hover=1.5 で 9.22cm）。実飛行A/B
-    // （ログ224906/231940）: 単独では帯域再配分（合計stdほぼ中立）
-    // だが、高度DOB（altitude.dob.fc=1.5）併用では 1.5/2.5
-    // の差が効く: 同一ログ再生で DOB+ti1.5=94.2mm vs DOB+ti2.5=107.1mm。
-    // −67%の実飛行検証（ログ022929）も 1.5 の組合せで飛行。
+    // フェーズ別 hover 専用の速度ループ Ti（VerticalPhase::Airborne）。既定 2.0 は alt_vel_ti
+    // （2.5、上昇・着陸）と異なるので、フェーズ別の切り替えが既定で働く（両方 2.5 の間は何もしな
+    // かった）。2.0 は上の併合なしの組の一部。
+    // 短い hover の Ti の以前の根拠（経緯として残す）: 実ホバーの低周波の電池電圧低下による推力外乱は
+    // 短い Ti で除去できるが、alt_vel_ti の一律短縮は自動離陸の捕捉オーバーシュートを悪化させる
+    // （積分巻き上がり、シム/実機 +60 %）。フェーズ分離（climb = alt_vel_ti、hover =
+    // alt_vel_ti_hover）なら TakeoffClimb は不変（SILS 分離実証: 離陸の行き過ぎ 9.96 cm に対し
+    // ti_hover = 1.5 で 9.22 cm）。実飛行 A/B（ログ 224906/231940）: 単独では帯域再配分（合計 std は
+    // ほぼ中立）、高度 DOB（altitude.dob.fc = 1.5）併用では選択が効く: 同一ログ再生で DOB + ti 1.5 =
+    // 94.2 mm、DOB + ti 2.5 = 107.1 mm。−67 % の実飛行検証（ログ 022929）は 1.5 の組合せで飛行。
     // PidController::applyAltVelTiForPhase() 参照（architecture.md INV-1）。
-    float alt_vel_ti_hover = 2.5f;
+    float alt_vel_ti_hover = 2.0f;
     // ALT_HOLD manual stick rates (separately tunable). The throttle stick is
     // spring-centred (centre = hold); push up → climb at climb_rate, push down →
     // descend at descent_rate. Mirrors the separate MAX_CLIMB_RATE / MAX_DESCENT_RATE
@@ -876,12 +913,15 @@ static const ParamEntry table[] = {
     {"attitude.yawhold.kp",       ParamType::FLOAT, &att_yawhold_kp,       3.0f, 0.0f, 10.0f, &notifyControllerReload},
     {"attitude.yawhold.rate_max", ParamType::FLOAT, &att_yawhold_rate_max, 2.0f, 0.1f, 5.0f,  &notifyControllerReload},
 
-    // Altitude control (SILS-validated; see the variable defaults above)
-    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  0.45f, 0.0f, 10.0f,  &notifyControllerReload},
+    // Altitude control (alt.kp / vel.kp / vel.ti_hover are the counterpart of the merge-off
+    // downward ToF: see the variable defaults above; keep equal to them)
+    // 高度制御（alt.kp / vel.kp / vel.ti_hover は併合なしの下向き ToF と対。上の変数の既定値を
+    // 参照し、必ず一致させる）
+    {"altitude.alt.kp",   ParamType::FLOAT, &alt_alt_kp,  0.85f, 0.0f, 10.0f,  &notifyControllerReload},
     {"altitude.alt.ti",   ParamType::FLOAT, &alt_alt_ti,  7.0f,  0.1f, 100.0f, &notifyControllerReload},
-    {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.1f,  0.0f, 10.0f,  &notifyControllerReload},
+    {"altitude.vel.kp",   ParamType::FLOAT, &alt_vel_kp,  0.12f, 0.0f, 10.0f,  &notifyControllerReload},
     {"altitude.vel.ti",   ParamType::FLOAT, &alt_vel_ti,  2.5f,  0.1f, 100.0f, &notifyControllerReload},
-    {"altitude.vel.ti_hover", ParamType::FLOAT, &alt_vel_ti_hover, 2.5f, 0.1f, 100.0f, &notifyControllerReload},
+    {"altitude.vel.ti_hover", ParamType::FLOAT, &alt_vel_ti_hover, 2.0f, 0.1f, 100.0f, &notifyControllerReload},
     {"altitude.climb_rate",   ParamType::FLOAT, &alt_climb_rate,   0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.descent_rate", ParamType::FLOAT, &alt_descent_rate, 0.5f, 0.05f, 2.0f, &notifyControllerReload},
     {"altitude.dob.fc",       ParamType::FLOAT, &alt_dob_fc,       0.0f, 0.0f, 5.0f, &notifyControllerReload},
@@ -1113,6 +1153,33 @@ static void warnIfYawRateDerivativeSaved()
              static_cast<double>(yaw_rate_td_s));
 }
 
+/// Log one warning when a saved altitude gain still equals its pre-2026-11-23 default. The defaults changed
+/// (0.45 / 0.1 / 2.5 to 0.85 / 0.12 / 2.0, the counterpart of the merge-off downward ToF) but a saved value is not
+/// migrated, and the on-board learning saves ALL parameters when a landing ends on the ground. The values are NOT rewritten.
+/// Called once, from init(). Silent on a craft whose NVS holds the new values or nothing.
+/// 保存済みの高さのゲインが 2026-11-23 より前の既定値のままのとき、警告を 1 行ログに出す。既定値は変わった
+/// （0.45 / 0.1 / 2.5 → 0.85 / 0.12 / 2.0。併合なしの下向き ToF と対）が、保存値は移行されず、オンボード学習は
+/// 着陸が地上で終わったときに全パラメータを保存する。値は書き換えない。init() から 1 回だけ呼ぶ。新しい値が保存されている
+/// 機体、何も保存されていない機体では何も出さない。
+///
+/// @design detailed_design.md §4 — Altitude control gains (counterpart of the merge-off ToF)  [OK]
+static void warnIfAltitudeGainsSuperseded()
+{
+    float alt_kp = 0.0f;
+    float vel_kp = 0.0f;
+    float vel_ti_hover_s = 0.0f;
+    if (!get_float("altitude.alt.kp", alt_kp)) return;
+    if (!get_float("altitude.vel.kp", vel_kp)) return;
+    if (!get_float("altitude.vel.ti_hover", vel_ti_hover_s)) return;
+    if (!needsAltitudeGainNotice(alt_kp, vel_kp, vel_ti_hover_s)) return;
+
+    ESP_LOGW(TAG, "altitude gains alt.kp=%.3f vel.kp=%.3f vel.ti_hover=%.2f s include an old default "
+                  "(0.45 / 0.1 / 2.5); the defaults are now 0.85 / 0.12 / 2.0 (for the merge-off ToF). "
+                  "Fix: 'param set altitude.alt.kp 0.85', 'param set altitude.vel.kp 0.12', "
+                  "'param set altitude.vel.ti_hover 2.0', then 'param save'",
+             static_cast<double>(alt_kp), static_cast<double>(vel_kp), static_cast<double>(vel_ti_hover_s));
+}
+
 void init()
 {
     // One-time NVS-key collision check: two names hashing to the same key would
@@ -1133,6 +1200,7 @@ void init()
 
     load();
     warnIfYawRateDerivativeSaved();
+    warnIfAltitudeGainsSuperseded();
     ESP_LOGI(TAG, "Parameter system initialized (%d params)", TABLE_SIZE);
 }
 

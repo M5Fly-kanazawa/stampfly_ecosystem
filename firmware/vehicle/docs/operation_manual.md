@@ -191,6 +191,24 @@ param save
 
 `param get` が 0.01 と答えた機体だけ、2 行目と 3 行目を実行する。`param reset` は全パラメータを既定値へ戻す（学習済みのホバー推力補正なども失う）ので、`rate.yaw.td` だけを直すなら使わない。利用者が意図して 0.01 以外の値を設定している機体は、その値のままでよい。
 
+#### 高さの制御のゲイン（2026-11-23 に既定値を 3 つ変更。下向き ToF の併合なしと対）
+
+| パラメータ | 既定値 | 意味 |
+|-----------|--------|------|
+| `altitude.alt.kp` | **0.85**（旧 0.45）| 高さの位置ループの比例ゲイン [1/s] |
+| `altitude.vel.kp` | **0.12**（旧 0.1）| 速度ループの比例ゲイン [N/(m/s)] |
+| `altitude.vel.ti_hover` | **2.0**（旧 2.5）| 保持中の速度ループの積分時間 [s]。上昇・着陸の `altitude.vel.ti`（2.5 s）は変更なし |
+
+下向き ToF（高さの距離センサ）の読みの遅れが約 220 ms から約 50〜75 ms になったこと（併合なし）と対の値で、**併合ありのままこの値を使うと位相余裕が 28 度まで下がる**（モデルの見積もり）。実機の飛行 1 回では、先に決めた合格の線のうち 2 つ（1.7 Hz の感度の上限、0.2 m の上昇の行き過ぎ 20 %）を割っており、保持の改善は証明できていない（`detailed_design.md` §4「高さの制御のゲイン」）。
+
+**既に古い値を保存している機体。** オンボード学習（`attitude.trim.learn`・`hover.thrust.learn`、既定で有効）が、着陸が地上で終わるときに全パラメータを保存する（接地の衝撃での緊急 DISARM の後は保存されない）ので、変更前にそう着陸したことのある機体は 0.45 / 0.1 / 2.5 を保存しており、既定値を変えてもそのままである。そうした機体は、起動のたびに、パラメータの読み込みの直後（シリアルと WiFi のログ）に次の警告を 1 行出す（値は書き換えない）。
+
+```
+[WARN] Params: altitude gains alt.kp=0.450 vel.kp=0.100 vel.ti_hover=2.50 s include an old default (0.45 / 0.1 / 2.5); the defaults are now 0.85 / 0.12 / 2.0 (for the merge-off ToF). Fix: 'param set altitude.alt.kp 0.85', 'param set altitude.vel.kp 0.12', 'param set altitude.vel.ti_hover 2.0', then 'param save'
+```
+
+直す手順は、機体を DISARM した状態で、警告のとおりに 3 つを `param set` し、`param save` する（`param reset` は学習済みのホバー推力補正やトリムも既定に戻すので使わない）。意図して別の値にしている機体は、そのままでよい。3 つのうち 1 つでも旧い値のままなら警告が出る（0.45・0.1・2.5 を意図して選んだ場合も出る）。
+
 ### 離陸・着陸
 
 | 操作 | 動作 |
@@ -600,6 +618,7 @@ identical to the legacy vehicle.**
   instantly. Params: `attitude.yawhold.kp` (3.0, 0 disables), `attitude.yawhold.rate_max` (2.0 rad/s).
   Disabled in ACRO (pure rate control).
 - **Yaw rate PID derivative time `rate.yaw.td`** (default changed to **0** on 2026-11-22; it was 0.01). A value above 0 makes the yaw torque unstable at 200 Hz (a sign flip every sample). `rate.yaw.kp` (8.03e-4), `ti` (0.8) and `max_torque` (1.226e-3) are unchanged. A craft whose NVS already holds 0.01 keeps it after the default changes (`param save` writes every parameter, and there is no migration by version). On such a craft, disarmed: `param get rate.yaw.td`; if it answers 0.01, run `param set rate.yaw.td 0` then `param save`. Do not use `param reset` for this alone: it restores every default (including the learned hover-thrust trim). At every boot, right after the parameters are loaded, a craft whose saved value is not 0 logs one warning line (`rate.yaw.td = 0.0100 s (default is 0): the yaw torque may oscillate at 200 Hz. Fix: 'param set rate.yaw.td 0' then 'param save'`); the value is not rewritten automatically (the user may have set it on purpose). After the fix and `param save` the warning no longer appears.
+- **Altitude control gains** (three defaults changed on 2026-11-23, the counterpart of the merge-off downward ToF): `altitude.alt.kp` **0.85** (was 0.45), `altitude.vel.kp` **0.12** (was 0.1), `altitude.vel.ti_hover` **2.0** s (was 2.5; `altitude.vel.ti` for climb and landing stays 2.5 s). They go with the downward ToF reading age falling from about 220 ms to about 50-75 ms (merge off); **with the merge on these gains give a phase margin of only 28 degrees** (model estimate). In one real flight two of the acceptance lines set beforehand were missed (the 1.7 Hz sensitivity limit and the 20 % limit on the overshoot of a 0.2 m climb), so the hold improvement is not proven (`detailed_design.md` §4, "Altitude control gains"). The on-board learning (`attitude.trim.learn`, `hover.thrust.learn`, on by default) saves every parameter when a landing ends on the ground (not after an impact emergency DISARM), so a craft that landed that way before the change holds 0.45 / 0.1 / 2.5 and keeps them. Such a craft logs one warning right after the parameter load at every boot (`[WARN] Params: altitude gains alt.kp=0.450 ... Fix: 'param set altitude.alt.kp 0.85', ...`); the values are not rewritten. Fix, disarmed: `param set altitude.alt.kp 0.85`, `param set altitude.vel.kp 0.12`, `param set altitude.vel.ti_hover 2.0`, then `param save` (do not use `param reset`: it also resets the learned hover thrust and trim). The warning appears when any one of the three still equals its old value, also when 0.45, 0.1 or 2.5 was chosen on purpose.
 - **Yaw during landing**: a neutral yaw stick (including a small offset left beyond the 5 % deadband) holds the heading at the moment the landing began, also after an API takeoff. A deliberate yaw input is followed.
 - **Takeoff**: throttle > 0.5 in ARMED_GROUND → TAKEOFF → FLYING (ToF airborne). A craft that rises with the throttle at or below 0.5 (a gust, a fresh battery, the ground effect) also becomes TAKEOFF, about 1 s after it leaves the floor, once the healthy downward ToF has read heights above 5 cm without a break for 1 s; from then on the rules of the air apply (the comm-loss landing, the ToF-silence warning instead of a motor stop). With the ToF silent or invalid only the throttle decides. **Landing**: throttle
   down / DISARM.
