@@ -1,0 +1,51 @@
+# sysid_thrust_abort_mode.expect — POS_HOLD -> ALT_HOLD does not stop a running excitation; STABILIZE stops it (reason mode); the hover goes on
+# sysid_thrust_abort_mode.expect — POS_HOLD → ALT_HOLD は実行中の励振を止めない。STABILIZE は止める（理由 mode）。ホバーは続く
+#
+# Pass lines from the design (detailed_design.md §3 "thrust excitation", the table of norm cells: a mode change to a mode other than ALT_HOLD / POS_HOLD aborts with the reason `mode`
+# over 0.25 s; ThrustExcitationReason::ModeNotAllowed = 2, kThrustExciteAbortRampCycles = 100 cycles at 400 Hz; run window 0.25-1.05 m, tilt abort line 0.2 rad in flight_limits.hpp).
+# The lines were fixed before the first run of this scenario.
+# 合格の線は設計から（detailed_design.md §3「推力励振」の規範セルの表: ALT_HOLD / POS_HOLD 以外のモードへの変更は理由 `mode` で 0.25 s かけて打ち切る。
+# ThrustExcitationReason::ModeNotAllowed = 2、kThrustExciteAbortRampCycles = 400 Hz で 100 周期、実行中の窓 0.25〜1.05 m、傾きの打ち切りの線 0.2 rad は flight_limits.hpp）。
+# 線はこのシナリオの最初の実行の前に決めた。
+exit 0
+# Run 1 (POS_HOLD -> ALT_HOLD): not aborted, completed (result 2), no mode abort before it.
+# 実行 1（POS_HOLD → ALT_HOLD）: 打ち切られず満了（結果 2）。その前に mode の打ち切りは無い。
+log_contains any "Thrust excitation end: result=2"
+log_contains any "Thrust excitation end: result=4 reason=2 (mode)"
+order "Thrust excitation end: result=2" "Thrust excitation end: result=4 reason=2 (mode)"
+# Run 2 (-> STABILIZE): aborted with the reason mode and nothing else.
+# 実行 2（→ STABILIZE）: 理由 mode だけで打ち切られる。
+log_contains any "reply: error excitation aborted: mode"
+log_absent  any "reply: error excitation aborted: stick"
+log_absent  any "reply: error excitation aborted: height_error"
+log_absent  any "reply: error excitation aborted: height_window"
+log_absent  any "reply: error excitation aborted: tilt"
+log_absent  any "reply: error excitation aborted: cancelled"
+log_absent  any "error flight ended"
+# Run 1 keeps running after the switch to ALT_HOLD (t=30): the state is "running" (waveform 1 << 3 + state 3 = 11) in every 50 Hz sample from 31 s (the ramp-up ended 0.5 s after the start)
+# until 45 s (the run is 20 s from about 26.5 s; the last 0.5 s is the ramp-down). min >= 11 means no abort and no gap.
+# 実行 1 は ALT_HOLD への切り替え（t=30）の後も続く: 31 s（立ち上げは開始から 0.5 s で終わる）から 45 s（実行は約 26.5 s から 20 s。最後の 0.5 s は立ち下げ）まで、
+# 50 Hz のどの標本も状態が「実行中」（波形 1 << 3 ＋ 状態 3 = 11）。min >= 11 は打ち切りも途切れも無いこと。
+bundle_value ctrl_ref.thrust_excitation_state min >= 11 in 31.0 45.0
+# Run 2: the abort ramp (state 12 = ramp-down) shows within 0.3 s of the switch (t=56); the signal is gone 0.5 s after the switch (0.25 s ramp, 0.25 s for the detection and the 50 Hz sampling)
+# and stays gone until the landing, although the run's nominal end would be near t=72.5 s (the 20 s are not served).
+# 実行 2: 切り替え（t=56）から 0.3 s 以内に打ち切りの立ち下げ（状態 12 = 立ち下げ）が出る。信号は切り替えの 0.5 s 後（立ち下げ 0.25 s と、検出と 50 Hz の標本化の 0.25 s）には無く、
+# 実行の公称の終わりが t=72.5 s 付近なのに、着陸まで無いまま（20 s は務めない）。
+bundle_value ctrl_ref.thrust_excitation_state max >= 12 in 56.0 56.3
+bundle_value ctrl_ref.thrust_excitation_state max < 1 in 56.5 70.0
+bundle_value ctrl_ref.thrust_excitation_amplitude max < 1 in 56.5 70.0
+# The hover goes on: the height stays inside the run window (0.25-1.05 m) while run 1 runs and settles (t=26-52); in run 2, the 0.1 s of STABILIZE and the return to ALT_HOLD (t=52-65) the height
+# stays inside the window plus the ceiling-brake margin (below 1.25 m, the start of the ceiling brake). The tilt never reaches the abort line 0.2 rad; the duty keeps the margin of sysid_thrust_abort_chain.
+# ホバーは続く: 実行 1 が動いて整定する間（t=26〜52）、高さは実行中の窓（0.25〜1.05 m）の内側。実行 2・STABILIZE の 0.1 s・ALT_HOLD への復帰の間（t=52〜65）は、
+# 窓に天井ブレーキの余裕を足した内側（1.25 m 未満 = 天井ブレーキの始まり）。傾きは打ち切りの線 0.2 rad に達しない。duty は sysid_thrust_abort_chain と同じ余裕を保つ。
+metric alt_min > 0.25 in 26.0 65.0
+metric alt_max < 1.05 in 26.0 52.0
+metric alt_max < 1.25 in 52.0 65.0
+metric tilt_max < 0.2 in 26.0 65.0
+metric duty_max < 0.97 in 26.0 65.0
+# After the return to ALT_HOLD the height is held: the peak-to-peak wander is below 0.15 m in the last 3 s before the landing (the hover wanders 0.06-0.08 m in flight logs, as in sysid_thrust_reject).
+# ALT_HOLD への復帰の後は高さが保たれる: 着陸の前の最後の 3 s、ピーク間の揺れは 0.15 m 未満（ホバーの揺れは飛行ログで 0.06〜0.08 m。sysid_thrust_reject と同じ）。
+metric alt_band < 0.15 in 62.0 65.0
+# The craft lands: it is on the floor in the last 3.5 s.
+# 機体は着陸する: 最後の 3.5 s は床の上。
+metric alt_max < 0.10 in 72.5 75.9

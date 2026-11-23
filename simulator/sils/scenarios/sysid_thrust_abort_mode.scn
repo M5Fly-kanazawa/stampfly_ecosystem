@@ -1,0 +1,30 @@
+# sysid_thrust_abort_mode.scn — a mode change during a thrust excitation: POS_HOLD -> ALT_HOLD lets it run on, STABILIZE ends it
+#                               推力励振の途中のモード変更: POS_HOLD → ALT_HOLD は励振を続け、STABILIZE は励振を終わらせる
+#
+# Two 20 s multisines. (1) At +4 s the transmitter switch goes from the API's POS_HOLD to ALT_HOLD: ALT_HOLD is still an altitude mode (the controller's rule "ALT_HOLD or POS_HOLD"),
+# so the run is NOT aborted and completes (result 2, reply `ok`). (2) At +4 s the switch goes to STABILIZE for 0.1 s with the sticks unchanged (so that the stick-movement abort cannot be the cause): the
+# altitude loop is gone, the controller sees a mode that is not an altitude mode, returns the signal to 0 over 0.25 s (reason mode) and the API answers `error excitation aborted: mode`.
+# After 0.1 s of STABILIZE the switch goes back to ALT_HOLD and the hover is held again; the craft then lands.
+# 20 s の多重正弦波を 2 回。(1) +4 s で送信機のスイッチを API の POS_HOLD から ALT_HOLD へ: ALT_HOLD は高度モードのままなので（制御器の決まり「ALT_HOLD か POS_HOLD」）、
+# 実行は打ち切られず満了する（結果 2・応答 `ok`）。(2) +4 s でスイッチを STABILIZE へ 0.1 s（スティックは変えない。スティックの動きによる打ち切りが原因にならないように）: 高さのループが無くなり、
+# 制御器は高度モードでないモードを見て 0.25 s で信号を 0 に戻し（理由 mode）、API は `error excitation aborted: mode` を返す。STABILIZE の 0.1 s の後、スイッチを ALT_HOLD へ戻してホバーを保ち、そのあと着陸する。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_thrust_abort_mode.scn --target vehicle --duration 76000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (t=0-6)
+   +    battery  4.1                                                          # A2: hold the battery at 4.1 V for the whole flight (the SILS battery model sags below the 3.8 V start line after about 40 s of hover, which would refuse run 2 for a reason that is not the one under test)
+   +    api  "command"                                                        # B: SDK mode
+   +    api  "takeoff"                                                        # C: POS_HOLD auto-takeoff -> 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000      50                       # D: neutral RC during takeoff + hover (t=6-18)
+   +    api  "up 20"                                                          # E: climb to 0.7 m (t=18)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # F: neutral RC while climbing and settling (t=18-26)
+   +    api  "sysid thrust multisine 5 20"                                    # G1: run 1 (t=26)
+   +    rc   2048  2048   2048    2048  0     4000      50                       # G2: 4 s of signal in POS_HOLD (t=26-30)
+   +    rc   2048  2048   2048    2048  0     22000     50        1              # G3: switch to ALT_HOLD (t=30): still an altitude mode, the run goes on and ends by itself (about t=46.5); settle (t=30-52)
+   +    api  "sysid thrust multisine 5 20"                                    # H1: run 2 (t=52), now in ALT_HOLD
+   +    rc   2048  2048   2048    2048  0     4000      50        1              # H2: 4 s of signal (t=52-56)
+   +    rc   2048  2048   2048    2048  0     100       50        0              # H3: switch to STABILIZE (t=56) for 0.1 s with the sticks UNCHANGED (the throttle stays at 2048, so a stick movement cannot be the cause of the abort; STABILIZE with this throttle has no lift, the craft sinks for 0.1 s)
+   +    rc   2048  2048   2048    2048  0     8900      50        1              # H4: back to ALT_HOLD (t=56.1): the height is held again (t=56.1-65)
+   +    api  "land"                                                           # K: land (t=65)
+   +    rc   2048  2048   2048    2048  0     11000     50        1              # L: neutral RC through the landing (t=65-76)
