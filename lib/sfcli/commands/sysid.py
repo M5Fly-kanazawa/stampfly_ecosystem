@@ -1824,7 +1824,7 @@ def run_rate_excite(args) -> int:
 THRUST_EXCITE_TAKEOFF_HEIGHT_M = 0.5     # height after `takeoff` / `takeoff` 後の高さ
 THRUST_EXCITE_MOVE_MIN_CM = 10           # `up`/`down` accept 10..300 cm / 移動は 10〜300 cm
 THRUST_EXCITE_MOVE_MAX_CM = 300
-THRUST_EXCITE_REPLY_MARGIN_S = 10.0      # standby (3 s) + ramp-down + margin / 待機 3 s + 立ち下げ + 余裕
+THRUST_EXCITE_REPLY_MARGIN_S = 10.0      # standby (5 s) + ramp-down + margin / 待機 5 s + 立ち下げ + 余裕
 THRUST_EXCITE_STEP_FALL_S = 0.25         # appended return to zero of the steps / 階段の追加の立ち下げ
 THRUST_EXCITE_MOVE_TIMEOUT_S = 30.0
 THRUST_EXCITE_LAND_TIMEOUT_S = 30.0

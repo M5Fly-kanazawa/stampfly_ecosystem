@@ -833,14 +833,16 @@ inline constexpr float kThrustExciteBatteryAbortHoldS = 0.5f;
 inline constexpr float kThrustExciteStartTiltMaxRad = 0.1f;
 inline constexpr float kThrustExciteTiltAbortRad    = 0.2f;
 /// Conditions to leave the wait (Standby) and begin: altitude error [m], vertical speed [m/s] and the time all hold [s]; and the wait that is given up [s]. CANDIDATE.
-/// Basis: the hover wander is 0.06-0.08 m peak to peak, so an error of 0.05 m and a speed of 0.1 m/s are the quiet part of it; 0.5 s of quiet is ten ToF samples; 3 s is
-/// about six of the 0.5 s windows.
+/// Basis: the hover wander is 0.06-0.08 m peak to peak, so an error of 0.05 m and a speed of 0.1 m/s are the quiet part of it; 0.5 s of quiet is ten ToF samples; 5 s is
+/// ten of the 0.5 s windows. The wait was 3 s at first; applied to four real flights (2026-11-23), in the flight that still carried the height overshoot of
+/// the take-off 36 % of the possible command times ran into the 3 s timeout, with 5 s only 8 %, so the wait was lengthened and no other threshold changed (the aborts during the wait are unchanged).
 /// 待機（Standby）を終えて始める条件: 高さのずれ [m]・鉛直速度 [m/s]・全てが続く時間 [s]。待機を諦める時間 [s]。候補値。根拠: ホバーの揺れは 0.06〜0.08 m（ピーク間）なので、
-/// ずれ 0.05 m・速度 0.1 m/s はその静かな部分。静かな 0.5 s は ToF の 10 標本。3 s は 0.5 s の窓が 6 回。
+/// ずれ 0.05 m・速度 0.1 m/s はその静かな部分。静かな 0.5 s は ToF の 10 標本。5 s は 0.5 s の窓が 10 回。待ちは最初 3 s だった。実機の飛行記録 4 回に当てはめると（2026-11-23）、
+/// 離陸後の高さの行き過ぎが残る飛行では、命令を送りうる時刻の 36 % が 3 s で時間切れ、5 s なら 8 %。そのため待ちだけを長くし、ほかのしきい値は変えない（待ちの間の取り消しの条件も不変）。
 inline constexpr float kThrustExciteStartAltitudeErrorMaxM = 0.05f;
 inline constexpr float kThrustExciteStartVerticalSpeedMaxMps = 0.1f;
 inline constexpr float kThrustExciteStartSettleHoldS = 0.5f;
-inline constexpr float kThrustExciteStartSettleTimeoutS = 3.0f;
+inline constexpr float kThrustExciteStartSettleTimeoutS = 5.0f;
 /// Time the ToF must be invalid or silent before a running excitation is aborted [s]. CANDIDATE. Basis: the ToF samples at about 28.5 Hz (35 ms), so 0.1 s is about three
 /// samples: one lost sample does not abort, three do.
 /// 実行中の励振を打ち切るまでに ToF が無効・出力停止である時間 [s]。候補値。根拠: ToF は約 28.5 Hz（35 ms）なので、0.1 s は約 3 サンプル。1 つ抜けても打ち切らず、3 つで打ち切る。
