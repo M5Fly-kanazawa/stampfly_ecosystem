@@ -58,6 +58,7 @@ Mechanical-spec default plant / 機械仕様ベースの既定プラント:
 
 import json
 import math
+import re
 import sys as _sys
 from pathlib import Path as _Path
 
@@ -183,7 +184,21 @@ def etfe(u, y, fs=FS, f_lo=0.8, f_hi=30.0, nperseg=1024):
     if count == 0:
         raise ValueError("log too short for ETFE")
     freqs = np.fft.rfftfreq(nperseg, 1.0 / fs)
-    mask = (freqs >= f_lo) & (freqs <= f_hi) & (suu > 0)
+    # NaN/inf in u or y poisons every Welch sum; `suu > 0` alone would silently
+    # drop every bin (NaN > 0 is False) and the fit would return its start values.
+    # Count them for the error message and require finite bins.
+    # u/y に NaN/inf があると Welch の和が全て汚染される。`suu > 0` だけだと全ビンが
+    # 黙って落ち（NaN > 0 は False）、フィットが初期値を返してしまう。エラー文用に
+    # 数え、有限なビンだけを残す。
+    bad_u = int(np.sum(~np.isfinite(u)))
+    bad_y = int(np.sum(~np.isfinite(y)))
+    ok_bin = np.isfinite(suu) & np.isfinite(syy) & np.isfinite(syu) & (suu > 0)
+    mask = (freqs >= f_lo) & (freqs <= f_hi) & ok_bin
+    if not np.any(mask):
+        raise ValueError(
+            f"ETFE has no finite points in {f_lo:g}-{f_hi:g} Hz "
+            f"({bad_u} non-finite u samples, {bad_y} non-finite y samples of {n}; "
+            f"nperseg={nperseg}) -- refusing to return the start values")
     G = syu[mask] / suu[mask]
     coh = np.abs(syu[mask]) ** 2 / (suu[mask] * syy[mask] + 1e-30)
     return 2.0 * np.pi * freqs[mask], G, coh
@@ -246,6 +261,15 @@ def _nelder_mead(f, x0, scale, iters=400):
 
 def fit_plant(omega, G_hat, coherence, axis="roll"):
     """Fit (b, T, L), weighting by coherence. / コヒーレンス重み付きで (b,T,L) を推定。"""
+    omega = np.asarray(omega, dtype=float)
+    G_hat = np.asarray(G_hat)
+    coherence = np.asarray(coherence, dtype=float)
+    if omega.size == 0 or not (np.all(np.isfinite(omega)) and np.all(np.isfinite(G_hat))
+                               and np.all(np.isfinite(coherence))):
+        raise ValueError(
+            "fit_plant: ETFE is empty or has non-finite points "
+            f"({omega.size} points, coherence finite={bool(np.all(np.isfinite(coherence)))}) "
+            "-- refusing to return the start values")
     weights = np.clip(coherence, 0.0, 1.0) ** 2
     x0 = [1.0 / SPEC_INERTIA[axis], SPEC_MOTOR_T, SPEC_DELAY_L]
     best, cost = _nelder_mead(
@@ -371,7 +395,7 @@ def plot_fit(omega, G_hat, coh, b, T, L, axis, path):
 
 
 def _fit_core(r, y, duty_u, duty_quality, duty_reason, axis, gains, f_lo, f_hi,
-              plot_path, input_mode):
+              plot_path, input_mode, nperseg=1024):
     """Shared tail of the pipeline, from "recover u" onward: input-mode
     resolution -> ETFE -> parametric (b, T, L) -> optional plot. fit_from_df()
     (both SILS-recorded and real-vehicle flight-log-bundle callers --
@@ -411,11 +435,13 @@ def _fit_core(r, y, duty_u, duty_quality, duty_reason, axis, gains, f_lo, f_hi,
     else:
         u = replay_pid(r, y, g["kp"], g["ti"], g["td"], g["limit"])
 
-    omega, G_hat, coh = etfe(u, y, f_lo=f_lo, f_hi=f_hi)
+    omega, G_hat, coh = etfe(u, y, f_lo=f_lo, f_hi=f_hi, nperseg=nperseg)
     result = fit_plant(omega, G_hat, coh, axis)
     result["axis"] = axis
     result["input_mode"] = resolved_mode
     result["duty_reason"] = duty_reason
+    result["nperseg"] = int(min(nperseg, len(u)))
+    result["n_samples"] = int(len(u))
     if resolved_mode == 'kp':
         result["gains_used"] = g
     if plot_path:
@@ -443,8 +469,108 @@ def _valid_span(df, cols):
     return df.iloc[first:last + 1].reset_index(drop=True), gap_rows
 
 
+# =============================================================================
+# Excitation window from the bundle's text_log / バンドルの text_log から励振区間
+# =============================================================================
+
+#: Firmware lines (pid_controller.cpp startExcitation / the done path), e.g.
+#: "I (65002) PID: Sysid excitation start: axis=0 chirp amp=0.44 rad/s dur=10.0 s"
+#: and "I (75004) PID: Sysid excitation done"; axis 0/1/2 = roll/pitch/yaw.
+#: ファーム側の行（pid_controller.cpp の startExcitation と完了側）。axis 0/1/2 = roll/pitch/yaw。
+_EXC_START_RE = re.compile(
+    r"Sysid excitation start:\s*axis=(\d+)\s+(\w+)\s+amp=([0-9.eE+-]+).*?dur=([0-9.eE+-]+)")
+_EXC_DONE_RE = re.compile(r"Sysid excitation done")
+_AXIS_INDEX = {"roll": 0, "pitch": 1, "yaw": 2}
+
+
+def find_excitation_windows(text_log, axis):
+    """All excitation windows of `axis` in a bundle's text_log DataFrame.
+    バンドルの text_log DataFrame から `axis` の励振区間を全て返す。
+
+    Returns a list (in log order) of dicts {start_us, end_us, dur_s,
+    waveform, amp, end_source}; `end_source` is "done" (the done line) or
+    "start+dur" (no done line: start + the parsed duration). A `done` line
+    carries no axis, so it closes the most recent open start (the firmware
+    runs one excitation at a time). Other axes' excitations are ignored.
+    `text_log` None/empty gives [].
+    `end_source` は "done"（完了行）または "start+dur"（完了行が無いので開始 +
+    解析した継続時間）。完了行は軸を持たないため直近の未完了の開始を閉じる
+    （ファームは同時に 1 つしか励振しない）。他の軸の励振は無視する。
+    """
+    if text_log is None or len(text_log) == 0:
+        return []
+    want = _AXIS_INDEX[axis]
+    events = []                       # (kind, ts_us, axis_idx, waveform, amp, dur)
+    for ts, text in zip(text_log["timestamp_us"], text_log["text"]):
+        if not isinstance(text, str):
+            continue
+        m = _EXC_START_RE.search(text)
+        if m:
+            events.append(("start", int(ts), int(m.group(1)), m.group(2),
+                           float(m.group(3)), float(m.group(4))))
+        elif _EXC_DONE_RE.search(text):
+            events.append(("done", int(ts), None, None, None, None))
+    out = []
+    open_ev = None
+
+    def _close(ev, end_us, source):
+        if ev[2] == want:
+            out.append({"start_us": ev[1], "end_us": int(end_us), "dur_s": ev[5],
+                        "waveform": ev[3], "amp": ev[4], "end_source": source})
+
+    for ev in events:
+        if ev[0] == "start":
+            if open_ev is not None:       # previous one never reported done
+                _close(open_ev, open_ev[1] + open_ev[5] * 1e6, "start+dur")
+            open_ev = ev
+        elif open_ev is not None:
+            _close(open_ev, ev[1], "done")
+            open_ev = None
+    if open_ev is not None:
+        _close(open_ev, open_ev[1] + open_ev[5] * 1e6, "start+dur")
+    return out
+
+
+def resolve_window(df, axis, mode="auto", time_range=None, pad_s=0.5):
+    """Choose the time window [t0_us, t1_us] (absolute `timestamp_us`) to fit.
+    同定に使う時間窓 [t0_us, t1_us]（`timestamp_us` の絶対値）を決める。
+
+    time_range=(T0, T1) [s from the first row of `df`] overrides `mode`.
+    mode "auto": the LAST excitation of `axis` in df.attrs["text_log"], padded by
+    `pad_s` each side; None (with a note in info["warning"]) when the log has
+    none. mode "all": None (whole log).
+    Returns (window_us or None, info dict {source, note, warning}).
+    time_range は mode より優先（df の先頭行からの秒）。"auto" は df.attrs["text_log"]
+    にある `axis` の最後の励振を前後 pad_s 秒広げた区間。無ければ None（info["warning"]
+    に理由）。"all" は None（ログ全体）。
+    """
+    t_first = float(df["timestamp_us"].iloc[0])
+    if time_range is not None:
+        t0, t1 = float(time_range[0]), float(time_range[1])
+        if not t1 > t0:
+            raise ValueError(f"--time-range needs T1 > T0 (got {t0:g} {t1:g})")
+        return ((t_first + t0 * 1e6, t_first + t1 * 1e6),
+                {"source": "time-range", "note": "", "warning": ""})
+    if mode == "all":
+        return None, {"source": "whole log", "note": "", "warning": ""}
+    if mode != "auto":
+        raise ValueError(f"unknown window mode {mode!r} (auto or all)")
+    wins = find_excitation_windows(df.attrs.get("text_log"), axis)
+    if not wins:
+        return None, {"source": "whole log", "note": "",
+                      "warning": (f"no '{axis}' excitation found in the bundle's text_log "
+                                  "-- fitting the WHOLE log (unexcited segments can dominate "
+                                  "the result on hardware; use --time-range)")}
+    w = wins[-1]
+    note = f"excitation end from {w['end_source']}"
+    if len(wins) > 1:
+        note += f"; {len(wins)} {axis} excitations in the log, using the last"
+    return ((w["start_us"] - pad_s * 1e6, w["end_us"] + pad_s * 1e6),
+            {"source": "text_log", "note": note, "warning": ""})
+
+
 def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
-                 input_mode='auto'):
+                 input_mode='auto', window_us=None, nperseg=1024):
     """Full pipeline on an aligned flight-log-bundle DataFrame: df -> recover
     u -> ETFE -> parametric (b, T, L). This is the entry point `sf sysid
     rate-fit` uses for a real vehicle flight-log bundle, AND the entry point
@@ -491,6 +617,18 @@ def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
             ム/旧キャプチャ）のときだけ従来のPID再生経路にフォールバックする。
             'duty' は duty 経路を強制（使えなければエラー）。'kp' は従来の
             再生経路を強制。
+        window_us: optional (t0_us, t1_us) in the bundle's absolute
+            `timestamp_us`; only rows inside are used (see resolve_window()).
+            Default None = the whole log (previous behaviour). On hardware the
+            ground/takeoff/unexcited hover segments dominate the Welch average
+            (closed loop + sensor noise), so fit the excitation window.
+        nperseg: Welch segment length (default 1024); "auto" = 1024 when the
+            used rows number at least 4096, else 512.
+        window_us: 任意。バンドルの絶対 `timestamp_us` での (t0_us, t1_us)。区間内の行
+            だけを使う（resolve_window() 参照）。既定 None = ログ全体（従来動作）。実機では
+            地上・離陸・励振していないホバーが Welch 平均を支配するので励振区間を使う。
+        nperseg: Welch の区間長（既定 1024）。"auto" は使う行が 4096 以上なら 1024、
+            未満なら 512。
     """
     col_r = f"rate_ref_{axis}"
     col_y = {"roll": "gyro_x", "pitch": "gyro_y", "yaw": "gyro_z"}[axis]
@@ -511,6 +649,23 @@ def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
     # imu.csv は起動時から続くため、整列表はその区間の前後で NaN になる。両信号が
     # 揃う最初と最後の行の間の連続区間を同定に使う。区間内部の穴はパケット欠落を
     # 意味し、埋めずに拒否する（形式の「埋め値なし」規則、計画書 2.1 節）。
+    bundle_streams = df.attrs.get("bundle_streams", set())
+    n_rows_total = len(df)
+    if "voltage" in df.columns:
+        # Fill NaN battery voltage (the 1 Hz status stream starts later than the
+        # 400 Hz streams, so a real log's first ~1 s is NaN) from the nearest valid
+        # samples BEFORE windowing, so a window cannot lose its only valid sample.
+        # バッテリ電圧の NaN（1 Hz の status ストリームは 400 Hz ストリームより遅れて
+        # 始まるので、実機ログは最初の約 1 秒が NaN）を、窓で切る前に近傍の有効値で補う。
+        df = df.copy()
+        df["_voltage_was_nan"] = df["voltage"].isna()
+        df["voltage"] = df["voltage"].ffill().bfill()
+    if window_us is not None:
+        ts = df["timestamp_us"].to_numpy(dtype=float)
+        df = df[(ts >= window_us[0]) & (ts <= window_us[1])]
+        if len(df) == 0:
+            raise ValueError(f"time window {window_us[0] / 1e6:.2f}-{window_us[1] / 1e6:.2f} s "
+                             "contains no rows of the log")
     df, gap_rows = _valid_span(df, (col_r, col_y))
     if gap_rows:
         raise ValueError(
@@ -522,6 +677,12 @@ def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
     if len(r) < 1024:
         raise ValueError(f"too few samples ({len(r)}) — capture with the "
                           "excitation running (sf log wifi + api sysid)")
+    if nperseg == "auto":
+        nperseg = 1024 if len(r) >= 4096 else 512
+    t_us = df["timestamp_us"].to_numpy(dtype=float)
+    window_info = {"t0_s": float(t_us[0] / 1e6), "t1_s": float(t_us[-1] / 1e6),
+                   "n_samples": int(len(r)), "nperseg": int(nperseg),
+                   "rows_in_log": n_rows_total}
 
     # Real per-row timestamps are available (unlike an exact-400Hz-spacing
     # assumption via `len(t) * DT`) but this function's own math
@@ -579,7 +740,7 @@ def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
         # _classify_duty_source()（tools/sysid/plant_fit.py と共有、同じ
         # 手法をあちらでも使用）が既存の hz >= 200.0 しきい値判定で正しい結果
         # に達する -- 本物の CSV レート列は不要。
-        motor_present = "motor" in df.attrs.get("bundle_streams", set())
+        motor_present = "motor" in bundle_streams
         duty_rate_hz_arr = np.full(len(duty_fr), 400.0 if motor_present else 50.0)
         duty_quality, duty_reason = _classify_duty_source(
             duty_fr, duty_rr, duty_rl, duty_fl, duty_rate_hz_arr)
@@ -591,11 +752,17 @@ def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
         vbat_note = ''
         if 'voltage' in df.columns:
             vbat_arr = df['voltage'].to_numpy(dtype=float)
-            bad = vbat_arr < _V_BATT_MIN
+            n_filled = int(df['_voltage_was_nan'].sum()) if '_voltage_was_nan' in df else 0
+            if n_filled:
+                vbat_note += (f" ({n_filled}/{len(vbat_arr)} rows had no voltage yet -- "
+                              "filled from the nearest valid sample)")
+            # non-finite (an all-NaN column) is as bad as implausibly low
+            # 有限でない値（全行 NaN の列）は非現実的な低電圧と同様に不良扱い
+            bad = ~np.isfinite(vbat_arr) | (vbat_arr < _V_BATT_MIN)
             if np.any(bad):
                 vbat_arr = np.where(bad, _V_BATT_NOMINAL, vbat_arr)
-                vbat_note = (f" ({int(np.sum(bad))}/{len(vbat_arr)} rows had no/"
-                             f"implausible voltage -- used the nominal {_V_BATT_NOMINAL}V there)")
+                vbat_note += (f" ({int(np.sum(bad))}/{len(vbat_arr)} rows had no/"
+                              f"implausible voltage -- used the nominal {_V_BATT_NOMINAL}V there)")
         else:
             vbat_arr = np.full(len(duty_fr), _V_BATT_NOMINAL)
             vbat_note = (f" (no voltage column in bundle -- used the nominal "
@@ -605,8 +772,10 @@ def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
         duty_reason += vbat_note
         duty_u = _duty_differential_vehicle(duty_fr, duty_rr, duty_rl, duty_fl, vbat_arr, axis)
 
-    return _fit_core(r, y, duty_u, duty_quality, duty_reason, axis, gains,
-                      f_lo, f_hi, plot_path, input_mode)
+    result = _fit_core(r, y, duty_u, duty_quality, duty_reason, axis, gains,
+                       f_lo, f_hi, plot_path, input_mode, nperseg=nperseg)
+    result["window"] = window_info
+    return result
 
 
 # =============================================================================

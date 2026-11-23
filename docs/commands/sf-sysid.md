@@ -22,6 +22,7 @@ sf sysid <subcommand> [options]
 | `params` | パラメータ管理（表示・差分・エクスポート） |
 | `validate` | バリデーション・整合性チェック |
 | `plan` | 飛行試験計画の生成 |
+| `rate-fit` | レート制御ループのプラント b・T・L を、励振飛行のフライトログから同定（励振区間だけを使う） |
 | `thrust-excite` | 鉛直の推力励振の飛行を API で自動化（離陸 → 高さ 0.7 m → 励振 → 着陸） |
 | `thrust-fit` | 推力 → 上向き加速度のプラント・ToF の遅れ・加速度計の雑音を記録から同定 |
 
@@ -34,7 +35,26 @@ sf sysid params show
 ```
 
 > 詳細なドキュメントは今後追加予定です（推力励振の 2 コマンドは下記）。
-> [English version of the thrust-excitation section follows below.](#english-thrust)
+> [English version of the rate-fit and thrust-excitation sections follows below.](#english-thrust)
+
+## レート同定（rate-fit）
+
+```bash
+sf sysid rate-fit <バンドル> --axis roll --f-lo 1 --f-hi 25
+```
+
+既定では、フライトログ内のテキストログ（`text_log`）にある `Sysid excitation start/done` の行から、指定した軸の励振の区間を探し、その前後 `--pad` 秒（既定 0.5）だけを同定に使う。実機では地上・離陸・励振していないホバーの区間がスペクトル平均の大半を占め、閉ループとセンサ雑音のせいで周波数応答が物理的でなくなるため。励振が複数あれば最後のものを使い、その旨を表示する。`done` 行が無いときは開始 + `dur` を終了とする。使った区間（出所・開始と終了の秒・サンプル数・`nperseg`）は毎回表示する。
+
+| オプション | 既定 | 意味 |
+|-----------|------|------|
+| `--window {auto,all}` | `auto` | `auto` は励振区間（見つからなければ警告してログ全体）、`all` はログ全体 |
+| `--time-range T0 T1` | - | ログ先頭行からの秒で区間を直接指定（`--window` より優先） |
+| `--pad` | 0.5 | 励振区間の前後に足す秒数 |
+| `--nperseg` | 自動 | Welch 法の区間長。区間が 4096 サンプル以上なら 1024、未満なら 512 |
+
+電圧（status ストリームは 1 Hz で、400 Hz のストリームより遅れて始まる）が先頭で欠けているときは、近い有効値で補い、補った行数を `duty_reason` に残す。周波数応答に有限な点が無い、またはコヒーレンスが有限でないときは、初期値を返さずエラーで止まる。
+
+---
 
 ## 推力励振の同定（thrust-excite / thrust-fit）
 
@@ -179,3 +199,23 @@ To avoid the closed-loop bias, G is S_ra/S_ru with the excitation r as the refer
 | Condition number above 100 | The design matrix is nearly rank-deficient and the tone amplitudes break. With the standard design (eight tones, order-5 trend) it is about 4 for an 8.9 s window and about 3.4 for 18.9 s, so it normally does not appear | Do not use a result with a `WARNING:`. It appears when a design has tone spacings finer than the window resolution 1/T |
 
 > Fix of 2026-11-23: the earlier tool added neighbors at +-0.1, 0.2 and 0.3 Hz of every tone to the same least-squares fit to estimate the noise. That spacing is finer than the resolution of a 10 s run's window (8.9 s, 1/T = 0.112 Hz), the condition number reached 5.4e10, every tone was judged unusable and the fit was silently skipped. The method above replaces it, and a skipped fit now states its reason.
+
+
+---
+
+## Rate-loop identification (rate-fit)
+
+```bash
+sf sysid rate-fit <bundle> --axis roll --f-lo 1 --f-hi 25
+```
+
+By default the command finds the excitation window of the chosen axis from the `Sysid excitation start/done` lines in the bundle's text log (`text_log`) and fits only that window, padded by `--pad` seconds (default 0.5) on each side. On hardware the ground, takeoff and unexcited hover segments dominate the spectral average (closed loop plus sensor noise) and give an unphysical frequency response. With several excitations the last one is used and the output says so; without a `done` line the end is start + `dur`. The window actually used (source, start and end in s, number of samples, `nperseg`) is always printed.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--window {auto,all}` | `auto` | `auto` = the excitation window (the whole log with a warning if none is found); `all` = the whole log |
+| `--time-range T0 T1` | - | Window in seconds from the first row of the log (overrides `--window`) |
+| `--pad` | 0.5 | Seconds added before and after the excitation window |
+| `--nperseg` | auto | Welch segment length: 1024 if the window has at least 4096 samples, else 512 |
+
+Battery voltage (the status stream is 1 Hz and starts later than the 400 Hz streams) that is missing at the start is filled from the nearest valid sample, and the number of filled rows is reported in `duty_reason`. If the frequency response has no finite points or the coherence is not finite, the command stops with an error instead of returning the start values.

@@ -1628,6 +1628,22 @@ def _register_rate_fit(subparsers):
     parser.add_argument("--td", type=float, help="rate Td that flew (kp-replay path only)")
     parser.add_argument("--f-lo", type=float, default=0.8, help="fit band low [Hz]")
     parser.add_argument("--f-hi", type=float, default=30.0, help="fit band high [Hz]")
+    parser.add_argument("--window", choices=["auto", "all"], default="auto",
+                        help="rows to fit (default: auto -- the axis' excitation window "
+                             "from the bundle's text_log, padded by --pad; the whole log "
+                             "with a warning if none is found). 'all' = the whole log. "
+                             "Unexcited segments dominate the average on hardware, so "
+                             "fit the excitation window")
+    parser.add_argument("--time-range", dest="time_range", type=float, nargs=2,
+                        metavar=("T0", "T1"),
+                        help="fit only T0..T1 [s from the first row of the log] "
+                             "(overrides --window)")
+    parser.add_argument("--pad", type=float, default=0.5,
+                        help="seconds added before/after the excitation window "
+                             "(--window auto; default 0.5)")
+    parser.add_argument("--nperseg", type=int,
+                        help="Welch segment length in samples (default: auto -- 1024 "
+                             "if the window has at least 4096 samples, else 512)")
     parser.add_argument("-o", "--output", help="write the fit result JSON here")
     parser.add_argument("--selftest", action="store_true",
                         help="run the synthetic-plant pipeline self-test and exit")
@@ -1668,9 +1684,27 @@ def run_rate_fit(args) -> int:
         # 剥がれる（"*.sflog" が残る）-- ファイル名の元としては問題なく、
         # プロットのファイル名に ".sflog" の断片が残るだけ。
         plot_path = str(Path(bundle_path).with_suffix("")) + f"_bode_{args.axis}.png"
-    result = rs.fit_from_df(df, args.axis, gains=gains,
-                            f_lo=args.f_lo, f_hi=args.f_hi, plot_path=plot_path,
-                            input_mode=args.input_mode)
+    try:
+        window_us, winfo = rs.resolve_window(
+            df, args.axis, mode=args.window,
+            time_range=args.time_range, pad_s=args.pad)
+        result = rs.fit_from_df(df, args.axis, gains=gains,
+                                f_lo=args.f_lo, f_hi=args.f_hi, plot_path=plot_path,
+                                input_mode=args.input_mode, window_us=window_us,
+                                nperseg=args.nperseg if args.nperseg else "auto")
+    except ValueError as exc:
+        console.error(f"rate-fit failed: {exc}")
+        return 1
+    if winfo["warning"]:
+        console.warning(winfo["warning"])
+    w = result["window"]
+    t_first = float(df["timestamp_us"].iloc[0]) / 1e6
+    note = f" ({winfo['note']})" if winfo["note"] else ""
+    console.info(f"window: {winfo['source']}{note}  "
+                 f"{w['t0_s'] - t_first:.2f}..{w['t1_s'] - t_first:.2f} s from log start, "
+                 f"{w['n_samples']} samples, nperseg={w['nperseg']}")
+    if result["duty_reason"] and "filled" in result["duty_reason"]:
+        console.info(f"  ({result['duty_reason']})")
     input_desc = ("400Hz motor duty (firmware/vehicle mixer inverted)"
                   if result["input_mode"] == "duty" else "PID replay (--kp)")
     console.info(f"axis {result['axis']}: input={input_desc}")
