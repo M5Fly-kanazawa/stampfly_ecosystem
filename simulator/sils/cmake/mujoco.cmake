@@ -51,6 +51,20 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(mujoco)
 
+# MuJoCo builds its own sources with warnings as errors. A newer compiler than the one MuJoCo
+# 3.9.0 was released against adds warnings that then stop the build (GCC 15.2 on Ubuntu 26.04:
+# engine_print.c "assignment discards 'const' qualifier", -Werror=discarded-qualifiers; seen in CI
+# on 2026-11-22). We do not maintain MuJoCo's sources, so warnings in them must not fail our build.
+# The option is appended after MuJoCo's own flags, so it wins. Our own targets are not affected.
+# MuJoCo は自身のソースを「警告をエラー扱い」でビルドする。MuJoCo 3.9.0 のリリース時より新しい
+# コンパイラは警告を増やし、それでビルドが止まる（Ubuntu 26.04 の GCC 15.2:
+# engine_print.c の「const 修飾子を捨てる代入」、-Werror=discarded-qualifiers。2026-11-22 に CI で
+# 発生）。MuJoCo のソースは本リポジトリの保守対象ではないので、その警告でビルドを止めない。
+# この指定は MuJoCo 自身のフラグの後ろに付くので優先される。本リポジトリのターゲットには影響しない。
+if(TARGET mujoco AND NOT MSVC)
+  target_compile_options(mujoco PRIVATE -Wno-error)
+endif()
+
 # MinGW note (MuJoCo's OWN mju_error/mju_warning %zu use): unlike the real CRT
 # printf/scanf above, GCC's mingw target ALWAYS maps a user
 # __attribute__((format(printf, ...))) to the "ms_printf" archetype —
