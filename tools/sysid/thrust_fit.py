@@ -62,9 +62,12 @@ DURATION_QUANTUM_CYCLES = 40                         # run lengths are rounded t
 DURATION_ROUND_TOLERANCE_CYCLES = 12                 # edge uncertainty (50 Hz) / 変わり目の不確かさ
 ABORTED_RAMP_DOWN_CYCLES_MAX = 150                   # state-4 cycles below this = aborted (normal 200, abort 100) / 状態 4 の周期数がこれ未満なら打ち切り
 STEADY_MARGIN_CYCLES = 20                            # trimmed beside the ramps (0.05 s) / 立ち上げ・立ち下げの外側の余白
-TREND_ORDER = 5                                      # polynomial trend removed with the tones / 音と一緒に引く多項式の次数
-NEIGHBOR_OFFSETS_HZ = (-0.3, -0.2, -0.1, 0.1, 0.2, 0.3)
-NEIGHBOR_MIN_DISTANCE_HZ = 0.07                      # a neighbor must stay this far from every tone / 音からこれ以上離す
+TREND_ORDER = 5                                      # polynomial trend removed with the tones (absorbs the ToF height wander) / 音と一緒に引く多項式の次数（ToF の高さの漂いを吸収）
+NOISE_PROBE_HALF_WIDTH_HZ = 0.6                      # noise probed at Fourier bins k/T within +-0.6 Hz of a tone / 雑音は音の ±0.6 Hz の中の k/T で見積もる
+PROBE_GAIN_MAX = 2.0                                 # a probe bin the trend absorbs more than this is dropped / 傾向に吸収される度合いがこれを超える点は捨てる
+NOISE_PROBE_MAX_COUNT = 6                            # use the nearest 6 noise-only bins (12 degrees of freedom) / 最も近い 6 点（自由度 12）を使う
+NOISE_PROBE_TONE_EXCLUSION_BINS = 1.0                # probes stay this many 1/T away from every tone / 見積もり点を音から離す距離（1/T の倍数）
+CONDITION_NUMBER_WARN = 100.0                        # design-matrix condition number above this -> warning / 設計行列の条件数がこれを超えたら警告
 COHERENCE_MIN = 0.8                                  # tones below this are not fitted / これ未満の音は当てはめない
 TOF_SNR_MIN = 10.0                                   # tone power / neighbor power, ToF / 音の電力 ÷ 近傍の電力（ToF）
 FIT_TAU_STARTS_S = (0.01, 0.03, 0.06)
@@ -250,18 +253,6 @@ def search_start_cycle(record: ThrustRecord, edge_row: int, total_cycles: int) -
 # 3. Tone amplitudes and coherence / 音ごとの複素振幅とコヒーレンス
 # =============================================================================
 
-def neighbor_frequencies(tones_hz) -> np.ndarray:
-    """Non-tone frequencies within +-0.3 Hz of the tones (noise estimate). / 音の ±0.3 Hz の音でない周波数。"""
-    tones = np.asarray(tones_hz, dtype=float)
-    found = set()
-    for tone in tones:
-        for offset in NEIGHBOR_OFFSETS_HZ:
-            candidate = round(tone + offset, 6)
-            if candidate > 0.0 and np.min(np.abs(tones - candidate)) >= NEIGHBOR_MIN_DISTANCE_HZ:
-                found.add(candidate)
-    return np.array(sorted(found))
-
-
 def _design_matrix(times_s: np.ndarray, frequencies_hz: np.ndarray) -> np.ndarray:
     phase = 2.0 * math.pi * np.outer(times_s, frequencies_hz)
     span = max(float(times_s.max() - times_s.min()), 1e-9)
@@ -273,7 +264,7 @@ def _design_matrix(times_s: np.ndarray, frequencies_hz: np.ndarray) -> np.ndarra
 def fit_complex_amplitudes(times_s, values, frequencies_hz):
     """Least squares of cos, sin (all frequencies), a polynomial trend.
     Returns complex amplitudes A with value ~ Re(A exp(j 2 pi f t)), and the coefficient vector.
-    全周波数の cos・sin と定数・1 次の項の最小二乗。value ~ Re(A exp(j 2 pi f t)) となる複素振幅 A を返す。"""
+    全周波数の cos・sin と多項式の傾向の最小二乗。value ~ Re(A exp(j 2 pi f t)) となる複素振幅 A を返す。"""
     frequencies = np.asarray(frequencies_hz, dtype=float)
     matrix = _design_matrix(np.asarray(times_s, dtype=float), frequencies)
     coefficients, *_ = np.linalg.lstsq(matrix, np.asarray(values, dtype=float), rcond=None)
@@ -281,22 +272,117 @@ def fit_complex_amplitudes(times_s, values, frequencies_hz):
     return coefficients[:count] - 1j * coefficients[count:2 * count], coefficients
 
 
-def tone_amplitudes_with_noise(times_s, values, tones_hz) -> dict:
-    """Complex amplitude of each tone and the mean power of its non-tone neighbors.
-    各音の複素振幅と、その近傍（音でない周波数）の平均電力。"""
+def window_resolution_hz(times_s) -> float:
+    """Fourier resolution 1/T of the window. / 窓のフーリエ分解能 1/T。"""
+    times = np.asarray(times_s, dtype=float)
+    return 1.0 / max(float(times.max() - times.min()), 1e-9)
+
+
+def probe_frequencies(tones_hz, resolution_hz: float, exclude_tones: bool = True) -> list:
+    """For each tone, the Fourier bins k/T (k >= 1) within +-0.6 Hz that are not within 1/T of any tone.
+    Bins spaced by 1/T are orthogonal on a uniform window, so the probes never make a design ill-conditioned,
+    whatever the window length. Listed nearest first; the nearest 6 usable ones are used (12 degrees of freedom: stable, and
+    local, because the noise of the ToF height and of the slow wander is red, larger at low frequency).
+    各音について、±0.6 Hz の中の窓のフーリエの格子 k/T（k >= 1）のうち、どの音からも 1/T 以上離れたもの。
+    1/T の間隔の格子は一様な窓で直交するので、窓の長さによらず悪条件にならない。近い順に並べ、使える点のうち最も近い
+    6 点を使う（自由度 12 で安定し、かつ局所的。ToF の高さや遅い変動の雑音は低周波ほど大きい赤色のため）。"""
     tones = np.asarray(tones_hz, dtype=float)
-    neighbors = neighbor_frequencies(tones)
-    amplitudes, _ = fit_complex_amplitudes(times_s, values, np.concatenate([tones, neighbors]))
-    tone_amp = amplitudes[:tones.size]
-    neighbor_power = np.abs(amplitudes[tones.size:]) ** 2
-    noise_power = np.empty(tones.size)
-    for i, tone in enumerate(tones):
-        near = np.abs(neighbors - tone) <= max(abs(o) for o in NEIGHBOR_OFFSETS_HZ) + 1e-6
-        noise_power[i] = float(np.mean(neighbor_power[near])) if near.any() else float(np.mean(neighbor_power))
-    power = np.abs(tone_amp) ** 2
-    return {"amplitude": tone_amp, "noise_power": noise_power,
-            "power_ratio": power / np.maximum(noise_power, 1e-300),
-            "coherence": power / np.maximum(power + noise_power, 1e-300)}
+    bins = resolution_hz * np.arange(1, int(100.0 / resolution_hz))
+    probes = []
+    for tone in tones:
+        near = np.abs(bins - tone) <= NOISE_PROBE_HALF_WIDTH_HZ
+        if exclude_tones:
+            near &= np.min(np.abs(bins[:, None] - tones[None, :]), axis=1) >= NOISE_PROBE_TONE_EXCLUSION_BINS * resolution_hz
+        candidates = bins[near]
+        probes.append([float(f) for f in candidates[np.argsort(np.abs(candidates - tone))]])    # nearest first / 近い順
+    return probes
+
+
+def _probe_power(times_s, values, frequency_hz: float) -> Optional[float]:
+    """|A|^2 of one least-squares fit of cos, sin at `frequency_hz` plus the same polynomial trend as the
+    tone fit: the power a noise-only bin shows in the tone estimator. Returns None when the trend absorbs the
+    bin (the noise gain of the fit is more than PROBE_GAIN_MAX times that of an ideal orthogonal fit), because
+    such a bin cannot show the noise: its amplitude is blown up by the near-collinearity instead.
+    `frequency_hz` の cos・sin と音の当てはめと同じ多項式の傾向を最小二乗で当てはめたときの |A|^2。雑音だけの格子点が
+    音の推定器に現れる電力。傾向が格子点を吸収してしまう（当てはめの雑音の倍率が理想の直交の場合の
+    PROBE_GAIN_MAX 倍を超える）ときは None。そのような点は雑音を映さず、ほぼ一次従属による増幅だけが出るため。"""
+    times = np.asarray(times_s, dtype=float)
+    matrix = _design_matrix(times, np.array([frequency_hz]))
+    inverse = np.linalg.pinv(matrix.T @ matrix)
+    if (inverse[0, 0] + inverse[1, 1]) * times.size / 4.0 > PROBE_GAIN_MAX:
+        return None
+    coefficients, *_ = np.linalg.lstsq(matrix, np.asarray(values, dtype=float), rcond=None)
+    return float(coefficients[0] ** 2 + coefficients[1] ** 2)
+
+
+def local_noise_power(times_s, residual, tones_hz, resolution_hz: float, exclude_tones: bool = True):
+    """Per tone: (mean |A|^2 of the nearest NOISE_PROBE_MAX_COUNT usable noise-only bins of `residual`,
+    number of bins used). The mean is NaN when no bin is usable. It is the noise power of that tone's
+    amplitude estimate. The bins are those of `resolution_hz` (the EXCITATION window's 1/T).
+    各音について、(残差の使える雑音だけの格子点のうち最も近い NOISE_PROBE_MAX_COUNT 点の |A|^2 の平均, 使った点数)。
+    使える点が無ければ平均は NaN。その音の振幅の推定に乗る雑音の電力に等しい。格子は励振の窓の 1/T。"""
+    power = np.full(len(tones_hz), np.nan)
+    counts = np.zeros(len(tones_hz), dtype=int)
+    for i, found in enumerate(probe_frequencies(tones_hz, resolution_hz, exclude_tones)):
+        values = []
+        for frequency in found:
+            value = _probe_power(times_s, residual, frequency)
+            if value is not None:
+                values.append(value)
+            if len(values) >= NOISE_PROBE_MAX_COUNT:
+                break
+        counts[i] = len(values)
+        if values:
+            power[i] = float(np.mean(values))
+    return power, counts
+
+
+def _design_condition_number(times_s, tones_hz) -> float:
+    """Condition number of the tones + trend design matrix. / 音と傾向の設計行列の条件数。"""
+    matrix = _design_matrix(np.asarray(times_s, dtype=float), np.asarray(tones_hz, dtype=float))
+    return float(np.linalg.cond(matrix))
+
+
+def _trend_residual(times_s, values) -> np.ndarray:
+    """`values` minus its low-order polynomial trend (no tones). / 低次の多項式の傾向を引いた値（音は引かない）。"""
+    times = np.asarray(times_s, dtype=float)
+    matrix = _design_matrix(times, np.empty(0))
+    coefficients, *_ = np.linalg.lstsq(matrix, np.asarray(values, dtype=float), rcond=None)
+    return np.asarray(values, dtype=float) - matrix @ coefficients
+
+
+def tone_amplitudes_with_noise(times_s, values, tones_hz, hover=None) -> dict:
+    """Complex amplitude of each tone (tones + low-order trend only, so the design stays well
+    conditioned for any window length) and its noise power from the RESIDUAL spectrum: the mean power
+    of the noise-only Fourier bins k/T around the tone, seen through the same estimator.
+    `hover` = (times, values) of the hover before the excitation gives the optimistic comparison noise
+    (its power is scaled to the sample count of the excitation window).
+    各音の複素振幅（音と低次の傾向だけを当てはめるので、窓が短くても設計行列は悪条件にならない）と、残差の
+    スペクトルから見積もった雑音の電力（同じ推定器で見た、音の周りの雑音だけの格子点 k/T の電力の平均）。
+    `hover` = 励振の前のホバーの (時刻, 値)。楽観的になる比較用の雑音も返す（電力は励振の窓の標本数に換算）。"""
+    tones = np.asarray(tones_hz, dtype=float)
+    times = np.asarray(times_s, dtype=float)
+    amplitudes, coefficients = fit_complex_amplitudes(times, values, tones)
+    residual = np.asarray(values, dtype=float) - _design_matrix(times, tones) @ coefficients
+    condition = _design_condition_number(times, tones)
+    resolution = window_resolution_hz(times)
+    noise_power, probe_counts = local_noise_power(times, residual, tones, resolution)
+    power = np.abs(amplitudes) ** 2
+    result = {"amplitude": amplitudes, "noise_power": noise_power,
+              "power_ratio": power / np.maximum(noise_power, 1e-300),
+              "coherence": power / np.maximum(power + noise_power, 1e-300),
+              "condition_number": condition, "resolution_hz": resolution, "residual": residual,
+              "probe_counts": probe_counts,
+              "hover_noise_power": None, "hover_power_ratio": None}
+    if hover is not None:
+        hover_times = np.asarray(hover[0], dtype=float)
+        hover_residual = _trend_residual(hover_times, hover[1])
+        # The hover has no tones: no bin needs to be excluded. / ホバーには音がないので、除く点はない。
+        hover_power, _ = local_noise_power(hover_times, hover_residual, tones, window_resolution_hz(hover_times), False)
+        hover_power = hover_power * hover_times.size / times.size
+        result.update({"hover_noise_power": hover_power,
+                       "hover_power_ratio": power / np.maximum(hover_power, 1e-300)})
+    return result
 
 
 # =============================================================================
@@ -382,9 +468,9 @@ def frequency_response(thrust_tones: dict, accel_tones: dict, tones_hz) -> dict:
     """G(jw) = A_a / A_u per tone, i.e. S_ra / S_ru (r is common and cancels), with coherence.
     音ごとの G(jw) = A_a / A_u（= S_ra / S_ru。r は共通で消える）とコヒーレンス。"""
     response = accel_tones["amplitude"] / thrust_tones["amplitude"]
-    coherence = np.minimum(thrust_tones["coherence"], accel_tones["coherence"])
+    coherence = np.fmin(thrust_tones["coherence"], accel_tones["coherence"])      # NaN = no noise estimate / 雑音の見積もりなし
     return {"frequency_hz": np.asarray(tones_hz, dtype=float), "response": response,
-            "coherence": coherence, "used": coherence >= COHERENCE_MIN}
+            "coherence": coherence, "used": np.nan_to_num(coherence, nan=0.0) >= COHERENCE_MIN}
 
 
 # =============================================================================
@@ -404,14 +490,17 @@ def estimate_tof_delay(tones_hz, accel_amplitude, tof_tones: dict) -> dict:
               "phase_rad": [float(v) for v in phase], "magnitude_ratio": [float(v) for v in np.abs(ratio)],
               "used_tones_hz": [float(f) for f in np.asarray(tones_hz)[usable]]}
     if usable.sum() < 2:
-        return {**result, "tof_delay_relative_to_accelerometer_s": None, "std_error_s": None}
+        reason = (f"ToF delay skipped: {int(usable.sum())} of {len(snr)} tones have ToF SNR >= {TOF_SNR_MIN:g} "
+                  f"(at least 2 are needed); best SNR {np.nanmax(snr) if np.isfinite(snr).any() else float('nan'):.2f}")
+        return {**result, "tof_delay_relative_to_accelerometer_s": None, "std_error_s": None, "status": reason}
     weight = 2.0 * snr[usable]
     w_omega = omega[usable]
     slope_denominator = float(np.sum(weight * w_omega ** 2))
     delay = -float(np.sum(weight * w_omega * phase[usable])) / slope_denominator
     chi_square = float(np.sum(weight * (phase[usable] + w_omega * delay) ** 2)) / max(usable.sum() - 1, 1)
     std_error = math.sqrt(max(chi_square, 1.0) / slope_denominator)
-    return {**result, "tof_delay_relative_to_accelerometer_s": delay, "std_error_s": std_error}
+    return {**result, "tof_delay_relative_to_accelerometer_s": delay, "std_error_s": std_error,
+            "status": f"ok: {int(usable.sum())} of {len(snr)} tones with ToF SNR >= {TOF_SNR_MIN:g}"}
 
 
 # =============================================================================
@@ -492,18 +581,57 @@ def _steady_window(record: ThrustRecord, start_cycle: int, total_cycles: int):
     return rows, tof, first, last
 
 
+def _unusable_reason(coherence: float, snr_accel: float, snr_thrust: float) -> Optional[str]:
+    """Why a tone is left out of the fit (None = usable). / 当てはめに使えない理由（None = 使える）。"""
+    if not math.isfinite(coherence):
+        return "no noise estimate (window too short for the noise probes)"
+    if coherence >= COHERENCE_MIN:
+        return None
+    weaker = "acceleration" if snr_accel <= snr_thrust else "thrust"
+    return f"coherence {coherence:.2f} < {COHERENCE_MIN} (weakest: {weaker})"
+
+
 def _tone_table(frequency: dict, thrust_tones: dict, accel_tones: dict, fitted) -> list:
+    """One row per tone, always (also when the fit is skipped). / 当てはめを省いたときも含め、音ごとの行を必ず作る。"""
     rows = []
     for i, tone in enumerate(frequency["frequency_hz"]):
         response = frequency["response"][i]
+        snr_a, snr_u = float(accel_tones["power_ratio"][i]), float(thrust_tones["power_ratio"][i])
+        hover_a = accel_tones["hover_power_ratio"]
+        hover_u = thrust_tones["hover_power_ratio"]
         rows.append({"frequency_hz": float(tone), "gain_mps2_per_n": float(abs(response)),
                      "phase_rad": float(np.angle(response)),
                      "coherence": float(frequency["coherence"][i]), "used_in_fit": bool(frequency["used"][i]),
+                     "unused_reason": _unusable_reason(float(frequency["coherence"][i]), snr_a, snr_u),
+                     "snr_accel_in_excitation": snr_a, "snr_thrust_in_excitation": snr_u,
+                     "snr_accel_hover": float(hover_a[i]) if hover_a is not None else None,
+                     "snr_thrust_hover": float(hover_u[i]) if hover_u is not None else None,
                      "thrust_amplitude_n": float(abs(thrust_tones["amplitude"][i])),
                      "accel_amplitude_mps2": float(abs(accel_tones["amplitude"][i])),
                      "fitted_gain": float(abs(fitted[i])) if fitted is not None else None,
                      "fitted_phase_rad": float(np.angle(fitted[i])) if fitted is not None else None})
     return rows
+
+
+def _fit_status(used_count: int, total: int, fit) -> str:
+    """One line saying whether the (K, tau, L) fit ran and why not. / 当てはめを行ったか、省いた理由の 1 行。"""
+    if fit is not None:
+        return f"ok: fitted with {used_count} of {total} tones (coherence >= {COHERENCE_MIN})"
+    return (f"(K, tau, L) fit skipped: {used_count} of {total} tones are usable "
+            f"(coherence >= {COHERENCE_MIN}, i.e. tone power / noise power >= "
+            f"{COHERENCE_MIN / (1.0 - COHERENCE_MIN):g}); at least {FIT_PARAMETER_COUNT} are needed")
+
+
+def _hover_inputs(record: ThrustRecord):
+    """(accel hover, thrust hover) as (times, values), or (None, None) when no stable hover precedes the run.
+    ホバー区間の（加速度, 推力）を (時刻, 値) で返す。安定したホバーが無ければ (None, None)。"""
+    active = np.flatnonzero((record.state_code & STATE_MASK) >= 1)
+    window = _hover_window_rows(record, int(active[0])) if active.size else None
+    if window is None:
+        return None, None
+    rows = slice(*window)
+    times = (record.cycle[rows] - record.cycle[window[0]]) / CYCLE_RATE_HZ
+    return (times, record.upward_accel[rows]), (times, record.thrust[rows])
 
 
 def analyze_multisine_segment(record: ThrustRecord, segment: dict) -> dict:
@@ -519,8 +647,9 @@ def analyze_multisine_segment(record: ThrustRecord, segment: dict) -> dict:
     times = (record.cycle[rows] - start["start_cycle"]) / CYCLE_RATE_HZ
     tof_times = (record.tof_cycle[tof_rows] - start["start_cycle"]) / CYCLE_RATE_HZ
     tones = np.array(TONE_FREQUENCIES_HZ)
-    thrust_tones = tone_amplitudes_with_noise(times, record.thrust[rows], tones)
-    accel_tones = tone_amplitudes_with_noise(times, record.upward_accel[rows], tones)
+    hover_accel, hover_thrust = _hover_inputs(record)
+    thrust_tones = tone_amplitudes_with_noise(times, record.thrust[rows], tones, hover_thrust)
+    accel_tones = tone_amplitudes_with_noise(times, record.upward_accel[rows], tones, hover_accel)
     tof_tones = tone_amplitudes_with_noise(tof_times, record.tof_height[tof_rows], tones)
     response = frequency_response(thrust_tones, accel_tones, tones)
     used = response["used"]
@@ -529,22 +658,25 @@ def analyze_multisine_segment(record: ThrustRecord, segment: dict) -> dict:
         fit = fit_thrust_plant(tones[used], response["response"][used], response["coherence"][used])
     fitted = (model_response([fit["K"], fit["tau_s"], fit["L_s"]], 2 * math.pi * tones)
               if fit else None)
-    residual = record.upward_accel[rows] - _tone_fit(times, record.upward_accel[rows], tones)
+    residual = accel_tones["residual"]
+    conditions = {"thrust_and_accel": thrust_tones["condition_number"], "tof": tof_tones["condition_number"]}
+    warnings = [f"design-matrix condition number {value:.3g} ({name}) exceeds {CONDITION_NUMBER_WARN:g}: "
+                f"the tone amplitudes may be inaccurate" for name, value in conditions.items()
+                if value > CONDITION_NUMBER_WARN]
     result.update({
-        "status": "ok", "fit": fit, "tones": _tone_table(response, thrust_tones, accel_tones, fitted),
+        "status": "ok", "fit": fit, "fit_status": _fit_status(int(used.sum()), tones.size, fit),
+        "tones": _tone_table(response, thrust_tones, accel_tones, fitted), "warnings": warnings,
         "tof": estimate_tof_delay(tones, accel_tones["amplitude"], tof_tones),
         "noise_during_excitation": noise_summary(residual, tones),
         "data": {"steady_window_s": (last - first) / CYCLE_RATE_HZ, "rows_used": int(rows.sum()),
-                 "tof_samples_used": int(tof_rows.sum()), "tones_used_in_fit": int(used.sum())},
+                 "tof_samples_used": int(tof_rows.sum()), "tones_used_in_fit": int(used.sum()),
+                 "fourier_resolution_hz": thrust_tones["resolution_hz"],
+                 "condition_number": conditions,
+                 "noise_probes_per_tone": {"thrust": thrust_tones["probe_counts"], "accel": accel_tones["probe_counts"],
+                                           "tof": tof_tones["probe_counts"]}},
         "_plot": {"tones": tones, "response": response["response"], "used": used,
                   "fitted": fitted, "tof": None}})
     return result
-
-
-def _tone_fit(times, values, tones) -> np.ndarray:
-    """The part of `values` explained by the tones, a polynomial trend. / 音・定数・1 次の項で説明できる部分。"""
-    _, coefficients = fit_complex_amplitudes(times, values, tones)
-    return _design_matrix(np.asarray(times, float), np.asarray(tones, float)) @ coefficients
 
 
 # =============================================================================
@@ -605,8 +737,9 @@ def analyze_record(record: ThrustRecord) -> dict:
     noise = accelerometer_noise(record, multisine["noise_during_excitation"] if multisine else None)
     output["accelerometer_noise"] = noise
     if multisine:
-        output.update({"fit": multisine["fit"], "tof": multisine["tof"], "start": multisine["start"],
-                       "tones": multisine["tones"], "_plot": multisine["_plot"]})
+        output.update({"fit": multisine["fit"], "fit_status": multisine["fit_status"], "tof": multisine["tof"],
+                       "start": multisine["start"], "tones": multisine["tones"], "warnings": multisine["warnings"],
+                       "run_data": multisine["data"], "_plot": multisine["_plot"]})
     return output
 
 
@@ -622,30 +755,68 @@ def to_jsonable(value):
         return {k: to_jsonable(v) for k, v in value.items() if not str(k).startswith("_")}
     if isinstance(value, (list, tuple)):
         return [to_jsonable(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return to_jsonable(value.tolist())
     if isinstance(value, (np.floating, np.integer, np.bool_)):
-        return value.item()
+        return to_jsonable(value.item())
     if isinstance(value, float) and not math.isfinite(value):
         return None
     return value
 
 
+def _format_snr(value) -> str:
+    return "   n/a" if value is None or not math.isfinite(value) else f"{value:6.2f}"
+
+
+def tone_table_lines(tones: list) -> list:
+    """The per-tone table: always printed, whether or not the fit ran. SNR = tone power / noise power;
+    `run` = noise from the residual during the excitation (the reference), `hover` = noise before it (optimistic).
+    音ごとの表。当てはめを行っても省いても必ず出す。SNR = 音の電力 ÷ 雑音の電力。run = 励振の間の残差の雑音（基準）、
+    hover = 励振の前のホバーの雑音（楽観的）。"""
+    lines = ["per-tone response (SNR = tone power / noise power; run = residual during the excitation [reference], "
+             "hover = hover before it [optimistic])",
+             "  f[Hz]   |G|[(m/s^2)/N]  phase[deg]  SNR_a(run) SNR_a(hover) SNR_u(run) coherence  usable"]
+    for row in tones:
+        lines.append(f"  {row['frequency_hz']:5.2f}  {row['gain_mps2_per_n']:13.2f}  "
+                     f"{math.degrees(row['phase_rad']):9.1f}  {_format_snr(row['snr_accel_in_excitation'])}    "
+                     f"{_format_snr(row['snr_accel_hover'])}     {_format_snr(row['snr_thrust_in_excitation'])}   "
+                     f"{row['coherence']:8.2f}   {'yes' if row['used_in_fit'] else 'no'}"
+                     + ("" if row["used_in_fit"] else f"  ({row['unused_reason']})"))
+    return lines
+
+
 def summary_lines(result: dict) -> list:
-    """Short console summary. / コンソール用の短い要約。"""
+    """Console summary: fit (or why it was skipped), the tone table, ToF, start, noise, warnings.
+    コンソール用の要約: 当てはめ（省いたなら理由）・音の表・ToF・開始位置・雑音・警告。"""
     lines = []
     fit = result.get("fit")
     if fit:
         lines.append(f"K = {fit['K']:.2f} +- {fit['K_std_error']:.2f} (m/s^2)/N   "
                      f"tau = {fit['tau_s'] * 1e3:.1f} +- {fit['tau_std_error_s'] * 1e3:.1f} ms   "
                      f"L = {fit['L_s'] * 1e3:.1f} +- {fit['L_std_error_s'] * 1e3:.1f} ms (dead time incl. accelerometer path)")
+    if result.get("fit_status"):
+        lines.append(f"fit: {result['fit_status']}")
+    if result.get("tones"):
+        lines.extend(tone_table_lines(result["tones"]))
     tof = result.get("tof") or {}
     delay = tof.get("tof_delay_relative_to_accelerometer_s")
     if delay is not None:
         lines.append(f"ToF delay RELATIVE to the accelerometer = {delay * 1e3:.1f} +- {tof['std_error_s'] * 1e3:.1f} ms "
                      f"(tones used: {tof['used_tones_hz']})")
+    if tof.get("status"):
+        lines.append(f"ToF: {tof['status']}")
     start = result.get("start")
     if start:
         lines.append(f"excitation start: edge{start['offset_from_edge_cycles']:+d} cycles, "
                      f"correlation {start['correlation']:.3f} (runner-up {start['correlation_runner_up']:.3f})")
+    run_data = result.get("run_data")
+    if run_data:
+        conditions = run_data["condition_number"]
+        lines.append(f"window {run_data['steady_window_s']:.1f} s (Fourier resolution 1/T = "
+                     f"{run_data['fourier_resolution_hz']:.3f} Hz); design condition number "
+                     f"thrust/accel {conditions['thrust_and_accel']:.3g}, ToF {conditions['tof']:.3g}")
+    for text in result.get("warnings", []):
+        lines.append(f"WARNING: {text}")
     for name, noise in result.get("accelerometer_noise", {}).items():
         lines.append(f"accelerometer noise [{name}]: floor {noise['floor_mps2_per_sqrt_hz']:.2e} (m/s^2)/sqrt(Hz), "
                      f"bands {noise['band_rms_mps2']}")

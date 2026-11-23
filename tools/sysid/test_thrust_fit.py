@@ -272,6 +272,137 @@ def test_upward_acceleration_is_gravity_free_at_rest_and_tilt_corrected():
 
 
 # =============================================================================
+# (4b) Window length, conditioning, skipped fits / 窓の長さ・条件数・省いた当てはめ
+# =============================================================================
+
+# Scatter (1 sigma) of the fitted K, tau, L measured over 24 noise seeds of this synthetic flight
+# (accelerometer noise 0.3 m/s^2 per sample, weak feedback), per run length. The test bounds below are 3 sigma,
+# fixed before the assertions were written; the scatter falls as the window grows.
+# この合成飛行の K・tau・L の当てはめの散らばり（1 sigma）を 24 通りの雑音で測った値（実行の長さ別。加速度計の雑音は
+# 1 標本あたり 0.3 m/s^2、弱いフィードバック）。下の幅は 3 sigma で、表明を書く前に決めた。窓が長いほど散らばりは小さい。
+SCATTER_BY_RUN_S = {10: (0.86, 4.4e-3, 3.4e-3),       # (K, tau [s], L [s])
+                    20: (0.74, 2.4e-3, 2.1e-3),
+                    30: (0.50, 1.9e-3, 1.4e-3)}
+BOUND_SIGMAS = 3.0
+
+
+@pytest.mark.parametrize("run_s", [10, 20, 30])
+def test_plant_is_recovered_for_10_20_30_second_runs(run_s):
+    """A 10 s run (window 8.9 s, resolution 1/T = 0.112 Hz) must not break the estimator.
+    10 s の実行（窓 8.9 s、分解能 1/T = 0.112 Hz）でも推定が壊れない。"""
+    gain_sigma, tau_sigma, dead_sigma = SCATTER_BY_RUN_S[run_s]
+    for seed in (11, 12, 13):
+        record, _ = make_record(seed=seed, run_cycles=run_s * 400, feedback_gain=0.01)
+        result = tf.analyze_record(record)
+        fit = result["fit"]
+        assert fit is not None, result["fit_status"]
+        assert fit["K"] == pytest.approx(TRUE_GAIN, abs=BOUND_SIGMAS * gain_sigma)
+        assert fit["tau_s"] == pytest.approx(TRUE_TAU_S, abs=BOUND_SIGMAS * tau_sigma)
+        assert fit["L_s"] == pytest.approx(TRUE_DEAD_TIME_S, abs=BOUND_SIGMAS * dead_sigma)
+        assert result["warnings"] == []
+
+
+@pytest.mark.parametrize("run_s", [10, 20, 30])
+def test_design_matrix_is_well_conditioned_for_any_window(run_s):
+    """The 10 s window gave a condition number of 5e10 with the old +-0.1/0.2/0.3 Hz neighbors.
+    10 s の窓では、旧来の ±0.1・0.2・0.3 Hz の近傍で条件数が 5e10 になっていた。"""
+    record, _ = make_record(seed=1, run_cycles=run_s * 400)
+    result = tf.analyze_record(record)
+    conditions = result["run_data"]["condition_number"]
+    assert max(conditions.values()) < 10.0
+    assert result["run_data"]["fourier_resolution_hz"] == pytest.approx(1.0 / result["run_data"]["steady_window_s"], rel=0.02)
+
+
+def test_close_tones_raise_a_condition_number_warning(monkeypatch):
+    times = np.arange(0, 8.9, 1.0 / tf.CYCLE_RATE_HZ)
+    crowded = 0.4 + 0.03 * np.arange(12)              # 12 frequencies 0.03 Hz apart, well below 1/T = 0.112 Hz
+    assert tf._design_condition_number(times, crowded) > tf.CONDITION_NUMBER_WARN
+    assert tf._design_condition_number(times, tf.TONE_FREQUENCIES_HZ) < tf.CONDITION_NUMBER_WARN
+    monkeypatch.setattr(tf, "CONDITION_NUMBER_WARN", 1.0)
+    record, _ = make_record(seed=1)
+    result = tf.analyze_record(record)
+    assert any("condition number" in text for text in result["warnings"])
+    assert any(line.startswith("WARNING") for line in tf.summary_lines(result))
+
+
+def test_noise_estimate_is_calibrated_at_10_20_30_seconds():
+    """Mean estimated noise power over 24 seeds equals the measured variance of the tone amplitude within the
+    scatter of a 12-degree-of-freedom estimate (a factor 0.6..1.7), for every tone and window length.
+    24 通りの雑音で、見積もった雑音の電力の平均が、音の振幅の実測の分散に一致する（自由度 12 の推定の散らばり
+    0.6〜1.7 倍の範囲）。"""
+    tones = np.array(tf.TONE_FREQUENCIES_HZ)
+    for run_s in (10, 30):
+        amplitudes, noises = [], []
+        for seed in range(24):
+            record, start = make_record(seed=seed, run_cycles=run_s * 400)
+            rows, _, _, _ = tf._steady_window(record, start, run_s * 400)
+            times = (record.cycle[rows] - start) / tf.CYCLE_RATE_HZ
+            tones_result = tf.tone_amplitudes_with_noise(times, record.upward_accel[rows], tones)
+            amplitudes.append(tones_result["amplitude"])
+            noises.append(tones_result["noise_power"])
+        amplitudes, noises = np.array(amplitudes), np.array(noises)
+        measured = np.mean(np.abs(amplitudes - amplitudes.mean(axis=0)) ** 2, axis=0)
+        ratio = np.mean(noises, axis=0) / measured
+        assert np.all((ratio > 0.6) & (ratio < 1.7)), (run_s, ratio)
+
+
+def test_fit_is_skipped_with_a_reason_when_the_signal_is_buried_in_noise():
+    record, _ = make_record(seed=2, accel_noise_std=15.0, feedback_gain=0.0)           # tone SNR ~ 0.07 / 音の SNR は約 0.07
+    result = tf.analyze_record(record)
+    assert result["fit"] is None
+    assert "skipped" in result["fit_status"] and "tones are usable" in result["fit_status"]
+    assert "coherence >= 0.8" in result["fit_status"]
+    assert len(result["tones"]) == len(tf.TONE_FREQUENCIES_HZ)               # the table is still complete
+    assert all(not row["used_in_fit"] and row["unused_reason"] for row in result["tones"])
+    assert all(row["snr_accel_in_excitation"] is not None for row in result["tones"])
+    text = "\n".join(tf.summary_lines(result))
+    assert "fit skipped" in text and "per-tone response" in text
+    assert text.count("no  (") == len(tf.TONE_FREQUENCIES_HZ)
+
+
+def test_tof_delay_skip_states_its_reason(monkeypatch):
+    monkeypatch.setitem(globals(), "TOF_NOISE_STD_M", 0.5)                            # ToF noise buries the tones / ToF の雑音が音を埋める
+    record, _ = make_record(seed=2, accel_noise_std=0.3, feedback_gain=0.0)
+    tof = tf.analyze_record(record)["tof"]
+    assert tof["tof_delay_relative_to_accelerometer_s"] is None
+    assert "ToF delay skipped" in tof["status"] and "ToF SNR >= 10" in tof["status"]
+
+
+def test_both_noise_references_are_reported_and_hover_is_the_optimistic_one():
+    record, _ = make_record(seed=6, accel_noise_std=0.5, feedback_gain=0.0)
+    rows = tf.analyze_record(record)["tones"]
+    assert all(row["snr_accel_hover"] is not None for row in rows)
+    in_run = np.array([row["snr_accel_in_excitation"] for row in rows])
+    hover = np.array([row["snr_accel_hover"] for row in rows])
+    assert np.all(np.isfinite(in_run)) and np.all(np.isfinite(hover))
+    assert np.median(hover / in_run) == pytest.approx(1.0, abs=0.5)           # same white noise in both / 同じ白色雑音
+
+
+def test_result_is_json_serializable_with_and_without_a_fit():
+    import json
+    for noise in (0.3, 15.0):
+        record, _ = make_record(seed=3, accel_noise_std=noise, feedback_gain=0.0)
+        loaded = json.loads(json.dumps(tf.to_jsonable(tf.analyze_record(record))))
+        assert loaded["fit_status"] and len(loaded["tones"]) == 8
+        assert "condition_number" in loaded["run_data"]
+
+
+def test_thrust_fit_cli_writes_the_json_next_to_the_figure(sysid_module, monkeypatch, tmp_path):
+    import json
+    record, _ = make_record(seed=3, accel_noise_std=15.0, feedback_gain=0.0)
+    backend = sysid_module._thrust_backend()
+    monkeypatch.setattr(sysid_module, "_resolve_input_bundle", lambda name: Path("flight_x.sflog.zip"))
+    monkeypatch.setattr(backend, "analyze_bundle", lambda path: backend.analyze_record(record))
+    parser = argparse.ArgumentParser()
+    sysid_module.register(parser.add_subparsers())
+    args = parser.parse_args(["sysid", "thrust-fit", "flight_x", "--plot", str(tmp_path)])
+    assert sysid_module.run_thrust_fit(args) == 0
+    saved = json.loads((tmp_path / "flight_x.sflog.zip_thrust_fit.json").read_text())
+    assert saved["fit"] is None and "skipped" in saved["fit_status"]
+    assert (tmp_path / "flight_x.sflog.zip_thrust_fit.png").exists()
+
+
+# =============================================================================
 # (5) thrust-excite arguments / thrust-excite の引数の組み立て
 # =============================================================================
 

@@ -1859,8 +1859,8 @@ def _register_thrust_fit(subparsers):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("input", help="flight-log bundle (.sflog.zip or directory; also searched in logs/)")
-    parser.add_argument("--json-out", help="write the full result JSON here")
-    parser.add_argument("--plot", metavar="DIR", help="save the response / fit / coherence figure (PNG) into DIR")
+    parser.add_argument("--json-out", help="write the full result JSON here (default with --plot: <DIR>/<bundle>_thrust_fit.json)")
+    parser.add_argument("--plot", metavar="DIR", help="save the response / fit / coherence figure (PNG) and the result JSON into DIR")
     parser.set_defaults(func=run_thrust_fit)
 
 
@@ -1875,15 +1875,18 @@ def run_thrust_fit(args) -> int:
         console.warning("no thrust excitation run in this log (ctrl_ref.thrust_excitation_state "
                         "never reached ramp-up; rejected or not flown?) -- only the hover noise is reported")
     for line in backend.summary_lines(result):
-        console.info(line)
+        (console.warning if line.startswith("WARNING") else console.info)(line)
+    json_path = args.json_out
     if args.plot:
         Path(args.plot).mkdir(parents=True, exist_ok=True)
-        figure = backend.plot_result(result, Path(args.plot) / (Path(str(bundle_path)).name + "_thrust_fit.png"))
+        stem = str(Path(args.plot) / (Path(str(bundle_path)).name + "_thrust_fit"))
+        figure = backend.plot_result(result, stem + ".png")
         if figure:
             console.success(f"figure: {figure}")
-    if args.json_out:
-        Path(args.json_out).write_text(json.dumps(backend.to_jsonable(result), indent=2))
-        console.info(f"result JSON: {args.json_out}")
+        json_path = json_path or stem + ".json"     # JSON next to the figure by default / 既定では図の隣に JSON
+    if json_path:
+        Path(json_path).write_text(json.dumps(backend.to_jsonable(result), indent=2))
+        console.info(f"result JSON: {json_path}")
     return 0
 
 

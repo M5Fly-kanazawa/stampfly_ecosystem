@@ -70,13 +70,41 @@ sf sysid thrust-fit logs/flight_<timestamp>.sflog.zip --plot out/ --json-out out
 | 項目 | 内容 |
 |------|------|
 | `K`, `tau_s`, `L_s` と標準誤差 | G(s) = K·exp(−L·s)/(τ·s+1)。入力は励振後の総推力 `ctrl_output.thrust` ［N］、出力は重力を引いた上向きの加速度 ［m/s²］。L は加速度計の経路の遅れを含む |
-| `tones` | 各音の周波数・ゲイン・位相・コヒーレンス（周波数ごとの信頼度）・当てはめに使ったか。コヒーレンス 0.8 未満の音は当てはめから外す |
+| `tones` | 各音の周波数・ゲイン・位相・コヒーレンス（周波数ごとの信頼度）・信号対雑音比（SNR）・当てはめに使ったか・使わない理由。当てはめを省いたときも必ず出す。コヒーレンス 0.8（= 音の電力 ÷ 雑音の電力が 4 以上）未満の音は当てはめから外す |
+| `fit_status` | 当てはめを行ったか、省いたなら理由（使える音が何本で、基準は何か）の 1 行 |
+| `tof.status` | ToF の遅れを求めたか、省いたなら理由（SNR 10 以上の音が何本か）の 1 行 |
+| `warnings`, `run_data` | 設計行列の条件数（後述）が 100 を超えたときの警告。窓の長さ・フーリエ分解能 1/T・条件数・雑音の見積もりに使った点数 |
 | `tof.tof_delay_relative_to_accelerometer_s` | ToF の遅れ（**加速度計に対する相対値**。絶対値ではない）。加速度計の 2 階積分と ToF の位相差の傾きから求める。ToF の振幅が小さい高い周波数の音は SNR（音の電力 ÷ 近傍の電力）が 10 未満で外す |
 | `accelerometer_noise` | 励振の前のホバー（待機の 1 s 前までの 10 s、だめなら 5 s）と励振の最中（音を引いた後）の、帯域ごとの実効値（0.4–1・1–3・3–6・6–9.5 Hz）と床の値［(m/s²)/√Hz］ |
 | `start` | 励振の開始の周期の位置（50 Hz の変わり目から何周期ずれたか）と相関値 |
 | 階段 | 区間の切り出しと、推力に対する加速度の立ち上がり（20 % 通過）の遅れだけ（参考値） |
 
-閉ループの偏りを避けるため、G は励振 r を基準にした S_ra/S_ru で求める（u を基準にした S_ua/S_uu は、加速度の雑音がループを回って推力に戻る分で偏る）。8 本の音は 0.1 Hz の整数倍なので、各音の cos・sin と多項式の傾向を最小二乗で当てはめ、複素振幅の比を取る。ToF は標本の時刻そのもので当てはめ、零次保持の補間はしない。
+閉ループの偏りを避けるため、G は励振 r を基準にした S_ra/S_ru で求める（u を基準にした S_ua/S_uu は、加速度の雑音がループを回って推力に戻る分で偏る）。8 本の音は 0.1 Hz の整数倍なので、各音の cos・sin と多項式の傾向（5 次）を最小二乗で当てはめ、複素振幅の比を取る。ToF は標本の時刻そのもので当てはめ、零次保持の補間はしない。
+
+### 出力の読み方
+
+`sf sysid thrust-fit` は、当てはめが成功しても省かれても、次の順に必ず出す。
+
+1. `fit:` の行 — (K, τ, L) の当てはめを行ったか。省いたときは「使える音が N 本、基準は コヒーレンス 0.8 以上、3 本以上必要」の形で理由を出す。
+2. 音ごとの表 — 周波数、`|G|`（ゲイン）、位相、`SNR_a(run)`（加速度の SNR、励振の最中の雑音を基準）、`SNR_a(hover)`（同、励振の前のホバーの雑音を基準）、`SNR_u(run)`（推力の SNR）、コヒーレンス、使える/使えない（使えない理由つき）。
+3. `ToF:` の行 — ToF の遅れを求めたか。省いたときは理由を出す。
+4. 窓の長さ・分解能 1/T・設計行列の条件数。`WARNING:` が付いたら下の限界の節を読む。
+5. 加速度計の雑音（励振の前のホバーと励振の最中）。
+
+**SNR の基準は「励振の最中の雑音」（`run`）が第一**。励振の前のホバーの雑音（`hover`）は、励振の最中の雑音より小さい（実機の最初の記録で、加速度の雑音の電力が 1.4〜11 倍。励振でループが動き、遅い変動や振動が増えるため）ので、`hover` を基準にすると楽観的になる。当てはめに使う判定は `run` だけで行い、`hover` は比較のために並べる。
+
+**雑音の見積もり**: 音の cos・sin と低次の傾向を当てはめた残差を、音の周りの窓のフーリエ格子 k/T（T は窓の長さ。他の音から 1/T 以上離れた最も近い点のうち、傾向に吸収されない 6 点まで）で同じ推定器にかけ、電力の平均を雑音の電力とする。格子は 1/T の間隔で互いに直交するので、窓が短くても設計行列は悪条件にならない。合成データ（真の応答が既知。窓 10・20・30 s、24 通りの雑音）では、見積もった雑音の電力が音の振幅の実測の分散の 0.7〜1.3 倍に入った（最も低い音は 2〜3 倍の保守側になることがある）。
+
+### 限界（短い記録・小さい振幅）
+
+| 状況 | 起きること | 対処 |
+|------|-----------|------|
+| 励振が短い（窓が短い） | 分解能 1/T が粗く（窓 8.9 s で 0.112 Hz）、音の振幅の不確かさが増す。同じ飛行条件の合成データで、10 s の記録の τ の散らばり（1 sigma）は 4.4 ms、L は 3.4 ms、20 s で 2.4 ms と 2.1 ms、30 s で 1.9 ms と 1.4 ms。τ と L は互いに分けにくく、個別の値の誤差は大きい | `--dur 20` 以上。短い記録の τ と L は標準誤差を添えて読む |
+| 振幅が小さい（`--amp` が小さい） | 加速度の音の電力が雑音に埋もれ、コヒーレンスが 0.8 に届かない音が増える。使える音が 3 本未満なら当てはめを省く（`fit_status` に理由）。実機の 2 %・10 s の記録では、使える音は 0 本だった（SNR_a(run) は 0.6〜2.7） | `--amp` を上げる（5 % が既定）、`--dur` を延ばす（SNR は窓の長さにほぼ比例して上がる） |
+| ToF の SNR が低い | SNR 10 未満の音は ToF の遅れに使わない。2 本未満なら省く（`tof.status` に理由） | 同上。ToF の高さは加速度の 2 階積分に相当し、高い周波数の音ほど振幅が小さい |
+| 条件数が 100 を超える | 設計行列がほぼ一次従属で、音の振幅が壊れる。この道具の標準の設計（8 本の音と 5 次の傾向）では窓 8.9 s で約 4、18.9 s で約 3.4 で、通常は出ない | `WARNING:` が出たら結果を使わない。音の間隔が窓の分解能 1/T より狭い設計にした場合に出る |
+
+> 2026-11-23 の修正: 旧来の道具は、雑音の見積もりのために音の ±0.1・0.2・0.3 Hz を足して同時に当てはめていた。この間隔が 10 s の記録の窓（8.9 s、1/T = 0.112 Hz）の分解能より細かく、設計行列の条件数が 5.4×10¹⁰ になり、全部の音が「使えない」と判定されて当てはめが黙って省かれていた。上の方法に改め、省いたときは理由を出すようにした。
 
 ---
 
@@ -116,10 +144,38 @@ Vehicle replies: `ok` / `error excitation rejected: <reason>` / `error excitatio
 | Item | Meaning |
 |------|---------|
 | `K`, `tau_s`, `L_s` with standard errors | G(s) = K exp(-L s)/(tau s + 1). Input: total thrust after the excitation, `ctrl_output.thrust` [N]; output: upward acceleration minus gravity [m/s^2]. L includes the accelerometer path delay |
-| `tones` | per tone: frequency, gain, phase, coherence (per-frequency reliability), whether used in the fit. Tones with coherence below 0.8 are left out |
+| `tones` | per tone: frequency, gain, phase, coherence (per-frequency reliability), signal-to-noise ratio (SNR), whether used in the fit, and why not. Always printed, also when the fit is skipped. Tones with coherence below 0.8 (= tone power / noise power below 4) are left out |
+| `fit_status` | one line: whether the fit ran and, if not, why (how many tones are usable and what the criterion is) |
+| `tof.status` | one line: whether the ToF delay was computed and, if not, why (how many tones have SNR of 10 or more) |
+| `warnings`, `run_data` | a warning when the design-matrix condition number (below) exceeds 100; window length, Fourier resolution 1/T, condition number and the number of probes used for the noise |
 | `tof.tof_delay_relative_to_accelerometer_s` | ToF delay RELATIVE to the accelerometer (not an absolute delay), from the slope of the phase between the double-integrated acceleration and the ToF height. Tones whose SNR (tone power / neighbor power) is below 10 are dropped |
 | `accelerometer_noise` | hover before the excitation (10 s ending 1 s before the standby, else 5 s) and during it (tones subtracted): band RMS (0.4-1, 1-3, 3-6, 6-9.5 Hz) and floor [(m/s^2)/sqrt(Hz)] |
 | `start` | start cycle of the excitation (offset from the 50 Hz state edge) and the correlation |
 | steps | cut-out and the rise delay (20 % crossing) of the acceleration after the thrust only (reference value) |
 
-To avoid the closed-loop bias, G is S_ra/S_ru with the excitation r as the reference (S_ua/S_uu is biased by acceleration noise that returns through the loop into the thrust). The eight tones are multiples of 0.1 Hz, so cos, sin of each tone and a polynomial trend are fitted by least squares and the complex amplitudes divided. The ToF is fitted at its own sample times; no zero-order-hold interpolation is used.
+To avoid the closed-loop bias, G is S_ra/S_ru with the excitation r as the reference (S_ua/S_uu is biased by acceleration noise that returns through the loop into the thrust). The eight tones are multiples of 0.1 Hz, so cos, sin of each tone and a polynomial trend (order 5) are fitted by least squares and the complex amplitudes divided. The ToF is fitted at its own sample times; no zero-order-hold interpolation is used.
+
+### Reading the output
+
+`sf sysid thrust-fit` always prints, in this order, whether the fit succeeded or was skipped:
+
+1. The `fit:` line: whether the (K, tau, L) fit ran. If skipped, the reason ("N tones are usable, criterion coherence >= 0.8, at least 3 are needed").
+2. The per-tone table: frequency, `|G|` (gain), phase, `SNR_a(run)` (acceleration SNR against the noise during the excitation), `SNR_a(hover)` (the same against the hover before the excitation), `SNR_u(run)` (thrust SNR), coherence, usable or not (with the reason).
+3. The `ToF:` line: whether the ToF delay was computed; the reason if skipped.
+4. Window length, resolution 1/T and design-matrix condition number. If a `WARNING:` appears, read the limits section below.
+5. Accelerometer noise (hover before the excitation, and during it).
+
+**The reference for the SNR is the noise during the excitation (`run`).** The hover noise before the excitation (`hover`) is smaller than the noise during it (on the first real record the acceleration noise power was 1.4 to 11 times smaller: the excitation moves the loop and raises the slow wander and vibration), so using it would be optimistic. Only `run` decides which tones are used in the fit; `hover` is printed for comparison.
+
+**Noise estimate:** the residual of the tones-plus-low-order-trend fit is passed through the same estimator at the Fourier grid k/T around each tone (T is the window length; the nearest bins at least 1/T from every tone and not absorbed by the trend, up to 6), and the mean power is the noise power. The grid points are 1/T apart and mutually orthogonal, so the design matrix is well conditioned however short the window is. On synthetic data with a known response (windows of 10, 20 and 30 s, 24 noise seeds) the estimated noise power was 0.7 to 1.3 times the measured variance of the tone amplitude (up to 2 to 3 times, on the conservative side, at the lowest tone).
+
+### Limits (short runs, small amplitudes)
+
+| Situation | What happens | What to do |
+|-----------|--------------|------------|
+| Short excitation (short window) | The resolution 1/T is coarse (0.112 Hz for an 8.9 s window) and the tone amplitudes are less certain. On synthetic data under the same conditions the scatter (1 sigma) of tau is 4.4 ms and of L 3.4 ms for a 10 s run, 2.4 and 2.1 ms for 20 s, 1.9 and 1.4 ms for 30 s. tau and L are hard to separate, so each has a large error | `--dur 20` or more. Read tau and L of a short run together with their standard errors |
+| Small amplitude (small `--amp`) | The acceleration tone power sinks into the noise and more tones miss coherence 0.8. With fewer than 3 usable tones the fit is skipped (reason in `fit_status`). On the real 2 %, 10 s record no tone was usable (SNR_a(run) 0.6 to 2.7) | Raise `--amp` (default 5 %), lengthen `--dur` (the SNR rises roughly in proportion to the window length) |
+| Low ToF SNR | Tones with SNR below 10 are not used for the ToF delay; with fewer than 2 the delay is skipped (reason in `tof.status`). The ToF height corresponds to the double integral of the acceleration, so high tones are small | Same as above |
+| Condition number above 100 | The design matrix is nearly rank-deficient and the tone amplitudes break. With the standard design (eight tones, order-5 trend) it is about 4 for an 8.9 s window and about 3.4 for 18.9 s, so it normally does not appear | Do not use a result with a `WARNING:`. It appears when a design has tone spacings finer than the window resolution 1/T |
+
+> Fix of 2026-11-23: the earlier tool added neighbors at +-0.1, 0.2 and 0.3 Hz of every tone to the same least-squares fit to estimate the noise. That spacing is finer than the resolution of a 10 s run's window (8.9 s, 1/T = 0.112 Hz), the condition number reached 5.4e10, every tone was judged unusable and the fit was silently skipped. The method above replaces it, and a skipped fit now states its reason.
