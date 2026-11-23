@@ -584,11 +584,11 @@ calibration_sets:
           出典の詳細: 論文 NanoVNA 実測の Foster 同定値（Rs）。
           秋田先生が NanoVNA-F V2 で測った 10 kHz–1 MHz のインピーダンスに、
           150 kHz 付近を重視して合わせた 2 段 Foster モデルの直列抵抗。
-          直流抵抗の直接測定ではない（根拠: sf_sandbox data/measured_motor_impedance.md）。
+          直流抵抗の直接測定ではない（根拠: 開発者の手元の測定記録（モータのインピーダンスの測定））。
 
           Source details: Paper's Foster-model fit (Rs) to NanoVNA data (Akita,
           NanoVNA-F V2, 10 kHz-1 MHz, weighted around 150 kHz); not a DC
-          measurement (evidence: sf_sandbox data/measured_motor_impedance.md).
+          measurement (evidence: the developer's own measurement record of the motor impedance).
 
           旧候補0.34Ω（別個体疑いの旧LCR実測）・0.63Ω（vpython側の更新漏れの
           旧初期値）は競合する実測ではなく更新漏れと判明。0.593Ωに統一。
