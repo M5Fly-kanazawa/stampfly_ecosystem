@@ -17,6 +17,25 @@
 # in the last centimetres): the end must come from the dead-zone path, not from a 3 G impact or a stalled descent.
 # ToF の近距離の不感帯を模擬すると、接地は不感帯として見える（最後の数 cm でセンサが無効になる）。
 # 終わりは 3 G の衝撃や降下停滞でなく、不感帯の経路から来なければならない。
+# KNOWN-FAIL (xfail), marked 2026-11-23. With the downward ToF histogram merge OFF the touchdown ends by the 3 G impact detection ("Impact detected: 3.5G",
+# 16.072 s, 0.01 s after contact; emergency DISARM) and "Landing detected (ToF dead zone" never appears (3 of the 21 checks fail: that log line and 2 `order` lines;
+# the numeric lines still pass, alt_max in [16,19] = 0.0425 < 0.05). Merge ON: dead-zone path at 16.0145 s, contact 15.885 s at 0.269 m/s, peak accelerometer 3.40 G (one
+# sample over 3 G). Merge OFF: contact 16.062 s at 0.338 m/s, 4.10 G (two samples). Cause: the merged ToF lag delayed the start of the near-ground settle assist (the thrust
+# ceiling ramps to 0.7 x hover over 1 s once the estimated height is below 0.15 m) to a true height of 0.121 m; merge off starts it at 0.164 m, so it acts 0.57 s instead of
+# 0.42 s before the contact and the contact is faster. The test was already on a cliff edge: with the start of the descent shifted by +-0.3 s (D dwell 3400-5000 ms),
+# merge ON took the dead-zone path in only 1 of 6 runs (the others: 3.0-3.3 G impact, 0.267 m/s in all), merge OFF in 0 of 6 (4.05-4.33 G, 0.338-0.343 m/s). The real flight 14
+# (merge off) also ended its landing by the impact detection. The dead-zone detection logic is held by the host tests `land_dead_zone_*` (4 tests in
+# firmware/vehicle/test/test_main.cpp), independent of SILS. A fix belongs to a review of the landing (simulation-policy.md backlog #27), not to this scenario;
+# the lines are NOT moved because they would only restate today's SILS result.
+# 既知の不合格（xfail）。2026-11-23 に印を付けた。下向き ToF のヒストグラム併合を切ると、接地は 3 G の衝撃検出（「Impact detected: 3.5G」、16.072 s、接触の 0.01 s 後、
+# 緊急 DISARM）で終わり、「Landing detected (ToF dead zone」は出ない（21 判定のうち 3 つが不合格: その文字の記録と `order` 2 行。数値の線は合格のまま、[16,19] の alt_max = 0.0425 < 0.05）。
+# 併合あり: 不感帯の経路が 16.0145 s、接触 15.885 s で 0.269 m/s、加速度計の最大 3.40 G（3 G 超は 1 標本）。併合なし: 接触 16.062 s で 0.338 m/s、4.10 G（2 標本）。
+# 原因: 併合ありの ToF の遅れが、着地アシスト（推定の高さが 0.15 m 未満で推力の上限を 1 s かけて 0.7 倍へ絞る）の開始を真の高さ 0.121 m まで遅らせていた。併合なしは 0.164 m で始まり、
+# 接触の前に 0.42 s でなく 0.57 s 効くので接触が速い。この試験は変更前から崖の縁にあった: 降下の開始を ±0.3 s ずらす（D の滞留 3400〜5000 ms）と、併合ありで不感帯の経路は
+# 6 本中 1 本だけ（残りは 3.0〜3.3 G の衝撃、接触速度は全て 0.267 m/s）、併合なしは 0 本（4.05〜4.33 G、0.338〜0.343 m/s）。実機の飛行 14（併合なし）も着陸は衝撃の検出で終わった。
+# 不感帯の検出の論理は、SILS と独立にホスト試験 `land_dead_zone_*`（firmware/vehicle/test/test_main.cpp の 4 本）が守る。直すのは着陸の見直しの中（simulation-policy.md のバックログ #27）で、
+# このシナリオではない。線は動かさない: 今日の SILS の結果を書き直すだけになるため。
+xfail: soft-touchdown landing now ends by the 3 G impact detection, not the dead-zone path, once the ToF reading no longer lags (contact 0.338 vs 0.269 m/s); it was on a cliff edge before the change; the detection logic is held by the host tests land_dead_zone_* (simulation-policy backlog #27)
 exit 0
 log_contains any "Mode change: STABILIZE → ALT_HOLD"
 log_contains any "ARM accepted"

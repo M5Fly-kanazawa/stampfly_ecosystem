@@ -25,6 +25,9 @@
 #     G: スロットル下げ(1024) → 降下（目標高度を下げる、中央を通過）。
 #     H: スロットル中央(2048) → 下げた高度を保持。
 #
+# Window of the D check moved to [13.0,14.0] on 2026-11-23 so that it guards the gate, not the auto-takeoff overshoot still decaying at 12 s: see alt_recenter_gate.expect.
+# D の判定の窓は、ゲートを守るよう 2026-11-23 に [13.0,14.0] へ移した（12 s にまだ減衰中の自動離陸の行き過ぎを測らない）: alt_recenter_gate.expect を参照。
+#
 # Run: sf sils scenario simulator/sils/scenarios/alt_recenter_gate.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>

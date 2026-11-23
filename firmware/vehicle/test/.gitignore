@@ -8,6 +8,7 @@ test_state_manager
 test_tilt_consistency
 test_sensor_freshness
 test_tof_silence
+test_tof_histogram_merge
 test_tof_health
 test_blind_landing
 test_takeoff_policy

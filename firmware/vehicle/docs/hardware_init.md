@@ -294,6 +294,10 @@ P1 と P3 のピン番号は奇数と偶数が入れ替わって描かれてお�
 
 関連: 前方 ToF が無効であることを ARM の前に知らせる手段が無い（`prearm` も LED も変わらない）。課題 1・2 と合わせて扱う。
 
+### ToF のヒストグラム併合の設定の失敗（2026-11-23）
+
+下向き・前方の ToF は、初期化のとき（`init()`、測距の開始前）にヒストグラム併合なしを設定し、ドライバから読み戻して確かめる（理由・実機の数値・副作用は `detailed_design.md` §5「下向き・前方 ToF のヒストグラム併合」）。**設定または読み戻しの失敗は、そのセンサの初期化の失敗として扱い、上の分類に従う**: 下向きは Recoverable（ARM されていない間、TofTask が再初期化のたびに同じ設定を掛け直す）、前方は Optional（`sensor_present(FrontToF) = false`、警告のみ）。理由: 既定の併合ありのまま続けると、読みが約 220 ms 古くなって跳ぶ状態に気づかずに飛ぶことになる。設定は失敗しうる呼び出しが 2 つ（設定と読み戻し）だけで、I2C 通信を伴わない。
+
 ### LED エラーパターン（Critical 失敗時）
 
 `sf_board::init()` が abort 経路に入ったとき、LED が以下のパターンを表示してユーザーに伝える。
@@ -424,6 +428,8 @@ This document specifies:
 - Namespace boundaries for the 4-tier learner access (L0 / L1 / L2 / L3)
 
 **Bottom ToF classification (Recoverable while disarmed).** A bottom ToF whose bring-up fails at boot, or that delivers no sample for 2 s, is reset through XSHUT (GPIO 7) and initialised again by TofTask, as long as the craft is not armed (INIT / IDLE_GROUND / IDLE_HELD): the first attempt after 2 s of silence, then every 10 s while the sensor stays silent (`kTofReinitSilenceUs`, `kTofReinitRetryIntervalUs`). The decision is the pure function `sf::mayReinitializeToF()` (`tof_silence_policy.hpp`); in every armed state nothing about the sensor changes. While the sensor is silent ARM is refused in every mode (`ArmBlock::TofSilent`; `detailed_design.md` §3 note 12). The task never deletes itself, and a failed bring-up does not stop the boot.
+
+**Histogram merge setting failure (2026-11-23).** The downward and front ToF are set to histogram merge off at initialisation (`init()`, before ranging starts) and read back from the driver (reason, hardware numbers and side effects: `detailed_design.md` §5, "Histogram merge of the downward and front ToF"). **A failure to set or to read back is a failure of that sensor's initialisation and follows the classification above:** Recoverable for the downward sensor (while disarmed TofTask applies the same setting again at every re-initialisation), Optional for the front sensor (`sensor_present(FrontToF) = false`, a warning only). Reason: carrying on with the default merge would let the craft fly with readings about 220 ms stale and jumping, unnoticed. The setting is two calls that can fail (set and read back) and involves no I2C traffic.
 
 **I2C bus recovery at boot.** Right after the I2C master bus is created and before any sensor is touched, sf_board calls `i2c_master_bus_reset()` once (it clocks SCL up to nine times and issues a STOP, releasing a slave that was stopped in the middle of a transaction while only the MCU restarted and the sensors stayed powered). A failure does not stop the boot; the result is logged on one line.
 

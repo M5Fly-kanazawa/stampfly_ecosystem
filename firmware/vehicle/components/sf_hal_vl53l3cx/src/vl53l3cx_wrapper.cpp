@@ -222,11 +222,42 @@ esp_err_t VL53L3CXWrapper::init(const Config& config)
         return ESP_FAIL;
     }
 
+    // Histogram merge, before ranging starts (the setting only lives in the driver data that DataInit just reset)
+    // ヒストグラム併合。測距の開始前に掛ける（設定は、DataInit が初期化したばかりのドライバのデータにだけ存在する）
+    ret = applyHistogramMerge();
+    if (ret != ESP_OK) {
+        releaseI2cDevice();
+        return ret;
+    }
+
     initialized_ = true;
 
     const char* location_str = (config_.location == ToFLocation::BOTTOM) ? "BOTTOM" : "FRONT";
-    ESP_LOGI(TAG, "VL53L3CX (%s) initialized at address 0x%02X", location_str, config_.i2c_addr);
+    ESP_LOGI(TAG, "VL53L3CX (%s) initialized at address 0x%02X, histogram merge %s", location_str, config_.i2c_addr,
+             config_.histogram_merge_enabled ? "on (driver default)" : "off");
 
+    return ESP_OK;
+}
+
+esp_err_t VL53L3CXWrapper::applyHistogramMerge()
+{
+    // Merging on is the driver default: nothing to set, nothing that can fail.
+    // 併合ありはドライバの既定: 設定するものも、失敗しうるものも無い。
+    if (config_.histogram_merge_enabled) {
+        return ESP_OK;
+    }
+
+    const int32_t requested = tof_histogram_merge::tuningValue(false);
+    VL53LX_Error status = VL53LX_SetTuningParameter(&device_, VL53LX_TUNINGPARM_HIST_MERGE, requested);
+    int32_t readback = requested ^ 1;   // differs from `requested` until the driver answers / ドライバが答えるまでは要求値と異なる値
+    if (status == VL53LX_ERROR_NONE) {
+        status = VL53LX_GetTuningParameter(&device_, VL53LX_TUNINGPARM_HIST_MERGE, &readback);
+    }
+    if (status != VL53LX_ERROR_NONE || !tof_histogram_merge::readbackMatches(requested, readback)) {
+        ESP_LOGE(TAG, "Histogram merge setting failed: status %d, requested %d, read back %d",
+                 status, static_cast<int>(requested), static_cast<int>(readback));
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }
 

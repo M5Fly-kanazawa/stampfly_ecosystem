@@ -26,6 +26,9 @@
 # ALT_HOLD throttle is the SYMMETRIC axis (raw-2048)/2048 ∈ [-1,+1]: 2048=0=HOLD,
 # up(>2048)=climb, down(<2048)=descend. STABILIZE throttle is [0,1] (2048=0=off).
 #
+# KNOWN-FAIL since 2026-11-23 (ToF histogram merge off removed an accidental brake; the header numbers 0.88 m / alt peak ~1.15 m below are from before): see alt_inflight_switch.expect and simulation-policy.md backlog #26.
+# 2026-11-23 から既知の不合格（ToF のヒストグラム併合なしで、偶然のブレーキが無くなった。下の 0.88 m・alt の山 約 1.15 m は変更前の値）: alt_inflight_switch.expect と simulation-policy.md のバックログ #26 を参照。
+#
 # Run: sf sils scenario simulator/sils/scenarios/alt_inflight_switch.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>

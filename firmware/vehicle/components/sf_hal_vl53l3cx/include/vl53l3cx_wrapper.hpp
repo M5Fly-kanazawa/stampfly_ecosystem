@@ -21,6 +21,7 @@
 #include "esp_err.h"
 #include "driver/i2c_master.h"
 #include "driver/gpio.h"
+#include "tof_histogram_merge.hpp"
 
 // C driver headers
 extern "C" {
@@ -75,6 +76,12 @@ public:
         uint8_t i2c_addr;                 ///< Target I2C address
         ToFLocation location;             ///< Sensor location
         uint32_t timing_budget_ms;        ///< Timing budget in ms
+        /// Histogram merge of the ST driver (true = driver default, on; false = off). Held per sensor, like the other
+        /// per-sensor settings here (timing_budget_ms), so one sensor can be changed without the other. Applied once in
+        /// init(), before ranging starts, and again at every re-initialisation. See tof_histogram_merge.hpp.
+        /// ST ドライバのヒストグラム併合（true = ドライバ既定の有効、false = 無効）。init() で測距の開始前に 1 回掛け、
+        /// 再初期化のたびに掛け直す。tof_histogram_merge.hpp を参照。
+        bool histogram_merge_enabled;
 
         /**
          * @brief Get default configuration for bottom sensor
@@ -86,6 +93,9 @@ public:
             config.i2c_addr = BOTTOM_I2C_ADDR;
             config.location = ToFLocation::BOTTOM;
             config.timing_budget_ms = 33;  // 30Hz
+            // Merging off: no ~220 ms staleness and no multi-centimetre jump for the height estimator.
+            // 併合なし: 高さの推定にとって、約 220 ms の古さと数 cm の跳びが無くなる。
+            config.histogram_merge_enabled = false;
             return config;
         }
 
@@ -99,6 +109,12 @@ public:
             config.i2c_addr = FRONT_I2C_ADDR;
             config.location = ToFLocation::FRONT;
             config.timing_budget_ms = 33;  // 30Hz
+            // Merging off, the user's decision (2026-11-23), same as the bottom sensor. On hardware merging off was
+            // checked only for the downward sensor up to 1.5 m: the share of valid readings and the noise of the front
+            // sensor at 1-3 m are NOT yet confirmed (merging used to support the long range).
+            // 併合なし。利用者の決定（2026-11-23）で下向きと同じ。実機で併合なしを確かめたのは下向きの 1.5 m までで、
+            // 前方の 1〜3 m での有効な読みの割合と雑音は未確認（併合は遠距離を支えていた）。
+            config.histogram_merge_enabled = false;
             return config;
         }
     };
@@ -227,6 +243,12 @@ public:
     esp_err_t setTimingBudget(uint32_t budget_ms);
 
     /**
+     * @brief Histogram merge setting in force (true = driver default, on)
+     * 有効なヒストグラム併合の設定（true = ドライバ既定の有効）
+     */
+    bool histogramMergeEnabled() const { return config_.histogram_merge_enabled; }
+
+    /**
      * @brief Get sensor location
      *
      * @return Sensor location (BOTTOM or FRONT)
@@ -276,6 +298,15 @@ private:
     bool initialized_ = false;   ///< Initialization status
     bool ranging_ = false;       ///< Ranging active status
     i2c_master_dev_handle_t i2c_dev_handle_ = nullptr;
+
+    /**
+     * @brief Apply config_.histogram_merge_enabled to the driver and read it back (no I2C traffic)
+     * config_.histogram_merge_enabled をドライバに掛け、読み戻して確かめる（I2C 通信なし）
+     *
+     * Leaves the driver default untouched when merging is enabled. A set or read-back failure is a bring-up failure.
+     * 併合が有効のときはドライバの既定に触れない。設定・読み戻しの失敗は起動（立ち上げ）の失敗。
+     */
+    esp_err_t applyHistogramMerge();
 
     /**
      * @brief Remove the I2C device handle (if any) and forget it

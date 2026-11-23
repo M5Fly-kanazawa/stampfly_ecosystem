@@ -22,7 +22,15 @@ order "Transition: LANDING → IDLE_GROUND" "ARM rejected: downward ToF is silen
 # 出力停止が判定されるまで 0.46〜0.52 m に整定（離陸の行き過ぎ、10.8 s に最大 0.80 m、は既存の挙動）。
 # ToF 停止 13.999 s、LANDING 約 14.3 s: LANDING が始まるまでに上昇しない。
 metric alt_mean > 0.40 in 13.0 14.0
-metric alt_max < 0.60 in 13.0 14.5
+# Window moved from [13.0,14.5] to [14.0,14.5] on 2026-11-23 (line 0.60 unchanged). This line guards "no climb once the ToF stops": the
+# stop is injected at 14.0 s, so the window starts there and ends when LANDING has begun. The auto-takeoff overshoot (peak 0.80-0.83 m at 10.7 s, an existing behaviour)
+# is still decaying at 13.0 s (0.558 m with ToF histogram merge, 0.599 m with merge off, margin 0.9 mm) and is not what this line is about. In the new window
+# (merge off) alt_max = 0.513 m at 14.0 s, margin 0.087 m (about 0.7 s of the -0.12 m/s slope); a climb after the stop would exceed 0.60 m.
+# 窓を [13.0,14.5] から [14.0,14.5] へ移した（2026-11-23。線 0.60 は変更なし）。この線が守るのは「ToF が止まった後に上昇しない」こと:
+# 停止は 14.0 s に注入するので窓はそこから始め、LANDING が始まるまでを覆う。自動離陸の行き過ぎ（最大 0.80〜0.83 m、10.7 s。既存の挙動）は 13.0 s にまだ減衰中
+# （ToF 併合あり 0.558 m、併合なし 0.599 m、余裕 0.9 mm）で、この線の対象ではない。新しい窓（併合なし）の alt_max は 14.0 s の 0.513 m、余裕 0.087 m
+# （−0.12 m/s の斜面で約 0.7 s 分）。停止の後に上昇すれば 0.60 m を超える。
+metric alt_max < 0.60 in 14.0 14.5
 # Descent speed of the blind descent from 0.46 m: measured 0.60 m/s (truth); the closed-loop landing with a working ToF touches down at 0.3 m/s. Bound 0.8 m/s.
 # The thrust of the descent without a ToF is at most 0.95 x the support thrust
 # (it cannot climb whatever the velocity estimate says), so once the velocity target is reached the descent speed is set by that ceiling (0.05 g), not by the PI.

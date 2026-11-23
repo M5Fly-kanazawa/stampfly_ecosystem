@@ -705,6 +705,25 @@ sensor.tof → 推定コンポーネントに常に届く
 
 パラメータ変更時のコールバックで推定コンポーネントの内部マスクを即時更新する。これにより段階的にセンサを有効化しながらデバッグが可能。
 
+### 下向き・前方 ToF のヒストグラム併合（なし、2026-11-23 利用者の決定）
+
+ST のドライバは既定で、同じ発光の設定の過去最大 6 フレームの光子の計数（ヒストグラム）を足し合わせてから距離を出す（併合。調整値 `VL53LX_TUNINGPARM_HIST_MERGE` = 1、最大数 `…_MAX_SIZE` = 6、ヒストグラムの形の差がこの値以上で蓄積を捨てる `…_RESET_MERGE_THRESHOLD` = 15000）。**2 つの ToF（下向き・前方）とも、初期化のとき（測距を始める前、再初期化のときも）に併合なし（`HIST_MERGE` = 0）を設定する**。設定の置き場は `VL53L3CXWrapper::Config::histogram_merge_enabled`（センサごと。`defaultBottom()`・`defaultFront()` とも `false`）、定数は `tof_histogram_merge.hpp`。実行時に変えるパラメータにはしない。
+
+| 項目 | 併合あり（変更前） | 併合なし（変更後） | 出典 |
+|------|------------------|------------------|------|
+| 下向き ToF の読みの古さ（ゆっくりの動き、最大 0.4 m/s 未満） | 約 220 ms | 約 50〜75 ms（着陸の接地の瞬間からの見積もりで 46 ms）。内訳は未確認 | 実機の試験（手で上下に動かす 4 設定、飛行 1 回、2026-11-23） |
+| 蓄積が捨てられる瞬間の読みの跳び | 1 標本で数 cm（最大 69 mm） | 0 回（最大 13 mm） | 同上 |
+| 静止時の標準偏差 | 1.15 mm | 1.96 mm | 同上 |
+| 飛行の保持中のばらつき | 2.1〜2.3 mm | 4.2 mm | 飛行 14 |
+| 有効な読み | — | 1.3〜1.5 m まで全標本が有効 | 同上 |
+
+- **理由:** 高さの推定（ESKF）は ToF を鉛直の主観測に使う。読みが古いほど、また 1 標本で跳ぶほど、高さの保持と離着陸の判定に不利になる。雑音の増加（上の表）は、推定器の観測雑音の見込み 0.01 m（`eskf.obs.tof_noise`）より小さいので、今回は推定器の設定値を変えない（別の作業で検討する）。
+- **副作用:** 雑音が増える。遠い距離で読みが有効でなくなる頻度が上がりうる（併合は遠距離の測距を支えていた）。
+- **前方 ToF:** 利用者の決定で下向きと同じ（併合なし）。**実機で併合なしを確かめたのは下向きの 1.5 m までで、前方の 1.5 m を超える距離（壁まで 1 m・2 m・3 m）での有効な読みの割合と雑音は未確認**（PC 上の合成の試算では 1.4 m 以上で測距が成立しにくくなる結果があったが、光子の数は仮の値）。前方は記録・表示専用で、判定・制御・推定には使わない。
+- **設定の失敗:** 設定または読み戻しの失敗は、そのセンサの初期化の失敗として扱う（`hardware_init.md` §5。下向きは Recoverable、前方は Optional）。既定の併合ありのまま続けると、読みの古さが 220 ms に戻っても気づけないので、続行しない。
+- **SILS:** 下向き ToF は同じ ST のドライバを通り、起動の経路（`init()`）も同じなので併合なしになる。SILS の ToF のモデルはセンサが光を集める時間の窓や読み出しの古さを表さないため、併合なしの SILS の遅れは実機（約 50 ms）より小さい（`docs/architecture/simulation-policy.md`）。前方 ToF の模擬は SILS に無い。
+- **確認:** 起動のログ `VL53L3CX (BOTTOM|FRONT) initialized at address 0x.., histogram merge off`（ドライバから読み戻した設定）。ホスト試験 `test_tof_histogram_merge`（定数とドライバの既定・記録配列の上限の整合）。
+
 ### ESKF 実装の特性
 
 `sf_estimator_eskf` には次の機能が実装されている（χ² 判定（カイ二乗判定）は実機 vehicle/ の知見、Adaptive R・線形化バイアスは SILS でのプロトタイピングに基づく。SILS での定量検証は G1〜G4 で行う）。
@@ -1466,6 +1485,25 @@ public:
 ### Sensor Observation Switch
 
 Sensor observation ON/OFF is controlled via parameters and decided internally by the estimation component. Raw data always reaches the estimator and logger; the estimator skips observation updates when the parameter is false.
+
+### Histogram merge of the downward and front ToF (off, user's decision 2026-11-23)
+
+By default the ST driver adds up the photon counts (histograms) of the last (up to 6) frames of the same emission setting before it computes a distance (merge; tuning parameters `VL53LX_TUNINGPARM_HIST_MERGE` = 1, maximum count `..._MAX_SIZE` = 6, and `..._RESET_MERGE_THRESHOLD` = 15000, the histogram-shape difference at which the accumulation is discarded). **Both ToF sensors (downward and front) are set to merging off (`HIST_MERGE` = 0) at initialisation, before ranging starts, and again at every re-initialisation.** The setting lives in `VL53L3CXWrapper::Config::histogram_merge_enabled` (per sensor; `defaultBottom()` and `defaultFront()` both `false`) and the constants in `tof_histogram_merge.hpp`. It is not a run-time parameter.
+
+| Item | Merging on (before) | Merging off (after) | Source |
+|------|---------------------|---------------------|--------|
+| Staleness of the downward ToF reading (slow motion, below 0.4 m/s) | about 220 ms | about 50-75 ms (46 ms estimated from the touchdown instant); breakdown not confirmed | hardware tests (hand up-and-down, 4 settings, 1 flight, 2026-11-23) |
+| Jump of the reading when the accumulation is discarded | several cm in one sample (up to 69 mm) | 0 times (up to 13 mm) | same |
+| Standard deviation at rest | 1.15 mm | 1.96 mm | same |
+| Spread while holding in flight | 2.1-2.3 mm | 4.2 mm | flight 14 |
+| Valid readings | - | all samples valid up to 1.3-1.5 m | same |
+
+- **Reason:** the height estimator (ESKF) uses the ToF as its main vertical observation; a stale reading and a one-sample jump both hurt height hold and the takeoff / landing judgements. The extra noise (table) is below the estimator's assumed observation noise of 0.01 m (`eskf.obs.tof_noise`), so the estimator settings are left unchanged here (to be reviewed separately).
+- **Side effects:** more noise; readings may become invalid more often at long range (merging used to support long-range ranging).
+- **Front ToF:** the same (off) by the user's decision. **On hardware merging off was checked only for the downward sensor up to 1.5 m; the share of valid readings and the noise of the front sensor beyond 1.5 m (walls at 1 m, 2 m, 3 m) are NOT confirmed** (a synthetic estimate on a PC gave ranging that becomes hard beyond 1.4 m, with an assumed photon count). The front ToF is for log and display only; no judgement, control or estimation uses it.
+- **Setting failure:** a failure to set or read back is a failure of that sensor's initialisation (`hardware_init.md` §5: Recoverable for the downward sensor, Optional for the front). Carrying on with the default merge would hide a return of the 220 ms staleness, so it does not.
+- **SILS:** the downward ToF goes through the same ST driver and the same `init()` path, so merging is off there. The SILS ToF model does not represent the sensor's light-collection window or readout staleness, so the SILS delay with merging off is smaller than on hardware (about 50 ms) (`docs/architecture/simulation-policy.md`). SILS has no front ToF model.
+- **Check:** boot log `VL53L3CX (BOTTOM|FRONT) initialized at address 0x.., histogram merge off` (the setting read back from the driver); host test `test_tof_histogram_merge` (constants against the driver default and the record-array limit).
 
 ### Barometric height (observation only)
 

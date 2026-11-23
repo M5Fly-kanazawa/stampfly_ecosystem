@@ -1,12 +1,12 @@
 # alt_recenter_gate.expect — re-center gate + symmetric climb/descend (Case A)
 # スロットル再センターロック＋対称な上昇/降下（Case A）
 #
-# D [12.0,14.0]: gate CLOSED — throttle held UP (4095) is IGNORED, altitude holds ~0.5 m
+# D [13.0,14.0]: gate CLOSED — throttle held UP (4095) is IGNORED, altitude holds ~0.5 m
 #   (alt_max < 0.72). Without the gate, full-up would carry it away.
 # F [17.5,18.5]: after re-centering at E the gate OPENS; throttle UP now CLIMBs (> 1.1 m).
 # G [20.5,21.0]: throttle DOWN now DESCENDs — the new symmetric scheme lowers the target
 #   altitude back below 0.9 m (the stick controls both directions, centre = hold).
-# D [12.0,14.0]: ロック中 — 上げっぱなし(4095)は無視され ~0.5 m 保持(alt_max < 0.72)。
+# D [13.0,14.0]: ロック中 — 上げっぱなし(4095)は無視され ~0.5 m 保持(alt_max < 0.72)。
 # F [17.5,18.5]: E で再センター後ロック解除、上げで上昇(> 1.1 m)。
 # G [20.5,21.0]: 下げで降下 — 対称方式で目標高度を 0.9 m 未満へ下げる（中央=ホールド）。
 exit 0
@@ -15,8 +15,24 @@ log_contains any "Auto-takeoff engaged"
 log_contains any "Auto-takeoff complete — normal mode law engaged"
 order "Auto-takeoff engaged" "Auto-takeoff complete — normal mode law engaged"
 # Gate CLOSED: throttle UP ignored → hold the captured 0.5 m.
-metric alt_max  < 0.72 in 12.0 14.0
-metric alt_band < 0.20 in 12.0 14.0
+# Window moved from [12.0,14.0] to [13.0,14.0] on 2026-11-23 (the lines 0.72 and 0.20 are unchanged). What this window must guard is the
+# gate: with it open, full-up (4095) climbs at the stick climb rate from the end of the auto-takeoff (9.2 s), and by 13 s the craft would be at the
+# altitude ceiling (1.0-1.2 m; the same stick in alt_inflight_switch row H climbs to 1.1 m, in alt_ceiling_stick to 1.17 m), far above 0.72.
+# What it must NOT measure is the auto-takeoff overshoot (peak 0.80-0.83 m at 10.7 s, an existing behaviour that decays slowly): at 12.0 s the
+# true height is 0.688 m (ToF with histogram merge) or 0.717 m (merge off) on that decaying slope (about -0.12 m/s), so the old window passed by 3 mm
+# and moved by 3 cm with a 0.3 s shift of the overshoot, which says nothing about the gate. In [13.0,14.0] (merge off): alt_max 0.599, alt_band 0.086
+# (merge: 0.558 / 0.063); the margin to 0.72 is 0.12 m, about 1 s of the slope. The craft is still settling there (it reaches ~0.40 m by 16.5 s).
+# NOT executed: the gate-disabled run (it needs a firmware change); the "would exceed 0.72" statement is inferred from the climb rates above.
+# ゲートが閉じている: 上げたスロットルは無視され、捕捉した 0.5 m を保持する。
+# 窓を [12.0,14.0] から [13.0,14.0] へ移した（2026-11-23。線 0.72 と 0.20 は変更なし）。この窓が守るのはゲート: 開いていれば、全上げ(4095)は
+# 自動離陸の終わり（9.2 s）からスティックの上昇率で上がり、13 s には高度上限（1.0〜1.2 m。alt_inflight_switch の H 行の同じスティックは 1.1 m、
+# alt_ceiling_stick は 1.17 m）に達して 0.72 を大きく超える。測ってはならないのは自動離陸の行き過ぎ（最大 0.80〜0.83 m、10.7 s。既存の挙動で、ゆっくり
+# 減衰する）: 12.0 s の真の高さは、その減衰の斜面（約 −0.12 m/s）の上で 0.688 m（ToF 併合あり）/ 0.717 m（併合なし）で、旧窓は 3 mm の差で
+# 通っていた。行き過ぎが 0.3 s ずれると 3 cm 動き、ゲートとは無関係。[13.0,14.0]（併合なし）は alt_max 0.599、alt_band 0.086（併合あり: 0.558 / 0.063）。
+# 0.72 までの余裕は 0.12 m（斜面で約 1 s 分）。この窓でも機体はまだ整定中（16.5 s で約 0.40 m）。
+# 未実施: ゲートを無効にした実行（ファームウェアの変更が要る）。「0.72 を超える」は上の上昇率からの推論。
+metric alt_max  < 0.72 in 13.0 14.0
+metric alt_band < 0.20 in 13.0 14.0
 # Gate OPEN + UP: climb well above 0.5 m. The altitude ceiling (1.2 m) tapers the stick climb toward it, so the
 # peak is 1.07 m; the bound 1.00 says "well above 0.5 m".
 # ロック解除＋上げ: 0.5 m を大きく超えて上昇する。高度上限（1.2 m）がスティック上昇を上限へ向けて絞るので、

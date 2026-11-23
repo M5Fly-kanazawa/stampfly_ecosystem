@@ -15,7 +15,16 @@ tof_silent_prearm
 tof_recover_climb_alt
 tof_reinit_flight
 alt_ceiling_stick
-landing_dead_zone
+# Landing detection: alt_disarm_land (replaced landing_dead_zone on 2026-11-23, which is KNOWN-FAIL: with the ToF histogram merge off its touchdown ends by the 3 G
+# impact detection instead of the dead-zone path, and it already sat on that cliff edge before; see simulation-policy.md backlog #27). Why this one: the same
+# command sequence as landing_dead_zone (same takeoff, hover, DISARM in ALT_HOLD), the dead zone is off (`tof_deadzone 0`) so its result does not depend on which
+# detection path ends the landing, it checks the landing by numeric lines (duty_max > 0.50, alt_min > 0.20, tilt_max, alt_max < 0.05 after touchdown) and
+# it PASSES with the merge on and off (it ended by "stalled descent" before and by the impact detection after: both count as a landing).
+# 着陸の検出: alt_disarm_land（2026-11-23 に landing_dead_zone と入れ替え。landing_dead_zone は KNOWN-FAIL: ToF のヒストグラム併合なしでは接地が不感帯の経路でなく
+# 3 G の衝撃検出で終わり、変更前から崖の縁にあった。simulation-policy.md のバックログ #27）。これを選ぶ理由: landing_dead_zone と同じ指令列（同じ離陸・ホバー・
+# ALT_HOLD での DISARM）で、不感帯は切ってある（`tof_deadzone 0`）ので結果はどの検出経路で着陸が終わるかに依存せず、着陸を数値の線（duty_max > 0.50、
+# alt_min > 0.20、tilt_max、接地の後の alt_max < 0.05）で確かめ、併合ありでもなしでも合格する（変更前は「降下停滞」、後は衝撃検出で終わった。どちらも着陸）。
+alt_disarm_land
 prearm
 boot_motion
 

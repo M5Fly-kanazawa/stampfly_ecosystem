@@ -39,6 +39,9 @@
 # 無効になった。それを再生すると、この規則は降下中には作動せず、最後の有効な読みの 0.23 s 後に作動する
 # （detailed_design.md §3 注7）。
 #
+# KNOWN-FAIL since 2026-11-23 (with the ToF histogram merge off the touchdown ends by the 3 G impact detection; the numbers above are from the merge-on build): see landing_dead_zone.expect and simulation-policy.md backlog #27.
+# 2026-11-23 から既知の不合格（ToF のヒストグラム併合なしでは接地が 3 G の衝撃検出で終わる。上の数値は併合ありのもの）: landing_dead_zone.expect と simulation-policy.md のバックログ #27 を参照。
+#
 # Run: sf sils scenario simulator/sils/scenarios/landing_dead_zone.scn --target vehicle
 #
 #  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
