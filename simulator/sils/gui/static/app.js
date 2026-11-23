@@ -538,13 +538,13 @@ function resize3D() {
 
 // =============================================================================
 // StampFly model — ported from the landing page (landing/index.html), which was built
-// from photos of the real aircraft: the actual STL body parts + true-to-life 3-blade
-// propellers (paddle outline + linear twist). Everything is authored in the landing/STL
+// from photos of the real aircraft: the actual STL body parts + the measured 4-blade
+// propeller (STL, propeller_rotor_ccw / _cw). Everything is authored in the landing/STL
 // NATIVE frame (millimetres, X=left, Y=up, Z=fwd); we then drop the whole model into the
 // BODY FLU group with scale 0.001 (mm→m) + quat (0.5,0.5,0.5,0.5), the identical transform
 // the MuJoCo MJCF uses, so it sits in the body frame and the per-frame attitude quaternion
 // orients it (props point down when it flips). landing page と同一の実機準拠モデルを移植
-// （実STLパーツ＋実機そっくりの3枚羽根）。landing/STL native(mm,X左/Y上/Z前)で作り、MJCF と
+// （実STLパーツ＋実測の4枚羽根プロペラ）。landing/STL native(mm,X左/Y上/Z前)で作り、MJCF と
 // 同じ scale0.001+quat(0.5,0.5,0.5,0.5)で機体FLUへ。姿勢quatが正しく回す。
 // -----------------------------------------------------------------------------
 const PART_MAT = {
@@ -560,61 +560,24 @@ const PART_MAT = {
 };
 const bladeMat = new THREE.MeshStandardMaterial({ color: 0xff2b3d, transparent: true, opacity: 0.62,
   roughness: 0.18, metalness: 0.0, emissive: 0x4a0008, emissiveIntensity: 0.35, side: THREE.DoubleSide });
-const hubMat = new THREE.MeshStandardMaterial({ color: 0x8e0512, roughness: 0.3, metalness: 0.15 });
 
-// makeBlade: paddle outline with a linear twist root→tip (landing page, verbatim).
-// パドル形状＋線形ねじれの羽根（landing page と同一）。
-function makeBlade(L, Wm, thick, twistRoot, twistTip) {
-  const s = new THREE.Shape();
-  s.moveTo(0, 0.20 * Wm);
-  s.bezierCurveTo(0.40 * L, 0.50 * Wm, 0.65 * L, 0.50 * Wm, 0.86 * L, 0.30 * Wm);
-  s.quadraticCurveTo(L, 0.16 * Wm, L, 0.0);
-  s.quadraticCurveTo(L, -0.12 * Wm, 0.86 * L, -0.20 * Wm);
-  s.bezierCurveTo(0.65 * L, -0.58 * Wm, 0.40 * L, -0.58 * Wm, 0, -0.24 * Wm);
-  s.closePath();
-  const geo = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: false });
-  geo.translate(0, 0, -thick / 2);
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const a = twistRoot + (twistTip - twistRoot) * Math.min(1, Math.max(0, x / L));
-    const c = Math.cos(a), sn = Math.sin(a);
-    p.setXYZ(i, x, y * c - z * sn, y * sn + z * c);
-  }
-  geo.rotateX(Math.PI / 2);     // lay the blade flat → the prop spins about its local Y
-  geo.computeVertexNormals();
-  return geo;
-}
-const PROP_RADIUS = 14.99;      // mm (landing page)
-const HUB_R = PROP_RADIUS * 0.22;
-const bladeGeo = makeBlade(PROP_RADIUS - HUB_R * 0.6, (PROP_RADIUS - HUB_R * 0.6) / 2.7, 0.6, 0.38, 0.10);
-const hubGeo = new THREE.CylinderGeometry(HUB_R, HUB_R * 0.9, 2.6, 24);
-const domeGeo = new THREE.SphereGeometry(HUB_R * 0.85, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-
-// A true-to-life 3-blade prop (landing page makeProp). Spins about its local Y (= body up
-// once the model is rotated into FLU). 実機準拠の3枚羽根（local Y 軸回りに回転）。
-function makeProp() {
-  const prop = new THREE.Group();
-  prop.add(new THREE.Mesh(hubGeo, hubMat));
-  const dome = new THREE.Mesh(domeGeo, hubMat); dome.position.y = 1.0; prop.add(dome);
-  for (let i = 0; i < 3; i++) {
-    const blade = new THREE.Mesh(bladeGeo, bladeMat);
-    blade.rotation.y = i * (Math.PI * 2 / 3);
-    blade.translateX(HUB_R * 0.6);
-    prop.add(blade);
-  }
-  return prop;
-}
+// Propeller shapes: the measured 4-blade propeller loaded from STL (origin = hub centre, axis = +Y),
+// one file per spin direction (the cw one is the mirror image). Loaded asynchronously by buildDrone().
+// プロペラ形状: 実測の 4 枚羽根を STL から読む(原点=ハブ中心、軸=+Y)。回転方向ごとに 1 ファイル
+// (cw は ccw の鏡像)。buildDrone() が非同期に読む。
+const PROP_MESH = { ccw: 'propeller_rotor_ccw', cw: 'propeller_rotor_cw' };
 
 // Prop hubs in the landing/STL NATIVE frame (mm, X=left, Y=up, Z=fwd) + the motor duty
 // (m0..m3 = M1 FR/M2 RR/M3 RL/M4 FL) that drives each, in its real turn direction
 // (CCW=+1 / CW=-1 about body up; MJCF: M1 FR & M3 RL CCW, M2 RR & M4 FL CW).
 // プロペラハブ（landing native mm）＋駆動モータ＋実回転方向。
+// Hub centre height 6.535 mm: simulator/shared/assets/meshes/propeller_geometry.json (axis_height_mm).
+// ハブ中心の高さ 6.535 mm(propeller_geometry.json の axis_height_mm)。
 const PROP_HUBS = [
-  { pos: [ 22.80, 7.81,  22.80], motor: 3, dir: -1 },  // FL = M4  CW
-  { pos: [-22.80, 7.81,  22.80], motor: 0, dir: +1 },  // FR = M1  CCW
-  { pos: [ 22.80, 7.81, -22.81], motor: 2, dir: +1 },  // RL = M3  CCW
-  { pos: [-22.80, 7.81, -22.81], motor: 1, dir: -1 },  // RR = M2  CW
+  { pos: [ 22.8042, 6.535,  22.8081], motor: 3, dir: -1 },  // FL = M4  CW
+  { pos: [-22.8042, 6.535,  22.8081], motor: 0, dir: +1 },  // FR = M1  CCW
+  { pos: [ 22.8042, 6.535, -22.8003], motor: 2, dir: +1 },  // RL = M3  CCW
+  { pos: [-22.8042, 6.535, -22.8003], motor: 1, dir: -1 },  // RR = M2  CW
 ];
 const BODY_PARTS = ['frame', 'pcb', 'm5stamps3', 'battery', 'battery_adapter',
                     'motor_fl', 'motor_fr', 'motor_rl', 'motor_rr'];
@@ -627,16 +590,19 @@ function buildDrone() {
   model.scale.setScalar(0.001);                  // mm → m (MJCF mesh scale)
   model.quaternion.set(0.5, 0.5, 0.5, 0.5);      // native (X左/Y上/Z前) → body FLU (MJCF geom quat)
   g.add(model);
-  // Propellers (procedural, synchronous). Spin about local Y (= body up after the transform).
-  PROP_HUBS.forEach(h => {
-    const prop = makeProp();
-    prop.position.set(h.pos[0], h.pos[1] - 1.4, h.pos[2]);
-    model.add(prop);
-    props.push({ pivot: prop, dir: h.dir, motor: h.motor });
-  });
-  // STL body parts (async — pop in as they arrive). geo.computeVertexNormals so the lit
-  // material is not black. STL本体（非同期）。法線生成で黒化を防ぐ。
+  // STL body parts and propellers (async — pop in as they arrive). geo.computeVertexNormals so
+  // the lit material is not black. Propellers spin about local Y (= body up after the transform).
+  // STL本体とプロペラ（非同期）。法線生成で黒化を防ぐ。プロペラは local Y 軸回りに回す。
   const loader = new STLLoader();
+  Object.values(PROP_MESH).forEach(name => loader.load(`/mesh/${name}.stl`, (geo) => {
+    geo.computeVertexNormals();
+    PROP_HUBS.filter(h => PROP_MESH[h.dir > 0 ? 'ccw' : 'cw'] === name).forEach(h => {
+      const prop = new THREE.Mesh(geo, bladeMat);
+      prop.position.set(h.pos[0], h.pos[1], h.pos[2]);
+      model.add(prop);
+      props.push({ pivot: prop, dir: h.dir, motor: h.motor });
+    });
+  }, undefined, (err) => console.warn('[3D] STL load failed:', name, err)));
   BODY_PARTS.forEach(name => loader.load(`/mesh/${name}.stl`, (geo) => {
     geo.computeVertexNormals();
     model.add(new THREE.Mesh(geo, PART_MAT[name] || PART_MAT.frame));

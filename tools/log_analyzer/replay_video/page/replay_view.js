@@ -83,58 +83,25 @@ const PART_MAT = {
 };
 const bladeMat = new THREE.MeshStandardMaterial({ color: 0xff2b3d, transparent: true, opacity: 0.62, roughness: 0.18,
   emissive: 0x4a0008, emissiveIntensity: 0.35, side: THREE.DoubleSide });
-const hubMat = new THREE.MeshStandardMaterial({ color: 0x8e0512, roughness: 0.3, metalness: 0.15 });
 
 // Prop hubs in the STL native frame (mm; X left, Y up, Z front), the motor index in data
 // order (FR, RR, RL, FL) that drives each, and its turn direction about body up
-// (+1 CCW, -1 CW).  STL 元座標（mm; X 左, Y 上, Z 前）でのプロペラ位置、駆動するモータの
-// データ上の番号（FR, RR, RL, FL）、機体の上向き軸まわりの回転方向（+1 反時計, -1 時計）。
+// (+1 CCW, -1 CW). The hub centre height 6.535 mm is axis_height_mm of
+// simulator/shared/assets/meshes/propeller_geometry.json. The measured 4-blade propeller is
+// loaded from STL (origin = hub centre, axis = +Y); the cw file is the mirror image of the ccw one.
+// STL 元座標（mm; X 左, Y 上, Z 前）でのプロペラ位置、駆動するモータのデータ上の番号（FR, RR, RL, FL）、
+// 機体の上向き軸まわりの回転方向（+1 反時計, -1 時計）。ハブ中心の高さ 6.535 mm は propeller_geometry.json
+// の axis_height_mm。実測の 4 枚羽根を STL から読む（原点=ハブ中心、軸=+Y。cw は ccw の鏡像）。
 const PROP_HUBS = [
-  { pos: [22.80, 7.81, 22.80], motor: 3, dir: -1 },    // FL = M4 CW
-  { pos: [-22.80, 7.81, 22.80], motor: 0, dir: +1 },   // FR = M1 CCW
-  { pos: [22.80, 7.81, -22.81], motor: 2, dir: +1 },   // RL = M3 CCW
-  { pos: [-22.80, 7.81, -22.81], motor: 1, dir: -1 },  // RR = M2 CW
+  { pos: [22.8042, 6.535, 22.8081], motor: 3, dir: -1 },    // FL = M4 CW
+  { pos: [-22.8042, 6.535, 22.8081], motor: 0, dir: +1 },   // FR = M1 CCW
+  { pos: [22.8042, 6.535, -22.8003], motor: 2, dir: +1 },   // RL = M3 CCW
+  { pos: [-22.8042, 6.535, -22.8003], motor: 1, dir: -1 },  // RR = M2 CW
 ];
-const PROP_RADIUS = 14.99, HUB_R = PROP_RADIUS * 0.22;
-
-// One flat paddle blade with a linear twist. ねじれ付きの平たい羽根 1 枚。
-function makeBladeGeometry(len, width, thick, twistRoot, twistTip) {
-  const s = new THREE.Shape();
-  s.moveTo(0, 0.20 * width);
-  s.bezierCurveTo(0.40 * len, 0.50 * width, 0.65 * len, 0.50 * width, 0.86 * len, 0.30 * width);
-  s.quadraticCurveTo(len, 0.16 * width, len, 0);
-  s.quadraticCurveTo(len, -0.12 * width, 0.86 * len, -0.20 * width);
-  s.bezierCurveTo(0.65 * len, -0.58 * width, 0.40 * len, -0.58 * width, 0, -0.24 * width);
-  s.closePath();
-  const geo = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: false });
-  geo.translate(0, 0, -thick / 2);
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const a = twistRoot + (twistTip - twistRoot) * clamp(x / len, 0, 1);
-    p.setXYZ(i, x, y * Math.cos(a) - z * Math.sin(a), y * Math.sin(a) + z * Math.cos(a));
-  }
-  geo.rotateX(Math.PI / 2);
-  geo.computeVertexNormals();
-  return geo;
-}
-const bladeGeo = makeBladeGeometry(PROP_RADIUS - HUB_R * 0.6, (PROP_RADIUS - HUB_R * 0.6) / 2.7, 0.6, 0.38, 0.10);
-const hubGeo = new THREE.CylinderGeometry(HUB_R, HUB_R * 0.9, 2.6, 24);
-const domeGeo = new THREE.SphereGeometry(HUB_R * 0.85, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-
-// A three-blade propeller that spins about its local Y (= body up). 3 枚羽根のプロペラ（局所 Y 軸まわりに回る）。
-function makeProp() {
-  const prop = new THREE.Group();
-  prop.add(new THREE.Mesh(hubGeo, hubMat));
-  const dome = new THREE.Mesh(domeGeo, hubMat); dome.position.y = 1.0; prop.add(dome);
-  for (let i = 0; i < 3; i++) {
-    const blade = new THREE.Mesh(bladeGeo, bladeMat);
-    blade.rotation.y = i * Math.PI * 2 / 3; blade.translateX(HUB_R * 0.6); prop.add(blade);
-  }
-  return prop;
-}
+const PROP_NAMES = { ccw: 'propeller_rotor_ccw', cw: 'propeller_rotor_cw' };
 
 const partGeometry = {};
+const propGeometry = {};
 // Load the STL parts once; every vehicle clone shares the geometry. STL 部品を 1 回だけ読み、全クローンで共有する。
 async function loadParts() {
   const loader = new STLLoader();
@@ -142,6 +109,11 @@ async function loadParts() {
     const geo = await loader.loadAsync(`meshes/${name}.stl`);
     geo.computeVertexNormals();
     partGeometry[name] = geo;
+  }));
+  await Promise.all(Object.values(PROP_NAMES).map(async (name) => {
+    const geo = await loader.loadAsync(`meshes/${name}.stl`);
+    geo.computeVertexNormals();
+    propGeometry[name] = geo;
   }));
 }
 
@@ -157,8 +129,8 @@ function buildVehicle(layer, scale) {
   native.quaternion.set(0.5, 0.5, 0.5, 0.5);
   flu.add(native); pivot.add(flu);
   const props = PROP_HUBS.map((h) => {
-    const prop = makeProp();
-    prop.position.set(h.pos[0], h.pos[1] - 1.4, h.pos[2]);
+    const prop = new THREE.Mesh(propGeometry[PROP_NAMES[h.dir > 0 ? 'ccw' : 'cw']], bladeMat);
+    prop.position.set(h.pos[0], h.pos[1], h.pos[2]);
     native.add(prop);
     return { node: prop, dir: h.dir, motor: h.motor };
   });
