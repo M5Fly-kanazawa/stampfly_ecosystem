@@ -195,11 +195,11 @@ StampFly の慣性モーメント（ロール $I_{xx}$・ピッチ $I_{yy}$・�
 | 軸まわりの慣性（形状の $I/m$ = 55.28 mm² × 0.2525 g） | $1.40\times10^{-8}$ kg·m² | 計算 |
 | ベンチ実測のロータの慣性 | $1.54\times10^{-8}$ kg·m²（形状の値はその 91 %。残り $0.14\times10^{-8}$ はモータの回転子の分と読める） | 推論（中） |
 | 試算 rev4 に使った質量 | 0.24 g × 4 = 0.96 g。実測（1.01 g）との差 0.05 g が機体の慣性に与える影響は 0.3 % 未満 | 解析の担当 |
-| リポジトリの機体の定義（URDF） | プロペラのリンク 1 枚 0.001 kg、慣性 1e-9。実物（0.0002525 kg）の約 4 倍 | 調査 |
-| STL | `propeller_{fl,fr,rl,rr}.stl`（各 690 三角形）は円板。読む側は `simulator/sils/models/stampfly.xml`（表示専用）・URDF 2 本・`mesh_inspect.cpp` | 調査 |
-| Web 表示の羽根 | STL を読まず、3 枚・直径 29.98 mm をコードで生成（`landing/index.html`、`simulator/sils/gui/static/app.js`、`tools/log_analyzer/replay_video/page/replay_view.js`、`lib/sfcli/assets/telemetry_web.html`、`tools/flasher_gui/assets/gen_icon_3d.py`、`docs/events/_shared/tikz/scripts/render_stampfly_iso.py` の 6 か所）。実物は 4 枚・31 mm | 調査 |
+| リポジトリの機体の定義（URDF） | 置き換え前: プロペラのリンク 1 枚 0.001 kg、慣性 1e-9（実物の約 4 倍）。**置き換え後（実施済み）**: 1 枚 0.0002525 kg、慣性は軸まわり 13.71e-9・面内 7.01e-9 kg·m²（形状から計算、一様密度）、`base_link` は 0.03599 kg（全体 0.037 kg を保つ） | 調査・実施 |
+| STL | 置き換え前: `propeller_{fl,fr,rl,rr}.stl`（各 690 三角形）は円板。**置き換え後（実施済み）**: 実測の 4 枚羽根（各 1,808 三角形、約 90 KB、公称ピッチ 0.9 inch の仮定）。ほかに回転用の `propeller_rotor_{ccw,cw}.stl` | 調査・実施 |
+| Web 表示の羽根 | 置き換え前: STL を読まず、3 枚・直径 29.98 mm をコードで生成（6 か所）。**置き換え後（実施済み）**: 4 か所（`landing/index.html`、`simulator/sils/gui/static/app.js`、`tools/log_analyzer/replay_video/page/replay_view.js`、`lib/sfcli/assets/telemetry_web.html`）は回転用 STL を読む。`tools/flasher_gui/assets/gen_icon_3d.py` と `docs/events/_shared/tikz/scripts/render_stampfly_iso.py` もスクリプトを直した（生成済みの画像は未更新） | 調査・実施 |
 
-形状データの置き換え（実測の羽根 4 枚の STL、約 2.3 万三角形、現行の約 34 倍の大きさ）は**計画の段階**で、着手していない。取付角の版の選定は、別に進めている数値流体計算（CFD）の検討の結果と開発者の決定を待っている。
+形状データの置き換えは 2026-11-23 に実施した。出どころ・作り方・未確定の点（ピッチ、翼断面が全半径で同じこと、ハブの形、羽根の表裏）は `simulator/shared/README.md`。形状から計算したプロペラ単体の軸まわりの慣性は 1.37e-8 kg·m²（上の表の 1.40e-8 は別の、より細かい形状での値）で、ベンチ実測のロータの慣性 1.54e-8 とは独立の値として並べて持つ。
 
 ## 7. 推論
 
@@ -243,8 +243,9 @@ StampFly の慣性モーメント（ロール $I_{xx}$・ピッチ $I_{yy}$・�
 | ホバーの推力の尺度の違い | 11/22（保持の記録で 1.08〜1.16）と 10/02（1.009〜1.010）で違う理由 |
 | 基準の値を変えるかどうかの決定 | **決定済み（2026-11-23）**。開発者が、3 軸とも試算の値に替えると決めた。採用値は $I_{xx}$ 11.5、$I_{yy}$ 15.3、$I_{zz}$ 22.6（e-6 kg·m²）。定義: 質量は実測の中央の値（モータ 17/6 g ×4、電池 8 g、フレーム 3.5 g、StampS3 モジュール 3.25 g、前方 ToF 基板 1 g、プロペラ 1.01/4 g ×4、主基板 = 37 g −（ほかの全部）= 8.907 g）。各部品は STL の体積に一様、主基板の残りは主基板の STL の形に一様。STL（X = 左・Y = 上・Z = 前）から機体座標 FRD（x = +Z、y = −X、z = −Y）。重心まわり。乱数なし、中央の質量での 1 回の計算を有効 3 桁に 1 回だけ丸める。スクリプトは 9 章 |
 | 慣性乗積と重心のずれ | **未採用（未対応）**。今回は対角の 3 成分だけを替えた。試算では $I_{13}$ が約 +0.28e-6（主軸の傾き約 2 度）、重心は STL の原点から x −0.6 mm・z −0.6 mm 程度。SILS の機体モデルの `fullinertia` と重心 `pos` への置き換えは、必要になったときに行う |
-| プロペラの形状データの置き換え | 6 章。URDF の質量、STL、Web 表示（6 か所） |
+| プロペラの形状データの置き換え | **実施済み（2026-11-23）**。6 章と `simulator/shared/README.md`。残り: 生成済みの画像（アイコン、講習のスライドの図）の作り直し、ピッチの確定 |
 | 講習・教育の資料（**今は直さない**。2026-11-23 の開発者の決定） | 資料の機体の利得 $K$ = 102 / 70 / 8.0 は、理論値 $K = K_m / I$（$K_m = 4 L K_f \approx 9.3\times10^{-4}$ N·m/duty、ヨーは $1.6\times10^{-4}$）を旧の慣性で計算した値である。新しい慣性では 80.9 / 60.8 / 7.4 になり、減衰係数、$\zeta = 0.7$ の設計のゲイン（0.25 / 0.36 / 3.19 → 0.315 / 0.42 / 3.46）、位相余裕、ボード線図 2 枚、動かせる部品の定数が連鎖して変わる。対象: `docs/events/sci_tutorial_2026/`（スライドの `sci_s4_pid*.tex`・`core_step3_pcontrol.tex`・`core_step4_sysid.tex`、Web 版、`assets/widgets/pid_step.js`、手順書）、`docs/events/_shared/tikz/` のボード線図、`docs/events/stampfly_workshop/`（`system_modeling.tex`・`system_identification.tex`・`workshop_guide.md`）、`firmware/workshop/lessons/` の lesson_06・07・08。**これらは旧の慣性のままで、基準のファイルと食い違っている。**2点吊り法の再測定で値が落ち着いてから直す。2026-09-10 の講習の当日の版は配布済みなので直さない。lesson_08 の解答のゲイン（0.25 / 0.36）は実機で飛ばした値を兼ねるので、直すときも値は変えない |
+| ピッチ・羽根の表裏の実物での確認 | 形状は公称ピッチ 0.9 inch（ずらし 0 度）、前縁が回転方向側・凸面が上という仮定で作った。実物で未確認 |
 | STL の向きの物理的な確認 | X = 左・Y = 上・Z = 前の対応は実物で未確認 |
 | フレームの実物の肉厚 | STL の体積が実物の 1.4〜1.6 倍相当の原因の確認 |
 | はかりの種類と刻み | プロペラの質量を量ったはかりの種類 |
@@ -459,11 +460,11 @@ Right-roll flips (`flip_test1`, `flip_test2`). The motors saturate at 0 and 1 (d
 | Spin-axis inertia (shape $I/m$ = 55.28 mm² × 0.2525 g) | $1.40\times10^{-8}$ kg·m² | Calculation |
 | Bench-measured rotor inertia | $1.54\times10^{-8}$ kg·m² (the shape value is 91 % of it; the remaining $0.14\times10^{-8}$ reads as the motor rotor) | Inference (medium) |
 | Mass used in estimate rev4 | 0.24 g × 4 = 0.96 g. The 0.05 g difference from the measured 1.01 g changes the vehicle inertia by less than 0.3 % | Analysis assistant |
-| Repository vehicle definition (URDF) | 0.001 kg per propeller link, inertia 1e-9; about 4 times the real 0.0002525 kg | Survey |
-| STL | `propeller_{fl,fr,rl,rr}.stl` (690 triangles each) are discs. Readers: `simulator/sils/models/stampfly.xml` (display only), 2 URDF files, `mesh_inspect.cpp` | Survey |
-| Web-display blades | Not read from the STL; generated in code as 3 blades of 29.98 mm diameter (`landing/index.html`, `simulator/sils/gui/static/app.js`, `tools/log_analyzer/replay_video/page/replay_view.js`, `lib/sfcli/assets/telemetry_web.html`, `tools/flasher_gui/assets/gen_icon_3d.py`, `docs/events/_shared/tikz/scripts/render_stampfly_iso.py`: 6 places). The real one has 4 blades and 31 mm | Survey |
+| Repository vehicle definition (URDF) | Before: 0.001 kg per propeller link, inertia 1e-9 (about 4 times the real mass). **After (done)**: 0.0002525 kg each, inertia 13.71e-9 (axis) and 7.01e-9 kg m2 (in plane) computed from the shape at uniform density; `base_link` 0.03599 kg (vehicle total stays 0.037 kg) | Survey / done |
+| STL | Before: `propeller_{fl,fr,rl,rr}.stl` (690 triangles each) were discs. **After (done)**: the measured 4-blade shape (1,808 triangles, about 90 KB each, nominal pitch 0.9 inch assumed), plus `propeller_rotor_{ccw,cw}.stl` for spinning | Survey / done |
+| Web-display blades | Before: generated in code (3 blades, 29.98 mm, 6 places). **After (done)**: 4 places (`landing/index.html`, `simulator/sils/gui/static/app.js`, `tools/log_analyzer/replay_video/page/replay_view.js`, `lib/sfcli/assets/telemetry_web.html`) load the rotor STL files. The scripts `tools/flasher_gui/assets/gen_icon_3d.py` and `docs/events/_shared/tikz/scripts/render_stampfly_iso.py` were also fixed (generated images not regenerated) | Survey / done |
 
-Replacing the shape data (an STL of the measured 4 blades, about 23,000 triangles, roughly 34 times the current size) is **at the planning stage** and has not been started. The choice of the pitch-angle version awaits the result of a separately progressing computational fluid dynamics (CFD) study and the developer's decision.
+The shape data was replaced on 2026-11-23. Origin, method and unconfirmed points (pitch, one section at all radii, hub shape, blade face) are in `simulator/shared/README.md`. The axis inertia of the single propeller computed from the shape is 1.37e-8 kg m2 (the 1.40e-8 in the table above is for another, finer shape) and is kept as a value independent of the bench-measured rotor inertia 1.54e-8.
 
 ## 7. Inference
 
@@ -507,8 +508,9 @@ Therefore the relation between the attachment points and the centre of gravity a
 | Difference in hover thrust scale | Why 11/22 (1.08-1.16 in the hold logs) and 10/02 (1.009-1.010) differ |
 | Decision on changing the reference values | **Decided (2026-11-23).** The developer decided to use the computed values on all three axes. Adopted: $I_{xx}$ 11.5, $I_{yy}$ 15.3, $I_{zz}$ 22.6 (e-6 kg·m²). Definition: central measured masses (motor 17/6 g x4, battery 8 g, frame 3.5 g, StampS3 module 3.25 g, front ToF board 1 g, propeller 1.01/4 g x4, main board = 37 g - everything else = 8.907 g); each part uniform over its STL volume, the main-board remainder uniform over the main-board STL; STL (X = left, Y = up, Z = front) to body frame FRD (x = +Z, y = -X, z = -Y); about the centre of gravity; no random numbers, one computation with the central masses rounded once to 3 significant digits. Script: chapter 9 |
 | Products of inertia and centre-of-gravity offset | **Not adopted (not handled).** Only the three diagonal terms were replaced. The estimate gives $I_{13}$ of about +0.28e-6 (principal-axis tilt about 2 degrees) and a centre of gravity about x -0.6 mm, z -0.6 mm from the STL origin. Switching the SILS vehicle model to `fullinertia` and a centre-of-mass `pos` is left until needed |
-| Replacing the propeller shape data | Chapter 6. URDF mass, STL, Web display (6 places) |
+| Replacing the propeller shape data | **Done (2026-11-23).** Chapter 6 and `simulator/shared/README.md`. Remaining: regenerate the generated images (icon, workshop slide figures) and settle the pitch |
 | Lecture and teaching materials (**not corrected for now**; developer's decision of 2026-11-23) | The plant gain $K$ = 102 / 70 / 8.0 in the materials is the theoretical value $K = K_m / I$ ($K_m = 4 L K_f \approx 9.3\times10^{-4}$ N·m/duty, yaw $1.6\times10^{-4}$) computed with the old inertia. With the new inertia it becomes 80.9 / 60.8 / 7.4, and the damping ratio, the gains designed for $\zeta = 0.7$ (0.25 / 0.36 / 3.19 → 0.315 / 0.42 / 3.46), the phase margins, two Bode plots and the constants of the interactive widget change with it. Affected: `docs/events/sci_tutorial_2026/` (slides `sci_s4_pid*.tex`, `core_step3_pcontrol.tex`, `core_step4_sysid.tex`, the Web version, `assets/widgets/pid_step.js`, the guides), the Bode plots in `docs/events/_shared/tikz/`, `docs/events/stampfly_workshop/` (`system_modeling.tex`, `system_identification.tex`, `workshop_guide.md`), and lesson_06, 07, 08 in `firmware/workshop/lessons/`. **These still use the old inertia and disagree with the reference file.** They will be corrected after a new bifilar measurement settles the value. The version handed out at the lecture of 2026-09-10 is not to be changed. The answer gains of lesson_08 (0.25 / 0.36) are also the gains flown on the real vehicle, so their values stay when the text is corrected |
+| Pitch and blade face on the real propeller | The shape assumes the nominal pitch 0.9 inch (offset 0 deg), leading edge on the rotation side and convex face up. Unconfirmed on the real propeller |
 | Physical check of the STL orientation | The X = left, Y = up, Z = front correspondence is unconfirmed on the real vehicle |
 | Real wall thickness of the frame | Cause of the STL volume being 1.4-1.6 times the real one |
 | Scale type and resolution | The type of scale used for the propeller mass |

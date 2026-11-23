@@ -35,6 +35,8 @@ on:
       - 'firmware/**'
       - 'simulator/sils/**'
       - 'simulator/tools/**'
+      - 'simulator/shared/**'
+      - 'landing/assets/model/**'
       - 'control/**'
       # lib/ (sfcli, sflog), tools/ and the reference flight-log
       # bundle are covered by the pytest step below, so changes there must
@@ -206,7 +208,8 @@ jobs:
             lib/sfcli/commands/test_build_sdkconfig.py \
             lib/sfcli/commands/test_doctor_sdkconfig.py \
             lib/sfcli/commands/test_sils_flightlog.py \
-            simulator/tools/compare_simulators/test_sim_io.py simulator/sils/tests
+            simulator/tools/compare_simulators/test_sim_io.py simulator/sils/tests \
+            simulator/shared/assets/meshes/tools
 
       - name: Cache SILS build directory (MuJoCo FetchContent + object files)
         # Caches the WHOLE build dir, not just _deps: actions/cache preserves file

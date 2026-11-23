@@ -323,7 +323,8 @@ tools/
 └── extract_snippets.py  # 教材コードの抜き出し（sf 非経由）
 ```
 
-- sf を経由しない補助は上記 4 つに限り、増やすときは本節に追記する
+- sf を経由しない補助は上記 4 つと、次の 1 つに限り、増やすときは本節に追記する
+  - `simulator/shared/assets/meshes/tools/`: プロペラの 3 次元形状ファイルを作る開発用の補助スクリプト（`build_propeller.py`）と、その照合・試験。利用者に提供する道具ではなく資産の生成用なので sf のコマンドにしない（2026-11-23 開発者の決定）。使い方は `simulator/shared/README.md`
 - 書き込み・ログ取得の実装は sf CLI 側にある（以前の `flashing/` は空のまま 2026-09-12 に削除、`log_capture/` は不在）
 
 ---
@@ -354,7 +355,7 @@ lib/
 simulator/
 ├── genesis/    # Genesis 物理エンジン版（高精度物理・物理量ベース制御）
 ├── sandbox/    # STL 分割・WebGL ビューア等の実験
-├── shared/     # 機体モデル・設定・シナリオ（assets/configs/scenarios）を各シミュレータが共有
+├── shared/     # 機体モデル・設定・シナリオ（assets/configs/scenarios）を各シミュレータが共有。プロペラの形状データと生成スクリプトは assets/meshes/（README は shared/README.md）
 ├── sils/       # Software-in-the-Loop 本体（決定論的・ESP-IDF ホストビルド）
 ├── tests/      # シミュレータ横断のテスト
 ├── tools/      # シミュレータ間比較などの補助

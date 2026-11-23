@@ -101,6 +101,8 @@ Genesis物理エンジンで使用する座標系です。ロボットシミュ�
 - WebGLビュワー
 - Three.jsベースの可視化ツール
 
+**プロペラの STL（この座標で保存）:** 機体の位置に置いた `propeller_{fl,fr,rl,rr}.stl` と、原点がハブ中心の回転用 `propeller_rotor_{ccw,cw}.stl`。回転軸は +Y。回転方向は +Y（上）から見た向きで言い、右ねじ（Z から X へ回る向き）が反時計回り。M1 前右・M3 後左が反時計回り、M2 後右・M4 前左が時計回り。形状データの出どころと未確定の点は `simulator/shared/README.md`。
+
 ## 3. 位置の座標変換
 
 ### NED → WebGL 変換
@@ -544,6 +546,8 @@ Used for 3D visualization. Based on rear-following camera view.
 - STL files (3D mesh data)
 - WebGL viewer
 - Three.js-based visualization tools
+
+**Propeller STL files (stored in this frame):** `propeller_{fl,fr,rl,rr}.stl` placed at the motor positions, and `propeller_rotor_{ccw,cw}.stl` with the hub centre at the origin. The rotation axis is +Y. Spin is stated as seen from +Y (above); the right-hand sense (Z toward X) is counter-clockwise. M1 front right and M3 rear left are counter-clockwise; M2 rear right and M4 front left are clockwise. Origin and unconfirmed points of the shape data: `simulator/shared/README.md`.
 
 ## 3. Position Coordinate Transformations
 

@@ -129,7 +129,7 @@ simulator/
 │   └── control_allocation.py  # 制御配分
 │
 ├── shared/                # 共有リソース
-│   ├── assets/            # 3Dモデル・テクスチャ
+│   ├── assets/            # 3Dモデル・テクスチャ（プロペラ形状は shared/README.md）
 │   ├── configs/           # 設定ファイル
 │   └── scenarios/         # シナリオ定義
 │
