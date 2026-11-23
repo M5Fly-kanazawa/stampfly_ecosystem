@@ -471,6 +471,12 @@ PID は時定数形式（Kp/Ti/Td）を使用する（「PID 表記の違い」�
 | `eskf.use_baro` | 0（無効） | 鉛直はToF専用（設計方針、気圧は不使用） |
 | `eskf.use_mag` | 0（無効） | |
 
+#### 前方 ToF のヒストグラム併合
+
+| パラメータ | 既定値 | 範囲 | 備考 |
+|-----------|-------|------|------|
+| `tof.front.hist_merge` | 0（併合なし） | 0/1 | 1 = 併合あり。起動時に 1 回だけ読むので、`param set` → `param save` → 再起動で有効。併合なしは約 1.8 m まで、併合ありは 3 m まで測れるが、ゆっくりの動きで読みが約 0.2 秒古くなる。下向き ToF は併合なしの固定 |
+
 #### 判定しきい値
 
 観測ごとに自由度別のχ²閾値を持つ旧方式から、以下の方式へ再設計されている:
@@ -969,6 +975,12 @@ Parameter namespace: `eskf.*`
 | `eskf.use_flow` | 1 (on) | |
 | `eskf.use_baro` | 0 (off) | Vertical estimation is ToF-only by design; barometer unused |
 | `eskf.use_mag` | 0 (off) | |
+
+#### Front ToF Histogram Merge
+
+| Parameter | Default | Range | Notes |
+|-----------|---------|-------|-------|
+| `tof.front.hist_merge` | 0 (merge off) | 0/1 | 1 = merge on. Read once at boot, so it takes effect after `param set` -> `param save` -> reboot. Merge off reads up to about 1.8 m; merge on reads up to 3 m, but the reading is about 0.2 s old in slow motion. The downward ToF is fixed to merge off |
 
 #### Gate Thresholds
 

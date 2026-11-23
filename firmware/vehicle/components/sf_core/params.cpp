@@ -713,6 +713,15 @@ namespace param_vars {
     // バイアスドリフトは LPF なし 0.28 に対し 0.18（12Hz ノッチは広帯域ゆえ無効）。姿勢更新のみ、predict には不適用。
     float eskf_accel_att_lpf  = 30.0f;
 
+    // Front ToF histogram merge (0 = off, 1 = on). Read ONCE when the front sensor is brought up at boot:
+    // a change takes effect after param set -> param save -> reboot. Off = reads up to about 1.8 m with the
+    // ~75 ms age of the bottom sensor; on = reads up to 3 m but the reading is about 0.2 s old in slow motion.
+    // The downward ToF is fixed to off and has no parameter. See detailed_design.md §5 "Histogram merge of the downward and front ToF".
+    // 前方 ToF のヒストグラム併合（0 = 併合なし、1 = 併合あり）。起動時に前方センサを立ち上げるときに 1 回だけ
+    // 読む: 変更は param set → param save → 再起動で有効。なし = 約 1.8 m まで測れ、読みの古さは下向きと同じ約 75 ms。
+    // あり = 3 m まで測れるが、ゆっくりの動きでは読みが約 0.2 s 古い。下向き ToF は併合なしの固定でパラメータは無い。
+    int32_t tof_front_hist_merge = 0;
+
     // ESKF sensor enable
     bool eskf_use_tof   = true;
     bool eskf_use_flow  = true;
@@ -1002,6 +1011,9 @@ static const ParamEntry table[] = {
     // 最小が0なので、=0 で起動静止校正値にジャイロバイアスを凍結（飛行中ESKF更新を
     // レートループへ反映しない）。診断用トグル。通常は0.03で使う。
     {"eskf.bias.gyro_dev_max",   ParamType::FLOAT, &eskf_bg_dev_max,  0.03f,     0.0f, 1.0f,  &notifyEstimatorReload},
+
+    // Front ToF histogram merge, read at boot only (reboot to apply) / 前方 ToF の併合。起動時だけ読む（再起動で有効）
+    {"tof.front.hist_merge", ParamType::INT, &tof_front_hist_merge, 0.0f, 0.0f, 1.0f, nullptr},
 
     // ESKF observation noise
     {"eskf.obs.tof_noise",       ParamType::FLOAT, &eskf_tof_noise,     0.01f, 0.001f, 1.0f,  &notifyEstimatorReload},

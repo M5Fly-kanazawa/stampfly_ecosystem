@@ -71,6 +71,7 @@
 #include "driver/gpio.h"   // front-ToF XSHUT control / 前方ToF XSHUT制御
 
 #include "topics.hpp"
+#include "params.hpp"   // tof.front.hist_merge, read at front bring-up / 前方の立ち上げ時に読む tof.front.hist_merge
 #include "config.hpp"
 #include "sf_board.hpp"
 #include "flight_limits.hpp"
@@ -94,6 +95,11 @@ static constexpr uint32_t kReadFailLogIntervalCycles = 90;
 /// 前方 ToF を停止する連続 I2C 失敗回数。30Hz で 30 回 ≈ 1 秒。USB 給電のみの実機で、
 /// 前方はアドレス付け替えまで成功するがその後の読み出しが全て失敗し、コンソールを埋めた。
 static constexpr uint32_t kFrontDisableFailCycles = 30;
+
+/// Name and default (off) of the parameter that selects the front sensor's histogram merge.
+/// 前方センサのヒストグラム併合を選ぶパラメータの名前と既定値（併合なし）。
+static constexpr const char* kFrontHistogramMergeParam   = "tof.front.hist_merge";
+static constexpr int32_t     kFrontHistogramMergeDefault = 0;
 
 /// Front sensor I2C address after re-addressing (bottom is 0x30). Both parts boot at
 /// 0x29, so the front one is moved only AFTER the bottom one has left 0x29.
@@ -159,6 +165,14 @@ static void initFrontTof()
     cfg.xshut_pin = static_cast<gpio_num_t>(config::GPIO_TOF_XSHUT_FRONT);
     cfg.i2c_addr  = kFrontI2cAddress;
 
+    // Histogram merge of the front sensor: read once here (boot), so a change needs a reboot. A failed read keeps
+    // the default of the parameter (off). The downward sensor is not affected.
+    // 前方センサのヒストグラム併合。ここ（起動時）で 1 回だけ読むので、変更には再起動が要る。読み出しに失敗したら
+    // パラメータの既定（併合なし）のまま。下向きセンサには影響しない。
+    int32_t merge_value = kFrontHistogramMergeDefault;
+    sf::params::get_int(kFrontHistogramMergeParam, merge_value);
+    cfg.histogram_merge_enabled = (merge_value != 0);
+
     bool ok = (g_tof_front.init(cfg) == ESP_OK) && (g_tof_front.startRanging() == ESP_OK);
     if (!ok) {
         ESP_LOGW(TAG, "VL53L3CX front not detected (optional sensor) — disabled");
@@ -168,7 +182,8 @@ static void initFrontTof()
     g_front_present = true;
     sf::internal::board::set_sensor_present(
         sf::internal::board::SensorId::FrontToF, true);
-    ESP_LOGI(TAG, "VL53L3CX front ready (addr 0x%02X, ~30Hz)", kFrontI2cAddress);
+    ESP_LOGI(TAG, "VL53L3CX front ready (addr 0x%02X, ~30Hz), histogram merge %s (tof.front.hist_merge)",
+             kFrontI2cAddress, cfg.histogram_merge_enabled ? "on" : "off");
 }
 
 /// Poll one sensor once: if a sample is ready, read it, publish it to `topic`, stamp the

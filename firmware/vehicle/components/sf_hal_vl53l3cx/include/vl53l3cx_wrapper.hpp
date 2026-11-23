@@ -120,6 +120,8 @@ public:
             // sensor at 1-3 m are NOT yet confirmed (merging used to support the long range).
             // 併合なし。利用者の決定（2026-11-23）で下向きと同じ。実機で併合なしを確かめたのは下向きの 1.5 m までで、
             // 前方の 1〜3 m での有効な読みの割合と雑音は未確認（併合は遠距離を支えていた）。
+            // TofTask overrides this from the parameter tof.front.hist_merge (read at boot; default 0 = off).
+            // TofTask がパラメータ tof.front.hist_merge（起動時に読む。既定 0 = なし）で上書きする。
             config.histogram_merge_enabled = false;
             return config;
         }
