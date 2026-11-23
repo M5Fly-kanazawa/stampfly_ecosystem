@@ -13,6 +13,9 @@
 # landing distance is the difference of the two holds plus that drift; its bound 0.12 m lies between 0.041 (after) and 0.221 (before). The estimate bounds -0.10 .. +0.10 m lie between the
 # after-fix range (-0.008 .. +0.060) and the before-fix range (-0.182 .. -0.106). The gust is 0.04 N: 0.03 N gave an offset of 0.14 m at the completion and a landing distance of 0.099 (before) against
 # 0.053 (after), too close; 0.05 N gave 0.30 (before) against 0.0075 (after) but an estimate offset of 0.195 m, at the edge of the 0.1-0.2 m of the flight.
+# With the release at 0.08 m (2026-11-23, stage 2 of the estimator release work; the numbers above were measured with the release at 0.15 m): the craft 0.228 m from the launch point at the completion (0.218 before the change),
+# the true distance from the launch point in the hold 0.102 m (0.130), after the landing 0.031 m (0.100); every bound above still holds.
+# 解除を 0.08 m にした後（2026-11-23、推定器の解除の見直しの第 2 段。上の数値は解除が 0.15 m の時の実測）: 完了での離陸点からの距離 0.228 m（変更前 0.218）、保持の間の離陸点からの真の距離 0.102 m（0.130）、着陸の後 0.031 m（0.100）。上の上限はすべて保たれる。
 # SILS has no flow-sensor error at low height, so this is a check of HOW the target is taken, not of the size of the drift of a real flight.
 # 実測（真値と推定、ノイズなし、上昇中だけ機体の後ろ向き 0.04 N の突風）、修正前（b0171c10）→ 修正後:
 #   完了（7.8〜8.0 s）での離陸点からの距離 0.23 m: 0.225 → 0.225（同じ。修正は完了より前に何も変えない）

@@ -10,7 +10,7 @@
 #  3. The auto-takeoff climbs the altitude cascade toward the TARGET (0.5 m), velocity-
 #     limited, and CAPTURES the target value — not the climb-overshoot peak.
 #     The controller reports capture (Auto-takeoff complete) and the state machine moves
-#     TAKEOFF→FLYING; the ToF 0.15 m airborne edge is the ESKF vertical handoff only.
+#     TAKEOFF→FLYING; the ToF 0.15 m airborne edge (the ground flag) is not a trigger, and the ESKF vertical handoff has its own, lower height (kEstimatorReleaseHeightM, 0.08 m).
 #
 # 検証する仕様:
 #  1. モード変更は「地上」（IDLE_GROUND）で受理 — 設置中の ALT スイッチ切替で ARM 前に実モードが変わる。
@@ -19,7 +19,7 @@
 #     経てから上昇開始。
 #  3. 自動離陸は高度カスケードで「目標」（0.5 m）へ速度制限つき上昇し、目標値を捕捉する — 上昇の
 #     行き過ぎピークでなく。制御器が捕捉を報告（Auto-takeoff complete）し状態機械が
-#     TAKEOFF→FLYING へ。ToF 0.15 m 空中エッジは ESKF 鉛直ハンドオフ専用。
+#     TAKEOFF→FLYING へ。接地フラグの ToF 0.15 m 空中エッジはトリガではなく、ESKF 鉛直ハンドオフは専用のより低い高さ（kEstimatorReleaseHeightM、0.08 m）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/alt_auto_takeoff.scn --target vehicle
 #

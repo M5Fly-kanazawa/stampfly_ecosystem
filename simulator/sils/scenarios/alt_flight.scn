@@ -44,7 +44,7 @@
 #
 # Expectation (MEASURED — tune from the run's flight-log bundle's `truth.csv`/`posvel.csv` altitude):
 #   Ground (t<5.3): ESKF est_alt held at ~0 (no drift) while truth ~0.01 m.
-#   Handoff (t≈6.3, ToF > 0.15 m): resetPositionVelocity → ToF locks, est tracks truth.
+#   Handoff (t≈5.75, ToF > 0.08 m = kEstimatorReleaseHeightM since 2026-11-23; t≈6.1 at 0.15 m before): resetPositionVelocity → ToF locks, est tracks truth.
 #   ALT_HOLD (t≈6.3–18.3): a bounded, DECAYING oscillation (peak ≈0.62 m, trough ≈0.19 m)
 #     settles to hold ~0.60 m by t≈15; ESKF est tracks truth throughout (rmse ≈0.02 m,
 #     well inside gate); motors settle near the new hover duty ~0.73. Bounded, no runaway.
@@ -57,7 +57,7 @@
 # の数値判定の窓は過渡収束後に置いており、閾値自体は厳しい値のままである。
 # 期待（実測 — フライトログ一式の truth.csv/posvel.csv の高度で調整）:
 #   地上(t<5.3): ESKF est_alt が ~0 保持（ドリフト無）、真値 ~0.01m。
-#   ハンドオフ(t≈6.3, ToF>0.15m): resetPositionVelocity → ToF ロック、est が真値追従。
+#   ハンドオフ(t≈5.75, ToF>0.08m = 2026-11-23 から kEstimatorReleaseHeightM。それまでは 0.15m で t≈6.1): resetPositionVelocity → ToF ロック、est が真値追従。
 #   ALT_HOLD(t≈6.3–18.3): 有界な減衰振動（peak≈0.62m, trough≈0.19m）を経て t≈15 で ~0.60m に
 #     収束・保持、est は終始追従(rmse≈0.02m)、モータは新ホバー duty ~0.73 付近。有界・発散無。
 #   DISARM(t≈18.5): モータ停止・着地、est は ~0 に再錨付け（着地後ドリフト無）。

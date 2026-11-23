@@ -143,8 +143,9 @@ void EskfEstimator::updateFlow(const FlowData& flow)
     }
     last_flow_time_ = flow.timestamp;
 
-    float height = -core_.getPosition().z;
-    if (height < 0.02f) height = 0.02f;
+    // The conversion height: the estimated height, except for a short window after the takeoff release, where the downward ToF is used (EskfCore::flowHeightM).
+    // 換算の高さ: 推定の高さ。ただし離陸の解除の直後の短い窓の間は下向き ToF（EskfCore::flowHeightM）。
+    const float height = core_.flowHeightM();
 
     // Gyro compensation needs the body ANGULAR RATE (bias-corrected gyro), not the
     // gyro bias — pitch/roll rotation adds a rotational component to the optical flow

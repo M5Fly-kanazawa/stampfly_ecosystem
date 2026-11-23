@@ -128,10 +128,11 @@ public:
     /// Reset position and velocity only (keep attitude)
     /// 位置・速度のみリセット（姿勢は保持）
     ///
-    /// Called at the ground→airborne edge to start position tracking from origin
+    /// Called at the takeoff release (the first valid ToF sample above kEstimatorReleaseHeightM,
+    /// not the airborne side of the ground flag) to start position tracking from origin
     /// with a fresh covariance (clean ToF lock at takeoff).
-    /// 接地→空中エッジで呼ばれ、新しい共分散で原点から位置追跡を開始する
-    /// （離陸時の混入のない ToF ロック）。
+    /// 離陸の解除（kEstimatorReleaseHeightM を超える最初の有効な ToF サンプル。接地フラグの空中側ではない）で
+    /// 呼ばれ、新しい共分散で原点から位置追跡を開始する（離陸時の混入のない ToF ロック）。
     virtual void resetPositionVelocity() = 0;
 
     /// Hold position and velocity at zero (called every cycle while on the ground)

@@ -497,7 +497,7 @@ reset には性質の異なる **2つの層** がある。「reset は onExit/on
 - **無言の特例禁止**: `@design` タグで「なぜ onEnter でなく当該タスクか」を上記3条件＋実証データ付きで明記する
 - **独立した状態遷移監視ループを作らない**: 既存のセンサ→推定パイプライン（predict→observe）の一部として書く
 
-**実例:** 鉛直ハンドオフ（`resetPositionVelocity` / `holdPositionVelocity`）は ToF（30Hz）の接地↔空中エッジに同期して ImuTask が行う（クラスB）。onEnter(FLYING) に移すと state_task の 20ms ポーリング遅延が乗り、α-βトラッカの初期化が遅れて POS_HOLD 姿勢が劣化する（実測 att_rmse 3.1°→12.8°）。一方、ARM時のPIDリセットやESKF全状態リセットはクラスAで onEnter に集約する。
+**実例:** 鉛直ハンドオフ（`resetPositionVelocity` / `holdPositionVelocity`）は ToF（30Hz）の、推定器の解除の高さ（`kEstimatorReleaseHeightM` = 0.08 m）を超える有効サンプルに同期して ImuTask が行う（クラスB。接地フラグの空中側 0.15 m ではない。`detailed_design.md` §3 注16）。解除の高さを 0.15 → 0.08 m に変えても、クラスB の 3 条件は変わらない（トリガは ToF のセンサ事象、対象は推定器の内部状態、ImuTask の推定パイプラインの中）。条件 2 の実証（下記の att_rmse）は 0.15 m で解除していた時代の測定で、0.08 m での再測定は未確認（実機の項目は `hardware_checkout.md` 2-11）。onEnter(FLYING) に移すと state_task の 20ms ポーリング遅延が乗り、α-βトラッカの初期化が遅れて POS_HOLD 姿勢が劣化する（実測 att_rmse 3.1°→12.8°）。一方、ARM時のPIDリセットやESKF全状態リセットはクラスAで onEnter に集約する。
 
 ## 5. データフロー設計
 

@@ -58,8 +58,8 @@ static sf::StateManager g_state_manager;
 // covariance alone. We adopt the latter: it honors the design intent (declare flight-
 // uncertainty about attitude at ARM) yet stays stable, because attitude re-converges
 // from gravity on the ground before takeoff. The position/velocity "ground is zero, not
-// flight-representative" handoff is handled separately and precisely at the airborne
-// edge by ImuTask's resetPositionVelocity (class-B, architecture §4); the bias is the
+// flight-representative" handoff is handled separately and precisely at the estimator release
+// edge (the ToF sample above kEstimatorReleaseHeightM) by ImuTask's resetPositionVelocity (class-B, architecture §4); the bias is the
 // same IMU in flight, so its ground estimate is kept. (CLAUDE.md: control changes are
 // backed by simulation — the sweep is the evidence.)
 //
@@ -71,7 +71,7 @@ static sf::StateManager g_state_manager;
 // （pos_roll/pitch/flight 墜落）。スイート全PASS は2方策のみ＝「何もしない」と「姿勢の共分散
 // だけ膨張」。後者を採用: 設計意図（ARM で姿勢の自信をリセット）を満たしつつ安定 — 姿勢は
 // 離陸前に地上で重力から再収束するため。位置/速度の「地上ゼロは飛行を代表しない」ハンドオフは
-// 空中エッジで ImuTask の resetPositionVelocity が別途・正確に処理（クラスB, architecture §4）。
+// 推定器の解除のエッジ（kEstimatorReleaseHeightM を超える ToF サンプル）で ImuTask の resetPositionVelocity が別途・正確に処理（クラスB, architecture §4）。
 // バイアスは飛行中も同じ IMU ゆえ地上推定を保持。（CLAUDE.md: 制御変更はシミュレーションで裏付け。）
 //
 // @design detailed_design.md §3 — ARM: ESKF attitude-covariance inflation (not a full reset) [OK]
@@ -990,7 +990,8 @@ void StateTask(void* pvParameters)
         // TAKEOFF → FLYING — also split:
         //   ALT/POS auto-takeoff: completes when the CONTROLLER captures its target
         //     altitude (controller_status.takeoff_reached) — decoupled from the ToF
-        //     0.15m airborne edge, which is the ESKF vertical handoff only (ImuTask).
+        //     0.15m airborne edge of the ground flag (the ESKF vertical handoff has its own
+        //     lower height, kEstimatorReleaseHeightM, ImuTask).
         //   ACRO/STABILIZE manual: completes on the ToF airborne detection
         //     (system_status.airborne).
         // Reaching FLYING unlocks requestModeChange.
@@ -1006,8 +1007,8 @@ void StateTask(void* pvParameters)
         //     いる（takeoff_policy.hpp）。
         // TAKEOFF → FLYING — これもモード別:
         //   ALT/POS 自動離陸: 制御器が目標高度を捕捉したとき完了
-        //     （controller_status.takeoff_reached）— ToF 0.15m 空中エッジとは分離。後者は
-        //     ESKF 鉛直ハンドオフ専用（ImuTask）。
+        //     （controller_status.takeoff_reached）— 接地フラグの ToF 0.15m 空中エッジとは分離。
+        //     ESKF 鉛直ハンドオフは専用のより低い高さ kEstimatorReleaseHeightM（ImuTask）。
         //   ACRO/STABILIZE 手動: ToF 空中検知（system_status.airborne）で完了。
         // FLYING 到達で requestModeChange が解放される。
         //

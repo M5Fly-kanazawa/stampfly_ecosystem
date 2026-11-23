@@ -64,13 +64,13 @@ struct TakeoffLandingConfig {
     // assert "on ground"; landing already needs landing_hold_ms downstream
     // so the 2-sample (~66ms at 30Hz) delay is negligible (M-6).
     // NOTE: the ground→air flip (takeoff) is INTENTIONALLY immediate — the ESKF
-    // vertical handoff keys off that edge and is a sample-precision class-B reset
+    // vertical handoff keys off the estimator release (isEstimatorReleased(), set at once by its own, lower height) and is a sample-precision class-B reset
     // (architecture.md §4); debouncing it delays the handoff and degrades the
     // take-off transient (measured: duty_max 0.80 → 1.0 with a 2-sample delay).
     // on_ground_ を false→true に反転させるのに必要な地上側連続 ToF サンプル数
     // （air→ground デバウンス）。飛行中の単発近距離ゴーストで「接地」を主張できなくする。
     // 着陸は下流に landing_hold_ms があるので2サンプル(≈66ms)の遅延は無視できる (M-6)。
-    // 注: ground→air（離陸）の反転は意図的に即時 — ESKF 鉛直ハンドオフがこのエッジを
+    // 注: ground→air（離陸）の反転は意図的に即時 — ESKF 鉛直ハンドオフは推定器の解除（isEstimatorReleased()。専用のより低い高さで即時に立つ）を
     // 起点とするサンプル精度のクラスB reset（architecture.md §4）であり、デバウンスすると
     // ハンドオフが遅れ離陸過渡が劣化する（実測: 2サンプル遅延で duty_max 0.80→1.0）。
     uint8_t flip_confirm_samples = 2;
@@ -175,9 +175,9 @@ public:
     /// airborne_tof_m (a hop) keeps it set until it lands. ImuTask alone reads it (applyVerticalGroundHandoff); every other user of the ground flag
     /// (state machine, tilt monitor, barometric learning, landing detection, held-in-hand, the floor evidence) keeps isOnGround() / airborne_tof_m.
     /// With estimator_release_tof_m == airborne_tof_m it is exactly !isOnGround() (host test).
-    /// 推定器が機体を追ってよい: 位置・速度はもう 0 に固定されない。isOnGround() とは「別の」事実で、同じ ToF サンプルから、それと歩調を合わせて立つ・下りる:
+    /// 推定器が機体を追ってよい: 位置・速度はもう 0 に固定されない。isOnGround() とは「別の」事実で、同じ ToF サンプルから、それと同時に立つ・下りる:
     /// estimator_release_tof_m を超える有効な読み（と markAirborne()）で立ち、on_ground_ が true になる所（着陸で確定した地上の読み、DISARM 中の全周期）で下りる。
-    /// エッジでなくレベル: 解除の高さは超えたが airborne_tof_m は超えなかった機体（ホップ）は、着陸するまで立ったまま。読むのは ImuTask だけ（applyVerticalGroundHandoff）。
+    /// エッジでなくレベル: 解除の高さは超えたが airborne_tof_m は超えなかった機体（床から小さく浮いただけの機体）は、着陸するまで立ったまま。読むのは ImuTask だけ（applyVerticalGroundHandoff）。
     /// 接地フラグのほかの使い手（状態機械・傾きの監視・気圧高度の学習・着陸の判定・手持ち・床の証拠）は isOnGround() / airborne_tof_m のまま。
     /// estimator_release_tof_m == airborne_tof_m のとき、厳密に !isOnGround() に等しい（ホスト試験）。
     /// @design architecture.md INV-3 — detection here (the fact), the decision stays with ImuTask's hold / StateTask [OK]

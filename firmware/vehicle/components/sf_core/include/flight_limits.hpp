@@ -66,9 +66,9 @@ inline constexpr float kGuidanceYawRateMaxRadPerSec = 1.0f;
 inline constexpr float kGuidanceYawKpPerSec         = 2.0f;
 /// Target altitude of the auto-takeoff [m]: the height every takeoff ends at and then holds, whether the ARM of the transmitter started it
 /// (PidController: the climb target) or the API `takeoff` (ApiTask: the altitude of the guidance target it seeds). High enough to clear the
-/// ground effect (the ToF airborne edge of 0.15 m is the ESKF vertical handoff, not this target). Must not exceed kAltitudeCeilingM.
+/// ground effect (the ToF airborne edge of 0.15 m of the ground flag and the ESKF handoff height kEstimatorReleaseHeightM are not this target). Must not exceed kAltitudeCeilingM.
 /// 自動離陸の目標高度 [m]: 送信機の ARM が始めた離陸（PidController: 上昇目標）も API の `takeoff`（ApiTask: 初期化する誘導目標の高度）も、
-/// 離陸はこの高さで終わってそのまま保持する。地面効果を抜けるのに十分な高さ（ToF の空中判定 0.15 m は ESKF の鉛直ハンドオフ用で、この目標ではない）。
+/// 離陸はこの高さで終わってそのまま保持する。地面効果を抜けるのに十分な高さ（接地フラグの ToF の空中判定 0.15 m と ESKF の鉛直ハンドオフの高さ kEstimatorReleaseHeightM は、この目標ではない）。
 /// kAltitudeCeilingM を超えてはならない。
 inline constexpr float kAutoTakeoffTargetAltitudeM = 0.5f;
 static_assert(kAutoTakeoffTargetAltitudeM <= kAltitudeCeilingM,
@@ -298,13 +298,22 @@ inline constexpr float    kTakeoffAirborneBandM     = 0.15f;     // [m]
 /// Height above which the ESTIMATOR is released at takeoff [m]: a valid downward-ToF reading above it ends the hold that pins position and velocity at zero
 /// (ImuTask::applyVerticalGroundHandoff resets them once and lets them run; TakeoffLandingMgr::isEstimatorReleased()). A DIFFERENT decision from the ground flag above: the ground flag
 /// (kTakeoffAirborneBandM) answers "is the craft off the floor" for the state machine, the tilt monitor, the barometric learning and the landing detection, and must stay conservative;
-/// this one answers "has the estimate anything to track", and the earlier it is released the less of the first motion after lift-off the hold throws away (the craft moves back
-/// by 40-95 mm during the first centimetres of the climb). Order enforced below: kTakeoffGroundBandM < this <= kTakeoffAirborneBandM. Stage 1 (2026-11-23): 0.15 m, the same as the ground flag, so nothing changes yet.
-/// 離陸で「推定器」を解放する高さ [m]: これを超える有効な下向き ToF の読みで、位置・速度を 0 に固定する動作を終える（ImuTask::applyVerticalGroundHandoff が 1 回リセットして走らせる。
+/// this one answers "has the estimate anything to track", and the earlier it is released the less of the first motion after lift-off the hold throws away. Order enforced below:
+/// kTakeoffGroundBandM < this <= kTakeoffAirborneBandM.
+/// 0.08 m. Basis (2026-11-23, offline replay of the flight ESKF over the five flights s9, s10, s11, s13, s14, estimate minus tape measure, mean signed forward error, open loop): release at 0.15 m 157 mm,
+/// 0.10 m 115, 0.08 m 94 (-40 %), 0.06 m 78, 0.05 m 71; better in all five flights; the main cause is the first motion after lift-off that the pin discards (the craft moves back by 40-95 mm during
+/// the first centimetres of the climb). Margin above the floor: the largest valid reading on the floor was 45 mm (bench), 41-43 mm with the motors spinning (ARMED), 39 mm at rest; 0.08 m leaves 35 mm,
+/// 0.06 m only 15 mm and 0.05 m 5 mm. The reading is valid from about 31 mm up (histogram merge off, no jump seen). Limit: a replay that follows the path the craft flew; the real motion when the controller acts earlier
+/// is checked on the craft (hardware_checkout.md).
+/// 離陸で「推定器」を解放する高さ [m]: これを超える有効な下向き ToF の読みで、位置・速度を 0 に固定する動作を終える（ImuTask::applyVerticalGroundHandoff が 1 回リセットして動かす。
 /// TakeoffLandingMgr::isEstimatorReleased()）。上の接地フラグとは「別の判断」: 接地フラグ（kTakeoffAirborneBandM）は「機体は床を離れたか」を状態機械・傾きの監視・気圧高度の学習・着陸の判定に答え、
-/// 保守的なままでなければならない。こちらは「推定に追わせるものがあるか」に答え、早く解くほど、床を離れた直後の最初の動きを固定が捨てる量が減る（機体は上昇の最初の数 cm で 40〜95 mm 後ろへ動く）。
-/// 順序は下で強制: kTakeoffGroundBandM < この値 <= kTakeoffAirborneBandM。第 1 段（2026-11-23）: 0.15 m。接地フラグと同じなので、まだ何も変わらない。
-inline constexpr float    kEstimatorReleaseHeightM  = 0.15f;     // [m]
+/// 保守的なままでなければならない。こちらは「推定に追わせるものがあるか」に答え、早く解くほど、床を離れた直後の最初の動きのうち固定が反映できない量が減る。順序は下で強制:
+/// kTakeoffGroundBandM < この値 <= kTakeoffAirborneBandM。
+/// 0.08 m。根拠（2026-11-23、実機の飛行 5 回 s9・s10・s11・s13・s14 を、フライトの ESKF のソースでオフライン再生。推定 − 巻き尺の前後の誤差（符号つき）の平均、開ループ）: 解除 0.15 m で 157 mm、
+/// 0.10 m で 115、0.08 m で 94（−40 %）、0.06 m で 78、0.05 m で 71。5 回とも改善。主因は、固定が反映できない床離れ直後の最初の動き（機体は上昇の最初の数 cm で 40〜95 mm 後ろへ動く）。
+/// 床の読みまでの余裕: 床の上の有効な読みの最大は 45 mm（机の試験）、モータ回転中（ARM 中）41〜43 mm、静止 39 mm。0.08 m は 35 mm の余裕、0.06 m は 15 mm、0.05 m は 5 mm。
+/// 読みは約 31 mm から有効（ヒストグラムの併合なし、跳びなし）。限界: 実機が飛んだ経路をそのまま使う再生で、制御器が早く効いたときの実際の動きは実機で確かめる（hardware_checkout.md）。
+inline constexpr float    kEstimatorReleaseHeightM  = 0.08f;     // [m]
 static_assert(kTakeoffGroundBandM < kEstimatorReleaseHeightM && kEstimatorReleaseHeightM <= kTakeoffAirborneBandM,
               "ground band < estimator release height <= airborne band (the release is never above the ground flag's own release)");
 
@@ -369,8 +378,8 @@ inline constexpr float    kTofInvalidLandingMinHeightM = 0.10f;  // [m]
 inline constexpr float    kLandingDeadZoneBandM  = kTofInvalidLandingMinHeightM;   // [m]
 inline constexpr uint32_t kLandingDeadZoneHoldMs = 200;                            // 0.2 s
 
-/// At rest while the ground flag of the takeoff/landing manager is true. While the flag is true ImuTask holds the vertical state at zero (applyVerticalGroundHandoff), and the flag stays true up to
-/// kTakeoffAirborneBandM after the craft has been below kTakeoffGroundBandM, so the estimated vertical velocity there is a held zero, not a measurement of rest; the ToF readings are the evidence
+/// At rest while the ground flag of the takeoff/landing manager is true. While the flag is true the estimated vertical velocity is a held zero (ImuTask pins the state below kEstimatorReleaseHeightM, applyVerticalGroundHandoff) or a just-released estimate (up to about 0.2 s old, between that height and
+/// kTakeoffAirborneBandM), and the flag stays true up to kTakeoffAirborneBandM after the craft has been below kTakeoffGroundBandM, so the velocity there is not a measurement of rest; the ToF readings are the evidence
 /// (TakeoffLandingMgr::atRest()). Two values, both CANDIDATES. (1) kLandingRestBandM [m]: how far the valid readings of the present run may spread. Basis: the velocity gate of the same detector
 /// (TakeoffLandingConfig::landing_vel_mps 0.05 m/s) over its shortest hold (stall_hold_ms 0.4 s) is 0.02 m, which equals kAutoTakeoffFloorRiseM (four times the ToF noise, 0.5 cm). A real craft
 /// that holds still keeps the readings of 0.8 s within 0.005 m (real log flip_test1, 0.045-0.050 m, 123.8-124.6 s). (2) kLandingRestHoldMs: how long the stillness must last where the readings

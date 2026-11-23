@@ -284,6 +284,95 @@ TEST(eskf_reset_position)
     ASSERT_NEAR(p.z, 0.0f, 1e-6f);
 }
 
+// The takeoff release (resetPositionVelocity) starts the velocity uncertainty at release_vel_std (0.3 m/s), apart from the boot value init_vel_std (0.1 m/s);
+// the position uncertainty stays init_pos_std. (detailed_design.md note 16)
+// 離陸の解除（resetPositionVelocity）は、速度の不確かさを release_vel_std（0.3 m/s）から始める。起動時の値 init_vel_std（0.1 m/s）とは別。位置の不確かさは init_pos_std のまま。
+TEST(eskf_release_uses_its_own_velocity_std_and_leaves_the_boot_value)
+{
+    sf::EskfCore eskf;
+    sf::EskfConfig cfg;
+    eskf.init(cfg);
+    ASSERT_NEAR(eskf.getPDiag(sf::VEL_X), cfg.init_vel_std * cfg.init_vel_std, 1e-6f);   // boot: 0.1 m/s / 起動: 0.1 m/s
+    for (int i = 0; i < 400; i++) {
+        eskf.predict(sf::math::Vec3(0, 0, -9.81f), sf::math::Vec3(0, 0, 0), 0.0025f);
+    }
+    eskf.resetPositionVelocity();
+    for (int axis = 0; axis < 3; axis++) {
+        ASSERT_NEAR(eskf.getPDiag(sf::VEL_X + axis), 0.3f * 0.3f, 1e-6f);
+        ASSERT_NEAR(eskf.getPDiag(sf::POS_X + axis), cfg.init_pos_std * cfg.init_pos_std, 1e-6f);
+    }
+    ASSERT_TRUE(cfg.release_vel_std > cfg.init_vel_std);
+}
+
+// Flow conversion height: the estimated height (floor 0.02 m) except for flow_tof_height_window_s (0.3 s) after the release, when the downward ToF reading is used if it is not older than
+// flow_tof_max_age_s (0.2 s). The ToF reading 1.0 m is rejected by the innovation gate (0.5 m), so the estimate stays near 0 and the two heights stay apart.
+// フローの換算の高さ: 推定の高さ（下限 0.02 m）。ただし解除から flow_tof_height_window_s（0.3 s）の間は、下向き ToF の読みが flow_tof_max_age_s（0.2 s）より古くなければそれを使う。
+// 1.0 m の ToF の読みはイノベーション判定（0.5 m）で棄却されるので、推定は 0 付近のままで、2 つの高さは離れたまま。
+TEST(eskf_flow_height_uses_the_tof_for_a_short_window_after_the_release)
+{
+    constexpr float kDt = 0.0025f;
+    constexpr float kTofPeriodS = 0.033f;
+    constexpr float kRejectedTofM = 1.0f;
+    sf::EskfCore eskf;
+    sf::EskfConfig cfg;
+    eskf.init(cfg);
+    const sf::math::Vec3 accel(0, 0, -9.81f);
+    const sf::math::Vec3 gyro(0, 0, 0);
+    float since_tof_s = 1.0f;
+    auto step = [&](bool feed_tof) {
+        eskf.predict(accel, gyro, kDt);
+        since_tof_s += kDt;
+        if (feed_tof && since_tof_s >= kTofPeriodS) { eskf.updateToF(kRejectedTofM); since_tof_s = 0.0f; }
+    };
+    for (int i = 0; i < 200; i++) step(true);                       // on the ground, ToF read but the window is not open / 地上: ToF は読むが窓は開いていない
+    ASSERT_NEAR(eskf.flowHeightM(), 0.02f, 1e-4f);                  // the estimated height, at its floor / 推定の高さ（下限）
+    eskf.resetPositionVelocity();                                   // the release / 解除
+    ASSERT_NEAR(eskf.flowHeightM(), kRejectedTofM, 1e-3f);          // the window opens: the ToF height / 窓が開く: ToF の高さ
+    for (int i = 0; i < 100; i++) step(true);                       // 0.25 s after the release, ToF fresh / 解除から 0.25 s、ToF は新しい
+    ASSERT_NEAR(eskf.flowHeightM(), kRejectedTofM, 1e-3f);
+    for (int i = 0; i < 40; i++) step(true);                        // 0.35 s: the window has closed / 窓は閉じた
+    ASSERT_NEAR(eskf.flowHeightM(), -eskf.getPosition().z < 0.02f ? 0.02f : -eskf.getPosition().z, 1e-4f);
+    ASSERT_TRUE(eskf.flowHeightM() < 0.5f);
+}
+
+TEST(eskf_flow_height_falls_back_to_the_estimate_when_the_tof_reading_is_stale)
+{
+    constexpr float kDt = 0.0025f;
+    sf::EskfCore eskf;
+    sf::EskfConfig cfg;
+    eskf.init(cfg);
+    const sf::math::Vec3 accel(0, 0, -9.81f);
+    const sf::math::Vec3 gyro(0, 0, 0);
+    eskf.updateToF(1.0f);                                           // one reading, then silence / 1 回読んで、あとは出力なし
+    eskf.resetPositionVelocity();
+    for (int i = 0; i < 40; i++) eskf.predict(accel, gyro, kDt);    // 0.10 s: not stale / まだ古くない
+    ASSERT_NEAR(eskf.flowHeightM(), 1.0f, 1e-3f);
+    for (int i = 0; i < 60; i++) eskf.predict(accel, gyro, kDt);    // 0.25 s: older than 0.2 s, inside the 0.3 s window / 0.2 s より古い、窓の中
+    ASSERT_NEAR(eskf.flowHeightM(), 0.02f, 1e-4f);
+}
+
+TEST(eskf_flow_height_window_is_off_when_configured_zero_and_closed_by_a_full_reset)
+{
+    constexpr float kDt = 0.0025f;
+    const sf::math::Vec3 accel(0, 0, -9.81f);
+    const sf::math::Vec3 gyro(0, 0, 0);
+    sf::EskfConfig off;
+    off.flow_tof_height_window_s = 0.0f;
+    sf::EskfCore eskf;
+    eskf.init(off);
+    eskf.updateToF(1.0f);
+    eskf.resetPositionVelocity();
+    eskf.predict(accel, gyro, kDt);
+    ASSERT_NEAR(eskf.flowHeightM(), 0.02f, 1e-4f);                  // 0 = off: the old formula / 0 = 無効: 従来の式
+    sf::EskfConfig on;
+    eskf.init(on);
+    eskf.updateToF(1.0f);
+    eskf.resetPositionVelocity();
+    eskf.reset();                                                   // a full reset forgets the release and the reading / 全リセットは解除も読みも忘れる
+    eskf.predict(accel, gyro, kDt);
+    ASSERT_NEAR(eskf.flowHeightM(), 0.02f, 1e-4f);
+}
+
 // =============================================================================
 // PID tests
 // PIDテスト
@@ -1949,10 +2038,10 @@ TEST(land_notice_clears_the_dead_zone_evidence_of_before_the_landing)
 }
 
 // -----------------------------------------------------------------------------
-// At rest while the estimate is HELD at zero. While the ground flag is true (set below kTakeoffGroundBandM, kept up to kTakeoffAirborneBandM) ImuTask holds the vertical state at zero, so the
-// injected velocity is 0 whatever the craft does: a craft that climbs or descends between 0.05 and 0.15 m reports "at rest". The evidence of rest is then the ToF itself (rest_band_m).
-// 推定が 0 に「固定」されている間の静止。接地フラグが true の間（kTakeoffGroundBandM 未満で立ち、kTakeoffAirborneBandM まで保たれる）、ImuTask は鉛直状態を 0 に固定するので、機体が何をしても
-// 注入される速度は 0: 0.05〜0.15 m を上昇または降下する機体も「静止」と報告する。そのときの静止の証拠は ToF そのもの（rest_band_m）。
+// At rest while the estimate is HELD at zero. While the ground flag is true (set below kTakeoffGroundBandM, kept up to kTakeoffAirborneBandM) ImuTask holds the vertical state at zero (below the estimator release height; above it a young estimate), so the
+// injected velocity is 0 (or a young estimate) whatever the craft does: a craft that climbs or descends between 0.05 and 0.15 m reports "at rest". The evidence of rest is then the ToF itself (rest_band_m).
+// 推定が 0 に「固定」されている間の静止。接地フラグが true の間（kTakeoffGroundBandM 未満で立ち、kTakeoffAirborneBandM まで保たれる）、ImuTask は鉛直状態を 0 に固定する（推定器の解除の高さより下。それより上は解除直後の推定）ので、機体が何をしても
+// 注入される速度は 0（か解除直後の推定）: 0.05〜0.15 m を上昇または降下する機体も「静止」と報告する。そのときの静止の証拠は ToF そのもの（rest_band_m）。
 // -----------------------------------------------------------------------------
 
 /// Feed a LANDING like ImuTask does (the notice first, then the sample), the ToF moving by step_m per sample, the velocity injected as the held zero.
@@ -2095,6 +2184,10 @@ int main()
     run_eskf_predict_freefall();
     run_eskf_tof_update();
     run_eskf_reset_position();
+    run_eskf_release_uses_its_own_velocity_std_and_leaves_the_boot_value();
+    run_eskf_flow_height_uses_the_tof_for_a_short_window_after_the_release();
+    run_eskf_flow_height_falls_back_to_the_estimate_when_the_tof_reading_is_stale();
+    run_eskf_flow_height_window_is_off_when_configured_zero_and_closed_by_a_full_reset();
     run_eskf_gyro_bias_deviation_clamp();
     run_autotune_fit_and_tune();
     run_autotune_fit_coherence_weighting();

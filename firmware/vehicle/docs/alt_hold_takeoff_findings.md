@@ -16,7 +16,7 @@ vehicle の制御・状態機械を読む人、および同種のドローン離
 
 ### 全体シーケンス
 
-ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロットル操作不要）。短いスプール整定の後、制御器が高度カスケードで目標 0.5m まで上昇して**目標値を捕捉**し、状態機械へ完了を通知して FLYING へ移る。ToF の 0.15m 空中検知は ESKF 鉛直ハンドオフ専用で、状態遷移のトリガには使わない。
+ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロットル操作不要）。短いスプール整定の後、制御器が高度カスケードで目標 0.5m まで上昇して**目標値を捕捉**し、状態機械へ完了を通知して FLYING へ移る。ToF の 0.15m 空中検知（接地フラグの空中側）は状態遷移のトリガには使わない。ESKF 鉛直ハンドオフは専用のより低い高さ（`kEstimatorReleaseHeightM` = 0.08 m、2026-11-23。`detailed_design.md` §3 注16）で行う。
 
 ![離陸シーケンス状態遷移図](figures/fig0_sequence.png)
 
@@ -32,7 +32,7 @@ ALT_HOLD/POS_HOLD の離陸は **ARM 自体がトリガ**になる（スロッ�
 |------|------|------|------|------|
 | ARM 受理 | 7.50 s | 0 m | IDLE_GROUND → ARMED_GROUND | プロペラ 0（Grounded フェーズ）、スプール整定 0.3 s 開始 |
 | スプール完了 → 離陸 | 7.84 s | 0 m | ARMED_GROUND → TAKEOFF | `notifyTakeoff()`、props on・上昇開始（TakeoffClimb フェーズ） |
-| ToF ハンドオフ | 8.64 s | 0.15 m | TAKEOFF | ESKF 鉛直リセット（クラスB, ImuTask）。推定が真値の追従を開始 |
+| ToF ハンドオフ | 8.64 s | 0.15 m（この記録の時点。解除の高さは 2026-11-23 から 0.08 m） | TAKEOFF | ESKF 鉛直リセット（クラスB, ImuTask）。推定が真値の追従を開始 |
 | 行き過ぎピーク | 10.1 s | **0.66 m** | TAKEOFF（TakeoffClimb） | 地上ToF なしの窓由来の運動量で目標 0.5m を超過 |
 | 目標捕捉 → FLYING | 11.5 s | **0.5 m**（→ ~0.54 m 整定） | TAKEOFF → FLYING | 制御器が目標を捕捉し `takeoff_reached` 通知 → ALT_HOLD 係合 |
 
@@ -92,9 +92,9 @@ TakeoffClimb は通常の ALT_HOLD と同じ 2 段カスケードを、目標 0.
 
 ### 地上ToF なしの窓（観測不能性）
 
-ESKF は離陸前、鉛直の位置・速度を **0 に固定（hold）**している。鉛直を見られる唯一のセンサ ToF が **約 0.15m 以上**でしか安定ロックしないためで、0.15m を超えた瞬間にハンドオフして実値へ切り替える。
+ESKF は離陸前、鉛直の位置・速度を **0 に固定（hold）**している。床の上では鉛直を見られる唯一のセンサ ToF が不感帯（約 31 mm 未満）で無効なため、固定しないと予測だけの状態がドリフトするからで、ToF の有効な読みが解除の高さ（`kEstimatorReleaseHeightM`）を超えた瞬間にハンドオフして実値へ切り替える。（**2026-11-23 の訂正**: 以前の記述「ToF は約 0.15 m 以上でしか安定ロックしない」は数値の裏付けが無かった。ToF のヒストグラム併合なしでは約 31 mm から有効で、読みの跳びは実機の記録に無い。床の上の有効な読みの最大は 45 mm、解除は 0.15 m から 0.08 m に下げた。）
 
-問題は、**離陸の最初の 0.15m（約 0.25 秒）の間、機体は物理的に加速して上がっているのに鉛直速度推定は 0 に凍っている**こと。内側ループは「指令 +0.3 m/s、推定速度 0」の誤差を出しっぱなしにして推力補正を上限まで張り付かせ、その間に機体は **~0.6 m/s** まで加速する。ハンドオフ後に推定速度が実値へ飛ぶと、運動量で目標 0.5m を **~0.66m まで超過**する（これは ESKF 設計に内在する過渡で、バグではない）。
+問題は、**離陸の最初の解除の高さまで（0.15 m の時代は約 0.25 秒、0.08 m では約 0.2 秒）、機体は物理的に加速して上がっているのに鉛直速度推定は 0 に凍っている**こと。以下の数値（0.6 m/s、0.66 m）は 0.15 m で解除していた時代の測定で、0.08 m での再測定は未確認（実機で確かめる項目、`hardware_checkout.md`）。内側ループは「指令 +0.3 m/s、推定速度 0」の誤差を出しっぱなしにして推力補正を上限まで張り付かせ、その間に機体は **~0.6 m/s** まで加速する。ハンドオフ後に推定速度が実値へ飛ぶと、運動量で目標 0.5m を **~0.66m まで超過**する（これは ESKF 設計に内在する過渡で、バグではない）。
 
 ### climb-only クランプが捕捉に失敗する理由
 
@@ -136,7 +136,7 @@ All figures are real measurements: matplotlib plots of actual SILS `trajectory.c
 
 ### Overall Sequence
 
-In ALT_HOLD/POS_HOLD, **ARM itself triggers the takeoff** (no throttle input). After a short spool dwell, the controller climbs the altitude cascade to the 0.5 m target, **captures the target value**, notifies the state machine, and moves to FLYING. The ToF 0.15 m airborne detection is for the ESKF vertical handoff only, not the state-transition trigger.
+In ALT_HOLD/POS_HOLD, **ARM itself triggers the takeoff** (no throttle input). After a short spool dwell, the controller climbs the altitude cascade to the 0.5 m target, **captures the target value**, notifies the state machine, and moves to FLYING. The ToF 0.15 m airborne detection (the airborne side of the ground flag) is not the state-transition trigger; the ESKF vertical handoff has its own lower height (`kEstimatorReleaseHeightM` = 0.08 m, 2026-11-23; `detailed_design.md` Note 16).
 
 ![Takeoff sequence state diagram](figures/fig0_sequence.png)
 
@@ -150,7 +150,7 @@ The figure below is a real SILS run (`alt_auto_takeoff`, noise off, deterministi
 |------|------|------|------|------|
 | ARM accepted | 7.50 s | 0 m | IDLE_GROUND → ARMED_GROUND | props 0 (Grounded phase), 0.3 s spool dwell starts |
 | spool done → takeoff | 7.84 s | 0 m | ARMED_GROUND → TAKEOFF | `notifyTakeoff()`, props on, climb starts |
-| ToF handoff | 8.64 s | 0.15 m | TAKEOFF | ESKF vertical reset (class-B, ImuTask); estimate tracks truth |
+| ToF handoff | 8.64 s | 0.15 m (at the time of this record; the release height is 0.08 m since 2026-11-23) | TAKEOFF | ESKF vertical reset (class-B, ImuTask); estimate tracks truth |
 | overshoot peak | 10.1 s | **0.66 m** | TAKEOFF (TakeoffClimb) | blind-window momentum overshoots the 0.5 m target |
 | target captured → FLYING | 11.5 s | **0.5 m** (settles ~0.54 m) | TAKEOFF → FLYING | controller captures target, `takeoff_reached` → ALT_HOLD |
 
@@ -196,7 +196,7 @@ TakeoffClimb runs the ALT_HOLD cascade toward 0.5 m, with the position-loop velo
 
 ### Ground blind window
 
-The ESKF holds vertical position/velocity at 0 on the ground (ToF only locks above ~0.15 m). For the first ~0.25 s of climb the velocity estimate is frozen at 0 while the craft physically accelerates; the velocity loop saturates the thrust correction and the craft reaches ~0.6 m/s by the handoff, then overshoots to ~0.66 m. This is inherent to the ESKF design, not a bug.
+The ESKF holds vertical position/velocity at 0 on the ground (the ToF is invalid in its dead zone below about 31 mm, and a predict-only state would drift). **Correction of 2026-11-23:** the earlier statement "ToF only locks above ~0.15 m" had no numbers behind it; with the ToF histogram merge off the reading is valid from about 31 mm and no jump is seen in the flight logs. The pin is released at `kEstimatorReleaseHeightM` (0.08 m; it was 0.15 m). For the first ~0.25 s of climb (about 0.2 s at 0.08 m) the velocity estimate is frozen at 0 while the craft physically accelerates; the velocity loop saturates the thrust correction and the craft reaches ~0.6 m/s by the handoff, then overshoots to ~0.66 m. These numbers were measured with the 0.15 m release; the re-measurement at 0.08 m is not done (a hardware check item). This is inherent to the ESKF design, not a bug.
 
 ### Why climb-only fails to capture
 

@@ -908,24 +908,27 @@ ControlOutput PidController::compute(
             // ascent is gentle and the position loop DECELERATES near the target —
             // the craft captures the target altitude with no overshoot. When it settles
             // there (takeoff_reached_), the controller reports completion and the state
-            // machine moves TAKEOFF→FLYING. The ToF 0.15m airborne edge is the ESKF
-            // vertical handoff only (ImuTask), independent of this.
+            // machine moves TAKEOFF→FLYING. The ToF 0.15m airborne edge of the ground flag is
+            // not a trigger of this; the ESKF vertical handoff (ImuTask) has its own, lower
+            // height (kEstimatorReleaseHeightM), independent of this.
             // 自動離陸: 高度カスケードが alt_setpoint_（onTakeoff で設定した目標）へ上昇し、
             // 速度を takeoff_climb_rate_ に制限する — 上昇は穏やかで、目標近傍で位置ループが
             // 減速し、機体はオーバーシュートなく目標高度を捕捉する。そこに整定したら
             // （takeoff_reached_）制御器が完了を報告し、状態機械が TAKEOFF→FLYING を進める。
-            // ToF 0.15m 空中エッジは ESKF 鉛直ハンドオフ専用（ImuTask）でこれとは独立。
+            // 接地フラグの ToF 0.15m 空中エッジはこれのトリガではない。ESKF 鉛直ハンドオフ（ImuTask）は
+            // 専用のより低い高さ（kEstimatorReleaseHeightM）で、これとは独立。
             float vel_sp_z = alt_pos_.compute(alt_setpoint_, altitude, dt);
             // Clamp the climb/correction to the gentle takeoff rate (both directions):
             // the position loop decelerates as the target nears and corrects a small
             // overshoot DOWN to the target — capturing 0.5m exactly, not the peak. The
             // overshoot comes from the brief blind window below the ToF handoff (the
-            // ESKF holds vertical velocity at 0 until ~0.15m), so we must let the loop
+            // ESKF holds vertical velocity at 0 until the release height kEstimatorReleaseHeightM,
+            // 0.08 m, and for a few samples after it the velocity is still pulled in), so we must let the loop
             // settle back, not clamp descent to zero.
             // 上昇/補正を穏やかな離陸率（両方向）にクランプ: 位置ループが目標近傍で減速し、
             // 小さな行き過ぎを目標まで下方修正する — ピークでなく 0.5m を正確に捕捉する。
-            // 行き過ぎは ToF ハンドオフ未満の短いToF なしの窓（ESKF は ~0.15m まで鉛直速度を
-            // 0 に保持）に由来するため、降下を 0 にクランプせずループを戻らせる必要がある。
+            // 行き過ぎは ToF ハンドオフ未満の短いToF なしの窓（ESKF は解除の高さ kEstimatorReleaseHeightM、
+            // 0.08 m まで鉛直速度を 0 に保持し、解除の後も数サンプルは速度を取り込み中）に由来するため、降下を 0 にクランプせずループを戻らせる必要がある。
             if (vel_sp_z >  takeoff_climb_rate_) vel_sp_z =  takeoff_climb_rate_;
             if (vel_sp_z < -takeoff_climb_rate_) vel_sp_z = -takeoff_climb_rate_;
             vel_sp_z = limitClimbAboveCeiling(vel_sp_z, altitude);   // the auto-takeoff never climbs above the ceiling + margin / 自動離陸は上限 + 余裕を超えて上昇しない
@@ -1912,12 +1915,12 @@ void PidController::updateBlindStartFilters(const StateEstimate& state, float th
 /// Advance the vertical velocity estimate by one cycle (every armed cycle, every phase).
 /// The estimate FOLLOWS the ESKF vertical velocity (a second-order observer, not a copy) only when the ToF is
 /// healthy and consumed (not tof_silent) and its vertical
-/// state is free (state.airborne: not pinned at zero by the on-ground hold); at rest on the ground
+/// state is known to be free (state.airborne, the conservative reading: the estimator may run a little earlier, detailed_design.md note 16); at rest on the ground
 /// (phase Grounded and the commanded thrust below kVerticalVelocityRestThrustFrac of the hover thrust)
 /// the value is 0; otherwise the accelerometer integral runs (rules 1-3, vertical_velocity_estimator.hpp).
 /// 鉛直速度の推定を 1 周期進める（ARM 中は毎周期・全フェーズ）。ESKF の鉛直速度に「追従」する（2 次のオブザーバ。値の
 /// 写しではない）のは、ToF が健全で取り込み済み
-/// （tof_silent でない）かつ鉛直状態が自由（state.airborne: 接地ホールドで 0 固定でない）のときだけ。地上で静止
+/// （tof_silent でない）かつ鉛直状態が確実に自由（state.airborne。保守的な読み: 推定器はもう少し早く動くことがある。detailed_design.md 注16）のときだけ。地上で静止
 /// （フェーズ Grounded で、指令推力が hover 推力の kVerticalVelocityRestThrustFrac 倍未満）なら 0。
 /// それ以外は加速度計の積分（規則 1〜3、vertical_velocity_estimator.hpp）。
 /// @design detailed_design.md §3.1 — ToF silent: blind descent by vertical-velocity loop [OK]

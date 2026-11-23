@@ -69,6 +69,15 @@ struct EskfConfig {
     // Initial covariance / 初期共分散
     float init_pos_std     = 0.1f;        // [m]
     float init_vel_std     = 0.1f;        // [m/s]
+    // Uncertainty of the horizontal/vertical VELOCITY at the takeoff release (resetPositionVelocity()), apart from init_vel_std (the boot value, unchanged).
+    // At 0.08 m the craft already moves (the true velocity is a few tenths of m/s; the reset puts 0), so 0.1 m/s overstated the confidence in 0: the flow update was
+    // too stiff to pull the velocity to the measurement. 0.3 m/s: the study of the five flights of 2026-11-23 (offline replay of the flight ESKF, the velocity error after
+    // the release 15-20 % smaller than with 0.1). A fixed constant like init_*_std, not a parameter: it is the initial uncertainty of a state, not a noise the pilot tunes.
+    // 離陸の解除（resetPositionVelocity()）での水平・鉛直「速度」の不確かさ。init_vel_std（起動時の値。変えない）とは別。0.08 m では機体はすでに動いている（真の速度は
+    // 数 0.1 m/s、リセットは 0 を置く）ので、0.1 m/s は速度の共分散を小さく見せ（0 を信用しすぎる）、フローの更新が速度を測定値へ十分に寄せられなかった。0.3 m/s: 2026-11-23 の飛行 5 回の
+    // 検討（実機のフライト ESKF のオフライン再生。解除後の速度の追従の誤差が 0.1 より 15〜20 % 小さい）。init_*_std と同じ固定の定数で、パラメータにしない:
+    // 状態の初期の不確かさであって、操縦者が調整する雑音ではない。
+    float release_vel_std  = 0.3f;        // [m/s]
     float init_att_std     = 0.1f;        // [rad]
     float init_bg_std      = 0.01f;       // [rad/s]
     float init_ba_std      = 0.1f;        // [m/s²]
@@ -98,6 +107,14 @@ struct EskfConfig {
     // Flow / フロー
     float flow_rad_per_pixel = 0.00222f;
     float flow_gyro_scale    = 1.0f;
+    // The optical-flow velocity is height x angular flow. Just after the takeoff release the ESTIMATED height still lags the true one (the estimate starts at 0 and the ToF
+    // pulls it up over a few samples), which scales the velocity down (0.13-0.4 times at 0.05-0.10 m). For this long after the release the height of the conversion is the downward
+    // ToF reading (tilt-corrected) instead, when the last valid reading is not older than flow_tof_max_age_s; otherwise the estimated height as before. 0 = off.
+    // オプティカルフローの速度は 高さ × 角度のフロー。離陸の解除の直後は「推定の」高さがまだ真の高さに遅れる（推定は 0 から始まり、ToF の更新が数サンプルで真の高さへ寄せる）ので、
+    // 速度を小さく見積もる（0.05〜0.10 m で 0.13〜0.4 倍）。解除からこの時間の間は、換算の高さを下向き ToF の読み（傾き補正済み）にする。最後の有効な読みが
+    // flow_tof_max_age_s より古ければ、従来どおり推定の高さ。0 = 無効。
+    float flow_tof_height_window_s = 0.3f;   // [s] after the release / 解除から
+    float flow_tof_max_age_s       = 0.2f;   // [s] oldest usable ToF reading / 使える ToF の読みの最大の古さ
     float flow_min_height    = 0.02f;
     float flow_innov_clamp   = 0.3f;
     // Minimum PMW3901 surface quality (SQUAL) to fuse a flow sample. Low-quality
@@ -179,8 +196,16 @@ public:
     /// Reset all state / 全状態リセット
     void reset();
 
-    /// Reset position and velocity only / 位置・速度のみリセット
+    /// Reset position and velocity only (the takeoff release): position std init_pos_std, velocity std release_vel_std, and the clock of the flow-height window starts.
+    /// 位置・速度のみリセット（離陸の解除）: 位置の不確かさは init_pos_std、速度は release_vel_std。フローの高さの窓の時計が始まる。
     void resetPositionVelocity();
+
+    /// Height [m] that the optical-flow velocity is converted with: for flow_tof_height_window_s after resetPositionVelocity() the tilt-corrected downward-ToF reading
+    /// (when it is not older than flow_tof_max_age_s), otherwise the estimated height; never below 0.02 m.
+    /// オプティカルフローの速度の換算に使う高さ [m]: resetPositionVelocity() から flow_tof_height_window_s の間は傾き補正した下向き ToF の読み（flow_tof_max_age_s より古くないとき）、
+    /// それ以外は推定の高さ。0.02 m 未満にはしない。
+    /// @design detailed_design.md §3 注16 — flow height right after the estimator release [OK]
+    float flowHeightM() const;
 
     /// Inflate covariance for the states selected by `state_mask` (bit i = StateIdx i):
     /// set each selected diagonal back to its init value and zero its cross-covariance,
@@ -310,6 +335,13 @@ private:
 
     // Config / 設定
     EskfConfig cfg_;
+
+    // Flow-height window (flowHeightM): the last valid downward-ToF reading and the times since it and since resetPositionVelocity() [s]. Advanced by predict(); kNeverS = never.
+    // フローの高さの窓（flowHeightM）: 最後の有効な下向き ToF の読みと、それから・resetPositionVelocity() からの経過時間 [s]。predict() が進める。kNeverS = 一度もない。
+    static constexpr float kNeverS = 1.0e9f;
+    float last_tof_distance_m_ = 0.0f;
+    float since_tof_s_         = kNeverS;
+    float since_release_s_     = kNeverS;
 
     // Gyro-bias nominal for the deviation clamp (= boot calibration measurement;
     // {0,0,0} until seeded). See EskfConfig::bg_deviation_max.

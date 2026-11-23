@@ -2,14 +2,14 @@
 #                              上昇中だけ水平の突風を受ける API `takeoff`: 保持の目標は完了の時点の推定でなく、発進点
 #
 # The craft takes off with the API `takeoff` (POS_HOLD), holds 0.5 m and lands with `land`. A horizontal force of 0.04 N behind the craft acts only while it climbs: it is set at 7.15 s (0.15 m up,
-# just after the estimator releases its position / velocity pin at 7.14 s) and cleared at 7.85 s (the takeoff completes at about 7.9 s). The force is on the true -East axis (`wind 0 -0.04 0`):
+# after the estimator released its position / velocity pin at 6.90 s, at 0.08 m: kEstimatorReleaseHeightM since 2026-11-23, before it was 7.20 s at 0.15 m) and cleared at 7.85 s (the takeoff completes at about 7.9 s). The force is on the true -East axis (`wind 0 -0.04 0`):
 # the SILS craft faces true East at boot (truth quaternion yaw +90 deg) and the estimator's north is the craft's forward, so this is BEHIND the craft, the direction of the flight of 2026-11-22
 # (an estimate of 0.09 m behind). At the completion the craft is 0.23 m from its launch point (truth) and the estimate reads 0.15 m behind the release point. Before the fix ApiTask seeded the
 # guidance target at that estimate: the estimate stayed at -0.18 .. -0.11 m for the whole hold and the craft landed 0.22 m from the launch point. After it the guidance target is the controller's hold
 # point (the release point, estimate 0): the estimate stays within -0.03 .. +0.06 m and the craft lands 0.04 m from the launch point. Spec under test: detailed_design.md §3.1 note 4 item 4 (2026-11-22).
 # SILS has no flow-sensor error at low height, so this checks HOW the target is taken, not the size of the drift of a real flight.
 #
-# API の `takeoff`（POS_HOLD）で離陸し、0.5 m を保持して `land` で着陸する。機体の後ろ向きの水平力 0.04 N を上昇中だけ加える: 7.15 s（0.15 m 上昇、推定器が 7.14 s に位置・速度の固定を解いた直後）に
+# API の `takeoff`（POS_HOLD）で離陸し、0.5 m を保持して `land` で着陸する。機体の後ろ向きの水平力 0.04 N を上昇中だけ加える: 7.15 s（0.15 m 上昇。推定器は 6.90 s、0.08 m で位置・速度の固定を解いた後。解除の高さ kEstimatorReleaseHeightM は 2026-11-23 から 0.08 m、それまでは 0.15 m の 7.20 s）に
 # 加え、7.85 s（離陸の完了は約 7.9 s）に外す。力は真の -East 軸（`wind 0 -0.04 0`）: SILS の機体は起動時に真の East を向き（真値クォータニオンのヨー +90 度）、推定器の北は機体の前方なので、
 # 機体の後ろ向きで、2026-11-22 の飛行（推定で後ろへ 0.09 m）と同じ向き。完了のとき、機体は離陸点から 0.23 m（真値）にいて、推定は解除の点から 0.15 m 後ろを示す。修正前は ApiTask がその推定を
 # 誘導目標にした: 保持の間じゅう推定は -0.18〜-0.11 m に留まり、機体は離陸点から 0.22 m の所に着陸した。修正後の誘導目標は制御器の保持点（解除の点、推定 0）: 推定は -0.03〜+0.06 m に収まり、
@@ -21,7 +21,7 @@
 #  <t>  ch    <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
    0    rc    2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes (t=0-6)
    +    api   "command"                                          # B: enter SDK mode (t=6)
-   +    api   "takeoff"                                          # C: takeoff -> TAKEOFF at about 6.3 s, the estimator releases its pin at 7.14 s (0.15 m)
+   +    api   "takeoff"                                          # C: takeoff -> TAKEOFF at about 6.3 s, the estimator releases its pin at 6.90 s (0.08 m; 7.20 s at 0.15 m before 2026-11-23)
    +    rc    2048  2048   2048    2048  0     1150      50      # D: climb until just after the release (t=6-7.15)
    +    wind  0.0 -0.04 0.0                                      # E: gust ON: 0.04 N behind the craft (true -East), the climb only
    +    rc    2048  2048   2048    2048  0     700       50      # F: climb under the gust to 0.5 m (t=7.15-7.85); the takeoff completes at about 7.9 s

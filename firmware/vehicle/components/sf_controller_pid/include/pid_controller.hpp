@@ -154,7 +154,8 @@ private:
     //                  vertical channel is automated. The cascade decelerates near the
     //                  target, so the craft CAPTURES it (no overshoot); isTakeoffComplete()
     //                  reports it and the state machine moves TAKEOFF→FLYING. The ToF
-    //                  0.15m airborne edge is the ESKF vertical handoff only (ImuTask).
+    //                  0.15m airborne edge is the ground flag's (not a takeoff trigger); the ESKF
+    //                  vertical handoff (ImuTask) has its own lower height, kEstimatorReleaseHeightM.
     //   Airborne     — normal mode law. ALT_HOLD holds the target captured at takeoff,
     //                  or the current altitude on an in-flight switch into ALT/POS
     //                  (onModeChange). STABILIZE/ACRO ignore the phase (manual throttle).
@@ -778,12 +779,12 @@ private:
     float takeoff_climb_rate_ = 0.3f;     // [m/s] upward / 上向き上昇率
 
     // Auto-takeoff target altitude (TakeoffClimb phase, ALT/POS): the hover height after
-    // an auto-takeoff, high enough to clear ground effect (0.15m ToF airborne is the ESKF
-    // handoff, NOT this control target). The value is sf::limits::kAutoTakeoffTargetAltitudeM,
+    // an auto-takeoff, high enough to clear ground effect (the 0.15m ToF airborne edge of the ground
+    // flag and the ESKF handoff height kEstimatorReleaseHeightM are NOT this control target). The value is sf::limits::kAutoTakeoffTargetAltitudeM,
     // shared with the API takeoff, which seeds its guidance target at the same height; the
     // altitude ceiling (sf::limits::kAltitudeCeilingM) bounds it at build time.
     // 自動離陸の目標高度（TakeoffClimb フェーズ, ALT/POS）: 自動離陸後のホバー高度。地面効果を
-    // 抜ける高さ（0.15m ToF 空中検知は ESKF ハンドオフであってこの制御目標ではない）。値は
+    // 抜ける高さ（接地フラグの 0.15m ToF 空中検知と ESKF ハンドオフの高さ kEstimatorReleaseHeightM はこの制御目標ではない）。値は
     // sf::limits::kAutoTakeoffTargetAltitudeM で、API の離陸と共有する（API は誘導目標を同じ高さで
     // 初期化する）。高度上限（sf::limits::kAltitudeCeilingM）がビルド時にこれを縛る。
     static constexpr float kTakeoffTargetAltM = limits::kAutoTakeoffTargetAltitudeM;   // [m] / 目標高度

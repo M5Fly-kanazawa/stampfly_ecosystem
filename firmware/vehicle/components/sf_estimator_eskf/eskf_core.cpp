@@ -59,6 +59,8 @@ void EskfCore::reset()
     ba_ = {0, 0, 0};
     bg_nominal_ = {0, 0, 0};   // re-anchored by the next calibration seed / 次の校正種付けで再固定
     ang_rate_ = {0, 0, 0};
+    since_tof_s_     = kNeverS;   // no ToF reading, no release yet (flow-height window) / ToF の読みも解除もまだ無い（フローの高さの窓）
+    since_release_s_ = kNeverS;
 
     // Initialize P with config standard deviations
     // 設定の標準偏差でPを初期化
@@ -121,9 +123,10 @@ void EskfCore::resetPositionVelocity()
     have_flow_vel_ = false;
     flow_vel_lpf_  = {0, 0, 0};
     a_kin_ned_     = {0, 0, 0};
+    since_release_s_ = 0.0f;   // the flow-height window opens (flowHeightM) / フローの高さの窓が開く（flowHeightM）
     for (int i = 0; i < 3; i++) {
         P_.set_diag(POS_X + i, cfg_.init_pos_std * cfg_.init_pos_std);
-        P_.set_diag(VEL_X + i, cfg_.init_vel_std * cfg_.init_vel_std);
+        P_.set_diag(VEL_X + i, cfg_.release_vel_std * cfg_.release_vel_std);   // the release value, not the boot one / 起動時でなく解除の値
         // Zero cross-covariance with position/velocity
         // 位置/速度のクロス共分散をゼロ化
         for (int j = 0; j < N; j++) {
@@ -226,6 +229,11 @@ void EskfCore::reacquireVertical()
 void EskfCore::predict(const Vec3& accel_raw, const Vec3& gyro_raw, float dt)
 {
     accel_lpf_dt_ = dt;   // for the accel-attitude LPF (same IMU cycle) / accel 姿勢 LPF 用
+
+    // Clocks of the flow-height window; saturating, so a long flight never overflows them.
+    // フローの高さの窓の時計。飽和させるので、長い飛行でもあふれない。
+    since_tof_s_     = (since_tof_s_     < kNeverS) ? since_tof_s_     + dt : kNeverS;
+    since_release_s_ = (since_release_s_ < kNeverS) ? since_release_s_ + dt : kNeverS;
 
     // Flip re-acquisition timeout (flip-maneuver-plan.md §3.6): predict() runs every
     // IMU cycle regardless of the hold state, so it is the natural clock for the
@@ -604,6 +612,11 @@ void EskfCore::updateToF(float distance)
 {
     last_tof_ = ToFObservation{};   // not adopted until the sample passes every gate / 全判定を通るまで未採用
     if (!cfg_.use_tof) return;
+
+    // Keep the reading for the flow-height window (flowHeightM), before the gates: the window wants the raw reading even when the fusion rejects it.
+    // フローの高さの窓（flowHeightM）のために読みを保つ（判定の前）: 融合が棄却しても、窓は生の読みを使いたい。
+    last_tof_distance_m_ = distance;
+    since_tof_s_         = 0.0f;
 
     // Tilt check / 傾きチェック
     Vec3 euler = q_.to_euler();
@@ -1001,6 +1014,18 @@ void EskfCore::recomputeActiveMask()
     if (freeze_accel_bias_) {
         active_mask_ &= ~((1 << BA_X) | (1 << BA_Y) | (1 << BA_Z));
     }
+}
+
+float EskfCore::flowHeightM() const
+{
+    constexpr float kMinFlowHeightM = 0.02f;   // the floor of the conversion height (as before) / 換算の高さの下限（従来どおり）
+    float height_m = -pos_.z;
+    const bool in_window = since_release_s_ < cfg_.flow_tof_height_window_s;
+    if (in_window && since_tof_s_ < cfg_.flow_tof_max_age_s) {
+        const Vec3 euler = q_.to_euler();
+        height_m = last_tof_distance_m_ * cosf(euler.x) * cosf(euler.y);
+    }
+    return height_m < kMinFlowHeightM ? kMinFlowHeightM : height_m;
 }
 
 void EskfCore::setFreezeAccelBias(bool freeze)

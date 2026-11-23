@@ -256,12 +256,14 @@ TEST(with_equal_heights_the_release_equals_not_on_the_ground_on_every_sample_of_
     ASSERT_TRUE(edges >= 6);              // each takeoff segment releases at least once / 離陸の区間ごとに 1 回は解除
 }
 
-TEST(with_its_own_height_the_release_comes_earlier_on_every_real_takeoff_and_re_holds_with_the_ground_flag)
+TEST(with_its_own_height_the_release_is_never_later_than_the_ground_flag_and_is_dropped_on_the_same_sample_that_sets_it)
 {
     size_t takeoffs_checked = 0;
+    size_t rehold_edges = 0;
     for (const flight_samples::Segment& segment : flight_samples::kSegments) {
         sf::TakeoffLandingMgr own = makeManager(kLowRelease);
         sf::TakeoffLandingMgr same = makeManager(kAirborneM);
+        bool previous_on_ground = own.isOnGround();
         for (size_t i = 0; i < segment.count; ++i) {
             const bool valid = segment.mm[i] >= 0;
             const float distance = valid ? static_cast<float>(segment.mm[i]) / 1000.0f : 0.0f;
@@ -269,11 +271,48 @@ TEST(with_its_own_height_the_release_comes_earlier_on_every_real_takeoff_and_re_
             sample(same, distance, valid);
             ASSERT_TRUE(own.isOnGround() == same.isOnGround());               // the ground flag is untouched by the new height / 接地フラグは新しい高さの影響を受けない
             ASSERT_TRUE(!same.isEstimatorReleased() || own.isEstimatorReleased());   // earlier or together, never later / 同時か早い、遅くはならない
-            ASSERT_TRUE(!(!own.isOnGround()) || own.isEstimatorReleased());   // airborne side reached -> already released / 空中側に届いたら解除済み
+            ASSERT_TRUE(own.isOnGround() || own.isEstimatorReleased());       // airborne side reached -> already released / 空中側に届いたら解除済み
+            if (!previous_on_ground && own.isOnGround()) {                    // the sample that sets the ground flag again (a landing) / 接地フラグが再び立つ標本（着陸）
+                ASSERT_TRUE(!own.isEstimatorReleased());                      // drops the release on that very sample: the pin is back / まさにその標本で解除が下りる: 固定が戻る
+                ++rehold_edges;
+            }
+            previous_on_ground = own.isOnGround();
         }
         ++takeoffs_checked;
     }
+    printf("(%zu re-hold edges) ", rehold_edges);
     ASSERT_TRUE(takeoffs_checked == sizeof(flight_samples::kSegments) / sizeof(flight_samples::kSegments[0]));
+    ASSERT_TRUE(rehold_edges >= 3);                                           // the landing segments really contain the edge / 着陸の区間は本当にそのエッジを含む
+}
+
+TEST(with_the_default_height_each_real_takeoff_is_released_at_the_first_reading_above_it_and_never_on_the_floor)
+{
+    constexpr float kFloorMarginM = 0.030f;   // the largest valid reading on the floor was 0.045 m: the release height keeps at least this much above it / 床の上の有効な読みの最大は 0.045 m: 解除の高さはそれより少なくともこれだけ上
+    ASSERT_TRUE(sf::limits::kEstimatorReleaseHeightM >= 0.045f + kFloorMarginM);
+    size_t takeoffs = 0;
+    for (const flight_samples::Segment& segment : flight_samples::kSegments) {
+        const bool is_takeoff = segment.name[3] == 't' || segment.name[4] == 't';   // "sN_takeoff" / "sNN_takeoff"
+        if (!is_takeoff) continue;
+        sf::TakeoffLandingMgr mgr;
+        mgr.init();                          // the default config: the real release height / 既定の設定: 本当の解除の高さ
+        float highest_valid_before_release_m = 0.0f;
+        bool released_seen = false;
+        for (size_t i = 0; i < segment.count; ++i) {
+            const bool valid = segment.mm[i] >= 0;
+            const float distance = valid ? static_cast<float>(segment.mm[i]) / 1000.0f : 0.0f;
+            sample(mgr, distance, valid);
+            if (!released_seen && mgr.isEstimatorReleased()) {
+                released_seen = true;
+                ASSERT_TRUE(valid && distance > sf::limits::kEstimatorReleaseHeightM);   // set by that very reading / まさにその読みで立つ
+                ASSERT_TRUE(!mgr.isOnGround() || distance <= sf::limits::kTakeoffAirborneBandM);   // never later than the ground flag / 接地フラグより遅れない
+            }
+            if (!released_seen && valid && distance > highest_valid_before_release_m) highest_valid_before_release_m = distance;
+        }
+        ASSERT_TRUE(released_seen);
+        ASSERT_TRUE(highest_valid_before_release_m <= sf::limits::kEstimatorReleaseHeightM);     // the floor readings (ARM, motors spinning) never came close / 床の読みは近づかない
+        ++takeoffs;
+    }
+    ASSERT_TRUE(takeoffs == 6);
 }
 
 // ----------------------------------------------------------------------------
@@ -305,7 +344,8 @@ int main()
     run_release_is_set_by_mark_airborne_and_cleared_by_disarm();
     run_release_is_cleared_by_every_disarmed_cycle_after_a_flight();
     run_with_equal_heights_the_release_equals_not_on_the_ground_on_every_sample_of_the_real_flights();
-    run_with_its_own_height_the_release_comes_earlier_on_every_real_takeoff_and_re_holds_with_the_ground_flag();
+    run_with_its_own_height_the_release_is_never_later_than_the_ground_flag_and_is_dropped_on_the_same_sample_that_sets_it();
+    run_with_the_default_height_each_real_takeoff_is_released_at_the_first_reading_above_it_and_never_on_the_floor();
     run_constants_keep_the_order_ground_band_below_release_height_below_or_at_the_airborne_side();
 
     printf("\n=== Results: %d run, %d passed, %d failed ===\n", tests_run, tests_passed, tests_failed);

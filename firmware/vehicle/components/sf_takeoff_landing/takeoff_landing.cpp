@@ -34,8 +34,8 @@ void TakeoffLandingMgr::init()
 {
     config_ = TakeoffLandingConfig{};
     configureBlindTouchdown();
-    ESP_LOGI(TAG, "TakeoffLandingMgr initialized (ground=%.2fm, airborne=%.2fm)",
-             config_.ground_tof_m, config_.airborne_tof_m);
+    ESP_LOGI(TAG, "TakeoffLandingMgr initialized (ground=%.2fm, estimator release=%.2fm, airborne=%.2fm)",
+             config_.ground_tof_m, config_.estimator_release_tof_m, config_.airborne_tof_m);
 }
 
 // -----------------------------------------------------------------------------
@@ -46,7 +46,9 @@ void TakeoffLandingMgr::init(const TakeoffLandingConfig& config)
 {
     config_ = config;
     configureBlindTouchdown();
-    ESP_LOGI(TAG, "TakeoffLandingMgr initialized (custom config)");
+    ESP_LOGI(TAG, "TakeoffLandingMgr initialized (custom config: ground=%.2fm, estimator release=%.2fm, airborne=%.2fm)",
+             static_cast<double>(config_.ground_tof_m), static_cast<double>(config_.estimator_release_tof_m),
+             static_cast<double>(config_.airborne_tof_m));
 }
 
 // -----------------------------------------------------------------------------
@@ -96,9 +98,10 @@ void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_ve
 // evaluateToF — determine ground contact from the injected ToF distance
 // ToF評価 — 注入された ToF 距離から地面接地を判定
 //
-// on_ground_ drives TAKEOFF→FLYING (state_task, via the published airborne flag)
-// and the ESKF vertical handoff (imu_task, on the ground↔air edge). The two
-// directions are treated ASYMMETRICALLY (M-6):
+// on_ground_ drives TAKEOFF→FLYING (state_task, via the published airborne flag) and the
+// other users of the ground flag; the ESKF vertical handoff (imu_task) uses the separate
+// estimator_released_ fact set below, immediately like the ground→air flip. The two
+// directions of on_ground_ are treated ASYMMETRICALLY (M-6):
 //   - ground→air (takeoff): IMMEDIATE. The handoff is a sample-precision class-B
 //     reset (architecture.md §4); debouncing it delays the handoff and degrades
 //     the take-off transient (measured duty_max 0.80 → 1.0). A spurious ground
@@ -107,8 +110,9 @@ void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_ve
 //   - air→ground (false-ground mid-flight / landing): DEBOUNCED. A single near
 //     reflection cannot assert "on ground"; landing has landing_hold_ms
 //     downstream so the ~66ms confirm is negligible.
-// on_ground_ は TAKEOFF→FLYING（state_task、airborne フラグ経由）と ESKF 鉛直
-// ハンドオフ（imu_task、接地↔空中エッジ）を駆動する。2方向を非対称に扱う (M-6):
+// on_ground_ は TAKEOFF→FLYING（state_task、airborne フラグ経由）と接地フラグのほかの使い手を
+// 駆動する。ESKF 鉛直ハンドオフ（imu_task）は、下で立てる別の事実 estimator_released_ を使い、
+// 接地→空中の反転と同じく即時に立つ。on_ground_ の2方向を非対称に扱う (M-6):
 //   - ground→air（離陸）= 即時。ハンドオフはサンプル精度のクラスB reset（§4）で、
 //     デバウンスすると遅延し離陸過渡が劣化（実測 duty_max 0.80→1.0）。地上ゴーストで
 //     空中へ誤反転する害は限定的（TAKEOFF は throttle>0.5 が前提、地上ハンドオフ reset は
@@ -152,7 +156,7 @@ void TakeoffLandingMgr::evaluateToF(const TofData& tof)
         if (ground_streak_ < 255) ++ground_streak_;
         if (ground_streak_ >= config_.flip_confirm_samples) {
             on_ground_ = true;
-            estimator_released_ = false;   // re-hold with the ground flag (a LEVEL: also after a hop that never reached airborne_tof_m) / 接地フラグと一緒に再び固定（レベル: airborne_tof_m に届かなかったホップの後も）
+            estimator_released_ = false;   // re-hold with the ground flag (a LEVEL: also after a hop that never reached airborne_tof_m) / 接地フラグと一緒に再び固定（レベル: airborne_tof_m に届かなかった床から小さく浮いただけの機体の後も）
         }
     } else {
         // Hysteresis band between the thresholds: hold the flag, reset the streak.
@@ -236,12 +240,12 @@ void TakeoffLandingMgr::detectLanding(float vertical_velocity, bool in_landing_d
 // atRest — is the craft at rest, judged from evidence that is not a held zero?
 // 静止か — 固定された 0 ではない証拠から判定する
 //
-// While the ground flag is false the injected vertical velocity is the estimator's own, so it is the evidence. While the flag is true ImuTask HOLDS the vertical state at zero
-// (applyVerticalGroundHandoff), and the flag stays true up to kTakeoffAirborneBandM (0.15 m) after a craft has been below kTakeoffGroundBandM: a craft that climbs or descends at 0.2-0.4 m/s
-// between 0.05 and 0.15 m then reports 0 m/s, which is not a measurement. There the evidence is the ToF itself (trackRest()): the readings of the present run stay within rest_band_m.
-// 接地フラグが false の間、注入される鉛直速度は推定器自身のものなので、それが証拠になる。フラグが true の間は ImuTask が鉛直状態を 0 に「固定」し（applyVerticalGroundHandoff）、
-// フラグは一度 kTakeoffGroundBandM を下回った機体では kTakeoffAirborneBandM（0.15 m）まで true のままなので、0.05〜0.15 m で 0.2〜0.4 m/s で上昇または降下する機体も 0 m/s を報告する。
-// それは測定ではない。そこでの証拠は ToF そのもの（trackRest()）: 今の区間の読みが rest_band_m の中に収まっている。
+// While the ground flag is false the injected vertical velocity is the estimator's own, so it is the evidence. While the flag is true the vertical state is either HELD at zero by ImuTask (below the estimator release height,
+// applyVerticalGroundHandoff) or a just-released estimate that is still pulled in (between that height and airborne_tof_m), and the flag stays true up to kTakeoffAirborneBandM (0.15 m) after a craft has been below kTakeoffGroundBandM: a craft that climbs or descends at 0.2-0.4 m/s
+// between 0.05 and 0.15 m then reports 0 m/s or a young estimate, neither is a measurement of rest. There the evidence is the ToF itself (trackRest()): the readings of the present run stay within rest_band_m.
+// 接地フラグが false の間、注入される鉛直速度は推定器自身のものなので、それが証拠になる。フラグが true の間、鉛直状態は ImuTask が 0 に「固定」している（推定器の解除の高さより下。applyVerticalGroundHandoff）か、解除したばかりで取り込み中の推定（その高さと airborne_tof_m の間）であり、
+// フラグは一度 kTakeoffGroundBandM を下回った機体では kTakeoffAirborneBandM（0.15 m）まで true のままなので、0.05〜0.15 m で 0.2〜0.4 m/s で上昇または降下する機体も 0 m/s か解除直後の推定を報告する。
+// どちらも静止の測定ではない。そこでの証拠は ToF そのもの（trackRest()）: 今の区間の読みが rest_band_m の中に収まっている。
 //
 // @design detailed_design.md §3 注7 — a held zero is no evidence of rest (positive evidence only) [OK]
 // @design architecture.md INV-3 — detection in the detector, fed by ImuTask [OK]

@@ -781,7 +781,7 @@ static void applyVerticalGroundHandoff()
 {
     // Vertical ground→airborne handoff — an ESTIMATION-internal concern owned by ImuTask
     // because it is tightly coupled to the ToF sensor and must fire the instant the ToF
-    // detects airborne (a one-cycle-precise event). It is deliberately NOT moved to the
+    // passes the estimator release height (a one-cycle-precise event). It is deliberately NOT moved to the
     // onEnter(FLYING) transition callback: that fires ~20 ms later (StateTask's RC-poll
     // tick after system_status.airborne), and the α-β accel-compensation tracker is
     // sensitive enough that a 20 ms-late pos/vel reset measurably degrades POS_HOLD
@@ -789,7 +789,7 @@ static void applyVerticalGroundHandoff()
     // resets and the full-state ESKF reset (architecture §4), while this ToF-synced
     // vertical handoff (a one-shot reset at the airborne edge + the on-ground hold) stays
     // here in estimation where the ToF event is observed directly.
-    // 鉛直の接地→空中ハンドオフ — ToF センサと密結合で、ToF が空中を検知した瞬間（1サイクル
+    // 鉛直の接地→空中ハンドオフ — ToF センサと密結合で、ToF の読みが推定器の解除の高さを超えた瞬間（1サイクル
     // 精度のイベント）に作動する必要がある estimation 内部の関心事ゆえ ImuTask が所有する。
     // onEnter(FLYING) 遷移コールバックに移さない: それは ~20ms 遅れて作動し（system_status.
     // airborne 後の StateTask の RC ポーリングティック）、α-β 運動加速度補償トラッカは 20ms
@@ -848,13 +848,13 @@ static float    g_applied_accel_bias[3] = {0, 0, 0};
 /// StateTask reads `airborne` (ToF takeoff detection) to drive TAKEOFF → FLYING for the
 /// MANUAL takeoff (ACRO/STABILIZE) only — the ALT/POS auto-takeoff completes on the
 /// controller capturing its target altitude (controller_status.takeoff_reached), so the
-/// ToF airborne edge there serves the ESKF vertical handoff alone (applyVerticalGroundHandoff,
-/// above). Called every cycle from the loop so `airborne` tracks continuously.
+/// ToF airborne edge there (0.15 m, the ground flag) serves the other users of the flag, not the ESKF vertical handoff
+/// (applyVerticalGroundHandoff, above: its own, lower release height). Called every cycle from the loop so `airborne` tracks continuously.
 /// 起動/システム準備状態をトピックで発行し、他タスクが判定できるようにする（R16 流、
 /// クロスタスクのオブジェクトでなく）: requestArm() は calibrated を読む。StateTask は
 /// airborne（ToF 離陸検出）を読み「手動」離陸（ACRO/STABILIZE）の TAKEOFF→FLYING を駆動する
 /// — ALT/POS 自動離陸は制御器の目標高度捕捉（controller_status.takeoff_reached）で完了するため、
-/// そこでの ToF 空中エッジは ESKF 鉛直ハンドオフ（上の applyVerticalGroundHandoff）専用。
+/// そこでの ToF 空中エッジ（0.15 m、接地フラグ）は接地フラグのほかの使い手のためのもので、ESKF 鉛直ハンドオフ（上の applyVerticalGroundHandoff。専用のより低い解除の高さ）ではない。
 /// airborne が連続追従するよう毎周期発行。
 static void publishSystemStatus(uint32_t now_us)
 {

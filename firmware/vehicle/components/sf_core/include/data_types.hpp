@@ -188,15 +188,19 @@ struct StateEstimate {
                            // 取り込み直していない。単発の範囲外ではない）: 高度推定を信用できない
                            // ので、自動着陸は ToF なしの降下（加速度計に基づく速度推定の速度ループ）で降りる。
                            // ControlTask が failsafe_status から（FailsafeStatusGuard を通して）注入。
-    bool  airborne;        // The estimator's vertical state is FREE: the ground-contact hold is not
-                           // pinning position/velocity at zero (system_status.airborne, published by
-                           // ImuTask). During the take-off climb below the ToF handoff height it is
-                           // false, and state.velocity then says nothing about the climb. Injected by
+    bool  airborne;        // The ground-contact verdict says airborne (system_status.airborne, published by
+                           // ImuTask; airborne side 0.15 m): then the estimator's vertical state is FREE for sure.
+                           // It is the CONSERVATIVE reading of "free": the estimator is released earlier, at
+                           // kEstimatorReleaseHeightM (0.08 m), so between the two heights (about 0.2 s of the
+                           // take-off climb) this is false although the estimate already runs (detailed_design.md
+                           // note 16). While it is false, treat state.velocity as saying nothing about the climb. Injected by
                            // ControlTask; the vertical velocity estimator (vertical_velocity_estimator.hpp)
                            // follows the ESKF only while this is true AND the ToF is not silent.
-                           // 推定器の鉛直状態が「自由」: 接地ホールドが位置・速度を 0 に固定していない
-                           // （ImuTask が発行する system_status.airborne）。ToF の引き継ぎ高さより下の離陸の上昇中は
-                           // false で、そのとき state.velocity は上昇を表さない。ControlTask が注入する。鉛直速度の
+                           // 接地の判定が「空中」（ImuTask が発行する system_status.airborne。空中側 0.15 m）:
+                           // このとき推定器の鉛直状態は確実に「自由」。「自由」の保守的な読み: 推定器は
+                           // kEstimatorReleaseHeightM（0.08 m）でより早く解放されるので、2 つの高さの間（離陸の上昇の約 0.2 s）は
+                           // 推定がすでに動いていてもこれは false（detailed_design.md 注16）。false の間は、
+                           // state.velocity は上昇を表さないものとして扱う。ControlTask が注入する。鉛直速度の
                            // 推定器（vertical_velocity_estimator.hpp）は、これが true かつ ToF が出力停止でない間だけ
                            // ESKF に従う。
 };
@@ -746,9 +750,9 @@ struct ControllerStatus {
     bool     guidance_active;  // an API/Navigator guidance target is engaged / 誘導目標係合中
     bool     takeoff_reached;  // auto-takeoff (ALT/POS) has captured its target altitude —
                                // the controller-driven TAKEOFF → FLYING trigger (decoupled
-                               // from the ToF 0.15m airborne edge, which is ESKF-handoff only).
+                               // from the ToF 0.15m airborne edge of the ground flag; the ESKF handoff has its own lower height).
                                // 自動離陸(ALT/POS)が目標高度を捕捉した — 制御器駆動の
-                               // TAKEOFF→FLYING トリガ（ToF 0.15m 空中エッジ=ESKFハンドオフ専用とは分離）。
+                               // TAKEOFF→FLYING トリガ（接地フラグの ToF 0.15m 空中エッジとは分離。ESKF ハンドオフは専用のより低い高さ）。
     uint32_t timestamp;        // [us]
     // Blind descent facts (ToF silent), carried by the task layer for the touchdown detector in ImuTask
     // (blind_touchdown.hpp): the accelerometer-based vertical velocity estimate and the commanded thrust

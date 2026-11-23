@@ -14,7 +14,7 @@
 |------|------|-----------|---------|
 | 0 準備 | 機体の固定（重り、またはベンチ台）、試験するファームの確定、ビルド・書き込み、設定値・送信機・電池・モータの位置の確認 | 1〜1.5 時間 | 付けたまま（固定する） |
 | 1 机上 | 機体を固定した状態で、ループ周期・有限性・床の ToF・ログ・WiFi の CLI・離陸判定・通信途絶・電池・ToF 再初期化の有無を確かめる（1a〜1i） | 4〜6 時間 | 付けたまま（固定する。1g は手で持つ） |
-| 2 低空の自由飛行 | 危険の小さい順に 10 種の飛行（手順 2-1〜2-10。2-4 は表面ごとに 3 回以上）。1 回の飛行は 1 つの目的 | 4〜6 時間（電池交換を含む） | 付ける |
+| 2 低空の自由飛行 | 危険の小さい順に 11 種の飛行（手順 2-1〜2-11。2-4 は表面ごとに 3 回以上）。1 回の飛行は 1 つの目的 | 4〜6 時間（電池交換を含む） | 付ける |
 | 3 総合飛行 | 離陸・1 回転・着陸を 1 回で通す（C16）。段階 2 が全て合格してから | 30〜45 分 | 付ける |
 | 4 取りまとめ | 記録の回収、パラメータの復元、結果表 | 30 分 | — |
 
@@ -220,6 +220,7 @@ Claude Code を進行役にして進めるときは、リポジトリで Claude 
 | 2-6 | 120 | 離陸 15 + 整定 10 + 上昇 14 + 着陸 35 + 余裕 |
 | 2-9 | 180 | 離陸 15 + 整定 5 + 90 度 × 4（各 11 + 待ち 3）+ 360 度（15 + 3）+ 270 度（14 + 3）+ 着陸 35 + 余裕 |
 | 2-10 | 90 | |
+| 2-11 | 120 | 5 回の離陸・整定・着陸は 1 回ずつ数える。1 回あたり 離陸 15 + 整定 5 + 着陸 35 + 余裕 |
 | 3 | 150 | |
 
 **PC の接続（macOS）**: PC は、インターネットにつないだまま WiFi を機体につなぐ同時接続で進められる（2026-11-22 に実機で確認）。ただし、この PC（macOS）では、端末アプリからの Python のローカルネットワーク通信が拒否されることがあり、そのとき `sf log wifi` は `No data received` になる。**見分け方**: `nc -z 192.168.10.1 23` は通るのに、`sf log wifi -d 5 --no-save` はパケットが届かない。**対処**: システム設定の「ローカルネットワーク」で、使っている端末アプリを許可する。別の対処として、UDP の中継を使った。
@@ -609,7 +610,18 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 合格（**暫定**） | 停止後 5 秒間の `yaw change` が 10 度以内（根拠: 2-9 と同じ仮の線）。応答が上のとおり |
 | 中止 | 2-9 と同じ |
 
-**次へ進む条件**: 2-1〜2-10 の全てが合格（または責任者の承認つき）。
+### 2-11 離陸の推定器の解除の高さ 0.08 m（C9）
+
+| 項目 | 内容 |
+|------|------|
+| 目的 | 推定器が位置・速度を 0 に固定するのをやめる高さを 0.15 m から 0.08 m にした（`kEstimatorReleaseHeightM`、`detailed_design.md` §3 注16）効果と副作用を、実機で確かめる。オフライン再生（実機が飛んだ経路をそのまま使う開ループ）では、前後の位置の誤差（推定 − 巻き尺）が 5 回の平均で 157 mm → 94 mm と予想される。制御器が早く効いたときの実際の動きは、再生では分からない |
+| 入場 | 2-3 が合格。人員: 操縦者（開発者）+ Claude Code。POS_HOLD、床は平ら |
+| 操作 | (1) 床の上でモータが回っているとき（ARM から離陸の開始まで）の下向き ToF の読みの最大を `sf log stats` で見る。(2) 巻き尺で離陸点と着陸点を測り、`sf takeoff` → 整定 → `sf land` を 5 回行う。起動の表示（`takeoff_landing: ... estimator release=0.08m`）で解除の高さの設定を確かめる |
+| 記録 | ARM 中の ToF の最大（床の上）。5 回の離陸点と着陸点の巻き尺の距離と、推定の前後の位置の誤差の平均。解除の時刻（`Vertical handoff: takeoff`）の前後 0.5 s の傾きの指令（roll/pitch の設定点）の増え方。離陸の行き過ぎ（高度の最大 − 0.5 m）。着陸の検出（`Landing detected` の経路と時刻） |
+| 合格（**暫定**） | 床の上のモータ回転中の ToF の最大が 0.06 m 以下（0.08 m に 20 mm の余裕。過去の値は 45 mm）で、解除が床の上で誤って起きない（離陸の指令の前に `Vertical handoff` が出ない）。前後の位置の誤差の 5 回の平均が従来の 157 mm より小さい。解除の瞬間の傾きの指令が 0.1 rad（約 6 度）を超えて跳ばない。離陸の行き過ぎが従来の記録（約 0.16 m、`alt_hold_takeoff_findings.md`）を超えない。着陸が従来どおり検出される（根拠の線は暫定: 実機の値で見直す） |
+| 中止 | 床の上で `Vertical handoff` が出る、離陸の直後に傾きが 15 度を超える（中止の段 2・3） |
+
+**次へ進む条件**: 2-1〜2-11 の全てが合格（または責任者の承認つき）。
 
 ## 7. 段階 3: 総合飛行
 
@@ -701,6 +713,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | 2-9 360 度（C13） | 1 | | 時計回りに 360 度 | 所要 / 誤差 / 最低 ToF / ずれ: | | | |
 | 2-9 反時計回り 270 度（C13） | 1 | | 反時計回りに 270 度 | 所要 / 誤差 / 最低 ToF / ずれ: | | | |
 | 2-10（C13） | 1 | | 停止後 5 秒の `yaw change` ≤ 10 度（暫定） | | | | |
+| 2-11（C9） | 5 | | 5 回の前後の位置の誤差の平均が 157 mm 未満、床の上の ToF の最大 ≤ 0.06 m、解除の傾きの跳び ≤ 0.1 rad、行き過ぎが従来以下（暫定） | | | | |
 | 段階 2・3 の各飛行後（C1・C2・C15） | 飛行ごと | | 3 章の共通の確認 | | | | |
 | 3（C16） | 1 | | 7 章の表のとおり | | | | |
 | 4-1〜4-5 | 1 | — | パラメータが戻っている、`sf log check` エラー 0 | | | | |
@@ -719,7 +732,7 @@ sf height      # 推定の高度 [cm]（sf tof は下向き ToF [cm]、sf baro �
 | ARM の操作・モード | ARM はスティックの押し込みのトグル、`sf takeoff` は自分で ARM して POS_HOLD | `tasks/state_task.cpp` 791-803・910 行、`tasks/api_task.cpp` 543-551 行、`docs/guides/controller.md` 9 章 |
 | DISARM の効き方・LED・音 | 段 1〜3 の中止の段、LED と音の表 | `docs/operation_manual.md` 53-103・136-140・210 行 |
 | モータ単体試験 | `motor test <1-4> <0-100> [秒]`、M1 = FR、M2 = RR、M3 = RL、M4 = FL | `docs/operation_manual.md` 322 行 |
-| 閾値 | `kTakeoffGroundBandM` 0.05 m、`kTakeoffAirborneBandM` 0.15 m、`kAltitudeCeilingM` 1.2 m、`kAutoTakeoffTargetAltitudeM` 0.5 m、`kLandingRestBandM` 0.02 m、`kLandingRestHoldMs` 1000 ms、`kAutoTakeoffNoLiftAbortUs` 5 s、通信途絶の猶予 3 s、`critical_battery_v` 3.0 V、`low_battery_v` 3.4 V、`TAKEOFF_THROTTLE_THRESH` 0.5 | `flight_limits.hpp` 55・72・291-296・326-377 行、`state_manager.cpp` 49 行、`failsafe.hpp` 38-39 行、`main/config.hpp` 278 行 |
+| 閾値 | `kTakeoffGroundBandM` 0.05 m、`kTakeoffAirborneBandM` 0.15 m、`kEstimatorReleaseHeightM` 0.08 m、`kAltitudeCeilingM` 1.2 m、`kAutoTakeoffTargetAltitudeM` 0.5 m、`kLandingRestBandM` 0.02 m、`kLandingRestHoldMs` 1000 ms、`kAutoTakeoffNoLiftAbortUs` 5 s、通信途絶の猶予 3 s、`critical_battery_v` 3.0 V、`low_battery_v` 3.4 V、`TAKEOFF_THROTTLE_THRESH` 0.5 | `flight_limits.hpp` 55・72・291-296・326-377 行、`state_manager.cpp` 49 行、`failsafe.hpp` 38-39 行、`main/config.hpp` 278 行 |
 | 回頭・移動の待ち時間 | 回頭 = 角度 ÷ 57.3 + 6 s（+ 3 s の通信余裕）、移動 = 距離 ÷ 10 cm/s + 6 s（+ 3 s）、離陸 15 s、着陸 35 s | `components/sf_command/include/rotate_guidance.hpp` 98 行、`lib/sfcli/utils/vehicle_api.py` 59-122 行 |
 | `sf` の飛行・問い合わせ・ログのコマンド | `--ip`、`--timeout`、終了コード 0/1/3/130、`emergency`・`stop` は手順なしで送る（呼び出しごとに別のソケット） | `lib/sfcli/commands/flight.py`、`query.py`、`log.py`、`lib/sfcli/utils/vehicle_api.py` 160-200 行、`docs/commands/sf-log.md` |
 | API の応答 | `error not flying or guidance released ...`、`error interrupted by stop`、`cmd: <行>` | `tasks/api_task.cpp` 453・795・1930 行 |
@@ -744,7 +757,7 @@ The **owner** is the repository's owner (the control and hardware engineer), who
 |-------|---------|----------------|-----------|
 | 0 Preparation | Fix the vehicle in place (weights or a bench stand), fix the firmware under test, build and flash, check settings, transmitter, battery and motor positions | 1-1.5 h | Fitted (vehicle fixed) |
 | 1 Bench | With the vehicle fixed in place, check loop timing, finiteness, floor ToF, logging, WiFi CLI, takeoff decision, communication loss, battery, and whether the ToF re-initialisation ever acts (1a-1i) | 4-6 h | Fitted (vehicle fixed; held by hand in 1g) |
-| 2 Low free flight | Ten kinds of flight in order of increasing risk (steps 2-1 to 2-10; 2-4 is repeated three or more times per surface). One purpose per flight | 4-6 h (battery changes included) | Fitted |
+| 2 Low free flight | Eleven kinds of flight in order of increasing risk (steps 2-1 to 2-11; 2-4 is repeated three or more times per surface). One purpose per flight | 4-6 h (battery changes included) | Fitted |
 | 3 Integrated flight | Takeoff, one full turn and landing in one flight (C16), after everything in stage 2 passed | 30-45 min | Fitted |
 | 4 Wrap-up | Collect records, restore parameters, results sheet | 30 min | — |
 
@@ -950,6 +963,7 @@ Unplug the USB cable for flights. Even without USB, the state transitions, the t
 | 2-6 | 120 | takeoff 15 + settling 10 + climb 14 + landing 35 + margin |
 | 2-9 | 180 | takeoff 15 + settling 5 + 90 degrees x 4 (11 each + 3 wait) + 360 degrees (15 + 3) + 270 degrees (14 + 3) + landing 35 + margin |
 | 2-10 | 90 | |
+| 2-11 | 120 | One takeoff, settle and landing; count each of the five flights separately: takeoff 15 + settle 5 + landing 35 + margin |
 | 3 | 150 | |
 
 **PC connection (macOS)**: the PC can be used while connected to the Internet with its WiFi connected to the vehicle at the same time (confirmed on the real vehicle on 2026-11-22). On this PC (macOS), however, the Python network communication from a terminal application can be refused on the local network, and then `sf log wifi` ends with `No data received`. **How to tell**: `nc -z 192.168.10.1 23` succeeds while `sf log wifi -d 5 --no-save` receives no packet. **Remedy**: allow the terminal application in "Local Network" in System Settings. As another remedy, a UDP relay was used.
@@ -1339,7 +1353,18 @@ There is no way to create on the real vehicle, safely, a situation where LANDING
 | Pass (**provisional**) | `yaw change` for the 5 s after the stop is within 10 degrees (basis: the same temporary line as 2-9). The replies are as above |
 | Abort | Same as 2-9 |
 
-**Condition to proceed**: all of 2-1 to 2-10 pass (or are approved by the owner).
+### 2-11 The estimator release height of 0.08 m at takeoff (C9)
+
+| Item | Content |
+|------|---------|
+| Purpose | Check on the craft the effect and the side effects of lowering the height at which the estimator stops pinning position and velocity at zero from 0.15 m to 0.08 m (`kEstimatorReleaseHeightM`, `detailed_design.md` §3 Note 16). The offline replay (open loop: it follows the path the craft flew) predicts the forward position error (estimate minus tape measure, signed) to fall from 157 mm to 94 mm on average over five flights. What happens when the controller acts earlier is not known from the replay |
+| Entry | 2-3 passed. People: pilot (developer) + Claude Code. POS_HOLD, flat floor |
+| Operation | (1) Read the largest downward-ToF reading while the motors spin on the floor (from ARM to the start of the takeoff) with `sf log stats`. (2) Measure the takeoff and landing points with a tape and fly `sf takeoff` -> settle -> `sf land` five times. Confirm the release height from the boot line (`takeoff_landing: ... estimator release=0.08m`) |
+| Record | The largest ToF reading on the floor with the motors spinning. For each of the five flights the tape distance between the takeoff and landing points and the mean position error of the estimate. The rise of the tilt command (roll/pitch setpoints) in 0.5 s around the release (`Vertical handoff: takeoff`). The takeoff overshoot (maximum height minus 0.5 m). The landing detection (route and time of `Landing detected`) |
+| Pass (**provisional**) | The largest ToF reading on the floor with the motors spinning is 0.06 m or less (20 mm below 0.08 m; the past value was 45 mm) and the release never happens on the floor (no `Vertical handoff` before the takeoff command). The mean position error over the five flights is below the old 157 mm. The tilt command does not jump by more than 0.1 rad (about 6 degrees) at the release. The takeoff overshoot does not exceed the old record (about 0.16 m, `alt_hold_takeoff_findings.md`). The landing is detected as before (the lines are provisional: revise them with the real values) |
+| Abort | `Vertical handoff` appears on the floor, or the tilt exceeds 15 degrees right after the takeoff (abort ladder 2 and 3) |
+
+**Condition to proceed**: all of 2-1 to 2-11 pass (or are approved by the owner).
 
 ## 7. Stage 3: Integrated Flight
 
@@ -1431,6 +1456,7 @@ One execution is one row. When a step is repeated, add a row with a larger "Run"
 | 2-9 360 degrees (C13) | 1 | | 360 degrees clockwise | time / error / lowest ToF / drift: | | | |
 | 2-9 counterclockwise 270 degrees (C13) | 1 | | 270 degrees counterclockwise | time / error / lowest ToF / drift: | | | |
 | 2-10 (C13) | 1 | | `yaw change` in 5 s after stop <= 10 degrees (provisional) | | | | |
+| 2-11 (C9) | 5 | | mean signed forward position error over 5 flights below 157 mm, ToF maximum on the floor <= 0.06 m, tilt-command jump at the release <= 0.1 rad, overshoot not above the old (provisional) | | | | |
 | After each flight of stages 2 and 3 (C1, C2, C15) | per flight | | The common check of chapter 3 | | | | |
 | 3 (C16) | 1 | | As in the table of chapter 7 | | | | |
 | 4-1 to 4-5 | 1 | — | Parameters restored, `sf log check` 0 errors | | | | |
@@ -1449,7 +1475,7 @@ One execution is one row. When a step is repeated, add a row with a larger "Run"
 | ARM operation and modes | ARM is a toggle on the stick press; `sf takeoff` ARMs by itself and uses POS_HOLD | `tasks/state_task.cpp` lines 791-803 and 910, `tasks/api_task.cpp` lines 543-551, `docs/guides/controller.md` chapter 9 |
 | How DISARM acts, LEDs, sounds | The abort ladder, the table of LEDs and sounds | `docs/operation_manual.md` lines 53-103, 136-140, 210 |
 | Single-motor test | `motor test <1-4> <0-100> [seconds]`, M1 = FR, M2 = RR, M3 = RL, M4 = FL | `docs/operation_manual.md` line 322 |
-| Thresholds | `kTakeoffGroundBandM` 0.05 m, `kTakeoffAirborneBandM` 0.15 m, `kAltitudeCeilingM` 1.2 m, `kAutoTakeoffTargetAltitudeM` 0.5 m, `kLandingRestBandM` 0.02 m, `kLandingRestHoldMs` 1000 ms, `kAutoTakeoffNoLiftAbortUs` 5 s, communication-loss grace 3 s, `critical_battery_v` 3.0 V, `low_battery_v` 3.4 V, `TAKEOFF_THROTTLE_THRESH` 0.5 | `flight_limits.hpp` lines 55, 72, 291-296, 326-377, `state_manager.cpp` line 49, `failsafe.hpp` lines 38-39, `main/config.hpp` line 278 |
+| Thresholds | `kTakeoffGroundBandM` 0.05 m, `kTakeoffAirborneBandM` 0.15 m, `kEstimatorReleaseHeightM` 0.08 m, `kAltitudeCeilingM` 1.2 m, `kAutoTakeoffTargetAltitudeM` 0.5 m, `kLandingRestBandM` 0.02 m, `kLandingRestHoldMs` 1000 ms, `kAutoTakeoffNoLiftAbortUs` 5 s, communication-loss grace 3 s, `critical_battery_v` 3.0 V, `low_battery_v` 3.4 V, `TAKEOFF_THROTTLE_THRESH` 0.5 | `flight_limits.hpp` lines 55, 72, 291-296, 326-377, `state_manager.cpp` line 49, `failsafe.hpp` lines 38-39, `main/config.hpp` line 278 |
 | Turn and move wait times | Turn = angle / 57.3 + 6 s (+ 3 s of network margin), move = distance / 10 cm/s + 6 s (+ 3 s), takeoff 15 s, landing 35 s | `components/sf_command/include/rotate_guidance.hpp` line 98, `lib/sfcli/utils/vehicle_api.py` lines 59-122 |
 | `sf` flight, query and log commands | `--ip`, `--timeout`, exit codes 0/1/3/130, `emergency` and `stop` are sent without a handshake (a separate socket per call) | `lib/sfcli/commands/flight.py`, `query.py`, `log.py`, `lib/sfcli/utils/vehicle_api.py` lines 160-200, `docs/commands/sf-log.md` |
 | API replies | `error not flying or guidance released ...`, `error interrupted by stop`, `cmd: <line>` | `tasks/api_task.cpp` lines 453, 795, 1930 |

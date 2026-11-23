@@ -227,9 +227,9 @@ static sf::ControllerStatus publishControllerStatus(sf::IController& controller)
     // ゆえ、タスク層が事実をトピックへ運ぶ。
     // takeoff_reached carries the auto-takeoff capture event to StateTask, which
     // uses it to drive TAKEOFF→FLYING for ALT/POS (decoupled from the ToF 0.15m
-    // airborne edge). Same task-layer carries-the-fact pattern as guidance_active.
+    // airborne edge of the ground flag). Same task-layer carries-the-fact pattern as guidance_active.
     // takeoff_reached は自動離陸の捕捉イベントを StateTask へ運び、ALT/POS の
-    // TAKEOFF→FLYING を駆動する（ToF 0.15m 空中エッジとは分離）。guidance_active と
+    // TAKEOFF→FLYING を駆動する（接地フラグの ToF 0.15m 空中エッジとは分離）。guidance_active と
     // 同じ「タスク層が事実を運ぶ」パターン。
     // flip_ready/flip_block_reason/flip_active/flip_done/flip_result (plan
     // §4.1/§4.3): read from the controller every cycle, same task-layer-
