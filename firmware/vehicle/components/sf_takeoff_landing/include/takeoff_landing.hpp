@@ -39,6 +39,7 @@ namespace sf {
 struct TakeoffLandingConfig {
     float ground_tof_m       = limits::kTakeoffGroundBandM;   // Ground threshold [m]    / 地上閾値
     float airborne_tof_m     = limits::kTakeoffAirborneBandM;   // Airborne threshold [m]  / 空中閾値
+    float estimator_release_tof_m = limits::kEstimatorReleaseHeightM;   // Height that releases the estimator hold [m] / 推定器の固定を解く高さ [m]
     float landing_vel_mps    = 0.05f;   // Landing velocity [m/s]  / 着陸速度
     uint32_t landing_hold_ms = 700;     // Firm-ground confirm [ms] / 接地確認時間
     // Stalled-descent touchdown ("ground-effect float"). During a commanded landing
@@ -168,6 +169,21 @@ public:
     /// 機体が地上にあるか確認する
     bool isOnGround() const { return on_ground_; }
 
+    /// The estimator may track the craft: position and velocity are no longer pinned at zero. A SEPARATE fact from isOnGround(), from the same ToF samples
+    /// and set/cleared in step with it: set by a valid reading above estimator_release_tof_m (and by markAirborne()), cleared wherever on_ground_ becomes true
+    /// (the confirmed ground reads of a landing, and every disarmed cycle). A LEVEL, not an edge: a craft that rose above the release height but never above
+    /// airborne_tof_m (a hop) keeps it set until it lands. ImuTask alone reads it (applyVerticalGroundHandoff); every other user of the ground flag
+    /// (state machine, tilt monitor, barometric learning, landing detection, held-in-hand, the floor evidence) keeps isOnGround() / airborne_tof_m.
+    /// With estimator_release_tof_m == airborne_tof_m it is exactly !isOnGround() (host test).
+    /// 推定器が機体を追ってよい: 位置・速度はもう 0 に固定されない。isOnGround() とは「別の」事実で、同じ ToF サンプルから、それと歩調を合わせて立つ・下りる:
+    /// estimator_release_tof_m を超える有効な読み（と markAirborne()）で立ち、on_ground_ が true になる所（着陸で確定した地上の読み、DISARM 中の全周期）で下りる。
+    /// エッジでなくレベル: 解除の高さは超えたが airborne_tof_m は超えなかった機体（ホップ）は、着陸するまで立ったまま。読むのは ImuTask だけ（applyVerticalGroundHandoff）。
+    /// 接地フラグのほかの使い手（状態機械・傾きの監視・気圧高度の学習・着陸の判定・手持ち・床の証拠）は isOnGround() / airborne_tof_m のまま。
+    /// estimator_release_tof_m == airborne_tof_m のとき、厳密に !isOnGround() に等しい（ホスト試験）。
+    /// @design architecture.md INV-3 — detection here (the fact), the decision stays with ImuTask's hold / StateTask [OK]
+    /// @design detailed_design.md §3 注16 — estimator release vs ground flag [OK]
+    bool isEstimatorReleased() const { return estimator_released_; }
+
     /// Check if landing is detected (sustained low altitude + low vertical velocity).
     /// A LEVEL flag (true while the landing condition holds), not a one-shot pulse, so a
     /// slower consumer (StateTask at 50 Hz) cannot miss it through a Latest topic.
@@ -264,6 +280,7 @@ private:
 
     TakeoffLandingConfig config_;
     bool     on_ground_        = true;   // Ground contact flag (ToF<5cm) / 地面接地フラグ
+    bool     estimator_released_ = false;   // The estimator hold is released (see isEstimatorReleased) / 推定器の固定が解けている（isEstimatorReleased 参照）
     bool     near_ground_      = false;  // ToF within near_ground_tof_m  / 接地近傍フラグ
     bool     held_             = false;  // Held-in-hand flag    / 手持ちフラグ
     bool     landing_detected_ = false;  // Landing detected flag (level) / 着陸検出フラグ

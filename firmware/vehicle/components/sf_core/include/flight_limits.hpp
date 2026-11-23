@@ -295,6 +295,18 @@ inline constexpr float    kTakeoffGroundBandM       = 0.05f;     // [m]
 /// 離着陸マネージャの空中の閾値 [m]: これを超える有効な ToF の読みは離陸を意味する（TakeoffLandingConfig::airborne_tof_m の既定値はここから取る）。kTakeoffGroundBandM とこの値の間では、
 /// マネージャの接地フラグは直前の値を保つ（ヒステリシス）。TakeoffFloorWatch は、ラッチした床の証拠をこれですぐ解く（これを超える有効な読みは、機体が床を離れた証拠。kTakeoffGroundBandM を超える読みが kAutoTakeoffFloorHoldUs 続いても解く）。
 inline constexpr float    kTakeoffAirborneBandM     = 0.15f;     // [m]
+/// Height above which the ESTIMATOR is released at takeoff [m]: a valid downward-ToF reading above it ends the hold that pins position and velocity at zero
+/// (ImuTask::applyVerticalGroundHandoff resets them once and lets them run; TakeoffLandingMgr::isEstimatorReleased()). A DIFFERENT decision from the ground flag above: the ground flag
+/// (kTakeoffAirborneBandM) answers "is the craft off the floor" for the state machine, the tilt monitor, the barometric learning and the landing detection, and must stay conservative;
+/// this one answers "has the estimate anything to track", and the earlier it is released the less of the first motion after lift-off the hold throws away (the craft moves back
+/// by 40-95 mm during the first centimetres of the climb). Order enforced below: kTakeoffGroundBandM < this <= kTakeoffAirborneBandM. Stage 1 (2026-11-23): 0.15 m, the same as the ground flag, so nothing changes yet.
+/// 離陸で「推定器」を解放する高さ [m]: これを超える有効な下向き ToF の読みで、位置・速度を 0 に固定する動作を終える（ImuTask::applyVerticalGroundHandoff が 1 回リセットして走らせる。
+/// TakeoffLandingMgr::isEstimatorReleased()）。上の接地フラグとは「別の判断」: 接地フラグ（kTakeoffAirborneBandM）は「機体は床を離れたか」を状態機械・傾きの監視・気圧高度の学習・着陸の判定に答え、
+/// 保守的なままでなければならない。こちらは「推定に追わせるものがあるか」に答え、早く解くほど、床を離れた直後の最初の動きを固定が捨てる量が減る（機体は上昇の最初の数 cm で 40〜95 mm 後ろへ動く）。
+/// 順序は下で強制: kTakeoffGroundBandM < この値 <= kTakeoffAirborneBandM。第 1 段（2026-11-23）: 0.15 m。接地フラグと同じなので、まだ何も変わらない。
+inline constexpr float    kEstimatorReleaseHeightM  = 0.15f;     // [m]
+static_assert(kTakeoffGroundBandM < kEstimatorReleaseHeightM && kEstimatorReleaseHeightM <= kTakeoffAirborneBandM,
+              "ground band < estimator release height <= airborne band (the release is never above the ground flag's own release)");
 
 /// Auto-takeoff (ALT_HOLD / POS_HOLD / API takeoff) that CANNOT lift is aborted (DISARM, the motors stop), but only on POSITIVE evidence that the craft is
 /// still on the floor, never because evidence of flight is missing: the healthy downward ToF (not silent) reads a valid height of at most

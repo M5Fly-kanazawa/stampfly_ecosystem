@@ -314,6 +314,23 @@ static bool groundContactTrusted()
     return !sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state));
 }
 
+/// Whether the estimator's position and velocity are pinned at zero (the on-ground hold), as the rest of the system may trust it.
+/// The same rule as groundContactTrusted() for a ToF-silence episode (armed -> not pinned, disarmed -> pinned), but in normal operation it answers a DIFFERENT
+/// question from the ground flag: the manager's estimator-release fact (TakeoffLandingMgr::isEstimatorReleased(), its own height) instead of its ground flag
+/// (airborne_tof_m). Only applyVerticalGroundHandoff() calls this; every other user of the ground contact keeps groundContactTrusted().
+/// 推定器の位置・速度が 0 に固定されているか（接地ホールド）を、システムの他の部分が信用してよい形で返す。
+/// ToF 出力停止のエピソード中は groundContactTrusted() と同じ規則（ARM 中 → 固定しない、DISARM 中 → 固定する）だが、通常は接地フラグとは「別の」問いに答える:
+/// マネージャの接地フラグ（airborne_tof_m）でなく、推定器の解除の事実（TakeoffLandingMgr::isEstimatorReleased()、専用の高さ）を使う。
+/// 呼ぶのは applyVerticalGroundHandoff() だけ。接地のほかの使い手は groundContactTrusted() のまま。
+/// @design detailed_design.md §3 注16 — estimator release vs ground flag [OK]
+static bool estimatorHoldTrusted()
+{
+    if (!g_failsafe.tof_silent) {
+        return !g_takeoff_landing.isEstimatorReleased();
+    }
+    return !sf::isArmed(static_cast<sf::FlightState>(sf::system_mode.latest().state));
+}
+
 /// Feed the blind-touchdown detector one IMU sample: active only in LANDING with a silent ToF. The
 /// detector needs three facts besides |accel|, which the controller publishes on controller_status:
 /// the commanded thrust relative to the support thrust and the vertical velocity estimate.
@@ -784,8 +801,10 @@ static void applyVerticalGroundHandoff()
     // @design development_roadmap.md §3 Layer 3 — ToF-only vertical handoff        [OK]
     // @design architecture.md §4 — controller/full-state reset is owned by the state
     //         machine; the timing-critical ToF-synced vertical handoff stays here    [OK]
-    const bool on_ground = groundContactTrusted();   // not the raw flag: it freezes when the ToF is silent / 生のフラグでない: ToF 出力停止で固定されたままになる
-    static bool was_on_ground = true;   // boot state: on the ground / 起動時は接地
+    // The hold is judged by the estimator-release fact, NOT the ground flag (INV-3: detection in the manager, this is its one consumer). Trusted form: it freezes when the ToF is silent.
+    // 固定は、接地フラグでなく推定器の解除の事実で判定する（INV-3: 検出はマネージャ、ここはその唯一の使い手）。信用してよい形: ToF 出力停止で固定されたままになる。
+    const bool on_ground = estimatorHoldTrusted();
+    static bool was_on_ground = true;   // boot state: pinned on the ground / 起動時は地上で固定
 
     // Ground→airborne edge: reset pos/vel (and covariance) for a clean ToF lock.
     // 接地→空中エッジ: 混入のない ToF ロックのため pos/vel（と共分散）をリセット。

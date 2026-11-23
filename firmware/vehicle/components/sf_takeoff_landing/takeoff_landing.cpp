@@ -73,6 +73,7 @@ void TakeoffLandingMgr::update(const TofData& tof, bool armed, float vertical_ve
     // ToF ゆえここで手持ちを判定する。着陸ラッチ・デバウンス連続数・タイマーを次飛行のためクリア。
     if (!armed) {
         on_ground_ = true;
+        estimator_released_ = false;   // level-set beside on_ground_ / on_ground_ と並べてレベルで設定
         landing_detected_ = false;
         landing_start_ms_ = 0;
         stall_start_ms_   = 0;
@@ -132,6 +133,12 @@ void TakeoffLandingMgr::evaluateToF(const TofData& tof)
     // 降下停滞接地用の近傍帯（5cm 地上閾値より広く、~5-12cm の地面効果フロートを覆う）。
     near_ground_ = (tof.distance < config_.near_ground_tof_m);
 
+    // The estimator hold is released by its own, lower height (the ground flag below keeps its own); cleared together with the ground flag.
+    // 推定器の固定は、それ専用の（より低い）高さで解ける（下の接地フラグは自分の高さのまま）。接地フラグが立つときに一緒に下りる。
+    if (tof.distance > config_.estimator_release_tof_m) {
+        estimator_released_ = true;
+    }
+
     if (tof.distance > config_.airborne_tof_m) {
         // Airborne: flip immediately (prompt class-B handoff at takeoff).
         // 空中: 即時反転（離陸時のクラスB ハンドオフを遅らせない）。
@@ -145,6 +152,7 @@ void TakeoffLandingMgr::evaluateToF(const TofData& tof)
         if (ground_streak_ < 255) ++ground_streak_;
         if (ground_streak_ >= config_.flip_confirm_samples) {
             on_ground_ = true;
+            estimator_released_ = false;   // re-hold with the ground flag (a LEVEL: also after a hop that never reached airborne_tof_m) / 接地フラグと一緒に再び固定（レベル: airborne_tof_m に届かなかったホップの後も）
         }
     } else {
         // Hysteresis band between the thresholds: hold the flag, reset the streak.
@@ -368,6 +376,7 @@ void TakeoffLandingMgr::markAirborne()
         ESP_LOGW(TAG, "Ground contact unknown (ToF silent while armed): flag set to airborne");
     }
     on_ground_     = false;
+    estimator_released_ = true;   // armed + ToF silent = not on the ground: the estimator must not be pinned either / ARM 中の ToF 出力停止 = 接地でない: 推定器も固定してはならない
     ground_streak_ = 0;       // the air->ground debounce restarts from zero / 空中→接地のデバウンスはゼロから
     near_ground_   = false;   // the near-ground band is also unknown / 接地近傍帯も不明
     landing_start_ms_ = 0;    // a firm-ground landing timer must not survive the evidence it stood on / 接地着陸のタイマーは、拠り所の証拠とともに破棄する
