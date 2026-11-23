@@ -1,0 +1,556 @@
+{
+ "title": "StampFly propeller shape data / StampFly プロペラの形状データ",
+ "provenance_ja": "このデータは、開発者が公開リポジトリ prop_sim で行った写真からの実測(真上からの写真で平面形、切断面の写真で翼断面)を、2026-11-23 に写したものである。以後、プロペラの形状の基準はこのリポジトリのデータとし、測り直した場合はここを更新する。prop_sim は出どころである。区分(kind)は photo_measurement=写真の実測、nominal=型番の公称値、assumption=仮定、developer_measurement_20261123=開発者の実物の測定、repository_data=このリポジトリの他のデータ、estimate=見積もり。status が unconfirmed の項目は未確定。",
+ "provenance_en": "This data was copied on 2026-11-23 from the developer's own photographic measurements in the public repository prop_sim (planform from a top-view photograph, section from a cut-section photograph). From now on this repository's data is the reference for the propeller shape; update it here when re-measured. prop_sim is the origin. kind: photo_measurement, nominal, assumption, developer_measurement_20261123, repository_data, estimate. Items with status 'unconfirmed' are not settled.",
+ "prop_sim": {
+  "repository": "https://github.com/kouhei1970/prop_sim",
+  "commit": "ca19d1b630c0edecfb293cf8aa280f56fbf7e76d",
+  "commit_date": "2026-08-03",
+  "copied_on": "2026-11-23",
+  "license": "Copied under this repository's license (MIT), confirmed by the developer (2026-11-23); the data and photographs are the repository developer's own.",
+  "verify": "python3 simulator/shared/assets/meshes/tools/verify_against_prop_sim.py --prop-sim <path of a clone>"
+ },
+ "units": "mm and degrees unless an item says otherwise",
+ "items": {
+  "diameter_mm": {
+   "value": 31.21,
+   "unit": "mm",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim docs/STAMPFLY_1209.md section 1 and presets.py STAMPFLY_1209_MEASURED['diameter_mm']; top-view photo IMG_3578, scale 77.0 px/mm from a metal ruler; 99.5th percentile of the outline radius x 2; uncertainty +-0.2 mm"
+  },
+  "diameter_check_mm": {
+   "value": 31.0,
+   "unit": "mm",
+   "kind": "developer_measurement_20261123",
+   "status": "confirmed",
+   "source": "developer's caliper-level measurement of the real propeller, 2026-11-23 (agrees with the photo value within the uncertainty)"
+  },
+  "blade_count": {
+   "value": 4,
+   "unit": "-",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim STAMPFLY_1209_MEASURED['n_blades']; connected components of the photo"
+  },
+  "hub_diameter_mm": {
+   "value": 7.04,
+   "unit": "mm",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim STAMPFLY_1209_MEASURED['hub_outer_diameter_mm']; 2 x the radius where the azimuth coverage falls below 93 %"
+  },
+  "chord_table_r_over_R_mm": {
+   "value": [
+    [
+     0.226,
+     5.0
+    ],
+    [
+     0.3,
+     5.15
+    ],
+    [
+     0.35,
+     5.3
+    ],
+    [
+     0.4,
+     5.42
+    ],
+    [
+     0.45,
+     5.62
+    ],
+    [
+     0.5,
+     5.8
+    ],
+    [
+     0.55,
+     5.86
+    ],
+    [
+     0.6,
+     5.82
+    ],
+    [
+     0.65,
+     5.68
+    ],
+    [
+     0.7,
+     5.5
+    ],
+    [
+     0.75,
+     5.17
+    ],
+    [
+     0.8,
+     4.82
+    ],
+    [
+     0.85,
+     4.55
+    ],
+    [
+     0.9,
+     4.1
+    ],
+    [
+     0.95,
+     3.35
+    ],
+    [
+     0.98,
+     2.6
+    ],
+    [
+     1.0,
+     1.5
+    ]
+   ],
+   "unit": "[r/R, mm]",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim presets.py _STAMPFLY_1209_CHORD (17 rows, all copied). Top-view width: arc length per radius x cos(sweep)",
+   "note": "Not the true chord length; the builder converts it (see chord interpretation in README)."
+  },
+  "sweep_table_r_over_R_deg": {
+   "value": [
+    [
+     0.32,
+     1.2
+    ],
+    [
+     0.45,
+     6.3
+    ],
+    [
+     0.57,
+     16.0
+    ],
+    [
+     0.69,
+     21.9
+    ],
+    [
+     0.75,
+     24.9
+    ],
+    [
+     0.87,
+     26.0
+    ],
+    [
+     0.93,
+     32.8
+    ],
+    [
+     1.0,
+     34.5
+    ]
+   ],
+   "unit": "[r/R, deg]",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim presets.py STAMPFLY_1209_SWEEP_DEG (8 rows, all copied). Angle between the blade centre line tangent and the radial direction"
+  },
+  "sweep_root_deg": {
+   "value": 1.2,
+   "unit": "deg",
+   "kind": "assumption",
+   "status": "assumed",
+   "source": "constant inside r/R = 0.32 (the first table row); prop_sim has no data there"
+  },
+  "section_table_x_camber_thickness": {
+   "value": [
+    [
+     0.0,
+     0.0,
+     0.004
+    ],
+    [
+     0.0125,
+     0.00489,
+     0.03888
+    ],
+    [
+     0.025,
+     0.00946,
+     0.0532
+    ],
+    [
+     0.05,
+     0.01772,
+     0.07039
+    ],
+    [
+     0.075,
+     0.02492,
+     0.08064
+    ],
+    [
+     0.1,
+     0.03122,
+     0.08709
+    ],
+    [
+     0.15,
+     0.04159,
+     0.09339
+    ],
+    [
+     0.2,
+     0.04963,
+     0.09461
+    ],
+    [
+     0.25,
+     0.05594,
+     0.09318
+    ],
+    [
+     0.3,
+     0.06094,
+     0.09042
+    ],
+    [
+     0.35,
+     0.06486,
+     0.08717
+    ],
+    [
+     0.4,
+     0.06783,
+     0.0839
+    ],
+    [
+     0.45,
+     0.06984,
+     0.08089
+    ],
+    [
+     0.5,
+     0.07084,
+     0.07821
+    ],
+    [
+     0.55,
+     0.0707,
+     0.07579
+    ],
+    [
+     0.6,
+     0.06926,
+     0.07345
+    ],
+    [
+     0.65,
+     0.06637,
+     0.07089
+    ],
+    [
+     0.7,
+     0.06189,
+     0.06769
+    ],
+    [
+     0.75,
+     0.0557,
+     0.06333
+    ],
+    [
+     0.8,
+     0.04774,
+     0.05723
+    ],
+    [
+     0.85,
+     0.03803,
+     0.04868
+    ],
+    [
+     0.9,
+     0.02668,
+     0.03688
+    ],
+    [
+     0.95,
+     0.0139,
+     0.02098
+    ],
+    [
+     1.0,
+     0.0,
+     0.018
+    ]
+   ],
+   "unit": "[x/c, camber/c, t/c]",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim presets.py _STAMPFLY_1209_SECTION (24 rows, all copied). Cut-section photo IMG_3720, section painted black, extracted by gray<95 and saturation<70; chord = farthest point pair; smoothed by polynomials; no correction of the projection error",
+   "note": "One section only. Using it at every radius is an assumption (see section_same_at_all_radii)."
+  },
+  "section_same_at_all_radii": {
+   "value": true,
+   "unit": "-",
+   "kind": "assumption",
+   "status": "unconfirmed",
+   "source": "prop_sim uses this one section at all radii; only one cut was photographed"
+  },
+  "pitch_inch": {
+   "value": 0.9,
+   "unit": "inch",
+   "kind": "nominal",
+   "status": "unconfirmed",
+   "source": "nominal pitch of the type '1209' (prop_sim presets.stampfly_1209 pitch_in=0.9); the pitch cannot be read from a photograph. +-0.1 inch changes the hover speed by about 4 % (prop_sim docs section 10)",
+   "note": "Not confirmed on the real propeller. A separate CFD study found the nominal pitch closest to the bench data, but it is not settled."
+  },
+  "pitch_offset_deg": {
+   "value": 0.0,
+   "unit": "deg",
+   "kind": "assumption",
+   "status": "unconfirmed",
+   "source": "uniform offset added to the twist angle; 0 = nominal pitch. prop_sim docs section 8 mentions a -7.8 deg equivalent to match one thrust point (not applied)"
+  },
+  "twist_formula": {
+   "value": "beta = atan(P / (2 pi r)) (constant geometric pitch), capped at twist_cap_deg",
+   "unit": "-",
+   "kind": "nominal",
+   "status": "confirmed",
+   "source": "prop_sim presets.stampfly_1209 (pitch_distribution='geometric')"
+  },
+  "twist_cap_deg": {
+   "value": 48.0,
+   "unit": "deg",
+   "kind": "repository_data",
+   "status": "confirmed",
+   "source": "prop_sim presets.stampfly_1209 np.deg2rad(48.0) upper limit of the twist angle"
+  },
+  "twist_pivot_chord_fraction": {
+   "value": 0.5,
+   "unit": "x/c",
+   "kind": "assumption",
+   "status": "assumed",
+   "source": "chord position of the twist axis; prop_sim models local blade elements and has no axis"
+  },
+  "hub_height_mm": {
+   "value": 2.0,
+   "unit": "mm",
+   "kind": "assumption",
+   "status": "unconfirmed",
+   "source": "prop_sim mass estimate used a hub thickness of 2.0 mm without a recorded origin; here the hub is a cylinder of this height",
+   "note": "The real hub shape is not confirmed."
+  },
+  "hub_hole_radius_mm": {
+   "value": 0.5,
+   "unit": "mm",
+   "kind": "assumption",
+   "status": "assumed",
+   "source": "centre hole; the motor shaft radius is 0.4 mm (developer, 2026-11-23)"
+  },
+  "root_overlap_mm": {
+   "value": 0.25,
+   "unit": "mm",
+   "kind": "assumption",
+   "status": "assumed",
+   "source": "blade root starts this far inside the hub radius so that the shells overlap"
+  },
+  "blade_plate_thickness_mm": {
+   "value": 0.55,
+   "unit": "mm",
+   "kind": "estimate",
+   "status": "unconfirmed",
+   "source": "prop_sim mass estimate input; equals 5.86 mm x 0.095 (max chord x max t/c), origin not recorded. The built blade thickness comes from the section instead"
+  },
+  "density_g_per_cm3": {
+   "value": 1.2,
+   "unit": "g/cm3",
+   "kind": "assumption",
+   "status": "assumed",
+   "source": "polycarbonate density used by prop_sim for its mass estimate"
+  },
+  "projected_area_mm2": {
+   "value": 292.9,
+   "unit": "mm2",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim STAMPFLY_1209_MEASURED['projected_area_mm2'] (4 blades + hub), area ratio 0.383"
+  },
+  "max_chord_mm": {
+   "value": 5.86,
+   "unit": "mm",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim STAMPFLY_1209_MEASURED['max_chord_mm'] at r/R = 0.55"
+  },
+  "tip_sweep_deg": {
+   "value": 34.5,
+   "unit": "deg",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim STAMPFLY_1209_MEASURED['tip_sweep_deg']"
+  },
+  "section_summary": {
+   "value": {
+    "thickness_max": 0.095,
+    "thickness_max_x": 0.2,
+    "camber_max": 0.071,
+    "camber_max_x": 0.5,
+    "alpha0_deg_inviscid": -8.33
+   },
+   "unit": "-",
+   "kind": "photo_measurement",
+   "status": "confirmed",
+   "source": "prop_sim STAMPFLY_1209_MEASURED section_* entries (alpha0 from thin-airfoil theory)"
+  },
+  "mass_g": {
+   "value": 0.2525,
+   "unit": "g",
+   "kind": "developer_measurement_20261123",
+   "status": "confirmed",
+   "source": "developer's measurement of one propeller, 2026-11-23 (1.01 g for 4)"
+  },
+  "mass_estimate_prop_sim_g": {
+   "value": 0.26,
+   "unit": "g",
+   "kind": "estimate",
+   "status": "confirmed",
+   "source": "prop_sim: area x thickness (blade 0.55 mm / hub 2.0 mm) x PC 1.20 g/cm3"
+  },
+  "polar_inertia_prop_sim_kgm2": {
+   "value": 1.67e-08,
+   "unit": "kg m2",
+   "kind": "estimate",
+   "status": "confirmed",
+   "source": "prop_sim: 0.264 m R^2 with m = 0.26 g from the same mass distribution; how the factor 0.264 was obtained is not documented"
+  },
+  "bench_rotor_inertia_kgm2": {
+   "value": 1.54e-08,
+   "unit": "kg m2",
+   "kind": "repository_data",
+   "status": "confirmed",
+   "source": "control/models/stampfly_physical.yaml plant J (bench 2026-10-15; the rotor inertia including the propeller and the motor rotor)"
+  },
+  "guard_inner_diameter_mm": {
+   "value": 32.0,
+   "unit": "mm",
+   "kind": "developer_measurement_20261123",
+   "status": "confirmed",
+   "source": "developer's measurement 2026-11-23 (cylindrical part of the guard, about 32 mm)"
+  },
+  "motor_can_height_mm": {
+   "value": 16.0,
+   "unit": "mm",
+   "kind": "developer_measurement_20261123",
+   "status": "confirmed",
+   "source": "developer's measurement 2026-11-23"
+  },
+  "motor_shaft_length_mm": {
+   "value": 5.0,
+   "unit": "mm",
+   "kind": "developer_measurement_20261123",
+   "status": "confirmed",
+   "source": "developer's measurement 2026-11-23; the shaft top is at Y = 6.814 mm in the body STL frame"
+  },
+  "motor_shaft_diameter_mm": {
+   "value": 0.8,
+   "unit": "mm",
+   "kind": "developer_measurement_20261123",
+   "status": "confirmed",
+   "source": "developer's measurement 2026-11-23"
+  },
+  "tip_height_target_mm": {
+   "value": [
+    6.4,
+    6.75
+   ],
+   "unit": "mm",
+   "kind": "developer_measurement_20261123",
+   "status": "confirmed",
+   "source": "developer's reading of the real propeller tip height in 3D-model coordinates (body STL frame, Y up), 2026-11-23"
+  },
+  "axis_height_mm": {
+   "value": 6.535,
+   "unit": "mm",
+   "kind": "repository_data",
+   "status": "confirmed",
+   "source": "hub centre height in the body STL frame, chosen so that the blade tip centre is 6.575 mm = the middle of tip_height_target_mm"
+  },
+  "rotors": {
+   "value": {
+    "fr": {
+     "motor": "M1",
+     "hand": "ccw",
+     "x_mm": -22.8042,
+     "z_mm": 22.8081
+    },
+    "rr": {
+     "motor": "M2",
+     "hand": "cw",
+     "x_mm": -22.8042,
+     "z_mm": -22.8003
+    },
+    "rl": {
+     "motor": "M3",
+     "hand": "ccw",
+     "x_mm": 22.8042,
+     "z_mm": -22.8003
+    },
+    "fl": {
+     "motor": "M4",
+     "hand": "cw",
+     "x_mm": 22.8042,
+     "z_mm": 22.8081
+    }
+   },
+   "unit": "mm",
+   "kind": "repository_data",
+   "status": "confirmed",
+   "source": "motor_*.stl shaft-top centres in simulator/shared/assets/meshes/parts; spin directions from the comment in simulator/sils/models/stampfly.xml (M1 FR ccw, M2 RR cw, M3 RL ccw, M4 FL cw, seen from above)"
+  },
+  "spin_definition": {
+   "value": "ccw = counter-clockwise seen from +Y (above); the leading edge faces the rotation direction; the convex (suction) side is +Y; thrust is +Y",
+   "unit": "-",
+   "kind": "repository_data",
+   "status": "confirmed",
+   "source": "prop_sim frames.py / rotor.py: spin=+1 is the right-hand rotation about +z_h (thrust axis); section.py: camber > 0 when the upper side is convex"
+  },
+  "blade_face_orientation": {
+   "value": "leading edge on the rotation side, convex face up",
+   "unit": "-",
+   "kind": "assumption",
+   "status": "unconfirmed",
+   "source": "taken from the sign conventions of prop_sim, not from the real propeller",
+   "note": "Whether the real blade is built this way has not been checked."
+  }
+ },
+ "primary_sources": {
+  "note_ja": "平面形と翼断面の値の一次資料は次の 2 枚の写真(prop_sim の docs/images から内容を変えずに写した。SHA-256 が元と一致することを確認済み)。左の写真は真上から撮った実機プロペラと検出した外形(緑)、右は読み取った翼弦長の分布。元の撮影画像(IMG_3578.jpeg、IMG_3720.jpeg)と読み取りのスクリプトは prop_sim に無く、このリポジトリにも無い。",
+  "note_en": "The primary sources of the planform and section values are these two photographs (copied unchanged from prop_sim docs/images; SHA-256 equal to the originals). The original camera images (IMG_3578.jpeg, IMG_3720.jpeg) and the extraction script are not in prop_sim and not in this repository.",
+  "files": {
+   "propeller_source_photos/stampfly_1209_planform.png": {
+    "sha256": "1703643eca403651d90ec72fa53b358f51a50902ccceb5fd15ac84290088f550",
+    "size_px": [
+     1495,
+     650
+    ],
+    "ja": "左: 真上からの写真(元は IMG_3578.jpeg、金属定規で 77.0 px/mm に校正)に検出した外形(緑)・直径 31.2 mm・羽根 4 枚。右: 半径ごとの翼弦長(青点=半径一定の円弧幅、橙=羽根軸に直交する弦長、黒線=採用した表)。直径・枚数・ハブ径・翼弦長・後退角・投影面積を読んだ。",
+    "en": "Left: top-view photograph (original IMG_3578.jpeg, scale 77.0 px/mm from a metal ruler) with the detected outline (green), D = 31.2 mm, 4 blades. Right: chord distribution (blue dots = arc width at constant r, orange = chord normal to the blade axis, black = adopted table). Diameter, blade count, hub diameter, chord, sweep and projected area were read from it."
+   },
+   "propeller_source_photos/stampfly_1209_section.png": {
+    "sha256": "a89b09e09da60d180a9e04435f3dcfc464f2b60a808ff8eee859a1cbc861f465",
+    "size_px": [
+     1620,
+     960
+    ],
+    "ja": "切断面を黒く塗った写真(元は IMG_3720.jpeg)に、読み取った上面(青緑)・下面(赤)・弦(黄)・キャンバ線(白破線)を重ねた図と、前縁の拡大。左下は読み取った断面(最大キャンバ 7.1 % @0.50c、最大厚み 9.5 % @0.20c)。右下の揚力曲線は prop_sim の解析で、形状データではない。翼断面の表(24 点)を読んだ。写真のコード線の傾き(29.6 度)は撮影の向きで決まっただけで、ピッチではない。",
+    "en": "Photograph of the cut section painted black (original IMG_3720.jpeg) with the extracted upper surface (cyan), lower surface (red), chord (yellow) and camber line (white dashed), and a leading-edge zoom. Lower left: the extracted section (max camber 7.1 % at 0.50c, max thickness 9.5 % at 0.20c). The lift curve at lower right is a prop_sim analysis, not shape data. The 24-point section table was read from it. The chord-line tilt in the photograph (29.6 deg) only reflects the camera direction and is not the pitch."
+   }
+  },
+  "not_available": "original camera images, ruler readings, extraction script, intermediate data (none of them in prop_sim)",
+  "which_propeller_photographed": "The spin direction (ccw or cw type) of the photographed propeller and whether the photograph is seen from above or below are not recorded; the ccw type here assumes a top view (blades lag clockwise outward, as in the photograph)."
+ }
+}
