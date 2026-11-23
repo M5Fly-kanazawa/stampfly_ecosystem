@@ -102,6 +102,10 @@ def load_aligned(path, base: str = "imu", method: str = "hold") -> pd.DataFrame:
             bundle format makes each stream's real origin explicit.
           - `df.attrs["bundle_path"]`: `str(path)`, for diagnostics/
             error messages.
+          - `df.attrs["text_log"]`: the bundle's `text_log` stream as a
+            DataFrame (timestamp_us in the same clock as `df`, text), or
+            None when the bundle has none. Used to find the excitation
+            window (tools/log_analyzer/rate_sysid.py).
 
     Column contract (present only when the corresponding source stream
     exists in the bundle -- `imu` is the only one guaranteed to exist):
@@ -146,6 +150,7 @@ def load_aligned(path, base: str = "imu", method: str = "hold") -> pd.DataFrame:
     df = sflog.aligned(log, base=base, method=method)
     df.attrs["bundle_streams"] = set(log.streams.keys())
     df.attrs["bundle_path"] = str(path)
+    df.attrs["text_log"] = log.streams.get("text_log")
     return df
 
 
