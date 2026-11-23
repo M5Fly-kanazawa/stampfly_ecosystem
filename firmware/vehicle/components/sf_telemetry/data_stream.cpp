@@ -440,23 +440,22 @@ void DataStream::appendPilotAndReferenceEntries(datastream::UnifiedPacketBuilder
 
     appendCtrlRefEntry(builder, batch_[datastream::kSamplesPerPacket - 1]);
 
-    // Flow: drain EVERY sample from the log_flow ring (typically 2 per packet
-    // at 100Hz). Flow dx/dy are INCREMENTAL — displacement since the previous
-    // read — so a latest()-snapshot peek would silently drop half the
-    // displacement and corrupt any offline integration/replay. Absolute
-    // sensors (ToF/baro/mag) below can use the snapshot safely.
-    // フロー: log_flow リングから「全」サンプルを排出（100Hz なら 1 パケットに
-    // 通常 2 件）。フローの dx/dy は「差分量」— 前回読み出しからの変位 — なので、
-    // latest() スナップショット方式では変位の半分が黙って失われ、オフラインの
-    // 積分・再生が壊れる。下の絶対量センサ（ToF/気圧/磁気）はスナップショットで安全。
-    FlowData flow_sample;
-    while (log_flow.read(flow_sample)) {
-        datastream::WireFlow flow = {};
-        flow.timestamp_us = flow_sample.timestamp;
-        flow.dx           = flow_sample.dx;
-        flow.dy           = flow_sample.dy;
-        flow.quality      = flow_sample.squal;
-        countDrop(builder.addEntry(datastream::kPktFlow, &flow, sizeof(flow)));
+    // Flow: move up to kMaxFlowEntriesPerPacket samples from the log_flow ring (2 per packet at 100Hz
+    // when on time), oldest first; the rest wait in the ring for the next packet. Flow dx/dy are
+    // INCREMENTAL — displacement since the previous read — so a latest()-snapshot peek would silently
+    // drop half the displacement and corrupt any offline integration/replay; every sample is sent, only
+    // later if the packet is crowded. The cap keeps the last entries (barometer, magnetometer) of a
+    // packet from being pushed out when a late task finds many samples (data_stream_wire.hpp).
+    // Absolute sensors (ToF/baro/mag) below can use the snapshot safely.
+    // フロー: log_flow リングから最大 kMaxFlowEntriesPerPacket 件（遅れなければ 100Hz で 1 パケット 2 件）を
+    // 古い順に移す。残りは次のパケットのためにリングで待つ。フローの dx/dy は「差分量」— 前回読み出しからの
+    // 変位 — なので、latest() スナップショット方式では変位の半分が黙って失われ、オフラインの積分・再生が
+    // 壊れる。全標本を送る（パケットが混んだときは遅れて送る）。上限は、遅れたタスクが多数の標本を見つけたときに
+    // パケット末尾のエントリ（気圧・磁気）が押し出されるのを防ぐ（data_stream_wire.hpp）。
+    // 下の絶対量センサ（ToF/気圧/磁気）はスナップショットで安全。
+    const datastream::FlowAppendResult flow_result = datastream::appendFlowEntries(builder, log_flow);
+    for (size_t rejected = 0; rejected < flow_result.rejected; ++rejected) {
+        countDrop(false);
     }
 }
 

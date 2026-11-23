@@ -990,7 +990,7 @@ TEST(wire_unified_worst_case_fits)
     constexpr size_t kToFSilence  = kEntryHeader + sizeof(WireToFSilence);
     constexpr size_t kControl     = kEntryHeader + sizeof(WireControl);
     constexpr size_t kCtrlRef     = kEntryHeader + sizeof(WireCtrlRef);
-    constexpr size_t kFlow        = (kEntryHeader + sizeof(WireFlow)) * 2;   // 2 per packet at 100 Hz
+    constexpr size_t kFlow        = (kEntryHeader + sizeof(WireFlow)) * kMaxFlowEntriesPerPacket;   // the per-packet cap / 1 パケットの上限
     constexpr size_t kTof         = (kEntryHeader + sizeof(WireTof)) * 2;   // bottom + front
     constexpr size_t kBaro        = kEntryHeader + sizeof(WireBaro);
     constexpr size_t kBaroHeight  = kEntryHeader + sizeof(WireBaroHeight);
@@ -1001,6 +1001,7 @@ TEST(wire_unified_worst_case_fits)
     printf("\n    worst-case unified packet: %zu B, cap %zu B, margin %zu B\n",
            kTotal, kUnifiedMaxSize, kUnifiedMaxSize - kTotal);
     ASSERT_TRUE(kTotal <= kUnifiedMaxSize);
+    ASSERT_TRUE(kTotal == kUnifiedWorstCaseBytes);   // this list and the header's compile-time sum agree / この一覧とヘッダのコンパイル時の合計が一致
 
     // The same worst case built through the real builder: every addEntry() must be accepted and the
     // datagram must stay within the cap (an entry that does not fit is DROPPED, silently on the wire).
@@ -1017,8 +1018,9 @@ TEST(wire_unified_worst_case_fits)
     ASSERT_TRUE(builder.addEntry(kPktToFSilence, payload, sizeof(WireToFSilence)));
     ASSERT_TRUE(builder.addEntry(kPktControl, payload, sizeof(WireControl)));
     ASSERT_TRUE(builder.addEntry(kPktCtrlRef, payload, sizeof(WireCtrlRef)));
-    ASSERT_TRUE(builder.addEntry(kPktFlow, payload, sizeof(WireFlow)));
-    ASSERT_TRUE(builder.addEntry(kPktFlow, payload, sizeof(WireFlow)));
+    for (size_t flow = 0; flow < kMaxFlowEntriesPerPacket; ++flow) {
+        ASSERT_TRUE(builder.addEntry(kPktFlow, payload, sizeof(WireFlow)));
+    }
     ASSERT_TRUE(builder.addEntry(kPktTofBottom, payload, sizeof(WireTof)));
     ASSERT_TRUE(builder.addEntry(kPktTofFront, payload, sizeof(WireTof)));
     ASSERT_TRUE(builder.addEntry(kPktBaro, payload, sizeof(WireBaro)));
@@ -1088,6 +1090,98 @@ TEST(wire_unified_packet_size_by_flow_samples)
         }
     }
     ASSERT_TRUE(most_that_fit >= 6);
+}
+
+// A stand-in for the log_flow ring: oldest first, read() returns false when empty (the sf::Topic ring behaves so; its
+// drop-oldest overflow is not needed here because the test stays within 8 samples).
+// log_flow リングの代役: 古い順、空なら read() が false（sf::Topic のリングも同じ。8 件以内で試すので、
+// 満杯時の最古捨ては要らない）。
+struct FakeFlowRing {
+    std::vector<sf::FlowData> samples;
+    size_t next = 0;
+    bool read(sf::FlowData& out)
+    {
+        if (next >= samples.size()) {
+            return false;
+        }
+        out = samples[next++];
+        return true;
+    }
+    size_t left() const { return samples.size() - next; }
+};
+
+// Eight flow samples waiting (a TelemetryTask that ran 60 ms late): the first packet takes the 4 oldest, the second the next 4;
+// the time order holds across the two; every packet still carries all its barometer/magnetometer entries; no entry is dropped.
+// フロー 8 件が溜まった状態（TelemetryTask が 60 ms 遅れた）: 1 個目は古い 4 件、2 個目は次の 4 件を載せる。2 個をまたいで
+// 時刻の順が保たれ、どのパケットも気圧・磁気のエントリを全部載せ、落ちるエントリは 0。
+TEST(wire_flow_entries_are_capped_per_packet)
+{
+    using namespace sf::datastream;
+    constexpr size_t kBacklog = 8;   // topics.hpp: log_flow RingBuffer 8
+    FakeFlowRing ring;
+    for (size_t i = 0; i < kBacklog; ++i) {
+        sf::FlowData sample = {};
+        sample.timestamp = 1000 + 10000 * static_cast<uint32_t>(i);   // 100 Hz
+        sample.dx = static_cast<int16_t>(i);
+        ring.samples.push_back(sample);
+    }
+    size_t drops = 0;
+    uint32_t last_timestamp = 0;
+    for (int packet = 0; packet < 2; ++packet) {
+        sf::LogStreamSample samples[kSamplesPerPacket] = {};
+        UnifiedPacketBuilder builder;
+        builder.begin(static_cast<uint16_t>(packet), samples);
+        uint8_t payload[sizeof(WireControlOutput400) * kSamplesPerPacket] = {};
+        drops += !builder.addEntry(kPktDuty400, payload, sizeof(WireDuty400) * kSamplesPerPacket);
+        drops += !builder.addEntry(kPktCtrlOutput400, payload, sizeof(WireControlOutput400) * kSamplesPerPacket);
+        drops += !builder.addEntry(kPktFlightPhase400, payload, sizeof(WireFlightPhase400) * kSamplesPerPacket);
+        drops += !builder.addEntry(kPktFlightFlags, payload, sizeof(WireFlightFlags));
+        drops += !builder.addEntry(kPktToFSilence, payload, sizeof(WireToFSilence));
+        drops += !builder.addEntry(kPktControl, payload, sizeof(WireControl));
+        drops += !builder.addEntry(kPktCtrlRef, payload, sizeof(WireCtrlRef));
+        const size_t entries_before_flow = 7;
+
+        const FlowAppendResult result = appendFlowEntries(builder, ring);
+        ASSERT_TRUE(result.appended == kMaxFlowEntriesPerPacket && result.rejected == 0);
+        drops += result.rejected;
+
+        drops += !builder.addEntry(kPktTofBottom, payload, sizeof(WireTof));
+        drops += !builder.addEntry(kPktTofFront, payload, sizeof(WireTof));
+        drops += !builder.addEntry(kPktBaro, payload, sizeof(WireBaro));
+        drops += !builder.addEntry(kPktBaroHeight, payload, sizeof(WireBaroHeight));
+        drops += !builder.addEntry(kPktMag, payload, sizeof(WireMag));   // the entry that used to be lost / 以前は失われていたエントリ
+        const size_t length = builder.finish();
+        const uint8_t* buf = builder.buffer();
+        ASSERT_TRUE(length <= kUnifiedMaxSize);
+        ASSERT_TRUE(buf[kUnifiedFixedBytes - 1] == entries_before_flow + kMaxFlowEntriesPerPacket + 5);   // entry_count
+
+        // Walk the entries and check the flow timestamps rise with no gap and no repeat.
+        // エントリをたどり、フローの時刻が欠けも重複もなく増えることを検査する。
+        size_t at = kUnifiedFixedBytes;
+        size_t flows_seen = 0;
+        while (at + 1 < length - 1) {
+            const uint8_t id = buf[at];
+            const uint8_t size = buf[at + 1];
+            if (id == kPktFlow) {
+                uint32_t timestamp;
+                memcpy(&timestamp, &buf[at + 2], sizeof(timestamp));
+                ASSERT_TRUE(timestamp > last_timestamp);
+                ASSERT_TRUE(timestamp == 1000 + 10000 * static_cast<uint32_t>(packet * kMaxFlowEntriesPerPacket + flows_seen));
+                last_timestamp = timestamp;
+                ++flows_seen;
+            }
+            at += 2 + size;
+        }
+        ASSERT_TRUE(flows_seen == kMaxFlowEntriesPerPacket);
+        ASSERT_TRUE(at == length - 1);   // the entries end exactly at the checksum / エントリはチェックサムの直前でちょうど終わる
+    }
+    ASSERT_TRUE(drops == 0);
+    ASSERT_TRUE(ring.left() == 0);
+
+    // The ring drains faster than it fills: 4 leave per 20 ms packet, 2 arrive (100 Hz).
+    // リングは溜まる速さより速く空く: 20 ms のパケットごとに 4 件出て、2 件入る（100 Hz）。
+    constexpr size_t kArrivalsPerPacket = 2;
+    static_assert(kMaxFlowEntriesPerPacket > kArrivalsPerPacket, "the cap must outpace the arrival of flow samples");
 }
 
 // The 50 Hz ToF-silence entry (0x4E): 19 bytes, field order as the PC side (udp_capture.py FMT_TOF_SILENCE
@@ -2036,6 +2130,7 @@ int main()
     run_wire_unified_worst_case_fits();
     run_wire_ctrl_ref_v6_layout();
     run_wire_unified_packet_size_by_flow_samples();
+    run_wire_flow_entries_are_capped_per_packet();
 
     printf("\n[Tello state]\n");
     run_tello_state_all_keys_present();

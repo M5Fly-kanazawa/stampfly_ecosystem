@@ -828,6 +828,86 @@ inline size_t buildStatusPacketV4(uint8_t* buffer, uint16_t sequence, const Wire
     return body + 1;
 }
 
+// =============================================================================
+// Flow entries per packet — an upper bound, checked against the packet cap at compile time
+// 1 パケットのフローのエントリ数 — 上限。パケットの上限に収まることをコンパイル時に検査する
+// =============================================================================
+
+/// Most flow samples one unified packet carries (4). The 100 Hz flow gives 2 per packet when the task is on time; a late
+/// TelemetryTask finds more in the ring (8 deep), and the surplus waits in the ring for the next packet instead of crowding
+/// out the last entries (barometer, magnetometer) of this one. 4 leaves the worst packet 23 B under the cap and still drains
+/// the ring at 4 per 20 ms against the 2 per 20 ms that arrive.
+/// 1 つの統合パケットが運ぶフロー標本の最大数（4）。100 Hz のフローは、タスクが遅れなければ 1 パケットに 2 件。遅れた
+/// TelemetryTask はリング（深さ 8）にそれ以上を見つけるが、超過分はこのパケットの最後のエントリ（気圧・磁気）を押し出さず、
+/// リングに残して次のパケットへ回す。4 件なら最悪のパケットは上限の 23 B 下に収まり、しかも到着の 2 件／20 ms に対して
+/// 4 件／20 ms で排出できる。
+inline constexpr size_t kMaxFlowEntriesPerPacket = 4;
+
+/// Bytes of one entry on the wire: [id][size] + payload.
+/// 回線上の 1 エントリのバイト数: [id][size] + 本体。
+inline constexpr size_t kEntryHeaderBytes = 2;
+inline constexpr size_t entryBytes(size_t payload_bytes) { return kEntryHeaderBytes + payload_bytes; }
+
+/// Bytes before the first entry: header, the three 8-sample blocks, entry_count.
+/// 最初のエントリより前のバイト数: ヘッダ、8 サンプルの 3 ブロック、entry_count。
+inline constexpr size_t kUnifiedFixedBytes =
+    sizeof(WireHeader) +
+    kSamplesPerPacket * (sizeof(WireImuEskf) + sizeof(WirePosVel) + sizeof(WireRateRef)) + 1;
+
+/// The largest unified packet: every kind of entry present, flow at its cap, plus the checksum byte. Add a new entry to
+/// the packet and this must grow with it; if the sum passes kUnifiedMaxSize the build stops here (entries do not fail at run time).
+/// 最大の統合パケット: 全種類のエントリが載り、フローが上限で、チェックサム 1 バイトを足したもの。パケットに
+/// エントリを足したらここにも足すこと。合計が kUnifiedMaxSize を超えればビルドがここで止まる（実行時に黙って落ちない）。
+inline constexpr size_t kUnifiedWorstCaseBytes =
+    kUnifiedFixedBytes +
+    entryBytes(sizeof(WireDuty400) * kSamplesPerPacket) +
+    entryBytes(sizeof(WireControlOutput400) * kSamplesPerPacket) +
+    entryBytes(sizeof(WireFlightPhase400) * kSamplesPerPacket) +
+    entryBytes(sizeof(WireFlightFlags)) +
+    entryBytes(sizeof(WireToFSilence)) +
+    entryBytes(sizeof(WireControl)) +
+    entryBytes(sizeof(WireCtrlRef)) +
+    kMaxFlowEntriesPerPacket * entryBytes(sizeof(WireFlow)) +
+    2 * entryBytes(sizeof(WireTof)) +        // bottom + front / 底面 + 前方
+    entryBytes(sizeof(WireBaro)) +
+    entryBytes(sizeof(WireBaroHeight)) +
+    entryBytes(sizeof(WireMag)) +
+    1;                                        // checksum / チェックサム
+static_assert(kUnifiedWorstCaseBytes <= kUnifiedMaxSize,
+              "the worst unified packet exceeds kUnifiedMaxSize: lower kMaxFlowEntriesPerPacket or shrink an entry");
+
+/// Result of one drain of the flow ring into a packet.
+/// フローのリングを 1 回排出した結果。
+struct FlowAppendResult {
+    size_t appended;   ///< entries the packet took / パケットが受理した数
+    size_t rejected;   ///< entries the packet refused (full) — the caller counts them as drops / パケットが拒否した数（満杯）— 呼び出し側が落ちとして数える
+};
+
+/// Move at most kMaxFlowEntriesPerPacket flow samples from the ring into the packet, oldest first. What is left stays in the
+/// ring for the next packet, so time order holds across packets. FlowSource needs bool read(FlowData&) (the sf::Topic ring).
+/// リングからパケットへ、古い順に最大 kMaxFlowEntriesPerPacket 件のフロー標本を移す。残りは次のパケットのためにリングに
+/// 残るので、パケットをまたいでも時刻の順が保たれる。FlowSource は bool read(FlowData&) を持つこと（sf::Topic のリング）。
+template <typename FlowSource>
+FlowAppendResult appendFlowEntries(UnifiedPacketBuilder& builder, FlowSource& ring)
+{
+    FlowAppendResult result = {0, 0};
+    FlowData sample;
+    while (result.appended + result.rejected < kMaxFlowEntriesPerPacket && ring.read(sample)) {
+        WireFlow flow = {};
+        flow.timestamp_us = sample.timestamp;
+        flow.dx           = sample.dx;
+        flow.dy           = sample.dy;
+        flow.quality      = sample.squal;
+        if (builder.addEntry(kPktFlow, &flow, sizeof(flow))) {
+            ++result.appended;
+        } else {
+            ++result.rejected;
+        }
+    }
+    return result;
+}
+
+
 /// Incremental builder of the text-log packet 0x51. Usage: begin(seq) → addLine()... → finish() → send
 /// buffer()/length(). The records of one packet never exceed kTextLogBytesPerPacket bytes.
 /// テキストログのパケット 0x51 のビルダ。begin(seq) → addLine()... → finish() の順に使う。1 パケットのレコードは
