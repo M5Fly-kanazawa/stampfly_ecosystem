@@ -1,0 +1,37 @@
+== StampFly inertia from part STL + measured masses (central values) ==
+total mass 37.0000 g; main-board remainder 8.9067 g
+centre of gravity (FRD, from the STL origin) [mm]: x -0.634  y 0.055  z -0.555
+
+-- adopted values [kg m^2] (before rounding / after rounding to 3 significant digits)
+Ixx  1.148209e-05  ->  1.150e-05
+Iyy  1.530445e-05  ->  1.530e-05
+Izz  2.263848e-05  ->  2.260e-05
+YAML style: Ixx 11.5e-6, Iyy 15.3e-6, Izz 22.6e-6
+Ixx + Iyy = 26.800 e-6 >= Izz = 22.600 e-6 : True
+
+-- per-part contribution [1e-6 kg m^2] (groups; sums of parallel-axis and own-shape terms)
+part                     mass g       Ixx       Iyy       Izz
+frame                     3.500     2.037     2.031     3.815
+main_board_remainder      8.907     1.237     1.106     1.540
+battery                   8.000     0.236     3.150     3.077
+front_tof_board           1.000     0.034     0.998     0.974
+stamps3_module            3.250     0.665     0.741     0.265
+motors                   11.333     6.683     6.687    11.861
+propellers                1.010     0.591     0.591     1.107
+TOTAL                    37.000    11.482    15.304    22.638
+
+-- not adopted, recorded only (products of inertia and centre-of-gravity offset)
+inertia-matrix elements about the CG (FRD): I13 (Ixz-type) +0.276 e-6, I12 -0.016 e-6, I23 +0.017 e-6 kg m^2
+(the STL is left-right symmetric, so I12 and I23 are ~0 here; the real values are unknown)
+
+-- ratio of the 2-point (bifilar) value to the adopted value
+Ixx  bifilar 9.16 e-6 / adopted 11.50 e-6 = 0.797
+Iyy  bifilar 13.30 e-6 / adopted 15.30 e-6 = 0.869
+Izz  bifilar 20.40 e-6 / adopted 22.60 e-6 = 0.903
+
+-- widths quoted from the analysis note (chapter 3; not used in the computation), 1e-6 kg m^2
+Ixx  95% envelope of the 3 placements (10.82, 11.84), frame-distribution extra width (-0.13, 0.23)
+Iyy  95% envelope of the 3 placements (14.38, 15.96), frame-distribution extra width (-0.13, 0.24)
+Izz  95% envelope of the 3 placements (21.44, 23.61), frame-distribution extra width (-0.25, 0.44)
+
+-- cross-check with propeller 0.96 g: [11.46  15.281 22.592] vs reference [11.46  15.281 22.592] -> MATCH

@@ -37,7 +37,7 @@ start index.html
 
 | パラメータ | 記号 | 説明 | StampFly標準値 |
 |-----------|------|------|----------------|
-| 慣性モーメント | I | 回転軸周りの慣性モーメント | 9.16×10⁻⁶ kg·m²（Roll軸） |
+| 慣性モーメント | I | 回転軸周りの慣性モーメント | 11.5×10⁻⁶ kg·m²（Roll軸） |
 | モータ時定数 | τₘ | モータの1次遅れ時定数 | 20 ms |
 
 #### PIDパラメータ
@@ -134,7 +134,7 @@ start index.html
 
 | Parameter | Symbol | Description | StampFly Default |
 |-----------|--------|-------------|------------------|
-| Moment of inertia | I | Inertia about rotation axis | 9.16×10⁻⁶ kg·m² (Roll) |
+| Moment of inertia | I | Inertia about rotation axis | 11.5×10⁻⁶ kg·m² (Roll) |
 | Motor time constant | τₘ | Motor first-order lag time constant | 20 ms |
 
 #### PID Parameters

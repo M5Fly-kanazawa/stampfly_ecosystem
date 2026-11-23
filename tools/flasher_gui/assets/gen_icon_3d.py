@@ -2,8 +2,8 @@
 """StampFly Flasher app icon generator — 3D render pipeline.
 
 Renders the real StampFly from the landing page's 9-part STL model
-(landing/assets/model/) plus procedurally generated propellers (ported
-from landing/index.html makeBlade/makeProp), through a numpy z-buffer
+(landing/assets/model/) plus the measured 4-blade propeller STL files
+(propeller_rotor_ccw / _cw in the same directory), through a numpy z-buffer
 rasterizer (true hidden-surface removal; translucent blades blended in
 a depth-tested second pass), then composes the approved "Navy Classic"
 icon: front-45 aerial view, lightning striking down into the glowing
@@ -11,8 +11,8 @@ M5 unit. Outputs into this directory: icon_1024.png, per-size PNGs
 (icon_16.png ... icon_512.png; <=32 px use a simplified large-bolt
 variant), icon.ico and (macOS only, via iconutil) icon.icns.
 
-landing ページの実機9パーツSTLモデル+手続き生成プロペラ
-（landing/index.html の makeBlade/makeProp 移植）を numpy Zバッファ
+landing ページの実機9パーツSTLモデル+実測の4枚羽根プロペラSTL
+（同じディレクトリの propeller_rotor_ccw / _cw）を numpy Zバッファ
 ラスタライザ（真の隠面消去。半透明ブレードは深度テスト付き後段合成）で
 描画し、承認済み「Navy Classic」構図（前方45°俯瞰・稲妻が発光する M5 へ
 注ぐ）に合成する。出力（本ディレクトリ）: icon_1024.png / サイズ別PNG
@@ -66,88 +66,17 @@ def hex_to_rgb(h):
 
 
 BLADE_RGBA = np.array([1.0, 0.169, 0.239, 0.62])   # 0xff2b3d, opacity .62
-HUB_RGBA   = np.array([0.557, 0.020, 0.071, 1.0])  # 0x8e0512
 
-PROP_R = 14.99
-HUB_R = PROP_R * 0.22
-BLADE_LEN = PROP_R - HUB_R * 0.6
-# Prop hub height: hub TOP is flush with the motor-shaft TIP (y=6.814),
-# per user direction 2026-07-20 ("モータシャフト上面とハブ上面を揃えて").
-# hub_top = PROP_Y + 1.0 + 2.6/2 -> PROP_Y = 6.814 - 2.3 = 4.514.
-# プロペラハブ高さ: ハブ上面をモータ軸先端(y=6.814)と面一にする
-# （2026-07-20 指示「モータシャフトの上面とプロペラハブの上面を揃えて」）。
-# hub_top = PROP_Y + 1.0 + 2.6/2 より PROP_Y = 6.814 - 2.3 = 4.514。
-PROP_Y = 4.514
-PROP_HUBS = [((22.80, PROP_Y,  22.80),  1), ((-22.80, PROP_Y,  22.80), -1),
-             ((22.80, PROP_Y, -22.81), -1), ((-22.80, PROP_Y, -22.81),  1)]
-
-
-def bezier(p0, p1, p2, p3, n=8):
-    t = np.linspace(0, 1, n)[:, None]
-    return ((1-t)**3*p0 + 3*(1-t)**2*t*p1 + 3*(1-t)*t**2*p2 + t**3*p3)
-
-
-def quad(p0, p1, p2, n=6):
-    t = np.linspace(0, 1, n)[:, None]
-    return (1-t)**2*p0 + 2*(1-t)*t*p1 + t**2*p2
-
-
-def blade_edges(L, Wm, n=14):
-    """上縁・下縁を根本→先端の同数サンプルで返す / upper & lower edges,
-    root->tip, equal sample counts (for gap-free strip triangulation).
-    NOTE: 扇形分割(tri_fan)は凹輪郭のこの羽根で根本〜中央に未被覆の
-    三角形の穴を作っていた(2026-07-20指摘)。ストリップ縫いで根治。"""
-    up = np.vstack([
-        bezier(np.array([0, .20*Wm]), np.array([.40*L, .50*Wm]),
-               np.array([.65*L, .50*Wm]), np.array([.86*L, .30*Wm]), n)[:-1],
-        quad(np.array([.86*L, .30*Wm]), np.array([L, .16*Wm]), np.array([L, 0.]), 5),
-    ])
-    lo = np.vstack([
-        bezier(np.array([0, -.24*Wm]), np.array([.40*L, -.58*Wm]),
-               np.array([.65*L, -.58*Wm]), np.array([.86*L, -.20*Wm]), n)[:-1],
-        quad(np.array([.86*L, -.20*Wm]), np.array([L, -.12*Wm]), np.array([L, 0.]), 5),
-    ])
-    return up, lo
-
-
-def strip_tris(up, lo):
-    """2本のポリライン間をストリップ三角形化 / stitch two polylines"""
-    m = min(len(up), len(lo))
-    tris = []
-    for i in range(m - 1):
-        tris.append(np.array([up[i], lo[i], lo[i+1]]))
-        tris.append(np.array([up[i], lo[i+1], up[i+1]]))
-    return np.array(tris)
-
-
-def make_blade_tris(L, Wm, twist_root, twist_tip):
-    up, lo = blade_edges(L, Wm)
-    u3 = np.column_stack([up[:, 0], up[:, 1], np.zeros(len(up))])
-    l3 = np.column_stack([lo[:, 0], lo[:, 1], np.zeros(len(lo))])
-    tris = strip_tris(u3, l3)
-    v = tris.reshape(-1, 3)
-    # linear twist about x / xに沿った線形ねじれ (rotate about x-axis)
-    a = twist_root + (twist_tip - twist_root) * np.clip(v[:, 0]/L, 0, 1)
-    y, z = v[:, 1].copy(), v[:, 2].copy()
-    v[:, 1] = y*np.cos(a) - z*np.sin(a)
-    v[:, 2] = y*np.sin(a) + z*np.cos(a)
-    # rotateX(pi/2): (x,y,z) -> (x, -z, y)
-    v = np.column_stack([v[:, 0], -v[:, 2], v[:, 1]])
-    return v.reshape(-1, 3, 3)
-
-
-def cylinder_tris(r_top, r_bot, h, n=16):
-    th = np.linspace(0, 2*np.pi, n+1)
-    tris = []
-    for i in range(n):
-        a, b = th[i], th[i+1]
-        pa_t = [r_top*np.cos(a), h/2, r_top*np.sin(a)]
-        pb_t = [r_top*np.cos(b), h/2, r_top*np.sin(b)]
-        pa_b = [r_bot*np.cos(a), -h/2, r_bot*np.sin(a)]
-        pb_b = [r_bot*np.cos(b), -h/2, r_bot*np.sin(b)]
-        tris += [np.array([pa_t, pa_b, pb_b]), np.array([pa_t, pb_b, pb_t]),
-                 np.array([[0, h/2, 0], pa_t, pb_t])]      # top cap
-    return np.array(tris)
+# Propeller hub centre height = axis_height_mm of simulator/shared/assets/meshes/propeller_geometry.json
+# (blade tips at Y = 6.3-6.85 mm). The hub top (Y = 7.5 mm) is therefore about 0.7 mm above the
+# motor-shaft tip (6.814); the old rule "hub top flush with the shaft tip" (2026-07-20) no longer holds.
+# プロペラのハブ中心の高さ。翼端が Y = 6.3〜6.85 mm になる値。ハブ上面(Y = 7.5 mm)はモータ軸先端
+# (6.814)より約 0.7 mm 高く、旧方針「ハブ上面を軸先端と面一」(2026-07-20)は成り立たない。
+PROP_Y = 6.535
+# (position, spin) of the 4 props; spin "ccw" or "cw" seen from above: M1 FR ccw, M2 RR cw, M3 RL ccw, M4 FL cw.
+# 4 基の位置と回転方向(上から見て)。M1 前右=ccw、M2 後右=cw、M3 後左=ccw、M4 前左=cw。
+PROP_HUBS = [((22.8042, PROP_Y,  22.8081), "cw"), ((-22.8042, PROP_Y,  22.8081), "ccw"),
+             ((22.8042, PROP_Y, -22.8003), "ccw"), ((-22.8042, PROP_Y, -22.8003), "cw")]
 
 
 def rot_y(a):
@@ -158,31 +87,20 @@ def rot_y(a):
 
 def build_props(spin=18):
     """4基のプロペラ三角形群+RGBA / triangles+RGBA for the 4 props.
-    spin: 各プロペラの位相角オフセット[deg]（見栄え用）"""
-    blade = make_blade_tris(BLADE_LEN, BLADE_LEN/2.7, 0.38, 0.10)
-    blade = blade + np.array([HUB_R*0.6, 0, 0])
-    hub = cylinder_tris(HUB_R, HUB_R*0.9, 2.6)
+    spin: 各プロペラの位相角オフセット[deg]（見栄え用）。形状は回転方向ごとの STL。"""
+    shape = {hand: load_stl(MODEL_DIR / f"propeller_rotor_{hand}.stl") for hand in ("ccw", "cw")}
     tris, rgba = [], []
-    for k, ((px, py, pz), d) in enumerate(PROP_HUBS):
-        base = np.radians(spin + k*37)
-        # d (=CW/CCW) only changes the phase direction of the 3 blades;
-        # a static render needs no mirrored blade geometry.
-        # d(=回転方向)は3枚羽根の位相の向きにだけ効かせる。静止画なので
-        # 羽根形状の鏡像化は不要。
-        for i in range(3):
-            b = blade.reshape(-1, 3) @ rot_y(base + i*2*np.pi/3 * d).T
-            t = b.reshape(-1, 3, 3) + np.array([px, py, pz])
-            tris.append(t)
-            rgba.append(np.tile(BLADE_RGBA, (len(t), 1)))
-        h = hub + np.array([px, py + 1.0, pz])
-        tris.append(h)
-        rgba.append(np.tile(HUB_RGBA, (len(h), 1)))
+    for k, ((px, py, pz), hand) in enumerate(PROP_HUBS):
+        base = np.radians(spin + k * 37)
+        t = (shape[hand].reshape(-1, 3) @ rot_y(base).T).reshape(-1, 3, 3) + np.array([px, py, pz])
+        tris.append(t)
+        rgba.append(np.tile(BLADE_RGBA, (len(t), 1)))
     return np.concatenate(tris), np.concatenate(rgba)
 
 
 def _gather(props=True):
-    """Collect all triangles + colors: 9 STL parts + 4 procedural props.
-    全三角形+色を収集: STL9パーツ+手続き生成プロペラ4基。"""
+    """Collect all triangles + colors: 9 STL parts + 4 propellers (STL).
+    全三角形+色を収集: STL9パーツ+プロペラ4基(STL)。"""
     tris, rgba = [], []
     for name, chex in PART_COLORS.items():
         t = load_stl(MODEL_DIR / f"{name}.stl")

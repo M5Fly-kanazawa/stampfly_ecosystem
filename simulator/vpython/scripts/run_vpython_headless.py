@@ -196,7 +196,7 @@ def run_headless(input_file, output_file, duration=10.0):
 
     stampfly = mc.multicopter(
         mass=mass,
-        inersia=[[9.16e-6, 0.0, 0.0], [0.0, 13.3e-6, 0.0], [0.0, 0.0, 20.4e-6]]
+        inersia=[[11.5e-6, 0.0, 0.0], [0.0, 15.3e-6, 0.0], [0.0, 0.0, 22.6e-6]]
     )
 
     # Initial state (start at origin for comparison)

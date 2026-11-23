@@ -339,53 +339,19 @@ const PART_MAT = {
 };
 const bladeMat = new THREE.MeshStandardMaterial({ color: 0xff2b3d, transparent: true, opacity: 0.62,
   roughness: 0.18, metalness: 0.0, emissive: 0x4a0008, emissiveIntensity: 0.35, side: THREE.DoubleSide });
-const hubMat = new THREE.MeshStandardMaterial({ color: 0x8e0512, roughness: 0.3, metalness: 0.15 });
 
-function makeBlade(L, Wm, thick, twistRoot, twistTip) {
-  const s = new THREE.Shape();
-  s.moveTo(0, 0.20 * Wm);
-  s.bezierCurveTo(0.40 * L, 0.50 * Wm, 0.65 * L, 0.50 * Wm, 0.86 * L, 0.30 * Wm);
-  s.quadraticCurveTo(L, 0.16 * Wm, L, 0.0);
-  s.quadraticCurveTo(L, -0.12 * Wm, 0.86 * L, -0.20 * Wm);
-  s.bezierCurveTo(0.65 * L, -0.58 * Wm, 0.40 * L, -0.58 * Wm, 0, -0.24 * Wm);
-  s.closePath();
-  const geo = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: false });
-  geo.translate(0, 0, -thick / 2);
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const a = twistRoot + (twistTip - twistRoot) * Math.min(1, Math.max(0, x / L));
-    const c = Math.cos(a), sn = Math.sin(a);
-    p.setXYZ(i, x, y * c - z * sn, y * sn + z * c);
-  }
-  geo.rotateX(Math.PI / 2);
-  geo.computeVertexNormals();
-  return geo;
-}
-const PROP_RADIUS = 14.99;
-const HUB_R = PROP_RADIUS * 0.22;
-const bladeGeo = makeBlade(PROP_RADIUS - HUB_R * 0.6, (PROP_RADIUS - HUB_R * 0.6) / 2.7, 0.6, 0.38, 0.10);
-const hubGeo = new THREE.CylinderGeometry(HUB_R, HUB_R * 0.9, 2.6, 24);
-const domeGeo = new THREE.SphereGeometry(HUB_R * 0.85, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-function makeProp() {
-  const prop = new THREE.Group();
-  prop.add(new THREE.Mesh(hubGeo, hubMat));
-  const dome = new THREE.Mesh(domeGeo, hubMat); dome.position.y = 1.0; prop.add(dome);
-  for (let i = 0; i < 3; i++) {
-    const blade = new THREE.Mesh(bladeGeo, bladeMat);
-    blade.rotation.y = i * (Math.PI * 2 / 3);
-    blade.translateX(HUB_R * 0.6);
-    prop.add(blade);
-  }
-  return prop;
-}
+// Propeller shapes: the measured 4-blade propeller from STL (origin = hub centre, axis = +Y), one
+// file per spin direction (cw = mirror image of ccw). プロペラ形状: 実測の 4 枚羽根を STL から読む。
+const PROP_MESH = { ccw: "propeller_rotor_ccw", cw: "propeller_rotor_cw" };
 // m1..m4 (packet) = M1 FR / M2 RR / M3 RL / M4 FL; CCW=+1 / CW=-1 (real turn direction).
 // パケットの m1..m4 と実回転方向の対応（MJCF と同一）。
 const PROP_HUBS = [
-  { pos: [ 22.80, 7.81,  22.80], motor: "m4", dir: -1 },  // FL = M4  CW
-  { pos: [-22.80, 7.81,  22.80], motor: "m1", dir: +1 },  // FR = M1  CCW
-  { pos: [ 22.80, 7.81, -22.81], motor: "m3", dir: +1 },  // RL = M3  CCW
-  { pos: [-22.80, 7.81, -22.81], motor: "m2", dir: -1 },  // RR = M2  CW
+  { pos: [ 22.8042, 6.535,  22.8081], motor: "m4", dir: -1 },  // FL = M4  CW
+  { pos: [-22.8042, 6.535,  22.8081], motor: "m1", dir: +1 },  // FR = M1  CCW
+  { pos: [ 22.8042, 6.535, -22.8003], motor: "m3", dir: +1 },  // RL = M3  CCW
+  { pos: [-22.8042, 6.535, -22.8003], motor: "m2", dir: -1 },  // RR = M2  CW
+// Hub centre height 6.535 mm = axis_height_mm of simulator/shared/assets/meshes/propeller_geometry.json.
+// ハブ中心の高さ 6.535 mm は propeller_geometry.json の axis_height_mm。
 ];
 const BODY_PARTS = ["frame", "pcb", "m5stamps3", "battery", "battery_adapter",
                     "motor_fl", "motor_fr", "motor_rl", "motor_rr"];
@@ -395,13 +361,16 @@ function buildDrone() {
   model.scale.setScalar(0.001);
   model.quaternion.set(0.5, 0.5, 0.5, 0.5);
   g.add(model);
-  PROP_HUBS.forEach(h => {
-    const prop = makeProp();
-    prop.position.set(h.pos[0], h.pos[1] - 1.4, h.pos[2]);
-    model.add(prop);
-    props.push({ pivot: prop, dir: h.dir, motor: h.motor });
-  });
   const loader = new STLLoader();
+  Object.values(PROP_MESH).forEach(name => loader.load(`/mesh/${name}.stl`, (geo) => {
+    geo.computeVertexNormals();
+    PROP_HUBS.filter(h => PROP_MESH[h.dir > 0 ? "ccw" : "cw"] === name).forEach(h => {
+      const prop = new THREE.Mesh(geo, bladeMat);
+      prop.position.set(h.pos[0], h.pos[1], h.pos[2]);
+      model.add(prop);
+      props.push({ pivot: prop, dir: h.dir, motor: h.motor });
+    });
+  }, undefined, (err) => console.warn("[3D] STL load failed:", name, err)));
   BODY_PARTS.forEach(name => loader.load(`/mesh/${name}.stl`, (geo) => {
     geo.computeVertexNormals();
     model.add(new THREE.Mesh(geo, PART_MAT[name] || PART_MAT.frame));

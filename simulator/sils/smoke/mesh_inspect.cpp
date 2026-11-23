@@ -5,10 +5,13 @@
  * Part of StampFly Ecosystem (SILS host bench).
  * https://github.com/M5Fly-kanazawa/stampfly_ecosystem
  *
- * Throwaway tool: print each mesh geom's body-frame Z extent, to measure the
- * propeller-vs-motor-top gap so the props can be nudged to sit on the motors.
- * 使い捨てツール: 各メッシュ geom の機体系 Z 範囲を表示し、プロペラとモータ
- * 上面の隙間を測る。
+ * Throwaway tool: print each mesh geom's body-frame Z extent, and for the
+ * propellers the largest XY radius (half of the propeller diameter, about
+ * 15.6 mm for the 4-blade measured shape) and the Z range, to check the
+ * propeller height against the motor shaft top.
+ * 使い捨てツール: 各メッシュ geom の機体系 Z 範囲を表示し、プロペラについては
+ * XY の最大半径(直径の半分。4 枚羽根の実測形状で約 15.6 mm)と Z 範囲を表示して、
+ * モータ軸の上端に対するプロペラの高さを確かめる。
  */
 
 #include <cfloat>
@@ -71,12 +74,9 @@ int main(int argc, char** argv)
                 printf("       band %2d  z=%.4f  rmax=%.4f m\n", b, zmin + b*(zmax-zmin)/(NB-1), rmax[b]);
         }
 
-        // For propellers: is the small-radius hub at the bottom (on motor) or
-        // the top (upside down)? Compare XY radius near z_min vs near z_max.
-        // プロペラ: 細いハブが下(モータ側)か上(裏返し)か。z_min 付近と z_max
-        // 付近の XY 半径を比べる。
+        // For propellers: XY centroid and the largest XY radius about it (tip radius).
+        // プロペラ: XY の重心と、そこからの最大 XY 半径(翼端の半径)。
         if (name && std::string(name).rfind("m_prop", 0) == 0) {
-            // XY centroid (in body frame).
             double cx = 0, cy = 0;
             for (int k = 0; k < n; ++k) {
                 mjtNum v[3] = {m->mesh_vert[3*(adr+k)+0], m->mesh_vert[3*(adr+k)+1], m->mesh_vert[3*(adr+k)+2]};
@@ -85,20 +85,16 @@ int main(int argc, char** argv)
                 cy += vr[1] + m->geom_pos[3*g+1];
             }
             cx /= n; cy /= n;
-            double band = 0.0015;  // 1.5 mm bands
-            double rbot_max = 0, rtop_max = 0;
+            double rmax = 0;
             for (int k = 0; k < n; ++k) {
                 mjtNum v[3] = {m->mesh_vert[3*(adr+k)+0], m->mesh_vert[3*(adr+k)+1], m->mesh_vert[3*(adr+k)+2]};
                 mjtNum vr[3]; mju_rotVecQuat(vr, v, m->geom_quat + 4*g);
-                double xb = vr[0] + m->geom_pos[3*g+0], yb = vr[1] + m->geom_pos[3*g+1], zb = vr[2] + m->geom_pos[3*g+2];
+                double xb = vr[0] + m->geom_pos[3*g+0], yb = vr[1] + m->geom_pos[3*g+1];
                 double r = std::sqrt((xb-cx)*(xb-cx) + (yb-cy)*(yb-cy));
-                if (zb <= zmin + band && r > rbot_max) rbot_max = r;
-                if (zb >= zmax - band && r > rtop_max) rtop_max = r;
+                if (r > rmax) rmax = r;
             }
-            printf("    -> hub check: max XY-radius near bottom=%.4f m, near top=%.4f m  (small=hub side)\n",
-                   rbot_max, rtop_max);
-            printf("    -> centroid xy=(%.4f, %.4f), z-center=%.4f\n",
-                   cx, cy, 0.5 * (zmin + zmax));
+            printf("    -> max XY radius=%.4f m (centroid xy=(%.4f, %.4f)), z-center=%.4f\n",
+                   rmax, cx, cy, 0.5 * (zmin + zmax));
         }
     }
     mj_deleteModel(m);

@@ -292,7 +292,7 @@ sf flash controller --legacy
 | MCU | ESP32-S3（M5Stamp S3） |
 | 質量 | 約 37 g（実測 36.8 g） |
 | 寸法 | モータ間距離（対角）65 mm、アーム長（中心→モータ）32.5 mm |
-| 慣性モーメント | Ixx 9.16e-6、Iyy 13.3e-6、Izz 20.4e-6 kg·m² |
+| 慣性モーメント | Ixx 11.5e-6、Iyy 15.3e-6、Izz 22.6e-6 kg·m² |
 | モータ | 4 基（X 配置）、PWM 150 kHz 駆動 |
 | バッテリー | 1S LiPo（3.7 V）、低電圧警告 3.4 V |
 
@@ -685,7 +685,7 @@ sf flash controller --legacy
 | MCU | ESP32-S3 (M5Stamp S3) |
 | Mass | about 37 g (measured 36.8 g) |
 | Size | motor-to-motor (diagonal) 65 mm, arm length (center to motor) 32.5 mm |
-| Moments of inertia | Ixx 9.16e-6, Iyy 13.3e-6, Izz 20.4e-6 kg·m² |
+| Moments of inertia | Ixx 11.5e-6, Iyy 15.3e-6, Izz 22.6e-6 kg·m² |
 | Motors | 4 (X configuration), 150 kHz PWM drive |
 | Battery | 1S LiPo (3.7 V), low-voltage warning at 3.4 V |
 

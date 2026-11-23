@@ -2,7 +2,9 @@
   StampFly flight model for the SILS (MuJoCo, natural ENU / Z-up world; body FLU).
   Physical parameters are the calibrated StampFly values
   (docs/architecture/stampfly-parameters.md, cross-checked with firmware):
-    mass 0.037 kg; inertia Ixx/Iyy/Izz = 9.16 / 13.3 / 20.4 e-6 kg·m²;
+    mass 0.037 kg; inertia Ixx/Iyy/Izz = 11.5 / 15.3 / 22.6 e-6 kg·m²
+    (computed from the part STL meshes and measured masses, 2026-11-23; was the 2-point
+    suspension measurement 9.16 / 13.3 / 20.4 — see control/models/stampfly_physical.yaml);
     motors at ±0.023 m, +0.005 m above CG; X-quad (M1=FR..M4=FL).
 
   StampFly 飛行モデル（MuJoCo, 自然な ENU/Z上 ワールド; 機体 FLU）。
@@ -83,7 +85,7 @@
     <!-- 機体 FLU（X前, Y左, Z上）。0.5 m でホバー開始。 -->
     <body name="drone" pos="0 0 0.5">
       <freejoint name="root"/>
-      <inertial pos="0 0 0" mass="0.037" diaginertia="9.16e-6 13.3e-6 20.4e-6"/>
+      <inertial pos="0 0 0" mass="0.037" diaginertia="11.5e-6 15.3e-6 22.6e-6"/>
 
       <!-- Collision: hidden box approximating the frame. Its half-height (size z) is the
            GROUND STANDOFF: the body origin rests this high above the floor. The emulated
@@ -116,14 +118,16 @@
       <geom type="mesh" mesh="m_motor_fr" material="mat_motor"   quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
       <geom type="mesh" mesh="m_motor_rl" material="mat_motor"   quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
       <geom type="mesh" mesh="m_motor_rr" material="mat_motor"   quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
-      <!-- Props sit with their disk bottom on the motor CAN top (z≈+0.0011);
-           prop original bottom is +0.0028, so pos z = -0.0017. -->
-      <!-- プロペラ円盤の底面をモータ缶の上面（z≈+0.0011）に合わせる。原寸底面
-           +0.0028 なので pos z = -0.0017。 -->
-      <geom type="mesh" mesh="m_prop_fl"  material="mat_prop" pos="0 0 -0.0017" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
-      <geom type="mesh" mesh="m_prop_fr"  material="mat_prop" pos="0 0 -0.0017" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
-      <geom type="mesh" mesh="m_prop_rl"  material="mat_prop" pos="0 0 -0.0017" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
-      <geom type="mesh" mesh="m_prop_rr"  material="mat_prop" pos="0 0 -0.0017" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <!-- Propellers: 4-blade measured shape, already placed at the motor positions in the body STL
+           frame (hub centre at the motor shaft, tip height Y = 6.3 to 6.85 mm), so no position offset.
+           Source: simulator/shared/assets/meshes/propeller_geometry.json. -->
+      <!-- プロペラ: 実測の 4 枚羽根形状。機体 STL 座標でモータの位置に置いてあるので
+           (ハブ中心がモータ軸、翼端の高さ Y = 6.3〜6.85 mm)、位置の補正は不要。
+           元データ: simulator/shared/assets/meshes/propeller_geometry.json -->
+      <geom type="mesh" mesh="m_prop_fl"  material="mat_prop" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_prop_fr"  material="mat_prop" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_prop_rl"  material="mat_prop" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
+      <geom type="mesh" mesh="m_prop_rr"  material="mat_prop" quat="0.5 0.5 0.5 0.5" contype="0" conaffinity="0" group="2"/>
 
       <!-- IMU + rotor sites (used by sensors/actuators; rendered invisible). -->
       <!-- IMU + ロータ site（センサ/アクチュエータが使用; 非表示）。 -->

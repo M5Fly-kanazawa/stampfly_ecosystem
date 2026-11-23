@@ -569,7 +569,7 @@ namespace param_vars {
     // 読み込む。FlipSequencer 自身はこの param システムに一切触れない。
     // 下の範囲は plan §3.4/§5.3 の掃引窓がある場合はそれに従う。
     float flip_rate_roll_dps    = 1500.0f;  // [deg/s] peak limit of the planned profile (measured ~+8 %) / 計画プロファイルのピーク上限（計測は約 +8 %）
-    float flip_rate_pitch_dps   = 1400.0f;  // [deg/s] lower than roll: Iyy=1.45x Ixx / ロールより低い: Iyy=Ixxの1.45倍
+    float flip_rate_pitch_dps   = 1400.0f;  // [deg/s] lower than roll: Iyy=1.33x Ixx / ロールより低い: Iyy=Ixxの1.33倍
     float flip_rate_ramp_rps2   = 145.0f;   // [rad/s^2] planned-profile ramp-up (roll needs 1.3 mNm of the 7 mNm limit) / 計画プロファイルの加速ランプ（ロールは上限 7 mNm のうち 1.3 mNm）
     float flip_boost_ms         = 150.0f;   // [ms] pre-spin climb / 反転前の上昇
     float flip_thrust_boost_ratio   = 0.9f;   // [-] Boost/Recover, x max_thrust_ / Boost/Recover、max_thrust_基準

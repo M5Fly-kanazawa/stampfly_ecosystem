@@ -272,7 +272,7 @@ def flight_sim_2000hz(world_type='voxel', seed=None, control_mode='rate',
 
     stampfly = mc.multicopter(
         mass=mass,
-        inersia=[[9.16e-6, 0.0, 0.0], [0.0, 13.3e-6, 0.0], [0.0, 0.0, 20.4e-6]]
+        inersia=[[11.5e-6, 0.0, 0.0], [0.0, 15.3e-6, 0.0], [0.0, 0.0, 22.6e-6]]
     )
 
     # Initialize renderer

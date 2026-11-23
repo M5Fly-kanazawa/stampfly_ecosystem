@@ -36,6 +36,8 @@ VENDOR_DIR = HERE / "vendor"
 MESH_DIR = REPO_ROOT / "simulator" / "shared" / "assets" / "meshes" / "parts"
 PART_NAMES = ["frame", "pcb", "m5stamps3", "battery", "battery_adapter",
               "motor_fl", "motor_fr", "motor_rl", "motor_rr"]
+# Propeller shapes (origin = hub centre, axis +Y), one per spin direction. プロペラ形状（回転方向ごと）。
+PROP_NAMES = ["propeller_rotor_ccw", "propeller_rotor_cw"]
 
 JPEG_QUALITY = 92
 CHROME_START_TIMEOUT_S = 30.0
@@ -125,9 +127,9 @@ class _QuietHandler(http.server.SimpleHTTPRequestHandler):
 
 
 class _Server(http.server.ThreadingHTTPServer):
-    """Local server with a long accept queue: the page asks for nine STL files at
+    """Local server with a long accept queue: the page asks for eleven STL files at
     once, and the default queue of 5 drops connections.
-    長い接続待ち行列を持つ局所サーバ。ページは STL 9 個を同時に取りに来るので、
+    長い接続待ち行列を持つ局所サーバ。ページは STL 11 個を同時に取りに来るので、
     既定の待ち行列 5 だと接続が落ちる。"""
 
     request_queue_size = 128
@@ -141,7 +143,7 @@ def stage_site(root: Path, data: dict) -> None:
             shutil.copy2(item, root / item.name)
     shutil.copytree(VENDOR_DIR, root / "vendor")
     (root / "meshes").mkdir()
-    for name in PART_NAMES:
+    for name in PART_NAMES + PROP_NAMES:
         shutil.copy2(MESH_DIR / f"{name}.stl", root / "meshes" / f"{name}.stl")
     (root / "data.json").write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
 

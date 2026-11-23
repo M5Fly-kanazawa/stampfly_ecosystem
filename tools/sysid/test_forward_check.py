@@ -6,12 +6,12 @@ test_forward_check.py - 順モデル照合の合格基準が実際に判別で�
 The criteria of `sf sils sysid-gate` (analysis/datasets/flightlog/forward_check.yaml) are
 only worth anything if a wrong propulsion model FAILS them.  This test runs the two
 published real flip logs through
-  - the SILS plant's R_out model: must PASS, with the values of
-    analysis/notes/forward_model_check_20261101.md;
+  - the SILS plant's R_out model: must PASS, with the values pinned below (EXPECTED_ROUT; the
+    values of analysis/notes/forward_model_check_20261101.md were those of the pre-2026-11-23 inertia);
   - the old D*V model (the plant before 2026-10; written out below, self-contained):
     must FAIL, on every one of the four roll criteria in both logs.
 `sf sils sysid-gate` の基準は、誤った推進系モデルが不合格になって初めて意味を持つ。公開した
-2 本の実機宙返りログを (a) R_out モデル (合格し、報告書の値に一致すること)、(b) 旧 D×V
+2 本の実機宙返りログを (a) R_out モデル (合格し、下に固定した値に一致すること。固定値は 2026-11-23 に慣性を替えて更新)、(b) 旧 D×V
 モデル (2026-10 以前のプラント。下に自己完結で記述。ロールの 4 基準すべて・両ログで不合格に
 なること) に通す。
 
@@ -38,13 +38,31 @@ SPEC_PATH = fc.default_criteria_path(_REPO_ROOT)
 LOG_DIR = SPEC_PATH.parent
 INERTIA = np.array([gp.EXPECTED_IXX, gp.EXPECTED_IYY, gp.EXPECTED_IZZ])
 
-# Expected R_out values (report chapter 5) and the tolerance of this test (the numbers
-# are deterministic; the margin only absorbs library-version noise).
-# R_out の期待値 (報告書 5 章) とこの試験の許容 (値は決定論的。許容はライブラリ差のみ)。
+# Expected R_out values and the tolerance of this test (the numbers are deterministic; the
+# margin only absorbs library-version noise).
+# R_out の期待値とこの試験の許容 (値は決定論的。許容はライブラリ差のみ)。
+#
+# Changed on 2026-11-23: the reference body inertia Ixx/Iyy/Izz was changed from
+# 9.16/13.3/20.4e-6 to 11.5/15.3/22.6e-6 kg m^2 (analysis/notes/mass_inertia_measurements_20261123.md).
+# The pinned values moved ONLY because of that: re-running with the three inertia constants set
+# back to the old values reproduces the old numbers, and the logs, the criteria file and every
+# other model constant are unchanged. The new values below come from running the code under test,
+# not from hand editing. The tolerance is NOT widened.
+#   log 0: residual 0.311 -> 0.152, hover gain 0.775 -> 0.973 (delay 4.0 ms and 4.4 ms unchanged)
+#   log 1: residual 0.285 -> 0.155, hover gain 0.837 -> 1.051 (delay 3.0 ms and 4.2 ms unchanged)
+# The old numbers (= analysis/notes/forward_model_check_20261101.md, report chapter 5) are those
+# of the old inertia.
+# 2026-11-23 に変更: 基準の機体慣性 Ixx/Iyy/Izz を 9.16/13.3/20.4e-6 から 11.5/15.3/22.6e-6 kg m^2 へ
+# 替えた (analysis/notes/mass_inertia_measurements_20261123.md)。固定値が動いた原因はこれだけ:
+# 慣性 3 定数を旧値に戻して再実行すると旧値が再現し、ログ・基準ファイル・他のモデル定数は
+# 変わっていない。下の新値は試験対象のコードを実行して得た値で、手で作っていない。許容は広げていない。
+#   ログ 0: 残差 0.311 -> 0.152、ホバーのゲイン 0.775 -> 0.973 (遅れ 4.0 ms・4.4 ms は不変)
+#   ログ 1: 残差 0.285 -> 0.155、ホバーのゲイン 0.837 -> 1.051 (遅れ 3.0 ms・4.2 ms は不変)
+# 旧値 (analysis/notes/forward_model_check_20261101.md 5 章) は旧慣性での値。
 EXPECTED_ROUT = {
     # log index: (nofit residual, best delay ms, hover gain, hover delay ms)
-    0: (0.311, 4.0, 0.775, 4.4),
-    1: (0.285, 3.0, 0.837, 4.2),
+    0: (0.152, 4.0, 0.973, 4.4),
+    1: (0.155, 3.0, 1.051, 4.2),
 }
 TOL_RESIDUAL, TOL_DELAY_MS, TOL_GAIN, TOL_HOVER_DELAY_MS = 0.01, 1.0, 0.02, 0.3
 
@@ -130,8 +148,14 @@ def test_pitch_rows_are_reference_only(rout_rows):
 
 def test_old_dxv_model_fails_every_roll_criterion_in_both_logs(old_rows):
     # Falsification: if any of these passed, that criterion could not tell the old model
-    # from the R_out model.  Reported old values: residual 1.04 / 0.97, delay 14 / 17 ms,
-    # hover gain 0.38 / 0.36, hover delay 14.4 ms.
+    # from the R_out model.  Reported old values (old inertia, report chapter 6): residual 1.04 / 0.97,
+    # delay 14 / 17 ms, hover gain 0.38 / 0.36, hover delay 14.4 ms.  With the 2026-11-23 inertia
+    # (this test uses the generated constants): residual 0.71 / 0.68, delay 14 / 17 ms, hover gain
+    # 0.47 / 0.45, hover delay 14.4 ms -- still all FAIL, but the margins to the criteria
+    # (0.5 / 8 ms / 0.6 / 8 ms) are narrower for the residual and the hover gain.
+    # 報告済みの旧値 (旧慣性、報告書 6 章) は上記。2026-11-23 の慣性 (この試験は生成定数を使う) では
+    # 残差 0.71 / 0.68、遅れ 14 / 17 ms、ゲイン 0.47 / 0.45、ホバー遅れ 14.4 ms で、全て不合格のままだが、
+    # 残差とホバーのゲインは基準までの余裕が狭くなった。
     # 反証: どれか 1 つでも PASS なら、その基準は旧モデルと R_out を区別できない。
     assert not fc.overall_pass(old_rows)
     for index, metrics in _by_log(old_rows).items():

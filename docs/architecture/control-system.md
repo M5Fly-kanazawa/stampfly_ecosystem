@@ -1039,6 +1039,8 @@ $$
 | アーム長（半径） | $r$ | 0.0325 | m | 中心→モーター |
 | モーメントアーム | $d$ | 0.023 | m | X/Y座標オフセット（$d = r/\sqrt{2}$） |
 
+> **注記（2026-11-23）:** この節の慣性モーメントは、以後の数値計算例（伝達関数・ゲイン・余裕）がすべて同じ値から導かれているため、2点吊り法の旧値（9.16・13.3・20.4 ×10⁻⁶）のまま据え置いた。機体の現在の基準値は 11.5・15.3・22.6 ×10⁻⁶ kg·m²（`control/models/stampfly_physical.yaml`、`docs/architecture/stampfly-parameters.md`）。
+
 #### モーター・プロペラパラメータ
 
 | パラメータ | 記号 | 値 | 単位 | 備考 |
@@ -2398,6 +2400,8 @@ The following parameters are numerical examples for this section, based on `docs
 | Pitch moment of inertia | $I_{yy}$ | $13.3 \times 10^{-6}$ | kg·m² | |
 | Yaw moment of inertia | $I_{zz}$ | $20.4 \times 10^{-6}$ | kg·m² | |
 | Arm length | $d$ | 0.0325 | m | Center to motor |
+
+> **Note (2026-11-23):** The moments of inertia in this section are kept at the old 2-point suspension values (9.16, 13.3, 20.4 ×10⁻⁶) because every following numerical example (transfer functions, gains, margins) is derived from them. The current reference values of the vehicle are 11.5, 15.3, 22.6 ×10⁻⁶ kg·m² (`control/models/stampfly_physical.yaml`, `docs/architecture/stampfly-parameters.md`).
 
 #### Motor & Propeller Parameters
 

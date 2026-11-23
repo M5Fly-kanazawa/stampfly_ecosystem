@@ -2,6 +2,9 @@
 
 > **Note:** [English version follows after the Japanese section.](#english) / 日本語の後に英語版があります。
 
+> **2026-11-23 注記:** 基準の機体慣性を 9.16/13.3/20.4e-6 から 11.5/15.3/22.6e-6 kg·m² に変更した（`analysis/notes/mass_inertia_measurements_20261123.md`）。この文書の数値は旧の慣性での値で、当時の記録として書き換えていない。新しい慣性での値は `tools/sysid/test_forward_check.py` の `EXPECTED_ROUT` に固定してある（宙返りの残差 0.311/0.285 → 0.152/0.155、ホバーのゲイン 0.775/0.837 → 0.973/1.051）。
+> **Note (2026-11-23):** The reference body inertia was changed from 9.16/13.3/20.4e-6 to 11.5/15.3/22.6e-6 kg·m² (`analysis/notes/mass_inertia_measurements_20261123.md`). The numbers in this document are those of the old inertia and are kept unchanged as the record of the time. The values with the new inertia are pinned in `EXPECTED_ROUT` of `tools/sysid/test_forward_check.py` (flip residual 0.311/0.285 → 0.152/0.155, hover gain 0.775/0.837 → 0.973/1.051).
+
 **状態**: 実施済み（バックログ #21 の第一段）。判定基準（合否の閾値）は決めていない。作成 2026-11-01、最終更新 2026-11-01。実機ログ（`flip_test1/2`）はリポジトリに含めない。
 
 ## 1. 目的と結論

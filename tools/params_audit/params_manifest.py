@@ -852,9 +852,9 @@ MANIFEST: Dict[str, List[ParamCheck]] = {
         ),
         ParamCheck(
             file="simulator/shared/assets/meshes/parts/stampfly.urdf",
-            regex=r'<mass value="([0-9.eE+-]+)"/>\s*\n\s*<inertia ixx="9\.16e-6"',
+            regex=r'<mass value="([0-9.eE+-]+)"/>\s*\n\s*<inertia ixx="[0-9.eE+-]+"',
             expected=EXPECTED_URDF_BASE_MASS,
-            note="base_link mass only (base 0.033 + 4x1g props = 0.037 total)",
+            note="base_link mass only (base 0.03599 + 4x0.2525 g props = 0.037 total)",
         ),
         ParamCheck(
             file="simulator/genesis/scripts/run_genesis_sim.py",

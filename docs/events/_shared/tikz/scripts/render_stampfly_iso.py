@@ -255,6 +255,8 @@ def triangulate_polygon_fan(polygon_points: np.ndarray) -> list[np.ndarray]:
     分割するため、羽根の根元のようなわずかな凹みがあっても正しく
     三角形分割できる。
     """
+    if len(polygon_points) == 3:      # already a triangle / すでに三角形
+        return [polygon_points]
     centroid = polygon_points.mean(axis=0)
     m = len(polygon_points)
     return [
@@ -591,273 +593,54 @@ def face_normals(triangles: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Propellers: not part of the STL set, so they are drawn procedurally.
-# Count / diameter / thickness / mounting height and the blade planform are
-# reused verbatim from the real StampFly three.js viewer
-# (landing/index.html, the "Real StampFly 3D model" module), which already
-# builds true-to-life props because the STL parts have no propeller mesh.
-# プロペラ: STL部品には含まれないため、手続き的に描く。枚数・直径・厚み・
-# 取付高さ、および羽根の平面形状は、実物のStampFly three.jsビューア
-# (landing/index.html の「Real StampFly 3D model」モジュール)の値を
-# そのまま流用する（STLにプロペラのメッシュが無いため、同ビューアも
-# 手続き的に本物そっくりのプロペラを描いている）。
+# Propellers: the measured 4-blade shape (31.21 mm, sweep and twist), read from the STL files
+# propeller_rotor_ccw.stl / propeller_rotor_cw.stl (origin = hub centre, axis = +Y). They are
+# copies of simulator/shared/assets/meshes/parts/ kept next to the other parts in
+# landing/assets/model/. Shape data: simulator/shared/assets/meshes/propeller_geometry.json.
+# プロペラ: 実測の 4 枚羽根形状(直径 31.21 mm、後退角・ねじりあり)を STL
+# (propeller_rotor_ccw.stl / propeller_rotor_cw.stl、原点=ハブ中心、軸=+Y)から読む。
+# simulator/shared/assets/meshes/parts/ の写しを他の部品と同じ landing/assets/model/ に置いてある。
+# 形状データは simulator/shared/assets/meshes/propeller_geometry.json。
 # ---------------------------------------------------------------------------
 
-# From landing/index.html: `const propRadius = 14.99;` (mm) -- overall
-# propeller disk radius, so diameter = 2*PROP_RADIUS_MM ~= 30 mm.
-# landing/index.html の `const propRadius = 14.99;` (mm) -- プロペラ円盤の
-# 半径。直径 = 2*PROP_RADIUS_MM ≈ 30mm。
-PROP_RADIUS_MM = 14.99
-BLADE_COUNT = 3  # landing: `for (let i = 0; i < 3; i++)` in makeProp() / 3枚羽根
-# landing: `const hubR = propRadius * 0.22;`
-HUB_RADIUS_MM = PROP_RADIUS_MM * 0.22
-# landing: `const bladeLen = propRadius - hubR * 0.6;`
-BLADE_LEN_MM = PROP_RADIUS_MM - HUB_RADIUS_MM * 0.6
-# landing: `makeBlade(bladeLen, bladeLen / 2.7, 0.6, 0.38, 0.10)` -- 2nd arg
-# "Wm" is the blade's width-scale parameter used throughout its outline.
-# landing の `makeBlade(bladeLen, bladeLen / 2.7, 0.6, 0.38, 0.10)` --
-# 第2引数 "Wm" は羽根の輪郭全体で使われる幅スケールパラメータ。
-BLADE_WIDTH_SCALE_MM = BLADE_LEN_MM / 2.7
-# landing: extrusion `depth: thick` = 0.6 mm. Kept only for documentation:
-# our render draws each blade as a single flat filled silhouette (matching
-# how every other part here is flat-shaded per triangle), so a 0.6 mm
-# relief is not visually material at this drawing scale and is not built
-# into the 2D geometry.
-# landing の押し出し `depth: thick` = 0.6mm。ここでは記録目的でのみ保持。
-# 本レンダリングは他の部品と同様に羽根も1枚の塗りつぶしシルエットとして
-# 描くため（本図の他パーツもすべて三角形単位のフラットシェーディング）、
-# この描画スケールでは0.6mmの厚み方向の凹凸は視覚的に意味を持たず、
-# 2D形状には反映しない。
-BLADE_THICKNESS_MM = 0.6  # documented only, not drawn / 記録のみ・描画には未使用
-# landing: `prop.position.set(pos[0], pos[1] - 1.4, pos[2])` with
-# `pos:[..., 7.81, ...]` (same Y for all four propHubs entries) -- i.e. the
-# mounting height, in the SAME raw (pre-recentering) landing Y coordinate
-# used by the body STL vertices, is 7.81 - 1.4 = 6.41 mm.
-# landing の `prop.position.set(pos[0], pos[1] - 1.4, pos[2])`、
-# `pos:[..., 7.81, ...]`（4つのpropHubs全てで同じY）-- 取付高さは、機体
-# STL頂点と同じ生の（センタリング前の）landing Y座標で 7.81 - 1.4 = 6.41mm。
-PROP_MOUNT_Y_LANDING_RAW_MM = 7.81 - 1.4
-# landing: `prop.translateX(hubR * 0.6)` in makeProp() -- each blade root
-# sits hubR*0.6 out from the hub center, not at the center itself.
-# landing の makeProp() 内 `blade.translateX(hubR * 0.6)` -- 各羽根の根元は
-# ハブ中心そのものではなく、そこから hubR*0.6 だけ外側にある。
-BLADE_ROOT_OFFSET_MM = HUB_RADIUS_MM * 0.6
+# Hub-centre height in the raw (pre-recentering) landing Y coordinate = axis_height_mm of
+# propeller_geometry.json. ハブ中心の高さ(センタリング前の landing Y)。propeller_geometry.json の axis_height_mm。
+PROP_MOUNT_Y_LANDING_RAW_MM = 6.535
+# Spin direction seen from above: M1 FR ccw, M2 RR cw, M3 RL ccw, M4 FL cw (the shape of the cw
+# file is the mirror image of the ccw one). 回転方向(上から見て)。cw 用の形は ccw 用の鏡像。
+PROP_HAND_BY_MOTOR = {"motor_fr": "ccw", "motor_rr": "cw", "motor_rl": "ccw", "motor_fl": "cw"}
 
-# Translucent red, per instructor spec (round 2 revision -- originally
-# translucent dark grey, changed to red for better contrast against the
-# grey motors/ducts).
-# 半透明の赤（講師指示・第2弾で変更。当初は半透明濃灰だったが、灰色の
-# モータ/ダクトとのコントラストのため赤に変更）。
+# Translucent red, per instructor spec (round 2 revision). 半透明の赤（講師指示・第2弾で変更）。
 BLADE_COLOR_RGB = (0.85, 0.15, 0.15)
-BLADE_ALPHA = 0.45
-BLADE_OUTLINE_SAMPLES = 14  # points per bezier segment / ベジェ曲線1区間あたりの点数
-
-# Hub cylinder (instructor fix, round 4, item 2): the propellers had no
-# hub. Dimensions reused verbatim from landing/index.html:
-#   `const hubGeo = new THREE.CylinderGeometry(hubR, hubR*0.9, 2.6, 24);`
-# (top radius hubR, bottom radius hubR*0.9, height 2.6mm, 24 sides).
-# landing also adds a small dome sphere above the cylinder; the
-# instructor asked only for "top face and side wall" (a plain cylinder),
-# so the dome is not reproduced here.
-# ハブ円柱（講師修正指示・第4弾・項目2）: プロペラにハブが無かった。
-# 寸法は landing/index.html の
-# `const hubGeo = new THREE.CylinderGeometry(hubR, hubR*0.9, 2.6, 24);`
-# をそのまま流用（上面半径hubR、底面半径hubR*0.9、高さ2.6mm、24分割）。
-# landing は円柱の上にドーム状の半球も追加しているが、講師指示は
-# 「上面と側面」（単純な円柱）のみなので、ドームはここでは再現しない。
-HUB_TOP_RADIUS_MM = HUB_RADIUS_MM
-HUB_BOTTOM_RADIUS_MM = HUB_RADIUS_MM * 0.9
-HUB_HEIGHT_MM = 2.6
-HUB_SIDES = 24
-# Same red family as the blades, but closer to opaque (instructor spec).
-# 羽根と同系の赤だが、より不透明寄り（講師指示）。
-HUB_COLOR_RGB = BLADE_COLOR_RGB
-HUB_ALPHA = 0.9
-
-
-def _sample_cubic_bezier(p0, p1, p2, p3, n: int) -> np.ndarray:
-    """n points along a cubic Bezier curve, from p0 (t=0) to p3 (t=1).
-    3次ベジェ曲線上のn点（p0(t=0)からp3(t=1)まで）。"""
-    t = np.linspace(0.0, 1.0, n)
-    mt = 1.0 - t
-    x = mt**3 * p0[0] + 3 * mt**2 * t * p1[0] + 3 * mt * t**2 * p2[0] + t**3 * p3[0]
-    y = mt**3 * p0[1] + 3 * mt**2 * t * p1[1] + 3 * mt * t**2 * p2[1] + t**3 * p3[1]
-    return np.stack([x, y], axis=1)
-
-
-def _sample_quadratic_bezier(p0, p1, p2, n: int) -> np.ndarray:
-    """n points along a quadratic Bezier curve, from p0 (t=0) to p2 (t=1).
-    2次ベジェ曲線上のn点（p0(t=0)からp2(t=1)まで）。"""
-    t = np.linspace(0.0, 1.0, n)
-    mt = 1.0 - t
-    x = mt**2 * p0[0] + 2 * mt * t * p1[0] + t**2 * p2[0]
-    y = mt**2 * p0[1] + 2 * mt * t * p1[1] + t**2 * p2[1]
-    return np.stack([x, y], axis=1)
-
-
-def build_blade_outline_mm() -> np.ndarray:
-    """Reconstruct the blade planform outline (local span/chord mm, span
-    s in [0, BLADE_LEN_MM] along local +u, chord w along local +-v) by
-    replaying landing/index.html's makeBlade() path commands exactly
-    (moveTo/bezierCurveTo/quadraticCurveTo/closePath), with twist omitted
-    -- the instructor confirmed blade rotation direction/orientation does
-    not matter for this static image, and a flat (untwisted) silhouette is
-    the natural simplification for a flat-shaded 2D drawing. Returns an
-    (M, 2) closed-polygon outline in (s, w) mm.
-    羽根の平面形状（局所スパン方向s∈[0,BLADE_LEN_MM]、局所コード方向w）を、
-    landing/index.html の makeBlade() のパス命令
-    （moveTo/bezierCurveTo/quadraticCurveTo/closePath）をそのまま再現して
-    復元する。ねじれ(twist)は省略 -- 講師確認により、この静止画では羽根の
-    回転方向・向きは問わないため、フラットシェーディングの2D図としては
-    ねじれ無し（平面）の輪郭が自然な単純化となる。(s, w) mm の閉多角形
-    (M, 2) を返す。
-    """
-    L = BLADE_LEN_MM
-    Wm = BLADE_WIDTH_SCALE_MM
-    n = BLADE_OUTLINE_SAMPLES
-
-    p_root = (0.0, 0.20 * Wm)
-    p_mid_hi = (0.86 * L, 0.30 * Wm)
-    p_tip = (L, 0.0)
-    p_mid_lo = (0.86 * L, -0.20 * Wm)
-    p_root_back = (0.0, -0.24 * Wm)
-
-    seg1 = _sample_cubic_bezier(p_root, (0.40 * L, 0.50 * Wm), (0.65 * L, 0.50 * Wm), p_mid_hi, n)
-    seg2 = _sample_quadratic_bezier(p_mid_hi, (L, 0.16 * Wm), p_tip, n)
-    seg3 = _sample_quadratic_bezier(p_tip, (L, -0.12 * Wm), p_mid_lo, n)
-    seg4 = _sample_cubic_bezier(p_mid_lo, (0.65 * L, -0.58 * Wm), (0.40 * L, -0.58 * Wm), p_root_back, n)
-    # closePath(): straight line back from p_root_back to p_root, left for
-    # PolyCollection's implicit polygon closing (no explicit sample needed).
-    # closePath(): p_root_back から p_root への直線。PolyCollection が
-    # 多角形を自動的に閉じるため、明示的な点は不要。
-    return np.concatenate([seg1, seg2, seg3, seg4], axis=0)
+BLADE_ALPHA = 0.6
 
 
 def _motor_hub_point_frd_units(part: Part, units_per_mm: float) -> np.ndarray:
-    """The propeller mounting point for one motor part: that motor's own
-    (X, Z) center in the horizontal FRD plane, at the shared
-    PROP_MOUNT_Y_LANDING_RAW_MM height, converted to FRD TikZ units. Used
-    by both the blades and the hub cylinder so they share one definition
-    of "where this motor's propeller is centered."
-    1つのモータ部品に対するプロペラ取付点: そのモータ自身の水平FRD面内
-    (X, Z)中心を、共通のPROP_MOUNT_Y_LANDING_RAW_MM高さで、FRD TikZ単位に
-    変換したもの。羽根とハブ円柱の両方で使い、「このモータのプロペラは
-    どこが中心か」の定義を1箇所にまとめる。
-    """
+    """Propeller hub centre for one motor part (landing frame, recentered): the motor's own (X, Z)
+    centre at the shared hub height. モータ 1 個に対するハブ中心(recentering 後の landing 座標)。"""
     verts_landing = part.triangles_mm_landing.reshape(-1, 3)
     motor_center_landing = 0.5 * (verts_landing.min(axis=0) + verts_landing.max(axis=0))
-    hub_point_landing = np.array(
-        [motor_center_landing[0], PROP_MOUNT_Y_LANDING_RAW_MM, motor_center_landing[2]]
-    )
-    return landing_to_frd(hub_point_landing[None, :])[0] * units_per_mm
+    return np.array([motor_center_landing[0], PROP_MOUNT_Y_LANDING_RAW_MM, motor_center_landing[2]])
 
 
 def build_propeller_polygons_frd_units(
     parts: list[Part], units_per_mm: float
 ) -> tuple[list[np.ndarray], list[tuple[float, float, float, float]]]:
-    """Build the 12 blade polygons (4 motors x 3 blades), each as an
-    (M, 3) array of FRD points in TikZ units, plus a matching translucent
-    RGBA color list. Blades lie flat in the body's horizontal (FRD X-Y)
-    plane at the propeller's mounting height, fanned out at 3 arbitrary
-    120-degree-apart angles per motor (orientation is not meaningful for a
-    static image, as confirmed by the instructor).
-    12枚の羽根ポリゴン（モータ4個×羽根3枚）を、それぞれFRD点(TikZ単位)の
-    (M, 3)配列として構築し、対応する半透明RGBA色のリストも返す。羽根は
-    機体の水平面（FRD X-Y平面）内、プロペラ取付高さの位置に平らに置き、
-    モータごとに（静止画では向きに意味が無いと講師確認済みの）任意の
-    120°間隔3方向へ展開する。
-    """
+    """Triangles of the 4 propellers (FRD points in TikZ units) with two-sided flat-shaded
+    translucent RGBA colours (same lighting model as the rest of the render).
+    4 個のプロペラの三角形(FRD 点、TikZ 単位)と、両面フラットシェーディングした半透明 RGBA 色。"""
     by_name = {p.name: p for p in parts}
-    blade_outline_mm = build_blade_outline_mm()  # (M, 2): (s, w)
-
+    shapes = {hand: read_binary_stl(MODEL_DIR / f"propeller_rotor_{hand}.stl")[0] for hand in ("ccw", "cw")}
     polygons: list[np.ndarray] = []
     colors: list[tuple[float, float, float, float]] = []
     for motor_name in MOTOR_NAMES:
-        hub_point_frd_units = _motor_hub_point_frd_units(by_name[motor_name], units_per_mm)
-
-        for blade_index in range(BLADE_COUNT):
-            angle = 2.0 * np.pi * blade_index / BLADE_COUNT
-            span_dir = np.array([np.cos(angle), np.sin(angle)])  # in FRD (X, Y) plane
-            chord_dir = np.array([-np.sin(angle), np.cos(angle)])
-
-            s = blade_outline_mm[:, 0] + BLADE_ROOT_OFFSET_MM  # radial distance from hub center
-            w = blade_outline_mm[:, 1]
-            offset_xy_mm = s[:, None] * span_dir[None, :] + w[:, None] * chord_dir[None, :]
-            offset_xy_units = offset_xy_mm * units_per_mm
-
-            blade_xy_units = hub_point_frd_units[:2][None, :] + offset_xy_units
-            blade_z_units = np.full((blade_xy_units.shape[0], 1), hub_point_frd_units[2])
-            polygons.append(np.concatenate([blade_xy_units, blade_z_units], axis=1))
-            colors.append((*BLADE_COLOR_RGB, BLADE_ALPHA))
-    return polygons, colors
-
-
-def build_hub_polygons_frd_units(
-    parts: list[Part], units_per_mm: float
-) -> tuple[list[np.ndarray], list[tuple[float, float, float, float]]]:
-    """Build the 4 hub cylinders (one per motor: HUB_SIDES side-wall
-    quads + 1 top cap n-gon each), as FRD-unit polygons with shaded RGBA
-    colors (two-sided |normal . light|, same lighting model as the rest
-    of the render, so the hub reads as a solid cylinder rather than a
-    flat red disk).
-    4個のハブ円柱（モータ1個につきHUB_SIDES枚の側面クアッド + 上面の
-    n角形1枚）を、FRD単位のポリゴンとしてシェーディング済みRGBA色
-    付きで構築する（両面|法線・光源|、本レンダリングの他部分と同じ
-    照明モデルを使うため、ハブは平らな赤い円ではなく立体的な円柱として
-    見える）。
-    """
-    by_name = {p.name: p for p in parts}
-    half_height_units = (HUB_HEIGHT_MM / 2.0) * units_per_mm
-    top_radius_units = HUB_TOP_RADIUS_MM * units_per_mm
-    bottom_radius_units = HUB_BOTTOM_RADIUS_MM * units_per_mm
-    angles = np.linspace(0.0, 2.0 * np.pi, HUB_SIDES, endpoint=False)
-    cos_a, sin_a = np.cos(angles), np.sin(angles)
-
-    def shade(normal_frd: np.ndarray) -> tuple[float, float, float, float]:
-        brightness = float(np.clip(AMBIENT + DIFFUSE * abs(normal_frd @ LIGHT_DIR), 0.0, 1.0))
-        rgb = np.clip(np.array(HUB_COLOR_RGB) * brightness, 0.0, 1.0)
-        return (*rgb, HUB_ALPHA)
-
-    polygons: list[np.ndarray] = []
-    colors: list[tuple[float, float, float, float]] = []
-    for motor_name in MOTOR_NAMES:
-        hub_center_frd_units = _motor_hub_point_frd_units(by_name[motor_name], units_per_mm)
-        # "Up" (toward the top face/dome, away from the motor can) is the
-        # -Z_frd direction, since Z_frd = -y_landing (down positive).
-        # 「上」（上面・ドーム側、モータ缶と反対側）は -Z_frd 方向
-        # （Z_frd = -y_landing、下が正のため）。
-        top_z = hub_center_frd_units[2] - half_height_units
-        bottom_z = hub_center_frd_units[2] + half_height_units
-
-        top_ring = np.stack(
-            [
-                hub_center_frd_units[0] + top_radius_units * cos_a,
-                hub_center_frd_units[1] + top_radius_units * sin_a,
-                np.full(HUB_SIDES, top_z),
-            ],
-            axis=1,
-        )
-        bottom_ring = np.stack(
-            [
-                hub_center_frd_units[0] + bottom_radius_units * cos_a,
-                hub_center_frd_units[1] + bottom_radius_units * sin_a,
-                np.full(HUB_SIDES, bottom_z),
-            ],
-            axis=1,
-        )
-
-        polygons.append(top_ring)
-        colors.append(shade(np.array([0.0, 0.0, -1.0])))  # flat horizontal cap, normal along -Z (up) / 水平な上面、法線は-Z(上)方向
-
-        for i in range(HUB_SIDES):
-            j = (i + 1) % HUB_SIDES
-            quad = np.stack([top_ring[i], top_ring[j], bottom_ring[j], bottom_ring[i]], axis=0)
-            normal = np.cross(quad[1] - quad[0], quad[2] - quad[0])
-            norm_len = np.linalg.norm(normal)
-            if norm_len > 0:
-                normal = normal / norm_len
-            polygons.append(quad)
-            colors.append(shade(normal))
+        hub_landing = _motor_hub_point_frd_units(by_name[motor_name], units_per_mm)
+        tri_landing = shapes[PROP_HAND_BY_MOTOR[motor_name]] + hub_landing
+        tri_units = landing_to_frd(tri_landing.reshape(-1, 3)).reshape(-1, 3, 3) * units_per_mm
+        brightness = np.clip(AMBIENT + DIFFUSE * np.abs(face_normals(tri_units) @ LIGHT_DIR), 0.0, 1.0)
+        for tri, b in zip(tri_units, brightness):
+            polygons.append(tri)
+            colors.append((*np.clip(np.array(BLADE_COLOR_RGB) * b, 0.0, 1.0), BLADE_ALPHA))
     return polygons, colors
 
 
@@ -980,15 +763,11 @@ def main() -> None:
     brightness = np.clip(AMBIENT + DIFFUSE * diffuse_term, 0.0, 1.0)
     mesh_shaded_colors = np.clip(base_colors * brightness[:, None], 0.0, 1.0)
 
-    # ---- Propellers: 12 flat translucent blade polygons (unchanged
-    # geometry/color from round 4).
-    # ---- プロペラ: 12枚の平らな半透明羽根ポリゴン（幾何・色は第4弾から
-    # 不変）。
+    # ---- Propellers: measured 4-blade STL shape, translucent triangles.
+    # ---- プロペラ: 実測の 4 枚羽根 STL 形状(半透明の三角形)。
     blade_polygons_units, blade_colors_rgba = build_propeller_polygons_frd_units(parts, units_per_mm)
 
-    # ---- Hub cylinders (unchanged geometry/color from round 4).
-    # ---- ハブ円柱（幾何・色は第4弾から不変）。
-    hub_polygons_units, hub_colors_rgba = build_hub_polygons_frd_units(parts, units_per_mm)
+    hub_polygons_units, hub_colors_rgba = [], []   # the hub is part of the propeller STL / ハブはプロペラ STL に含まれる
 
     # ---- Shrink the drawn body/propellers around the origin -- applied
     # to the raw 3D point arrays (mesh triangles, blade polygons, hub

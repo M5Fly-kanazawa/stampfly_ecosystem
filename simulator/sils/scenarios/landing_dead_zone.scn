@@ -19,7 +19,7 @@
 # the sensor goes invalid while the craft is still moving (its reading lags the truth: 0.085 m reported at a truth
 # height of 0.038 m), so `on_ground_` (two valid readings below 5 cm) is never set, the estimator is not pinned to the
 # ground, the stalled-descent test (`|vz| < 0.05 m/s`) never holds, and the 3 G impact cut does not fire either (this
-# contact is below 3 G). Without the dead-zone touchdown LANDING would never end (backlog #23). The dead-zone touchdown
+# contact is below 3 G). Without the dead-zone touchdown LANDING would never end (backlog #24). The dead-zone touchdown
 # (TakeoffLandingMgr::deadZoneTouchdown(), detailed_design.md §3 note 7) ends it: during the LANDING descent, a valid reading at or
 # below 0.10 m followed by ONLY invalid samples for 0.2 s means the craft is on the floor. Here the last valid reading is
 # 0.085 m and "Landing detected (ToF dead zone ...)" comes 0.2 s after it, with the craft at rest on the floor (truth
@@ -31,7 +31,7 @@
 # 「目標なし」を返すので、床の上では無効）。降下は 0.26 m/s で床に着き、機体がまだ動いている間にセンサが無効になる
 # （読みは真値に遅れる: 真の高さ 0.038 m で 0.085 m と報告）。そのため `on_ground_`（5 cm 未満の有効な読み 2 回）は立たず、
 # 推定器は地面に固定されず、降下停滞の判定（`|vz| < 0.05 m/s`）は成り立たず、3 G の衝撃カットも働かない（この接触は
-# 3 G 未満）。この経路が無いと LANDING は終わらない（バックログ #23）。不感帯での接地（
+# 3 G 未満）。この経路が無いと LANDING は終わらない（バックログ #24）。不感帯での接地（
 # TakeoffLandingMgr::deadZoneTouchdown()、detailed_design.md §3 注7）が終わらせる: LANDING の降下中に、0.10 m 以下の有効な
 # 読みの後、無効サンプルだけが 0.2 s 続いたら、機体は床の上にある。ここでは最後の有効な読みが 0.085 m で、その 0.2 s 後に
 # 「Landing detected (ToF dead zone ...)」が出る。機体は床の上で静止（真の高さ 0.021 m、鉛直速度 0.001 m/s）。続けて

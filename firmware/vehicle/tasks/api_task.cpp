@@ -1452,7 +1452,11 @@ void cmdAutotune(uint8_t axis, float wc, float pm_deg)
     // 使用。最終プラントは実測データにフィットするため、これは初期推定であり飛行パラメータ
     // ではない。飛行レートゲインは実測移植値(params.cpp)で慣性導出ではないため、ここで別名に
     // すべき慣性 SSOT は存在しない (L-13)。
-    static const float kSpecInertia[3] = {9.16e-6f, 13.3e-6f, 20.4e-6f};
+    // Values follow control/models/stampfly_physical.yaml (2026-11-23: computed from the
+    // part STL meshes and measured masses; before: 2-point suspension 9.16/13.3/20.4e-6).
+    // 値は control/models/stampfly_physical.yaml に従う（2026-11-23: 部品の STL と実測質量
+    // からの試算値。以前は2点吊り法の 9.16/13.3/20.4e-6）。
+    static const float kSpecInertia[3] = {11.5e-6f, 15.3e-6f, 22.6e-6f};
     static const float kFreqsHz[] = {2.0f, 3.0f, 4.5f, 7.0f, 10.0f,
                                      14.0f, 20.0f, 27.0f, 35.0f};
     constexpr int kNumFreqs = sizeof(kFreqsHz) / sizeof(kFreqsHz[0]);

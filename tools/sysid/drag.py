@@ -216,7 +216,7 @@ def fit_translational_decay(
 def fit_rotational_decay(
     time: np.ndarray,
     omega: np.ndarray,
-    Izz: float = 20.4e-6,
+    Izz: float = 22.6e-6,
 ) -> Tuple[float, float, float]:
     """
     Fit rotational decay to estimate rotational drag coefficient
@@ -274,7 +274,7 @@ def estimate_drag(
     df: pd.DataFrame,
     drag_type: str = "all",
     mass: float = 0.037,
-    Izz: float = 20.4e-6,
+    Izz: float = 22.6e-6,
 ) -> Dict[str, Any]:
     """
     Estimate drag coefficients from an aligned flight-log DataFrame
