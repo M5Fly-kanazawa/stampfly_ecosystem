@@ -79,5 +79,25 @@ inline bool isSysidRangeValid(float amplitude_deg_per_sec, float duration_second
            duration_seconds > 0.0f && duration_seconds <= kSysidDurationMaxSeconds;
 }
 
+/// Largest step count the API passes on. The LIMITS of a thrust excitation (10 %, 30 s, amplitude x half period) are judged once, by the
+/// controller (thrust_excitation.hpp), so that a refusal carries its reason; the API only keeps what is not a number it can hand over.
+/// API が渡す階段の回数の最大値。推力励振の上限（10 %・30 s・振幅 × 半周期）は制御器が 1 か所（thrust_excitation.hpp）で判断し、
+/// 拒否に理由が付くようにする。API は、渡せる数でないものだけを止める。
+constexpr float kThrustExcitationCountMax = 65535.0f;
+
+/// True when a number of `sysid thrust ...` (amplitude, length, half period) is finite and above 0.
+/// `sysid thrust ...` の数（振幅・長さ・半周期）が有限で 0 より大きいとき true。
+inline bool isThrustExcitationNumberValid(float value)
+{
+    return std::isfinite(value) && value > 0.0f;
+}
+
+/// True when the step count of `sysid thrust step ...` is a whole number from 1 to kThrustExcitationCountMax.
+/// `sysid thrust step ...` の階段の回数が 1〜kThrustExcitationCountMax の整数のとき true。
+inline bool isThrustExcitationCountValid(float count)
+{
+    return std::isfinite(count) && count >= 1.0f && count <= kThrustExcitationCountMax && count == std::floor(count);
+}
+
 }  // namespace api_arguments
 }  // namespace sf

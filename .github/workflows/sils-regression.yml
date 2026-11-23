@@ -178,6 +178,13 @@ jobs:
         # 検出する。
         run: python3 protocol/tools/check_messages.py
 
+      - name: Check the thrust-excitation waveform tables
+        # protocol/spec/thrust_excitation.yaml is the SSOT of the multisine frequencies, phases and ramp lengths of the vertical thrust
+        # excitation; the firmware header (thrust_excitation_table.hpp) and tools/sysid/thrust_excitation_table.py are generated from it.
+        # protocol/spec/thrust_excitation.yaml は鉛直の推力励振の多重正弦波の周波数・位相・立ち上げの長さの基準。ファームのヘッダと
+        # tools/sysid/thrust_excitation_table.py はそこから生成する。
+        run: python3 protocol/tools/gen_thrust_excitation.py --check
+
       - name: Flight-log format and tool unit tests (pytest)
         # The flight-log bundle format (protocol/spec/flight_log.yaml, plan
         # docs/plans/flight-log-format-plan.md section 3.5) has its own

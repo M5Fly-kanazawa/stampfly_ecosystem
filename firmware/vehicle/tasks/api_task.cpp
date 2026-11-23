@@ -42,7 +42,7 @@
  * でコマンド行を注入する — パーサ/実行系は「同一コード」が動き（Code Identity）、
  * バイト輸送だけを迂回する。応答は常にログにも出す（expect 判定と実機デバッグ用）。
  *
- * @publisher  api_command (flight verbs), command_target (guidance)
+ * @publisher  api_command (flight verbs), command_target (guidance), sysid_command, thrust_excitation_command
  * @subscriber system_mode, system_status, estimate_state, sensor_power, controller_status
  * @design requirements.md §7 — コマンド受信 (RC入力、API) / TelloAPI      [OK]
  * @design architecture.md §5 — コマンドフロー UDP/API                    [OK]
@@ -74,6 +74,7 @@
 #include "autotune.hpp"      // onboard fit + tune / オンボード同定＋設計
 #include "tello_state.hpp"   // UDP:8890 state-string builder / 状態文字列ビルダ
 #include "api_arguments.hpp" // range checks of the parsed numbers / 解析した数の範囲検査
+#include "thrust_excitation.hpp"   // reason names of `sysid thrust ...` / `sysid thrust ...` の理由の名前
 #include "rotate_guidance.hpp" // guidance yaw target and wait of cw / ccw / cw・ccw の誘導ヨー目標と待ち時間
 #include "sf_math.hpp"       // sf::math::wrapAngleRad, kPi
 
@@ -141,6 +142,11 @@ constexpr float    kSpeedMaxCmPerSec = 100.0f;
 constexpr float    kGoSpeedMinMps    = 0.1f;     // `go` speed clamp [m/s] / `go` の速度クランプ
 constexpr float    kGoSpeedMaxMps    = 1.0f;
 constexpr uint32_t kSysidMarginMs    = 1000;     // wait after the excitation ends [ms] / 励振の終了後に待つ時間
+// Margin added to the wait of a thrust excitation [ms]: the end ramp (at most 0.5 s), an abort ramp (0.25 s) and a poll. CANDIDATE.
+// 推力励振の待機に足す余裕 [ms]: 終わりの立ち下げ（最大 0.5 s）・打ち切りの立ち下げ（0.25 s）・ポーリング。候補値。
+constexpr uint32_t kThrustExciteWaitMarginMs = 2000;
+constexpr const char* kThrustExcitationUsage =
+    "error usage: sysid thrust multisine <amp%> <s> | step <amp%> <half_period_s> <count> | stop";
 constexpr float    kBattEmptyV     = 3.3f;    // 0% / 100% mapping for battery?
 constexpr float    kBattFullV      = 4.2f;
 
@@ -477,6 +483,21 @@ bool waitUntil(uint32_t timeout_ms, Pred pred, bool ends_with_flight = false)
         vTaskDelay(pdMS_TO_TICKS(kWaitPollMs));
     }
     return false;
+}
+
+// Sequence number of the last thrust-excitation command published (0 = none yet); ApiTask is the only publisher.
+// 最後に発行した推力励振の命令の通し番号（0 = まだ無い）。発行するのは ApiTask だけ。
+uint32_t g_thrust_excitation_sequence = 0;
+
+// Ask the controller to stop a waiting or running thrust excitation (it ramps out). Harmless when none runs.
+// 待機中・実行中の推力励振を止めるよう制御器へ頼む（立ち下げて止まる）。動いていなければ無害。
+void cancelThrustExcitation()
+{
+    sf::ThrustExcitationCommand command{};
+    command.kind = static_cast<uint8_t>(sf::ThrustExcitationKind::Cancel);
+    command.sequence = ++g_thrust_excitation_sequence;
+    command.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::thrust_excitation_command.publish(command);
 }
 
 // Reply text for a waitUntil that returned false: the interrupting command (`emergency`, `stop` or `land`), the end of the
@@ -1042,6 +1063,12 @@ bool dispatchDuringWait(char* line, const sockaddr_in* from)
     }
     if (std::strcmp(line, "land") == 0 && isSpoolingInAltitudeMode()) {
         return landOnFloorDuringWait(from);
+    }
+    if (std::strcmp(line, "sysid thrust stop") == 0) {   // acts at once, like `stop`: the waiting command answers "aborted: cancelled" / `stop` と同じく即実行。待っている命令が "aborted: cancelled" を返す
+        ESP_LOGI(TAG, "cmd: %s (during a blocking command)", line);
+        cancelThrustExcitation();
+        reply("ok");
+        return false;
     }
     deferLine(line, from);
     return false;
@@ -1895,6 +1922,136 @@ void cmdSysid(const char* axis_name, const char* waveform_name, float amplitude_
     reply(finished ? "ok" : waitFailureText("error sysid timeout"));
 }
 
+// -----------------------------------------------------------------------------
+// `sysid thrust multisine <amp%> <s>` / `sysid thrust step <amp%> <half_period_s> <count>` / `sysid thrust stop`
+// — thrust excitation for the vertical identification (detailed_design.md §3, "thrust excitation").
+// Unlike the rate-axis `sysid` (a fixed wait that always answers "ok"), this waits for the controller's
+// answer: accepted (acknowledged by sequence number), then finished / rejected / aborted, and replies with the reason.
+// 鉛直の同定のための推力励振（detailed_design.md §3「推力励振」）。レート軸の `sysid`（固定時間の待ちで常に "ok"）と違い、
+// 制御器の答え（通し番号で受理を確認 → 満了・拒否・打ち切り）を待ち、理由つきで応答する。
+//
+// @design detailed_design.md §3 — thrust excitation: API wait and reply [OK]
+// -----------------------------------------------------------------------------
+
+// Log one line for a finished request and reply: "ok" for a completed run, otherwise the error text with the reason.
+// 終わった要求の 1 行をログに出して応答する: 満了なら "ok"、そうでなければ理由つきのエラー文。
+void replyThrustExcitationOutcome(const sf::ControllerStatus& status)
+{
+    const auto result = static_cast<sf::ThrustExcitationResult>(status.thrust_excitation_result);
+    const auto reason = static_cast<sf::ThrustExcitationReason>(status.thrust_excitation_reason);
+    const char* reason_name = sf::thrustExcitationReasonName(reason);
+    ESP_LOGI(TAG, "Thrust excitation end: result=%u reason=%u (%s) elapsed=%u ms",
+             static_cast<unsigned>(status.thrust_excitation_result), static_cast<unsigned>(status.thrust_excitation_reason),
+             reason_name, static_cast<unsigned>(status.thrust_excitation_elapsed_ms));
+    char text[64];
+    switch (result) {
+        case sf::ThrustExcitationResult::Completed:
+            reply("ok");
+            return;
+        case sf::ThrustExcitationResult::Rejected:
+            std::snprintf(text, sizeof(text), "error excitation rejected: %s", reason_name);
+            break;
+        case sf::ThrustExcitationResult::Aborted:
+            std::snprintf(text, sizeof(text), "error excitation aborted: %s", reason_name);
+            break;
+        default:
+            std::snprintf(text, sizeof(text), "error excitation timeout");
+            break;
+    }
+    reply(text);
+}
+
+// Publish the request and wait for the controller to acknowledge it. Returns false (after the reply) when it was not acknowledged.
+// 要求を発行し、制御器が受理の応答をするのを待つ。応答されなかったら（返信した後に）false。
+bool publishAndAcknowledgeThrustExcitation(sf::ThrustExcitationCommand command)
+{
+    command.sequence = ++g_thrust_excitation_sequence;
+    command.timestamp = static_cast<uint32_t>(esp_timer_get_time());
+    sf::thrust_excitation_command.publish(command);
+    const uint32_t sequence = command.sequence;
+    const bool acknowledged = waitUntil(sf::limits::kThrustExciteAckTimeoutMs + kWaitPollMs, [sequence] {
+        return sf::controller_status.latest().thrust_excitation_ack >= sequence;
+    }, true);
+    if (!acknowledged) {
+        cancelThrustExcitation();   // a request that was not seen must not start later / 見られなかった要求が後から始まってはならない
+        reply(waitFailureText("error excitation timeout"));
+    }
+    return acknowledged;
+}
+
+void cmdThrustExcitation(const sf::ThrustExcitationCommand& command)
+{
+    if (currentState() != sf::FlightState::FLYING) {
+        reply("error excitation rejected: not_flying");
+        return;
+    }
+    if (sf::controller_status.latest().thrust_excitation_state != static_cast<uint8_t>(sf::ThrustExcitationState::None)) {
+        reply("error excitation rejected: busy");
+        return;
+    }
+    if (!publishAndAcknowledgeThrustExcitation(command)) {
+        return;
+    }
+    const sf::ControllerStatus accepted = sf::controller_status.latest();
+    if (accepted.thrust_excitation_result != static_cast<uint8_t>(sf::ThrustExcitationResult::Running)) {
+        replyThrustExcitationOutcome(accepted);   // rejected at the start / 開始で拒否
+        return;
+    }
+    ESP_LOGI(TAG, "Thrust excitation accepted: kind=%u amplitude=%u permille", static_cast<unsigned>(accepted.thrust_excitation_waveform),
+             static_cast<unsigned>(accepted.thrust_excitation_amplitude_permille));
+    const float wait_s = sf::limits::kThrustExciteStartSettleTimeoutS + sf::thrustExcitationNominalLengthS(command);
+    const uint32_t wait_ms = static_cast<uint32_t>(wait_s * 1000.0f) + kThrustExciteWaitMarginMs;
+    const bool finished = waitUntil(wait_ms, [] {
+        return sf::controller_status.latest().thrust_excitation_state == static_cast<uint8_t>(sf::ThrustExcitationState::None);
+    }, true);
+    if (!finished) {
+        cancelThrustExcitation();   // interrupted by stop / emergency / the end of the flight, or timed out / stop・emergency・飛行の終わりで打ち切られた、またはタイムアウト
+        reply(waitFailureText("error excitation timeout"));
+        return;
+    }
+    replyThrustExcitationOutcome(sf::controller_status.latest());
+}
+
+// Parse a line that starts with "sysid thrust". Returns true when it was one (answered or executed).
+// "sysid thrust" で始まる行を解析する。そうだったとき true（応答または実行済み）。
+bool handleThrustExcitationLine(const char* line)
+{
+    constexpr size_t kPrefixLength = 12;   // length of "sysid thrust" / "sysid thrust" の長さ
+    if (std::strncmp(line, "sysid thrust", kPrefixLength) != 0 || (line[kPrefixLength] != ' ' && line[kPrefixLength] != '\0')) {
+        return false;
+    }
+    char kind_name[16] = {};
+    float first = 0, second = 0, third = 0;
+    const int parsed = std::sscanf(line + kPrefixLength, " %15s %f %f %f", kind_name, &first, &second, &third);
+    if (parsed == 1 && std::strcmp(kind_name, "stop") == 0) {
+        cancelThrustExcitation();
+        reply("ok");
+        return true;
+    }
+    sf::ThrustExcitationCommand command{};
+    command.amplitude_percent = first;
+    if (parsed == 3 && std::strcmp(kind_name, "multisine") == 0) {
+        command.kind = static_cast<uint8_t>(sf::ThrustExcitationKind::Multisine);
+        command.duration_s = second;
+    } else if (parsed == 4 && std::strcmp(kind_name, "step") == 0) {
+        command.kind = static_cast<uint8_t>(sf::ThrustExcitationKind::Steps);
+        command.half_period_s = second;
+        command.count = sf::api_arguments::isThrustExcitationCountValid(third) ? static_cast<uint16_t>(third) : 0;
+    } else {
+        reply(kThrustExcitationUsage);
+        return true;
+    }
+    const bool numbers_ok = sf::api_arguments::isThrustExcitationNumberValid(first) &&
+                            sf::api_arguments::isThrustExcitationNumberValid(second) &&
+                            (command.kind == static_cast<uint8_t>(sf::ThrustExcitationKind::Multisine) || command.count >= 1);
+    if (!numbers_ok) {
+        reply(kOutOfRangeReply);
+        return true;
+    }
+    cmdThrustExcitation(command);
+    return true;
+}
+
 // `autotune <roll|pitch|yaw> [wc_radps] [pm_deg]` — onboard autotune. Returns true when the
 // line was an `autotune` line.
 // `autotune <軸> [ωc] [PM]` — オンボード自動チューン。`autotune` の行だったとき true。
@@ -1950,6 +2107,9 @@ bool handleNumberedLine(const char* line)
     char verb[16] = {};
     char waveform_name[16] = {};
     float a = 0, b = 0, c = 0, d = 0;
+    if (handleThrustExcitationLine(line)) {
+        return true;
+    }
     if (std::sscanf(line, "sysid %15s %15s %f %f", verb, waveform_name, &a, &b) == 4) {
         cmdSysid(verb, waveform_name, a, b);
         return true;

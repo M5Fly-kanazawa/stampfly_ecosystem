@@ -1,0 +1,9 @@
+# sysid_thrust_abort_tof.expect — ToF silence stops a running excitation; the ToF-silence landing follows
+# sysid_thrust_abort_tof.expect — ToF の出力停止が実行中の励振を止める。ToF 出力停止の着陸が続く
+#
+exit 0
+log_absent  any "Thrust excitation end: result=2"
+order "cmd: sysid thrust multisine 5 20" "Transition: FLYING → LANDING"
+bundle_value ctrl_ref.thrust_excitation_state max >= 11
+metric descent_speed_max < 1.5 in 30.0 46.0
+metric alt_max < 0.10 in 44.0 46.5

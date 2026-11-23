@@ -33,6 +33,7 @@
 #include <cstdint>
 
 #include "sf_math.hpp"   // sf::math::kGravity (the one gravity constant) / 重力加速度の唯一の定義
+#include "thrust_excitation_table.hpp"   // generated waveform tables of the thrust excitation / 推力励振の波形表（生成物）
 
 namespace sf {
 namespace limits {
@@ -766,6 +767,106 @@ inline constexpr float kBaroLearnGateM = 2.0f;
 /// The newest ToF sample must be no older than this to be paired with a barometer sample [us]. CANDIDATE. Basis: the ToF runs at about 30 Hz (33 ms period); 0.1 s allows two lost samples.
 /// 気圧計のサンプルと組にする ToF の最新サンプルは、これより古くてはならない [us]。候補値。根拠: ToF は約 30 Hz（周期 33 ms）。0.1 s は 2 サンプルの欠落を許す。
 inline constexpr uint32_t kBaroLearnMaxTofAgeUs = 100000;
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Thrust excitation (thrust_excitation.hpp): a small signal added to the total thrust while the altitude loop stays closed,
+// to measure the dead time and lag from thrust to vertical acceleration, the lag of the downward ToF and the accelerometer
+// noise in flight. Every value is a CANDIDATE (not yet flown); the basis is written next to it. The waveform tables
+// (frequencies, phases, ramp lengths) are generated from protocol/spec/thrust_excitation.yaml into thrust_excitation_table.hpp.
+// 推力励振（thrust_excitation.hpp）: 高さのループを閉じたまま総推力へ小さな信号を足し、推力 → 鉛直の加速度のむだ時間と遅れ、
+// 下向き ToF の遅れ、飛行中の加速度計の雑音を測る。値は全て候補値（まだ飛ばしていない）。根拠は値の横に書く。波形の表（周波数・
+// 位相・立ち上げの長さ）は protocol/spec/thrust_excitation.yaml から thrust_excitation_table.hpp に生成する。
+// @design detailed_design.md §3 — thrust excitation [OK]
+// ---------------------------------------------------------------------------------------------------------------------
+
+/// Largest amplitude of a thrust excitation, in percent of the hover thrust [%]. A larger request is rejected, not clipped (a
+/// mistyped number must be noticed). CANDIDATE. Basis: 10 % of the hover thrust (about 0.4 N) is 0.04 N, a quarter of the velocity-loop correction limit
+/// (0.15 N) and about 0.1 g of acceleration; the duty margin at 3.6 V (hover duty 0.73-0.79) covers it.
+/// 推力励振の振幅の上限（ホバー推力に対する割合 [%]）。超える要求は切り詰めずに拒否する（打ち間違いに気づくため）。候補値。根拠: ホバー推力（約 0.4 N）の
+/// 10 % は 0.04 N で、速度ループの補正の上限（0.15 N）の 4 分の 1、加速度では約 0.1 g。3.6 V のホバー duty（0.73〜0.79）の余裕で収まる。
+inline constexpr float kThrustExciteAmplitudeMaxPercent = 10.0f;
+/// Shortest and longest nominal length of a thrust excitation [s]. CANDIDATE. Basis: the longest is 3 periods of the 10 s multisine (the frequency resolution
+/// that the 20 s record of the 0.4 Hz tone needs); the shortest holds the two 0.5 s ramps of the multisine and one second of signal.
+/// 推力励振の公称の長さの下限・上限 [s]。候補値。根拠: 上限は 10 s の多重正弦波の 3 周期（0.4 Hz の音に必要な周波数分解能の 20 s 以上の記録）。下限は多重正弦波の
+/// 0.5 s の立ち上げ・立ち下げ 2 つと 1 s の信号が入る長さ。
+inline constexpr float kThrustExciteDurationMinS = 2.0f;
+inline constexpr float kThrustExciteDurationMaxS = 30.0f;
+/// Upper bound of (amplitude [%] x half period [s]) of a step [%.s], and the shortest half period [s]. CANDIDATE. Basis: a rough closed-loop
+/// calculation (position PI 0.45, velocity PI 0.1, motor lag 16 ms) moves the height by 0.052 m for +-5 % held 0.5 s, 0.114 m for 1.0 s and 0.160 m for 1.5 s;
+/// 4.0 %.s (5 % for 0.8 s) stays below the 0.15 m abort line with the 0.06-0.08 m of hover wander. A half period below 0.2 s is not a step response of this loop.
+/// 階段の（振幅 [%] × 半周期 [s]）の上限 [%·s] と、最短の半周期 [s]。候補値。根拠: 粗い閉ループの試算（位置 PI 0.45・速度 PI 0.1・モータの遅れ 16 ms）で、
+/// ±5 % を 0.5 s 保持すると高さが 0.052 m、1.0 s で 0.114 m、1.5 s で 0.160 m 動く。4.0 %·s（5 % なら 0.8 s）なら、ホバーの揺れ 0.06〜0.08 m を足しても
+/// 打ち切りの 0.15 m に収まる。0.2 s 未満の半周期は、このループの段応答にならない。
+inline constexpr float kThrustExciteStepAmplitudeTimeMaxPercentSeconds = 4.0f;
+inline constexpr float kThrustExciteStepHalfPeriodMinS = 0.2f;
+/// Height window to START a thrust excitation [m] and to keep running [m]. CANDIDATE. Basis: the standard takeoff holds 0.5 m and the measured hold wanders 0.42-0.64 m,
+/// so the start window opens at 0.35 m; the run window opens 0.1 m lower (0.25 m: clear of the ToF near-range dead zone and the ground effect). The top (0.9 m start,
+/// 1.05 m run) stays 0.2 m below the start of the ceiling brake (about 1.25 m = kAltitudeCeilingM + kAltitudeCeilingBrakeStartM) so the brake is never engaged by the excitation.
+/// 推力励振を始められる高さの窓 [m] と、実行中の窓 [m]。候補値。根拠: 標準の離陸は 0.5 m で、保持の実測は 0.42〜0.64 m の揺れなので、開始の窓は 0.35 m から。実行中の窓は
+/// それより 0.1 m 広い（0.25 m: ToF の近距離の不感帯と地面効果から離す）。上端（開始 0.9 m、実行中 1.05 m）は、天井ブレーキの始まり（約 1.25 m =
+/// kAltitudeCeilingM + kAltitudeCeilingBrakeStartM）から 0.2 m 以上下で、励振がブレーキを働かせない。
+inline constexpr float kThrustExciteStartHeightMinM = 0.35f;
+inline constexpr float kThrustExciteStartHeightMaxM = 0.9f;
+inline constexpr float kThrustExciteRunHeightMinM   = 0.25f;
+inline constexpr float kThrustExciteRunHeightMaxM   = 1.05f;
+/// Largest distance of the height from its target while running [m]; beyond it the run is aborted. CANDIDATE. Basis: the hover itself wanders 0.06-0.08 m (peak to peak)
+/// and a 10 % multisine moves the height by up to 0.033 m in a rough closed-loop calculation; 0.15 m is the same line as the ground/air margin of the takeoff manager.
+/// 実行中の、高さの目標からのずれの上限 [m]。超えたら打ち切る。候補値。根拠: ホバー自体が 0.06〜0.08 m（ピーク間）揺れ、10 % の多重正弦波は粗い閉ループの試算で最大 0.033 m 動かす。
+/// 0.15 m は離着陸マネージャの接地/空中の余裕と同じ線。
+inline constexpr float kThrustExciteAltitudeErrorAbortM = 0.15f;
+/// Battery voltage needed to START [V], and the voltage below which a running excitation is aborted [V]. CANDIDATE. Basis: the start value keeps the duty margin for the extra
+/// 10 % (hover duty at 3.6 V is already 0.73-0.79); the abort value is 0.2 V above the 3.4 V warning (safety.battery.low_v) so the run ends before the warning, and the emergency
+/// (3.0 V, landing in every mode) is far away.
+/// 開始に要る電池の電圧 [V] と、実行中にこれを下回ったら打ち切る電圧 [V]。候補値。根拠: 開始の値は、増える 10 % の分の duty の余裕を保つ（3.6 V のホバー duty は既に 0.73〜0.79）。
+/// 打ち切りの値は、3.4 V の警告（safety.battery.low_v）より 0.2 V 上で、警告の前に終わる。緊急（3.0 V、全モードで着陸）はずっと先。
+inline constexpr float kThrustExciteBatteryStartMinV = 3.8f;
+inline constexpr float kThrustExciteBatteryAbortV    = 3.6f;
+/// Time the battery voltage must stay below kThrustExciteBatteryAbortV before the abort [s]. CANDIDATE. Basis: the INA3221 reading updates only about every 0.4 s
+/// (averaging of 64 samples), so one low reading is one update; 0.5 s needs two.
+/// 電池の電圧が kThrustExciteBatteryAbortV を下回り続けてから打ち切るまでの時間 [s]。候補値。根拠: INA3221 の値は約 0.4 s ごとにしか更新されない（64 標本の平均）ので、
+/// 低い読みは 1 回の更新。0.5 s なら 2 回要る。
+inline constexpr float kThrustExciteBatteryAbortHoldS = 0.5f;
+/// Tilt [rad] allowed to START and above which a running excitation is aborted. CANDIDATE. Basis: the abort value 0.2 rad (11.5 degrees) lies just beyond the POS_HOLD tilt limit
+/// (0.1745 rad = 10 degrees, also the pass line of the rate-excitation scenarios), which only a disturbance can exceed; the start value is half of it.
+/// 開始で許す傾き [rad] と、実行中にこれを超えたら打ち切る傾き [rad]。候補値。根拠: 打ち切りの 0.2 rad（11.5 度）は、POS_HOLD の傾きの上限（0.1745 rad = 10 度。レート励振の
+/// シナリオの合格線でもある）の少し外で、外乱でしか届かない値。開始の値はその半分。
+inline constexpr float kThrustExciteStartTiltMaxRad = 0.1f;
+inline constexpr float kThrustExciteTiltAbortRad    = 0.2f;
+/// Conditions to leave the wait (Standby) and begin: altitude error [m], vertical speed [m/s] and the time all hold [s]; and the wait that is given up [s]. CANDIDATE.
+/// Basis: the hover wander is 0.06-0.08 m peak to peak, so an error of 0.05 m and a speed of 0.1 m/s are the quiet part of it; 0.5 s of quiet is ten ToF samples; 3 s is
+/// about six of the 0.5 s windows.
+/// 待機（Standby）を終えて始める条件: 高さのずれ [m]・鉛直速度 [m/s]・全てが続く時間 [s]。待機を諦める時間 [s]。候補値。根拠: ホバーの揺れは 0.06〜0.08 m（ピーク間）なので、
+/// ずれ 0.05 m・速度 0.1 m/s はその静かな部分。静かな 0.5 s は ToF の 10 標本。3 s は 0.5 s の窓が 6 回。
+inline constexpr float kThrustExciteStartAltitudeErrorMaxM = 0.05f;
+inline constexpr float kThrustExciteStartVerticalSpeedMaxMps = 0.1f;
+inline constexpr float kThrustExciteStartSettleHoldS = 0.5f;
+inline constexpr float kThrustExciteStartSettleTimeoutS = 3.0f;
+/// Time the ToF must be invalid or silent before a running excitation is aborted [s]. CANDIDATE. Basis: the ToF samples at about 28.5 Hz (35 ms), so 0.1 s is about three
+/// samples: one lost sample does not abort, three do.
+/// 実行中の励振を打ち切るまでに ToF が無効・出力停止である時間 [s]。候補値。根拠: ToF は約 28.5 Hz（35 ms）なので、0.1 s は約 3 サンプル。1 つ抜けても打ち切らず、3 つで打ち切る。
+inline constexpr float kThrustExciteToFLostAbortS = 0.1f;
+/// Time after the end of an excitation during which the hover-thrust learner and the support-thrust window stay frozen [s]. CANDIDATE. Basis: the learning time constant is
+/// 20 s, but the response of the height to the last tone decays within about 1 s (closed-loop settling of the 0.4 Hz tone).
+/// 励振が終わってから、ホバー推力の学習と支持推力の窓を止めたままにする時間 [s]。候補値。根拠: 学習の時定数は 20 s だが、最後の音に対する高さの応答は約 1 s で減衰する
+/// （0.4 Hz の音の閉ループの整定）。
+inline constexpr float kThrustExciteLearningHoldOffS = 1.0f;
+/// Largest speed [m/s] of the horizontal motion that still counts as a still guidance when the excitation starts. CANDIDATE. Basis: the position hold wanders by a few cm
+/// with speeds below 0.1 m/s (the POS_HOLD hold accuracy is +-6-7 cm); a guidance that is moving the craft is faster.
+/// 励振の開始のとき、誘導が静止中とみなす水平の速さの上限 [m/s]。候補値。根拠: 位置保持は 0.1 m/s 未満の速さで数 cm 揺れる（POS_HOLD の保持精度は ±6〜7 cm）。
+/// 誘導が機体を動かしているなら、これより速い。
+inline constexpr float kThrustExciteStartHorizontalSpeedMaxMps = 0.1f;
+/// Time that an API command waits for the controller to accept or reject a thrust excitation [ms]. CANDIDATE. Basis: ControlTask consumes the queue every control cycle (2.5 ms)
+/// and publishes the status in the same cycle; 500 ms is two orders of magnitude more, and shorter than the 1 s margin of the other waits.
+/// API の命令が、制御器が推力励振を受理・拒否するのを待つ時間 [ms]。候補値。根拠: ControlTask は制御周期（2.5 ms）ごとにキューを取り出し、同じ周期で状態を発行する。500 ms は
+/// その 2 桁上で、他の待機の余裕 1 s より短い。
+inline constexpr uint32_t kThrustExciteAckTimeoutMs = 500;
+static_assert(kThrustExciteRunHeightMaxM < kAltitudeCeilingM + kAltitudeCeilingBrakeStartM,
+              "the excitation must stay below the start of the ceiling brake");
+static_assert(kThrustExciteStartHeightMaxM < kThrustExciteRunHeightMaxM &&
+              kThrustExciteRunHeightMinM < kThrustExciteStartHeightMinM,
+              "the start window lies inside the run window");
+static_assert(kThrustExciteBatteryAbortV < kThrustExciteBatteryStartMinV,
+              "the abort voltage lies below the start voltage");
 
 }  // namespace limits
 }  // namespace sf

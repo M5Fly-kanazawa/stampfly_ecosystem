@@ -1,0 +1,19 @@
+# sysid_thrust_reject.expect — refusals carry a reason: on the ground, above the limits, at the wrong height, in the wrong mode; nothing starts
+# sysid_thrust_reject.expect — 拒否には理由が付く: 地上・上限超え・高さ違い・モード違い。何も始まらない
+#
+exit 0
+log_contains any "reply: error excitation rejected: not_flying"
+log_contains any "reply: error excitation rejected: amplitude"
+log_contains any "reply: error excitation rejected: duration"
+log_contains any "reply: error excitation rejected: step_limit"
+log_contains any "reply: error out of range"
+log_contains any "reply: error usage: sysid thrust"
+log_contains any "reply: error excitation rejected: height"
+log_contains any "reply: error excitation rejected: mode"
+log_absent  any "Thrust excitation accepted"
+# No refusal moves the craft: in the 1 s after the first five refusals the hover wanders by 0.06-0.08 m peak to peak (flight logs), so the band is 0.15 m.
+# 拒否は機体を動かさない: 最初の 5 つの拒否の後の 1 s、ホバーの揺れはピーク間 0.06〜0.08 m（実機ログ）なので、帯は 0.15 m。
+metric alt_band < 0.15 in 26.0 27.0
+bundle_value ctrl_ref.thrust_excitation_state max < 1
+bundle_value ctrl_ref.thrust_excitation_amplitude max < 1
+metric alt_max < 0.10 in 53.0 54.9

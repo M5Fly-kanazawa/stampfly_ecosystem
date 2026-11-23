@@ -170,6 +170,19 @@ def render_schema_py(spec: dict) -> str:
         "}\n\n"
     )
 
+    optional_columns = {
+        s["name"]: [c["name"] for c in s["columns"] if c.get("optional")]
+        for s in spec["streams"]
+        if any(c.get("optional") for c in s["columns"])
+    }
+    parts.append(
+        "# Trailing columns that a bundle from older firmware may lack (YAML `optional: true`):\n"
+        "# check.py does not report them as missing. stream name -> [column names].\n"
+        "# 旧ファームの一式に無いことがある末尾の列（YAML の `optional: true`）。check.py は欠落として\n"
+        "# 報告しない。ストリーム名 -> [列名]。\n"
+    )
+    parts.append(f"OPTIONAL_COLUMNS = {_pp(optional_columns)}\n\n")
+
     parts.append(
         "# Streams that MUST be present in every v1 bundle (only imu.csv today --\n"
         "# every other stream is optional because not every firmware/scenario\n"

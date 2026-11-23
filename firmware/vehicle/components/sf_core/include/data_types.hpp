@@ -659,6 +659,80 @@ struct NonFiniteStatus {
     uint8_t  first_stage;                       // NonFiniteStage of the first detection (the most upstream boundary of that cycle), kNonFiniteNoStage = none yet / 最初の検出の境界（その周期で最も上流）。kNonFiniteNoStage = まだ無い
 };
 
+// =============================================================================
+// Thrust excitation (vertical identification, a diagnostic overlay) — command and status types
+// 推力励振（鉛直の同定。診断オーバーレイ）— 命令と状態の型
+//
+// A small signal is added to the total thrust while the altitude loop stays closed. The judgement and the
+// waveform live in thrust_excitation.hpp (a pure header); these are the values that cross the task layer.
+// 高さのループを閉じたまま総推力へ小さな信号を足す。判断と波形は thrust_excitation.hpp（純粋なヘッダ）が持ち、
+// ここはタスク層を渡る値。
+//
+// @design detailed_design.md §3 — thrust excitation (normative cells) [OK]
+// @design architecture.md §4 — diagnostic overlay shown by controller_status [OK]
+// =============================================================================
+
+/// What a ThrustExcitationCommand asks for. / ThrustExcitationCommand の要求。
+enum class ThrustExcitationKind : uint8_t {
+    Cancel    = 0,   // stop a running or waiting excitation / 実行中・待機中の励振を止める
+    Multisine = 1,   // 8-tone multisine (amplitude, length) / 8 本の多重正弦波（振幅・長さ）
+    Steps     = 2,   // positive/negative steps (amplitude, half period, count) / 正負の段（振幅・半周期・回数）
+};
+
+/// State of the excitation, shown in controller_status and (low 3 bits) in the 50 Hz ctrl_ref record.
+/// 励振の状態。controller_status と、50 Hz の ctrl_ref の記録（下位 3 ビット）に出す。
+enum class ThrustExcitationState : uint8_t {
+    None     = 0,   // no excitation / 励振なし
+    Standby  = 1,   // accepted, waiting for the craft to be still / 受理済み。機体が静止するのを待つ
+    RampUp   = 2,   // the signal is rising / 信号の立ち上げ中
+    Running  = 3,   // full signal / 信号が全振幅
+    RampDown = 4,   // the signal is falling (end of the length or an abort) / 信号の立ち下げ中（終わり、または打ち切り）
+};
+
+/// Result of the last request. / 直近の要求の結果。
+enum class ThrustExcitationResult : uint8_t {
+    None      = 0,   // no request yet / 要求なし
+    Running   = 1,   // accepted, not finished / 受理済みで未了
+    Completed = 2,   // ran to the end of its length / 公称の長さを最後まで実行
+    Rejected  = 3,   // refused at the start (reason says why) / 開始で拒否（理由は reason）
+    Aborted   = 4,   // stopped while waiting or running (reason says why) / 待機中・実行中に打ち切り（理由は reason）
+};
+
+/// Why a request was rejected or a run was aborted (one code, one line in the log and in the API reply).
+/// 要求が拒否された、または実行が打ち切られた理由（符号 1 つ。ログ 1 行と API の応答に出す）。
+enum class ThrustExcitationReason : uint8_t {
+    None           = 0,
+    NotAirborne    = 1,    // vertical phase is not Airborne / 鉛直フェーズが Airborne でない
+    ModeNotAllowed = 2,    // not ALT_HOLD / POS_HOLD / ALT_HOLD・POS_HOLD でない
+    Busy           = 3,    // another excitation or a flip is active / ほかの励振かフリップが動いている
+    AmplitudeLimit = 4,    // amplitude outside (0, 10 %] / 振幅が (0, 10 %] の外
+    DurationLimit  = 5,    // length outside [2 s, 30 s] / 長さが [2 s, 30 s] の外
+    StepLimit      = 6,    // amplitude x half period too large, or half period too short / 振幅×半周期が大きすぎる、または半周期が短すぎる
+    BatteryLow     = 7,    // battery voltage low / 電池の電圧が低い
+    HeightOutOfRange = 8,  // height outside the start window / 高さが開始の窓の外
+    ToFInvalid     = 9,    // ToF not valid (start) or invalid / silent for 0.1 s (run) / ToF が無効（開始）、または 0.1 s 無効・出力停止（実行中）
+    TiltTooLarge   = 10,   // tilt too large / 傾きが大きい
+    NotSettled     = 11,   // the craft did not settle within the wait / 待機の間に機体が静止しなかった
+    HeightWindow   = 12,   // height left the run window / 高さが実行中の窓を出た
+    HeightError    = 13,   // height too far from its target / 高さが目標から遠い
+    StickMoved     = 14,   // the pilot moved a stick / 操縦者がスティックを動かした
+    Cancelled      = 15,   // cancel command / 取り消しの命令
+    FlightEnded    = 16,   // the vertical phase left Airborne / 鉛直フェーズが Airborne でなくなった
+    Preempted      = 17,   // a flip started / フリップが始まった
+};
+
+/// Thrust excitation request (API `sysid thrust ...` → controller). The amplitude is a percentage of the hover thrust.
+/// 推力励振の要求（API `sysid thrust ...` → 制御器）。振幅はホバー推力に対する割合 [%]。
+struct ThrustExcitationCommand {
+    uint8_t  kind;              // ThrustExcitationKind / 種類
+    float    amplitude_percent; // [%] of the hover thrust / ホバー推力に対する割合
+    float    duration_s;        // [s] nominal length (Multisine) / 公称の長さ（多重正弦波）
+    float    half_period_s;     // [s] length of one step (Steps) / 1 段の長さ（階段）
+    uint16_t count;             // number of positive+negative pairs (Steps) / 正負の対の数（階段）
+    uint32_t sequence;          // echoed in ControllerStatus::thrust_excitation_ack / ControllerStatus::thrust_excitation_ack に返す通し番号
+    uint32_t timestamp;         // [us]
+};
+
 /// Controller state fact for the API/guidance source (ControlTask → ApiTask).
 /// guidance_active is whether an API/Navigator position+yaw target is engaged in
 /// the controller. It goes false when the controller self-cancels guidance (pilot
@@ -716,6 +790,24 @@ struct ControllerStatus {
                                 // flight log / シーケンサのフェーズ（未係合は Idle）。フライトログ用
     float    flip_phi_rad;      // [rad] rotation accumulated since the flip started (0 when
                                 // Idle) / フリップ開始からの積算回転角（Idle では 0）
+    // Thrust excitation status (detailed_design.md §3, "thrust excitation"): carried by the task layer from the controller,
+    // read by ApiTask to answer the command and by TelemetryTask for the 50 Hz ctrl_ref record. State, result and reason are
+    // ThrustExcitationState / ThrustExcitationResult / ThrustExcitationReason values.
+    // 推力励振の状態（detailed_design.md §3「推力励振」）: タスク層が制御器から運ぶ。ApiTask が命令への応答に、TelemetryTask が
+    // 50 Hz の ctrl_ref の記録に読む。state・result・reason は ThrustExcitationState / Result / Reason の値。
+    uint8_t  thrust_excitation_state;              // ThrustExcitationState; the waveform kind is in bits 3..4 of the logged byte / 状態
+    uint8_t  thrust_excitation_result;             // ThrustExcitationResult / 直近の要求の結果
+    uint8_t  thrust_excitation_reason;             // ThrustExcitationReason (valid for Rejected / Aborted) / 理由（拒否・打ち切りのとき有効）
+    uint8_t  thrust_excitation_waveform;           // ThrustExcitationKind of the accepted request (0 = none) / 受理した要求の種類（0 = なし）
+    uint16_t thrust_excitation_amplitude_permille; // [1/1000 of the hover thrust] of the accepted request / 受理した要求の振幅（ホバー推力の千分率）
+    uint32_t thrust_excitation_elapsed_ms;         // [ms] since the request was accepted (frozen after the end) / 受理からの経過（終了後は止まる）
+    uint32_t thrust_excitation_ack;                // sequence of the last command the controller has seen / 制御器が最後に見た命令の通し番号
+    // Control references for the 50 Hz ctrl_ref record (altitude and horizontal targets; all 0 outside the altitude modes).
+    // 50 Hz の ctrl_ref の記録用の制御目標（高さと水平の目標。高度モード以外では全て 0）。
+    float    reference_altitude_m;                 // [m] altitude target / 高さの目標
+    float    reference_climb_velocity_mps;         // [m/s] vertical-velocity command (output of the position loop, or the stick climb rate) / 鉛直速度の指令（位置ループの出力、またはスティックの上昇率）
+    float    reference_climb_rate_command_mps;     // [m/s] stick / rc climb-rate command (0 = hold) / スティック・rc の上昇率の指令（0 = 保持）
+    float    reference_position_ned[2];            // [m] horizontal hold target north, east (POS_HOLD) / 水平の保持目標 北・東（POS_HOLD）
 };
 
 // =============================================================================

@@ -1,0 +1,36 @@
+# sysid_thrust_multisine.expect — a 5 % multisine thrust excitation: accepted, on the records, the height within +-0.15 m, ends normally
+# sysid_thrust_multisine.expect — 5 % の多重正弦波の推力励振: 受理・記録に出る・高さが ±0.15 m 以内・正常に終わる
+#
+# Pass lines were fixed from the design (detailed_design.md §3 thrust excitation: the height within +-0.15 m = a peak-to-peak band below 0.30 m,
+# tilt below 0.1745 rad, duty below 0.92), and from the pre-excitation hover of this flight, before the excitation was looked at.
+# 合格の線は設計（detailed_design.md §3 推力励振: 高さが ±0.15 m 以内 = ピーク間 0.30 m 未満、傾き 0.1745 rad 未満、duty 0.92 未満）と、この飛行の
+# 励振の前のホバーから、励振の結果を見る前に決めた。
+exit 0
+log_contains any "cmd: sysid thrust multisine 5 20"
+log_contains any "Thrust excitation accepted: kind=1 amplitude=50 permille"
+log_contains any "Thrust excitation end: result=2 reason=0 (none)"
+log_absent  any "excitation rejected"
+log_absent  any "excitation aborted"
+log_absent  any "error flight ended"
+order "Thrust excitation accepted" "Thrust excitation end: result=2"
+order "Thrust excitation end: result=2" "cmd: land"
+# The height stays within +-0.15 m of the hover (0.7 m) while the signal runs (27-46.5 s). / 信号が動いている間（27〜46.5 s）高さはホバー（0.7 m）の ±0.15 m 以内。
+metric alt_band < 0.30 in 27.0 46.5
+metric alt_min > 0.55 in 27.0 46.5
+metric alt_max < 0.85 in 27.0 46.5
+metric tilt_max < 0.1745 in 26.0 47.0
+metric duty_max < 0.92 in 26.0 47.0
+# The state and the amplitude are on the 50 Hz record: waveform 1 (multisine) in bits 3-4 and RampDown (4) -> 12 at the end; 50 = 5.0 %.
+# 状態と振幅が 50 Hz の記録に出る: 波形 1（多重正弦波）はビット 3〜4、終わりの RampDown（4）で 12。50 = 5.0 %。
+bundle_value ctrl_ref.thrust_excitation_state max >= 12
+bundle_value ctrl_ref.thrust_excitation_state max < 13
+bundle_value ctrl_ref.thrust_excitation_amplitude max >= 50
+bundle_value ctrl_ref.thrust_excitation_amplitude max <= 50
+# Thrust levels. The hover thrust at 0.7 m before the excitation is 0.3441 N (mean of ctrl_output.thrust over 22-26 s of this flight, before the
+# excitation acts). The amplitude is 5 % = 0.0172 N; a level of half the amplitude (0.3527 / 0.3355) is crossed only by the signal: the
+# unexcited hover moves by less than 0.003 N (0.9 %) in that window. / 励振の前の 0.7 m のホバー推力は 0.3441 N（この飛行の 22〜26 s の ctrl_output.thrust の平均）。
+# 振幅 5 % = 0.0172 N。振幅の半分の水準（0.3527 / 0.3355）を越えるのは信号だけ: 励振なしのホバーはその窓で 0.003 N（0.9 %）未満しか動かない。
+bundle_value ctrl_output.thrust max > 0.3527 in 30.0 44.0
+bundle_value ctrl_output.thrust min < 0.3355 in 30.0 44.0
+# Landed at the end. / 最後は接地。
+metric alt_max < 0.10 in 56.0 57.9

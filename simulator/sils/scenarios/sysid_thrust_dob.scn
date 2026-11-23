@@ -1,0 +1,20 @@
+# sysid_thrust_dob.scn — the multisine with the altitude disturbance observer (DOB) enabled: it must not cancel the excitation
+#                      外乱オブザーバ（DOB）を有効にした多重正弦波: 励振を打ち消してはならない
+#
+# The same flight as sysid_thrust_multisine with `altitude.dob.fc` 1.5 Hz. The DOB model is fed the command including the excitation, so the excitation is not read as a disturbance: the thrust record still carries the signal and the height stays within +-0.15 m. tests/test_thrust_excitation_bundles.py compares the vertical acceleration with the DOB-off flight (+-20 %).
+# sysid_thrust_multisine と同じ飛行で `altitude.dob.fc` を 1.5 Hz にする。DOB のモデルには励振を含む指令を与えるので、励振は外乱と読まれない: 推力の記録に信号が残り、高さは ±0.15 m 以内。tests/test_thrust_excitation_bundles.py が鉛直の加速度を DOB 無効の飛行と比べる（±20 %）。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_thrust_dob.scn --target vehicle --duration 58000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (t=0-6)
+   +    param altitude.dob.fc 1.5                                               # B0: enable the altitude DOB (cutoff 1.5 Hz) before the flight
+   +    api  "command"                                                           # B: SDK mode
+   +    api  "takeoff"                                                           # C: POS_HOLD auto-takeoff -> 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC during takeoff + hover (t=6-18)
+   +    api  "up 20"                                                             # E: climb to 0.7 m (t=18)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # F: neutral RC while climbing and settling (t=18-26)
+   +    api  "sysid thrust multisine 5 20"                                       # G: 5 % multisine for 20 s (t=26)
+   +    rc   2048  2048   2048    2048  0     24000     50                       # H: neutral RC through the excitation and its hold-off (t=26-50)
+   +    api  "land"                                                              # I: land (t=50)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # J: neutral RC through touchdown

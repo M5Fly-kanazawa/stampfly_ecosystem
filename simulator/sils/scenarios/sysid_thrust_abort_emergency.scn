@@ -1,0 +1,19 @@
+# sysid_thrust_abort_emergency.scn — a running thrust excitation is stopped at once by `emergency`
+#                                  実行中の推力励振が `emergency` で即座に止まる
+#
+# A 20 s multisine is running when `emergency` is injected: the motors are cut at once, the controller is reset (the signal stops without a ramp, the motors are off anyway) and the waiting command answers `error interrupted by emergency`.
+# 20 s の多重正弦波が動いているときに `emergency` を注入する: モータは即座に止まり、制御器は reset され（信号は立ち下げなしで止まる。モータはどのみち止まる）、待っていた命令は `error interrupted by emergency` を返す。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_thrust_abort_emergency.scn --target vehicle --duration 40000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (t=0-6)
+   +    api  "command"                                                        # B: SDK mode
+   +    api  "takeoff"                                                        # C: POS_HOLD auto-takeoff -> 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000      50                       # D: neutral RC during takeoff + hover (t=6-18)
+   +    api  "up 20"                                                          # E: climb to 0.7 m (t=18)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # F: neutral RC while climbing and settling (t=18-26)
+   +    api  "sysid thrust multisine 5 20"                                    # G: 20 s multisine (t=26)
+   +    rc   2048  2048   2048    2048  0     4000      50                       # H: 4 s of signal (t=26-30)
+   +    api  "emergency"                                                      # I: emergency (t=30)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # J: neutral RC while the craft falls

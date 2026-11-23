@@ -1,0 +1,19 @@
+# sysid_thrust_steps.scn — thrust excitation by steps: +-4 % for 0.8 s, 4 pairs
+#                        階段による推力励振: ±4 %・半周期 0.8 s・4 対
+#
+# Chain as sysid_thrust_multisine, with `sysid thrust step 4 0.8 4`: positive and negative thrust levels of 4 % of the hover thrust, 0.8 s each (amplitude x half period 3.2 %.s, inside the 4.0 %.s limit), 4 pairs = 6.4 s, then a 0.25 s return to 0. Verifies the same things for steps: accepted, answered ok, the height within +-0.15 m, the state on the 50 Hz record.
+# sysid_thrust_multisine と同じ連鎖で、`sysid thrust step 4 0.8 4`: ホバー推力の 4 % の正負の段を 0.8 s ずつ（振幅 × 半周期 3.2 %·s は上限 4.0 %·s の内側）、4 対 = 6.4 s、その後 0.25 s で 0 へ戻る。階段でも同じ項目を確かめる: 受理・ok の応答・高さが ±0.15 m 以内・50 Hz の記録の状態。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_thrust_steps.scn --target vehicle --duration 47000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (t=0-6)
+   +    api  "command"                                                        # B: SDK mode
+   +    api  "takeoff"                                                        # C: POS_HOLD auto-takeoff -> 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000      50                       # D: neutral RC during takeoff + hover (t=6-18)
+   +    api  "up 20"                                                          # E: climb to 0.7 m (t=18)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # F: neutral RC while climbing and settling (t=18-26)
+   +    api  "sysid thrust step 4 0.8 4"                                      # G: 4 pairs of +-4 % x 0.8 s (t=26; 0.5 s waiting, 6.4 s + 0.25 s of signal)
+   +    rc   2048  2048   2048    2048  0     12000      50                       # H: neutral RC through the excitation and the learning hold-off (t=26-38)
+   +    api  "land"                                                           # I: land (t=38)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # J: neutral RC through touchdown

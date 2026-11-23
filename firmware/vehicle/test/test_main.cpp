@@ -738,9 +738,10 @@ TEST(wire_unified_entries)
     memcpy(&ts, &buf[919], 4);
     ASSERT_TRUE(ts == 42u);
 
-    // Second entry follows the first; CtrlRef data_size 30 selects v3 on the PC.
+    // Second entry follows the first; CtrlRef data_size 51 selects v6 on the PC (v3 = 30, v5 = 50).
+    // 2 つ目のエントリは 1 つ目の直後。CtrlRef の data_size 51 で PC は v6 を選ぶ（v3 = 30、v5 = 50）。
     const size_t second = 919 + sizeof(WireControl);
-    ASSERT_TRUE(buf[second] == kPktCtrlRef && buf[second + 1] == 30);
+    ASSERT_TRUE(buf[second] == kPktCtrlRef && buf[second + 1] == 51);
 
     ASSERT_TRUE(length == 917 + 2 + sizeof(WireControl) + 2 + sizeof(WireCtrlRef) + 1);
     ASSERT_TRUE(xorChecksum(buf, length - 1) == buf[length - 1]);
@@ -1026,6 +1027,67 @@ TEST(wire_unified_worst_case_fits)
     const size_t length = builder.finish();
     ASSERT_TRUE(length == kTotal);
     ASSERT_TRUE(length <= kUnifiedMaxSize);
+}
+
+// The 50 Hz control-reference entry is the 51-byte v6 layout: its first 30 bytes are the v3 layout the PC decodes for older
+// firmware and its first 50 bytes are v5 (alt_setpoint at offset 30), so the PC picks the version by data_size.
+// 50 Hz の制御目標エントリは 51 バイトの v6: 先頭 30 バイトは PC が旧ファームのために復号する v3、先頭 50 バイトは v5
+// （alt_setpoint はオフセット 30）。PC は data_size で版を選ぶ。
+TEST(wire_ctrl_ref_v6_layout)
+{
+    using namespace sf::datastream;
+    static_assert(offsetof(WireCtrlRef, thrust_excitation) == 5, "the byte V3 called reserved");
+    static_assert(offsetof(WireCtrlRef, total_thrust) == 10, "v3 layout");
+    static_assert(offsetof(WireCtrlRef, motor_duty) == 14, "v3 layout");
+    static_assert(offsetof(WireCtrlRef, alt_setpoint) == 30, "v5 starts after the 30 bytes of v3");
+    static_assert(offsetof(WireCtrlRef, pos_setpoint_y) == 46, "v5 ends at 50");
+    static_assert(offsetof(WireCtrlRef, thrust_excitation_amplitude) == 50, "v6 appends one byte");
+    static_assert(kThrustExcitationStateMask == 0x07 && kThrustExcitationWaveformShift == 3, "packing of the state byte");
+    ASSERT_TRUE(static_cast<uint8_t>(sf::ThrustExcitationState::RampDown) <= kThrustExcitationStateMask);
+}
+
+// The unified packet for every number of flow samples that the 8-deep flow ring can hand to one packet (2 at the nominal 50 Hz; a
+// late TelemetryTask drains up to 8 at once): the real builder, all other entries at their maximum. It prints the table and asserts the
+// part that the design needs: the nominal 2 and a late drain of up to 6 fit; at 7 and 8 the last entries (mag first, then the barometric height) do not.
+// 8 深さのフローのリングが 1 つのパケットへ渡しうる全てのフロー標本数（公称 50 Hz で 2 件、遅れた TelemetryTask は一度に最大 8 件を
+// 排出する）の統合パケット: 実際のビルダで、ほかのエントリは最大。表を出し、設計が要る部分を検査する: 公称の 2 件と、遅れによる 6 件までは
+// 収まり、7 件と 8 件では最後のエントリ（磁気、次に気圧高度）が収まらない。
+TEST(wire_unified_packet_size_by_flow_samples)
+{
+    using namespace sf::datastream;
+    constexpr size_t kFlowRingDepth = 8;   // topics.hpp: log_flow RingBuffer 8
+    size_t most_that_fit = 0;
+    printf("\n    flow samples | packet bytes | accepted entries (cap %zu B)\n", kUnifiedMaxSize);
+    for (size_t flows = 0; flows <= kFlowRingDepth; ++flows) {
+        sf::LogStreamSample samples[kSamplesPerPacket] = {};
+        UnifiedPacketBuilder builder;
+        builder.begin(0, samples);
+        uint8_t payload[sizeof(WireControlOutput400) * kSamplesPerPacket] = {};
+        size_t accepted = 0;
+        accepted += builder.addEntry(kPktDuty400, payload, sizeof(WireDuty400) * kSamplesPerPacket);
+        accepted += builder.addEntry(kPktCtrlOutput400, payload, sizeof(WireControlOutput400) * kSamplesPerPacket);
+        accepted += builder.addEntry(kPktFlightPhase400, payload, sizeof(WireFlightPhase400) * kSamplesPerPacket);
+        accepted += builder.addEntry(kPktFlightFlags, payload, sizeof(WireFlightFlags));
+        accepted += builder.addEntry(kPktToFSilence, payload, sizeof(WireToFSilence));
+        accepted += builder.addEntry(kPktControl, payload, sizeof(WireControl));
+        accepted += builder.addEntry(kPktCtrlRef, payload, sizeof(WireCtrlRef));
+        for (size_t flow = 0; flow < flows; ++flow) {
+            accepted += builder.addEntry(kPktFlow, payload, sizeof(WireFlow));
+        }
+        accepted += builder.addEntry(kPktTofBottom, payload, sizeof(WireTof));
+        accepted += builder.addEntry(kPktTofFront, payload, sizeof(WireTof));
+        accepted += builder.addEntry(kPktBaro, payload, sizeof(WireBaro));
+        accepted += builder.addEntry(kPktBaroHeight, payload, sizeof(WireBaroHeight));
+        accepted += builder.addEntry(kPktMag, payload, sizeof(WireMag));
+        const size_t length = builder.finish();
+        const size_t offered = 12 + flows;
+        printf("    %12zu | %12zu | %zu of %zu\n", flows, length, accepted, offered);
+        ASSERT_TRUE(length <= kUnifiedMaxSize);
+        if (accepted == offered) {
+            most_that_fit = flows;
+        }
+    }
+    ASSERT_TRUE(most_that_fit >= 6);
 }
 
 // The 50 Hz ToF-silence entry (0x4E): 19 bytes, field order as the PC side (udp_capture.py FMT_TOF_SILENCE
@@ -1972,6 +2034,8 @@ int main()
     run_wire_text_log_id_is_distinct();
     run_wire_golden_vectors_match_the_python_side();
     run_wire_unified_worst_case_fits();
+    run_wire_ctrl_ref_v6_layout();
+    run_wire_unified_packet_size_by_flow_samples();
 
     printf("\n[Tello state]\n");
     run_tello_state_all_keys_present();

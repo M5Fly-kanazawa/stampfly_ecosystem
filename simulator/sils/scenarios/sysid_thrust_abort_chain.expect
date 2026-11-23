@@ -1,0 +1,32 @@
+# sysid_thrust_abort_chain.expect — four runs are stopped (cancel, stick, battery, height error); the hover goes on; no run completes
+# sysid_thrust_abort_chain.expect — 4 回の実行が止まる（取り消し・スティック・電池・高さのずれ）。ホバーは続く。完了する実行はない
+#
+# Pass lines from the design (the abort lines: height 0.25-1.05 m, error 0.15 m, battery 3.6 V; the abort returns the signal to 0 in 0.25 s).
+# 合格の線は設計から（打ち切りの線: 高さ 0.25〜1.05 m・ずれ 0.15 m・電池 3.6 V。打ち切りは 0.25 s で信号を 0 に戻す）。
+exit 0
+log_contains any "reply: error excitation aborted: cancelled"
+log_contains any "reply: error excitation aborted: stick"
+log_contains any "reply: error excitation aborted: battery"
+log_contains any "reply: error excitation aborted: height_error"
+order "reply: error excitation aborted: cancelled" "reply: error excitation aborted: stick"
+order "reply: error excitation aborted: stick" "reply: error excitation aborted: battery"
+order "reply: error excitation aborted: battery" "reply: error excitation aborted: height_error"
+log_absent  any "Thrust excitation end: result=2"
+log_absent  any "error flight ended"
+# The hover goes on through all four aborts: the height never leaves the run window (0.25-1.05 m of the design). The upper line 1.10 m allows the 0.025 N force and the
+# recovery from the battery step. The lower line is the lower edge of the run window, 0.25 m, not the 0.45 m first thought of: the step of the held battery voltage (4.1 -> 3.58 V)
+# sags the thrust for about 0.4 s (the voltage compensation follows the 10 Hz reading) and the height dips by 0.37 m (to 0.33 m in the first run of this scenario). That dip is
+# the battery model's, not the excitation's; what matters is that the craft never falls out of the window.
+# ホバーは 4 回の打ち切りを通して続く: 高さは実行中の窓（設計の 0.25〜1.05 m）を出ない。上の線 1.10 m は、0.025 N の力と、電池の段からの回復を許す。下の線は、最初に考えた
+# 0.45 m でなく、実行中の窓の下端 0.25 m: 保持した電池電圧の段（4.1 → 3.58 V）は約 0.4 s の間推力を下げ（電圧補償は 10 Hz の読みに従う）、高さは 0.37 m 下がる
+# （このシナリオの最初の実行で 0.33 m まで）。その下がりは電池モデルのもので励振のものではない。大事なのは、機体が窓の外へ落ちないこと。
+metric alt_min > 0.25 in 26.0 63.0
+metric alt_max < 1.10 in 26.0 63.0
+# Tilt: the roll stick of 0.22 repositions the POS_HOLD hold point (tilt below the 0.1745 rad hold limit plus the stick response).
+# 傾き: 0.22 のロールスティックは POS_HOLD の保持点を動かす（傾きは保持の上限 0.1745 rad にスティックの応答を足した程度）。
+metric tilt_max < 0.2618 in 26.0 63.0
+metric duty_max < 0.97 in 26.0 63.0
+# The signal is on the record in each of the four runs (state with the multisine waveform: at least 10 = running).
+# 4 回とも信号が記録に出る（多重正弦波の状態: 10 以上 = 立ち上げ以降）。
+bundle_value ctrl_ref.thrust_excitation_state max >= 12
+metric alt_max < 0.10 in 70.0 71.9

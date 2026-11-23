@@ -84,6 +84,7 @@ private:
     void appendFlightPhase400Entry(datastream::UnifiedPacketBuilder& builder);   // 400Hz flight state + flip phase / 400Hz の飛行状態＋フリップのフェーズ
     void appendFlightFlagsEntry(datastream::UnifiedPacketBuilder& builder);   // 50Hz flags / 50Hz のフラグ
     void appendPilotAndReferenceEntries(datastream::UnifiedPacketBuilder& builder);   // pilot input, control references, flow / パイロット入力、制御目標、フロー
+    void appendCtrlRefEntry(datastream::UnifiedPacketBuilder& builder, const LogStreamSample& last);   // 50Hz control references + thrust-excitation state / 50Hz の制御目標と推力励振の状態
     void appendAbsoluteSensorEntries(datastream::UnifiedPacketBuilder& builder);   // low-rate absolute sensors, on change / 低レートの絶対量センサ（更新時のみ）
     void appendBaroHeightEntry(datastream::UnifiedPacketBuilder& builder, const SensorSnapshot& snap);   // barometric height above the floor (0x52), with each new baro sample / 床からの気圧高度（0x52）。気圧計の新サンプルごと
     void appendToFSilenceEntry(datastream::UnifiedPacketBuilder& builder);   // 50Hz ToF-silence facts (0x4E) / 50Hz ToF 出力停止の事実

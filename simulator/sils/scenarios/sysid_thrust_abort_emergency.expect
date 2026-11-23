@@ -1,0 +1,10 @@
+# sysid_thrust_abort_emergency.expect — emergency stops the motors and the waiting command at once
+# sysid_thrust_abort_emergency.expect — emergency はモータと待っている命令を即座に止める
+#
+exit 0
+log_contains any "reply: error interrupted by emergency"
+log_absent  any "Thrust excitation end: result=2"
+order "cmd: sysid thrust multisine 5 20" "cmd: emergency"
+bundle_value ctrl_ref.thrust_excitation_state max >= 11
+# The motors are off from the emergency on. / emergency からモータは止まっている。
+metric duty_max < 0.01 in 32.0 38.0

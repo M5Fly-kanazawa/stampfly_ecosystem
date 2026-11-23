@@ -16,6 +16,8 @@ Subcommands:
     rate-fit   - Rate controller closed-loop identification (ETFE + fit)
     rate-tune  - PID gain design from an identified rate-loop model
     rate-excite - Rate-loop excitation signal generation (chirp/doublet)
+    thrust-fit  - Vertical thrust -> acceleration plant, ToF delay and accelerometer noise
+    thrust-excite - Fly the vertical thrust excitation via the Tello-style API
 """
 
 import argparse
@@ -78,6 +80,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     _register_rate_fit(sysid_subparsers)
     _register_rate_tune(sysid_subparsers)
     _register_rate_excite(sysid_subparsers)
+
+    # --- vertical thrust excitation (thrust_fit.py backend) ---
+    _register_thrust_fit(sysid_subparsers)
+    _register_thrust_excite(sysid_subparsers)
 
     parser.set_defaults(func=run_help)
 
@@ -1799,6 +1805,189 @@ def run_rate_excite(args) -> int:
         return 0
     except StampFlyError as exc:
         console.error(str(exc))
+        return 1
+    finally:
+        fly.close()
+
+
+# =============================================================================
+# Vertical thrust excitation: thrust-fit (analysis) and thrust-excite (flight)
+# 鉛直の推力励振: thrust-fit（解析）と thrust-excite（飛行）
+#
+# Workflow / 手順:
+#   1. sf log wifi -d 60                 (another terminal: 400Hz capture -> bundle)
+#      別の端末で 400Hz の取得を始める（一式を書く）
+#   2. sf sysid thrust-excite --takeoff --land
+#   3. sf sysid thrust-fit logs/flight_<timestamp>.sflog.zip --plot out/
+# =============================================================================
+
+THRUST_EXCITE_TAKEOFF_HEIGHT_M = 0.5     # height after `takeoff` / `takeoff` 後の高さ
+THRUST_EXCITE_MOVE_MIN_CM = 10           # `up`/`down` accept 10..300 cm / 移動は 10〜300 cm
+THRUST_EXCITE_MOVE_MAX_CM = 300
+THRUST_EXCITE_REPLY_MARGIN_S = 10.0      # standby (3 s) + ramp-down + margin / 待機 3 s + 立ち下げ + 余裕
+THRUST_EXCITE_STEP_FALL_S = 0.25         # appended return to zero of the steps / 階段の追加の立ち下げ
+THRUST_EXCITE_MOVE_TIMEOUT_S = 30.0
+THRUST_EXCITE_LAND_TIMEOUT_S = 30.0
+
+
+def _thrust_backend():
+    """tools/sysid/thrust_fit.py imported as sysid.thrust_fit. / tools/sysid/thrust_fit.py を import する。"""
+    tools_dir = str(paths.root() / "tools")
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    from sysid import thrust_fit
+    return thrust_fit
+
+
+def _register_thrust_fit(subparsers):
+    parser = subparsers.add_parser(
+        "thrust-fit",
+        help="Identify thrust->acceleration G(s)=K e^(-Ls)/(tau s+1), ToF delay and accelerometer noise",
+        description=(
+            "Reads a flight-log bundle flown with `sf sysid thrust-excite` (the vertical "
+            "thrust excitation with the altitude loop closed). The excitation is regenerated "
+            "from protocol/spec/thrust_excitation.yaml, its start cycle is refined by "
+            "correlation with ctrl_output.thrust, and G is computed with the excitation as the "
+            "reference (S_ra/S_ru), which stays unbiased under the closed altitude loop. "
+            "Also reports the ToF delay RELATIVE to the accelerometer and the accelerometer "
+            "noise spectrum. Steps are cut out and only their rise delay is estimated."),
+        epilog=(
+            "Capture the input data with (another terminal):\n"
+            "  sf log wifi -d 60\n"
+            "  sf sysid thrust-fit logs/flight_<timestamp>.sflog.zip --plot out/\n"
+            "入力データは上記コマンドで取得する（-dは秒数）。\n"),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("input", help="flight-log bundle (.sflog.zip or directory; also searched in logs/)")
+    parser.add_argument("--json-out", help="write the full result JSON here")
+    parser.add_argument("--plot", metavar="DIR", help="save the response / fit / coherence figure (PNG) into DIR")
+    parser.set_defaults(func=run_thrust_fit)
+
+
+def run_thrust_fit(args) -> int:
+    bundle_path = _resolve_input_bundle(args.input)
+    if bundle_path is None:
+        return 1
+    backend = _thrust_backend()
+    console.info(f"Loading bundle: {bundle_path}")
+    result = backend.analyze_bundle(bundle_path)
+    if not result["segments"]:
+        console.warning("no thrust excitation run in this log (ctrl_ref.thrust_excitation_state "
+                        "never reached ramp-up; rejected or not flown?) -- only the hover noise is reported")
+    for line in backend.summary_lines(result):
+        console.info(line)
+    if args.plot:
+        Path(args.plot).mkdir(parents=True, exist_ok=True)
+        figure = backend.plot_result(result, Path(args.plot) / (Path(str(bundle_path)).name + "_thrust_fit.png"))
+        if figure:
+            console.success(f"figure: {figure}")
+    if args.json_out:
+        Path(args.json_out).write_text(json.dumps(backend.to_jsonable(result), indent=2))
+        console.info(f"result JSON: {args.json_out}")
+    return 0
+
+
+def _register_thrust_excite(subparsers):
+    parser = subparsers.add_parser(
+        "thrust-excite",
+        help="Fly the vertical thrust excitation via the Tello-style API",
+        description=(
+            "Connects to the vehicle API (UDP :8889), optionally takes off and climbs to "
+            "--height, runs `sysid thrust multisine|step`, and optionally lands. Start "
+            "`sf log wifi` in another terminal FIRST: the 400Hz capture is what "
+            "`sf sysid thrust-fit` reads. Vehicle replies: ok / error excitation rejected: "
+            "<reason> / error excitation aborted: <reason> / error flight ended."),
+    )
+    parser.add_argument("--ip", default="192.168.10.1", help="vehicle IP")
+    parser.add_argument("--waveform", choices=["multisine", "steps"], default="multisine",
+                        help="excitation waveform (default: multisine)")
+    parser.add_argument("--amp", type=float, default=5.0, help="amplitude [%% of hover thrust] (default 5)")
+    parser.add_argument("--dur", type=float, default=20.0, help="multisine duration [s] (default 20)")
+    parser.add_argument("--half-period", type=float, default=0.6, dest="half_period",
+                        help="steps: duration of one positive or negative step [s] (default 0.6)")
+    parser.add_argument("--count", type=int, default=4, help="steps: number of positive+negative pairs (default 4)")
+    parser.add_argument("--height", type=float, default=0.7,
+                        help="height [m] to climb to after --takeoff (default 0.7)")
+    parser.add_argument("--takeoff", action="store_true", help="take off first (POS_HOLD), then move to --height")
+    parser.add_argument("--land", action="store_true", help="land afterwards")
+    parser.set_defaults(func=run_thrust_excite)
+
+
+def _height_move_command(height_m: float) -> Optional[str]:
+    """`up N` / `down N` from the takeoff height to height_m; None when no move is needed.
+    離陸後の高さから height_m への `up N` / `down N`。移動が要らなければ None。"""
+    delta_cm = round((height_m - THRUST_EXCITE_TAKEOFF_HEIGHT_M) * 100.0)
+    if delta_cm == 0:
+        return None
+    if not THRUST_EXCITE_MOVE_MIN_CM <= abs(delta_cm) <= THRUST_EXCITE_MOVE_MAX_CM:
+        raise ValueError(f"--height {height_m} m is {abs(delta_cm)} cm from the "
+                         f"{THRUST_EXCITE_TAKEOFF_HEIGHT_M} m takeoff height; the API moves "
+                         f"{THRUST_EXCITE_MOVE_MIN_CM}..{THRUST_EXCITE_MOVE_MAX_CM} cm at a time")
+    return f"{'up' if delta_cm > 0 else 'down'} {abs(delta_cm)}"
+
+
+def _excitation_command(args):
+    """(command string, reply timeout [s]) of the excitation. / 励振の命令の文字列と応答の待ち時間。"""
+    if args.amp <= 0:
+        raise ValueError("--amp must be positive")
+    if args.waveform == "multisine":
+        if args.dur <= 0:
+            raise ValueError("--dur must be positive")
+        return (f"sysid thrust multisine {args.amp:g} {args.dur:g}",
+                args.dur + THRUST_EXCITE_REPLY_MARGIN_S)
+    if args.half_period <= 0 or args.count < 1:
+        raise ValueError("--half-period must be positive and --count at least 1")
+    length_s = 2.0 * args.count * args.half_period + THRUST_EXCITE_STEP_FALL_S
+    return (f"sysid thrust step {args.amp:g} {args.half_period:g} {args.count}",
+            length_s + THRUST_EXCITE_REPLY_MARGIN_S)
+
+
+def build_thrust_excite_plan(args) -> list:
+    """Ordered (message, command, timeout) triples that thrust-excite sends. Raises ValueError on bad arguments.
+    thrust-excite が送る (メッセージ, 命令, 待ち時間) の並び。引数が不正なら ValueError。"""
+    plan = []
+    if args.takeoff:
+        plan.append(("takeoff (POS_HOLD, "
+                     f"{THRUST_EXCITE_TAKEOFF_HEIGHT_M} m) ...", "takeoff", 20.0))
+        move = _height_move_command(args.height)
+        if move:
+            plan.append((f"moving to {args.height} m ({move}) ...", move, THRUST_EXCITE_MOVE_TIMEOUT_S))
+    command, timeout = _excitation_command(args)
+    plan.append((f"excitation: {command} ...", command, timeout))
+    if args.land:
+        plan.append(("landing ...", "land", THRUST_EXCITE_LAND_TIMEOUT_S))
+    return plan
+
+
+def run_thrust_excite(args) -> int:
+    try:
+        plan = build_thrust_excite_plan(args)
+    except ValueError as exc:
+        console.error(str(exc))
+        return 1
+    sdk_dir = paths.root() / "tools" / "stampfly_py"
+    if str(sdk_dir) not in sys.path:
+        sys.path.insert(0, str(sdk_dir))
+    from stampfly import StampFly, StampFlyError
+
+    console.info(f"connecting to {args.ip} ... (keep the RC neutral; "
+                 "start `sf log wifi -d <seconds>` in another terminal FIRST to capture)")
+    fly = StampFly(args.ip)
+    try:
+        fly.connect()
+        for message, command, timeout in plan:
+            console.info(message)
+            fly.send(command, timeout=timeout)
+        console.info("done. analyze with: sf sysid thrust-fit <bundle> --plot <dir>")
+        return 0
+    except StampFlyError as exc:
+        console.error(str(exc))
+        if args.land:
+            console.warning("landing after the error ...")
+            try:
+                fly.send("land", timeout=THRUST_EXCITE_LAND_TIMEOUT_S)
+            except StampFlyError as land_exc:
+                console.error(str(land_exc))
         return 1
     finally:
         fly.close()

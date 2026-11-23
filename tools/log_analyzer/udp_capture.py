@@ -199,8 +199,12 @@ FMT_CTRL_REF_V2 = '<I 2B 2h f'
 FMT_CTRL_REF_V3 = '<I 2B 2h 5f'
 FMT_CTRL_REF_V4 = '<I 2B 2h 7f'
 FMT_CTRL_REF_V5 = '<I 2B 2h 10f'
-FMT_CTRL_REF = FMT_CTRL_REF_V5  # default for new logs
+# v6: v5 + thrust_excitation_amplitude(B) = 51B; the byte v3..v5 call `reserved` carries thrust_excitation_state
+# v6: v5 + thrust_excitation_amplitude(B) = 51B。v3〜v5 の `reserved` のバイトは thrust_excitation_state を運ぶ
+FMT_CTRL_REF_V6 = '<I 2B 2h 10f B'
+FMT_CTRL_REF = FMT_CTRL_REF_V6  # default for new logs
 assert struct.calcsize(FMT_CTRL_REF_V5) == 50
+assert struct.calcsize(FMT_CTRL_REF_V6) == 51
 
 # EskfPDiagSample: 64 bytes (10Hz)
 #   timestamp(I) + p_diag(15f) = 64B
@@ -302,7 +306,7 @@ SAMPLE_INFO = {
     PKT_BARO:      ('Baro',      FMT_BARO,      12),
     PKT_MAG:       ('Mag',       FMT_MAG,       16),
     PKT_TOF_FRONT: ('ToF_Frt',   FMT_TOF,        9),
-    PKT_CTRL_REF:  ('CtrlRef',   FMT_CTRL_REF,  50),
+    PKT_CTRL_REF:  ('CtrlRef',   FMT_CTRL_REF,  51),
     PKT_ESKF_PDIAG:('P_diag',   FMT_ESKF_PDIAG, 64),
     PKT_BARO_HEIGHT: ('BaroHeight', FMT_BARO_HEIGHT, 15),
 }
@@ -355,12 +359,13 @@ CSV_COLUMNS = {
     ],
     PKT_CTRL_REF: [
         'timestamp_us',
-        'flight_mode', 'reserved',
+        'flight_mode', 'thrust_excitation_state',
         'angle_ref_roll', 'angle_ref_pitch',
         'total_thrust',
         'motor_duty_FR', 'motor_duty_RR', 'motor_duty_RL', 'motor_duty_FL',
         'alt_setpoint', 'alt_vel_target',
         'climb_rate_cmd', 'pos_setpoint_x', 'pos_setpoint_y',
+        'thrust_excitation_amplitude',
     ],
     PKT_ESKF_PDIAG: [
         'timestamp_us',
@@ -628,7 +633,7 @@ def parse_packet(data: bytes) -> list:
                     results.append((sensor_id, sample))
                 elif sensor_id == PKT_CTRL_REF:
                     # Backward compatible: accept v1(10B), v2(14B), v3(30B)
-                    # 後方互換: v1(10B), v2(14B), v3(30B), v4(38B) を受け入れ
+                    # 後方互換: v1(10B), v2(14B), v3(30B), v4(38B), v5(50B) を受け入れ
                     if data_size == 10:
                         cols = CSV_COLUMNS[PKT_CTRL_REF][:5]
                         vals = struct.unpack_from(FMT_CTRL_REF_V1, data, offset)
@@ -644,6 +649,10 @@ def parse_packet(data: bytes) -> list:
                     elif data_size == 38:
                         cols = CSV_COLUMNS[PKT_CTRL_REF][:12]
                         vals = struct.unpack_from(FMT_CTRL_REF_V4, data, offset)
+                        results.append((sensor_id, dict(zip(cols, vals))))
+                    elif data_size == 50:
+                        cols = CSV_COLUMNS[PKT_CTRL_REF][:14]
+                        vals = struct.unpack_from(FMT_CTRL_REF_V5, data, offset)
                         results.append((sensor_id, dict(zip(cols, vals))))
             offset += data_size
 
@@ -853,6 +862,8 @@ def _ctrl_ref_row(sample: dict) -> dict:
         'climb_rate_cmd': sample.get('climb_rate_cmd', 0.0),
         'pos_setpoint_x': sample.get('pos_setpoint_x', 0.0),
         'pos_setpoint_y': sample.get('pos_setpoint_y', 0.0),
+        'thrust_excitation_state': sample.get('thrust_excitation_state', 0),
+        'thrust_excitation_amplitude': sample.get('thrust_excitation_amplitude', 0),
     }
 
 

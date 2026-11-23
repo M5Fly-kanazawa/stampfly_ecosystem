@@ -1,0 +1,19 @@
+# sysid_thrust_abort_land.scn — a running thrust excitation ends when a landing starts (battery emergency)
+#                             実行中の推力励振が、着陸の開始（電池の緊急）で終わる
+#
+# A 20 s multisine is running when the battery is held at 2.9 V (below the 3.0 V critical line): the state machine starts the LANDING, the vertical phase leaves Airborne, the controller returns the signal to 0 in 0.25 s (reason flight_ended), the API answers `error flight ended`, and the craft lands.
+# 20 s の多重正弦波が動いているときに電池を 2.9 V に保つ（危険の 3.0 V 未満）: 状態機械が LANDING を始め、鉛直フェーズが Airborne を出て、制御器は 0.25 s で信号を 0 に戻し（理由 flight_ended）、API は `error flight ended` を返し、機体は着陸する。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_thrust_abort_land.scn --target vehicle --duration 47000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (t=0-6)
+   +    api  "command"                                                        # B: SDK mode
+   +    api  "takeoff"                                                        # C: POS_HOLD auto-takeoff -> 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000      50                       # D: neutral RC during takeoff + hover (t=6-18)
+   +    api  "up 20"                                                          # E: climb to 0.7 m (t=18)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # F: neutral RC while climbing and settling (t=18-26)
+   +    api  "sysid thrust multisine 5 20"                                    # G: 20 s multisine (t=26)
+   +    rc   2048  2048   2048    2048  0     4000      50                       # H: 4 s of signal (t=26-30)
+   +    battery  2.9                                                          # I: battery held at 2.9 V -> LANDING (t=30)
+   +    rc   2048  2048   2048    2048  0     16000      50                       # J: neutral RC through the landing

@@ -291,22 +291,31 @@ void write_ctrl_ref_row(const sf::ControlOutput& ctrl, const sf::MotorOutput& mo
     std::FILE* f = sils_emu_flightlog_stream("ctrl_ref",
         "timestamp_us,flight_mode,angle_ref_roll,angle_ref_pitch,total_thrust,"
         "duty_FR,duty_RR,duty_RL,duty_FL,alt_setpoint,alt_vel_target,climb_rate_cmd,"
-        "pos_setpoint_x,pos_setpoint_y");
+        "pos_setpoint_x,pos_setpoint_y,thrust_excitation_state,thrust_excitation_amplitude");
     if (f == nullptr) return;
 
     const sf::SystemMode mode = sf::system_mode.latest();
-    // The trailing 5 cells (alt_setpoint/alt_vel_target/climb_rate_cmd/
-    // pos_setpoint_x/y) are left EMPTY: no published topic carries the
-    // PidController's PRIVATE cascade setpoints (flight_log.yaml's
-    // empty-cell rule covers exactly this — "the firmware version does not
-    // send that field at all").
-    // 末尾5セルは空欄のまま: PidController 内部（非公開）のカスケード目標値を
-    // 運ぶトピックが存在しない（flight_log.yaml の空欄規則「そのファーム版が
-    // そもそも送らない場合」に該当）。
-    std::fprintf(f, "%lld,%d,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,,,,,\n",
+    // The altitude and horizontal targets and the thrust-excitation state come from controller_status, as on the real
+    // vehicle (DataStream::appendCtrlRefEntry): the same values, the same packing of the state byte (state in bits 0..2, the
+    // waveform in bits 3..4) and the same rule that a disarmed craft writes 0.
+    // 高さと水平の目標と推力励振の状態は、実機（DataStream::appendCtrlRefEntry）と同じく controller_status から取る:
+    // 同じ値、同じ状態バイトの詰め方（状態は下位 3 ビット、波形はビット 3〜4）、disarm 中は 0 を書く同じ規則。
+    const sf::ControllerStatus status = sf::controller_status.latest();
+    const bool armed = mode.armed;
+    const unsigned excitation_byte = armed
+        ? ((status.thrust_excitation_state & 0x07u) | (static_cast<unsigned>(status.thrust_excitation_waveform) << 3))
+        : 0u;
+    const unsigned amplitude = armed ? static_cast<unsigned>(status.thrust_excitation_amplitude_permille) : 0u;
+    std::fprintf(f, "%lld,%d,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%u,%u\n",
         (long long)ts, (int)mode.sub_mode,
         (double)ctrl.angle_ref[0], (double)ctrl.angle_ref[1], (double)ctrl.thrust,
-        (double)motor.duty[0], (double)motor.duty[1], (double)motor.duty[2], (double)motor.duty[3]);
+        (double)motor.duty[0], (double)motor.duty[1], (double)motor.duty[2], (double)motor.duty[3],
+        (double)(armed ? status.reference_altitude_m : 0.0f),
+        (double)(armed ? status.reference_climb_velocity_mps : 0.0f),
+        (double)(armed ? status.reference_climb_rate_command_mps : 0.0f),
+        (double)(armed ? status.reference_position_ned[0] : 0.0f),
+        (double)(armed ? status.reference_position_ned[1] : 0.0f),
+        excitation_byte, amplitude);
 }
 
 // --- pilot.csv (edge-detected at its own native rate) ---

@@ -19,7 +19,7 @@
  * コマンドセットポイントを読み取り、アクティブなコントローラで
  * 制御出力を計算し、モーターdutyを発行する。
  *
- * @subscriber estimate_state, command_setpoint, controller_command, system_mode
+ * @subscriber estimate_state, command_setpoint, controller_command, system_mode, thrust_excitation_command
  * @publisher control_output, controller_status, actuator_motor, log_stream, nonfinite_status
  * @design architecture.md §5 — Main pipeline: Control + Actuation     [OK]
  * @design architecture.md §6 — ControlTask: Control + Actuation       [OK]
@@ -45,6 +45,12 @@
 #include "nonfinite_scope.hpp"        // NaN / infinity check of the control path boundaries
 
 static const char* TAG = "ControlTask";
+
+/// Control cycles between two polls of the thrust-excitation request queue: 8 cycles = 20 ms at 400 Hz. A request is a command typed
+/// by a person through the API, so a delay of 20 ms is harmless, and the idle cycles skip the queue.
+/// 推力励振の要求キューを見る間隔（制御周期）: 8 周期 = 400 Hz で 20 ms。要求は API で人が打つ命令なので 20 ms の遅れは
+/// 無害で、アイドルの周期はキューに触れない。
+static constexpr uint32_t kThrustExcitationPollCycles = 8;
 
 /// ControlTask handle, registered by the task itself at startup and exposed via
 /// sf::tasks::control_handle(). ImuTask reads it through that accessor to wake us
@@ -256,6 +262,7 @@ static sf::ControllerStatus publishControllerStatus(sf::IController& controller)
     status.vertical_rise_m      = controller.verticalRiseM();   // ToF health tracker (ImuTask) / ToF 健全性トラッカー（ImuTask）
     status.position_hold_valid = controller.positionHoldTarget(status.position_hold_ned[0],   // POS_HOLD hold target for ApiTask / ApiTask 用の POS_HOLD 保持目標
                                                                status.position_hold_ned[1]);
+    controller.fillDiagnostics(status);   // thrust excitation state and the control references of the 50 Hz log / 推力励振の状態と 50 Hz の記録用の制御目標
     status.timestamp = static_cast<uint32_t>(esp_timer_get_time());
     sf::controller_status.publish(status);
     return status;   // the log stream records the same facts / ログのストリームも同じ事実を記録する
@@ -341,6 +348,8 @@ void ControlTask(void* pvParameters)
     // 制御経路の NaN・無限大の検査（nonfinite_status、CLI の `status` が読む）: ARM 中の周期だけ数える。
     // 動作するのは Actuator::update() のモータ出力の保護だけ。
     sf::tasks::NonFiniteScope nonfinite(sf::nonfinite_status);
+
+    uint32_t thrust_excitation_poll_count = 0;   // armed cycles seen, for the decimated poll of the thrust-excitation queue / 推力励振のキューを間引いて見るための、ARM 中の周期の数
 
     while (true) {
         loop_timing.endCycle();   // close the previous cycle before waiting / 待つ前に前の周期を閉じる
@@ -514,6 +523,17 @@ void ControlTask(void* pvParameters)
             sf::SysidCommand sysid;
             while (sf::sysid_command.read(sysid)) {
                 controller.startExcitation(sysid);
+            }
+        }
+
+        // Thrust excitation requests (API `sysid thrust ...`): latched in the controller and judged in the next compute(). The queue is
+        // polled once per kThrustExcitationPollCycles cycles (20 ms): a request is not urgent, and the other cycles pay one increment.
+        // 推力励振の要求（API `sysid thrust ...`）: 制御器が保持し、次の compute() で判断する。キューは kThrustExcitationPollCycles 周期
+        // （20 ms）に 1 回だけ見る: 要求は急がず、ほかの周期のコストは加算 1 回。
+        if (++thrust_excitation_poll_count % kThrustExcitationPollCycles == 0) {
+            sf::ThrustExcitationCommand thrust_excitation;
+            while (sf::thrust_excitation_command.read(thrust_excitation)) {
+                controller.startThrustExcitation(thrust_excitation);
             }
         }
 

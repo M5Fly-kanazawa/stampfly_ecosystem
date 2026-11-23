@@ -239,10 +239,11 @@ def _check_columns(name: str, df: pd.DataFrame) -> list:
     expected = schema.COLUMN_NAMES.get(name)
     if expected is None:
         return []  # unknown stream name -- nothing in schema.py to check against
+    optional = set(getattr(schema, "OPTIONAL_COLUMNS", {}).get(name, ()))   # trailing columns that older firmware lacks / 旧ファームに無い末尾の列
     expected_set, actual_set = set(expected), set(df.columns)
     findings = [
         Finding("error", name, f"missing expected column '{col}'")
-        for col in sorted(expected_set - actual_set)
+        for col in sorted(expected_set - actual_set - optional)
     ]
     findings += [
         Finding("warning", name, f"unexpected extra column '{col}'")

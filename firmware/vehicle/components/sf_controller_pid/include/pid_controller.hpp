@@ -31,6 +31,7 @@
 #include "pid.hpp"
 #include "sensor_freshness.hpp"
 #include "sf_math.hpp"
+#include "thrust_excitation.hpp"   // sf::ThrustExcitation (waveform, start / abort judgement, state machine)
 #include "vertical_velocity_estimator.hpp"   // sf::VerticalVelocityEstimator
 
 namespace sf {
@@ -62,6 +63,8 @@ public:
                            const CommandSetpoint& current_sticks) override;
     bool isGuidanceActive() const override { return guidance_active_; }
     void startExcitation(const SysidCommand& cmd) override;
+    void startThrustExcitation(const ThrustExcitationCommand& command) override;
+    void fillDiagnostics(ControllerStatus& status) const override;
 
     // Flip maneuver (docs/plans/flip-maneuver-plan.md §4.1) / 宙返りマニューバ
     void onFlip(FlipDirection dir) override;
@@ -341,6 +344,27 @@ private:
     uint32_t sysid_seq_ = 0;           // result sequence / 結果シーケンス
     SysidFreqResult sysid_pending_{};  // completed point awaiting fetch / 取得待ちの完了点
     bool     sysid_pending_valid_ = false;
+    // Thrust excitation (see IController::startThrustExcitation and thrust_excitation.hpp). The request is latched here and
+    // judged in the next compute(), where the state estimate and the setpoint are at hand; the signal is added to the total
+    // thrust at the end of compute() (output.thrust), after the hover thrust, the correction, the DOB and the clamps.
+    // 推力励振（IController::startThrustExcitation と thrust_excitation.hpp 参照）。要求はここで保持し、状態推定と設定点が
+    // 手元にある次の compute() で判断する。信号は compute() の最後（output.thrust）、ホバー推力・補正・DOB・クランプの後で総推力へ足す。
+    ThrustExcitation thrust_excitation_;
+    ThrustExcitationCommand thrust_excitation_pending_command_{};
+    bool     thrust_excitation_pending_ = false;      // a request waits for the next compute() / 要求が次の compute() を待っている
+    uint32_t thrust_excitation_ack_ = 0;              // sequence of the last request seen / 最後に見た要求の通し番号
+    float    thrust_excitation_sticks_[4] = {};       // stick snapshot at the request: roll, pitch, yaw, throttle axis / 要求のときのスティック
+    // Control references mirrored for the 50 Hz log (see fillDiagnostics): the velocity command of the altitude loop and the
+    // stick / rc climb-rate command of this cycle.
+    // 50 Hz の記録のために写す制御目標（fillDiagnostics 参照）: 高さのループの速度指令と、この周期のスティック・rc の上昇率の指令。
+    float    reference_velocity_command_ = 0.0f;      // [m/s]
+    float    reference_climb_rate_command_ = 0.0f;    // [m/s]
+    float runThrustExcitation(const StateEstimate& state, const CommandSetpoint& setpoint, const math::Vec3& euler);   // judge a latched request and step the excitation / 保持した要求を判断し、励振を 1 歩進める
+    ThrustExcitationFacts buildThrustExcitationFacts(const StateEstimate& state, const CommandSetpoint& setpoint,
+                                                     const math::Vec3& euler) const;   // the facts the judgement reads / 判断が読む事実
+    bool guidanceStill(const StateEstimate& state) const;   // no guidance, or one that has arrived and is not moving the craft / 誘導なし、または着いていて機体を動かしていない
+    bool sticksMovedSinceRequest(const CommandSetpoint& setpoint) const;   // any stick left its snapshot by more than stick_move_cancel_ / スティックがスナップショットから stick_move_cancel_ を超えて動いた
+    float addExcitation(float thrust, float excitation) const;   // thrust + excitation clamped to the physical range; thrust itself when the excitation is 0 / 物理範囲にクランプした thrust + 励振。励振が 0 なら thrust そのもの
     static constexpr float kExciteAmpMax = 1.5f;   // [rad/s]
     static constexpr float kExciteDurMax = 10.0f;  // [s]
     static constexpr float kChirpF0      = 1.0f;   // [Hz] chirp start

@@ -1,0 +1,19 @@
+# sysid_thrust_abort_tof.scn — a running thrust excitation is stopped when the downward ToF goes silent
+#                            実行中の推力励振が、下向き ToF の出力停止で止まる
+#
+# A 20 s multisine is running when the downward ToF stops sending samples: the controller sees the ToF unusable for 0.1 s and ramps the signal out (reason tof, or flight_ended when the failsafe landing wins), and the ToF-silence landing follows.
+# 20 s の多重正弦波が動いているときに下向き ToF が出力を止める: 制御器は ToF が 0.1 s 使えないのを見て信号を立ち下げ（理由 tof。フェイルセーフの着陸が先なら flight_ended）、ToF 出力停止の着陸が続く。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_thrust_abort_tof.scn --target vehicle --duration 47000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (t=0-6)
+   +    api  "command"                                                        # B: SDK mode
+   +    api  "takeoff"                                                        # C: POS_HOLD auto-takeoff -> 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000      50                       # D: neutral RC during takeoff + hover (t=6-18)
+   +    api  "up 20"                                                          # E: climb to 0.7 m (t=18)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # F: neutral RC while climbing and settling (t=18-26)
+   +    api  "sysid thrust multisine 5 20"                                    # G: 20 s multisine (t=26)
+   +    rc   2048  2048   2048    2048  0     4000      50                       # H: 4 s of signal (t=26-30)
+   +    tof_silent  1                                                         # I: the downward ToF stops (t=30)
+   +    rc   2048  2048   2048    2048  0     16000      50                       # J: neutral RC through the ToF-silence landing

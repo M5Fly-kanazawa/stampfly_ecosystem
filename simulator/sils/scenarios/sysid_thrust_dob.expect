@@ -1,0 +1,18 @@
+# sysid_thrust_dob.expect — the multisine with the DOB enabled: the excitation is not cancelled as a disturbance
+# sysid_thrust_dob.expect — DOB を有効にした多重正弦波: 励振は外乱として打ち消されない
+#
+# Same pass lines as sysid_thrust_multisine (fixed before the run): the DOB model is fed the command including the excitation, so the signal stays on the record
+# and the height stays within +-0.15 m. tests/test_thrust_excitation_bundles.py compares the vertical acceleration with the DOB-off flight.
+# sysid_thrust_multisine と同じ合格の線（実行の前に決めた）: DOB のモデルには励振を含む指令を与えるので、信号は記録に残り、高さは ±0.15 m 以内。
+# tests/test_thrust_excitation_bundles.py が鉛直の加速度を DOB 無効の飛行と比べる。
+exit 0
+log_contains any "Thrust excitation end: result=2 reason=0 (none)"
+log_absent  any "excitation aborted"
+metric alt_band < 0.30 in 27.0 46.5
+metric alt_min > 0.55 in 27.0 46.5
+metric tilt_max < 0.1745 in 26.0 47.0
+metric duty_max < 0.92 in 26.0 47.0
+bundle_value ctrl_ref.thrust_excitation_state max >= 12
+bundle_value ctrl_output.thrust max > 0.3527 in 30.0 44.0
+bundle_value ctrl_output.thrust min < 0.3355 in 30.0 44.0
+metric alt_max < 0.10 in 56.0 57.9

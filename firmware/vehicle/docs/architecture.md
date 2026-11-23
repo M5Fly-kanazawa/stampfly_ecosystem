@@ -449,7 +449,7 @@ Paired}` として設計する。FAILSAFE と同様、状態管理（StateManage
 
 | # | 規則 | Flip への適用 |
 |---|------|--------------|
-| 1 | **分類規則**: 操縦者のスティックの意味・自動化される軸・フェイルセーフの解釈のどれかが変わるなら FlightState のシーケンス。変わらず設定点を作るだけなら誘導（`GuidanceTarget`）。診断オーバーレイ（同定励振）も `controller_status` で可視化 | 3 つとも変わる → `FlightState::FLIP` |
+| 1 | **分類規則**: 操縦者のスティックの意味・自動化される軸・フェイルセーフの解釈のどれかが変わるなら FlightState のシーケンス。変わらず設定点を作るだけなら誘導（`GuidanceTarget`）。診断オーバーレイ（同定励振）も `controller_status` で可視化（推力励振は状態・結果・理由・経過・振幅を `controller_status` に出す。レート励振の同じ欄は未対応で、今後の課題）。推力励振の規範セルは [`detailed_design.md`](detailed_design.md) の「推力励振」節 | 3 つとも変わる → `FlightState::FLIP` |
 | 2 | **チャネル別の設定点出所の宣言**: 各状態／フェーズが 姿勢・鉛直・水平・ヨー の出所（Pilot / Sequence / Zero）を表で宣言する（下表）。制御器は `VerticalPhase` を出所の一般化として持つ（INV-1 は保たれる: 出所が替わるだけで制御則は替えない）。INV-2 は「姿勢の出所が Pilot 以外になれるのはリンク途絶（Zero）と操縦者が起動した有限時間のシーケンス（Sequence）だけ」と規定する | Boost/Recover: 姿勢 Sequence(水平)・鉛直 Sequence(推力)・ヨー Sequence(保持)。Spin/Brake: 姿勢 Sequence(レート)・鉛直 Sequence(推力)・ヨー Sequence(0) |
 | 3 | **規範表の「シーケンス状態の既定行」**: エッジ保留・API 誘導拒否・DISARM/emergency/IMPACT 即時・接地リセット無し・新規シーケンス要求拒否を 1 行で定義し、各シーケンスは差分だけ書く（[`detailed_design.md`](detailed_design.md) §3.1） | FLIP の差分: GYRO_ANOMALY 無視、LOW_BATTERY とリンク途絶は FLYING 復帰後 |
 | 4 | **統合の時期**: 今は TAKEOFF と同じ形（`ControllerCmd` の動詞 + `controller_status` の完了フラグ + `IController` のフック）で足す。4 個目のシーケンスを足すときに `SequenceStart{kind}` / `sequence_done` / `onSequence(kind)` へ統合する | `ControllerCmd::Flip` / `FlipComplete`、`controller_status.flip_ready` / `flip_done` / `flip_result`、`IController::onFlip()` / `onFlipComplete()` |
@@ -466,7 +466,8 @@ Paired}` として設計する。FAILSAFE と同様、状態管理（StateManage
 | LANDING（リンク途絶） | Zero | Sequence(緩降下) | Zero | Zero |
 | FLIP Boost/Recover | Sequence(水平) | Sequence(推力) | — | Sequence(保持) |
 | FLIP Spin/Brake | Sequence(レート) | Sequence(推力) | — | Sequence(0) |
-| 同定励振（診断） | Sequence(レート注入・1軸) | Pilot | Pilot | Pilot |
+| 同定励振・レート（診断） | Sequence(レート注入・1軸) | Pilot | Pilot | Pilot |
+| 同定励振・推力（診断。FLYING の ALT_HOLD / POS_HOLD かつ Airborne） | Pilot（POS_HOLD では Mode） | Mode(高度保持) ＋ Sequence(推力の重ね合わせ) | Pilot（POS_HOLD では Mode） | Pilot |
 
 > **ヨーの「Pilot」の中身（2026-11-22）:** ヨースティックが中立のときは、ヘディングホールド（[`detailed_design.md`](detailed_design.md) §4）が方位を保つ — 「向きを保つ」が操縦者の意図である。これは TAKEOFF・LANDING でも変わらず、誘導の印が立ったままでも、モードやスロットルの値によらない（ヘディングホールドを止めてよいのは、誘導が実際にヨー角速度を駆動している間だけ）。ヨースティックを意図して倒せば、その入力に従う。
 

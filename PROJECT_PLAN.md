@@ -260,16 +260,18 @@ protocol/
 ├── spec/
 │   ├── messages.yaml      # ESP-NOW ControlPacket/PairingPacket の正
 │   ├── flight_log.yaml    # 標準フライトログ一式（.sflog.zip）の正: ストリーム名・列名・単位・レート
+│   ├── thrust_excitation.yaml # 鉛直の推力励振の波形表の正: 多重正弦波の周波数・位相・立ち上げの長さ（2026-11-23）
 │   └── espnow_tdma.yaml   # 実装からの逆文書化（生成・検査の対象外）
 └── tools/
     ├── gen_flight_log.py  # flight_log.yaml → lib/sflog/schema.py と docs/reference/flight-log-format.md を生成（--check で鮮度検査）
+    ├── gen_thrust_excitation.py # thrust_excitation.yaml → firmware/vehicle/components/sf_core/include/thrust_excitation_table.hpp と tools/sysid/thrust_excitation_table.py を生成（--check で鮮度検査）
     └── check_messages.py  # messages.yaml ⇔ firmware/common/protocol/include/espnow_protocol.hpp の整合検査
 ```
 
 - 仕様の正は `spec/` に置く。**生成物は消費側に置く**（Python は `lib/sflog/schema.py`、参照文書は
   `docs/reference/`）。`protocol/generated/` は置かない
 - 「正」を名乗る仕様には整合検査を付ける。`flight_log.yaml` は `gen_flight_log.py --check`、
-  `messages.yaml` は `check_messages.py`。いずれも CI（§14）で実行する
+  `messages.yaml` は `check_messages.py`、`thrust_excitation.yaml` は `gen_thrust_excitation.py --check`。いずれも CI（§14）で実行する
 - `espnow_tdma.yaml` は firmware 実装から書き起こした文書であり、生成・検査の対象ではない
 
 ---

@@ -407,16 +407,34 @@ struct WireControl {
 };
 static_assert(sizeof(WireControl) == 20, "wire drift");
 
-/// 50Hz control-reference entry — FMT_CTRL_REF_V3 '<I 2B 2h 5f' (30B)
+/// 50Hz control-reference entry — FMT_CTRL_REF_V6 '<I 2B 2h 10f B' (51B). The first 30 bytes are V3 (the layout of the
+/// firmware before 2026-11-23) and the first 50 bytes are V5, which the PC side (udp_capture.py) already decodes; the PC picks the
+/// version by data_size. The byte that V3 to V5 call `reserved` now carries the state of the thrust excitation (low 3 bits:
+/// ThrustExcitationState, bits 3..4: 1 multisine / 2 steps), and the last byte the excitation amplitude in 0.1 % of the hover thrust.
+/// 50Hz 制御目標エントリ — FMT_CTRL_REF_V6 '<I 2B 2h 10f B'（51B）。先頭 30 バイトは V3（2026-11-23 より前のファームの並び）、
+/// 先頭 50 バイトは V5 で、PC 側（udp_capture.py）は既に復号できる。PC は data_size で版を選ぶ。V3〜V5 で `reserved` と呼ぶバイトは
+/// 推力励振の状態（下位 3 ビット: ThrustExcitationState、ビット 3〜4: 1 多重正弦波 / 2 階段）を運び、最後のバイトは励振の振幅
+/// （ホバー推力の 0.1 % 単位）を運ぶ。
+/// @design protocol/spec/flight_log.yaml stream ctrl_ref [OK]
 struct WireCtrlRef {
     uint32_t timestamp_us;
     uint8_t  flight_mode;      // 0=ACRO 1=STAB 2=ALT 3=POS
-    uint8_t  reserved;
+    uint8_t  thrust_excitation;// state (bits 0..2) | waveform << kThrustExcitationWaveformShift (V3..V5: reserved, always 0)
     int16_t  angle_ref[2];     // value × 10000 [rad] R,P
     float    total_thrust;     // [N]
     float    motor_duty[4];    // FR, RR, RL, FL
+    float    alt_setpoint;     // [m] altitude target (0 outside the altitude modes)
+    float    alt_vel_target;   // [m/s] vertical-velocity command of the altitude loop
+    float    climb_rate_cmd;   // [m/s] stick / rc climb-rate command
+    float    pos_setpoint_x;   // [m] POS_HOLD hold target north (NED)
+    float    pos_setpoint_y;   // [m] POS_HOLD hold target east (NED)
+    uint8_t  thrust_excitation_amplitude; // [0.1 % of the hover thrust] / [ホバー推力の 0.1 %]
 };
-static_assert(sizeof(WireCtrlRef) == 30, "wire drift");
+static_assert(sizeof(WireCtrlRef) == 51, "wire drift");
+
+/// WireCtrlRef::thrust_excitation: the waveform sits above the 3 state bits. / 波形は状態の 3 ビットの上に置く。
+inline constexpr uint8_t kThrustExcitationStateMask      = 0x07;
+inline constexpr uint8_t kThrustExcitationWaveformShift  = 3;
 
 /// Low-rate sensor entries — FMT_FLOW '<I 2h B' / FMT_TOF '<I f B' /
 /// FMT_BARO '<I 2f' / FMT_MAG '<I 3f'

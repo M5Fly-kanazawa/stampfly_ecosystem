@@ -1,0 +1,14 @@
+# sysid_thrust_abort_land.expect — a landing (battery emergency) ends a running excitation; the API answers flight ended; the craft lands
+# sysid_thrust_abort_land.expect — 着陸（電池の緊急）が実行中の励振を終わらせる。API は flight ended を返す。機体は着陸する
+#
+exit 0
+log_contains any "Battery emergency → LANDING"
+log_contains any "reply: error flight ended"
+log_absent  any "Thrust excitation end: result=2"
+order "cmd: sysid thrust multisine 5 20" "Battery emergency → LANDING"
+order "Battery emergency → LANDING" "Transition: LANDING → IDLE_GROUND"
+# The excitation had started (state with the multisine waveform reached running).
+bundle_value ctrl_ref.thrust_excitation_state max >= 11
+# After the landing began the signal is gone and the craft is down: the end of the flight.
+metric descent_speed_max < 1.0 in 30.0 46.0
+metric alt_max < 0.05 in 44.0 46.5

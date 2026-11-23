@@ -516,6 +516,8 @@ ControlOutput PidController::compute(
     // インライン処理し、単一パイプライン（INV-1）を共有し、リンク生存中は姿勢を保つ（INV-2）。
     ControlOutput output = {};
     output.timestamp = state.timestamp;
+    reference_velocity_command_   = 0.0f;   // the references of the 50 Hz log are set again below where an altitude loop runs / 50 Hz の記録用の制御目標。高さのループが動く下の分岐で改めて設定する
+    reference_climb_rate_command_ = 0.0f;
 
     // Link-liveness and rc-guidance staleness (R16): observed by observeLinks(). The control
     // task already calls it every cycle in every flight state (compute() runs only while armed,
@@ -859,6 +861,15 @@ ControlOutput PidController::compute(
         rate_sp_pitch = att_pitch_.compute(pitch_sp, euler.y, dt);
     }
 
+    // Thrust excitation: one branch while idle. Judges a latched request, steps the waveform and returns the thrust [N] that is added
+    // to the total thrust at the end of this function (0 and no addition when idle, so the output is unchanged bit for bit).
+    // 推力励振: アイドルでは分岐 1 つ。保持した要求を判断し、波形を進め、この関数の最後で総推力へ足す推力 [N] を返す
+    // （アイドルでは 0 で足し算もしないので、出力はビット単位で変わらない）。
+    float excitation_thrust = 0.0f;
+    if (thrust_excitation_pending_ || thrust_excitation_.isStepping()) {
+        excitation_thrust = flip_active ? 0.0f : runThrustExcitation(state, setpoint, euler);
+    }
+
     // =========================================================================
     // Vertical channel — phase-switched (INV-1: the phase changes ONLY this channel)
     // 鉛直チャネル — フェーズで分岐（INV-1: フェーズが変えるのはこのチャネルのみ）
@@ -918,6 +929,7 @@ ControlOutput PidController::compute(
             if (vel_sp_z >  takeoff_climb_rate_) vel_sp_z =  takeoff_climb_rate_;
             if (vel_sp_z < -takeoff_climb_rate_) vel_sp_z = -takeoff_climb_rate_;
             vel_sp_z = limitClimbAboveCeiling(vel_sp_z, altitude);   // the auto-takeoff never climbs above the ceiling + margin / 自動離陸は上限 + 余裕を超えて上昇しない
+            reference_velocity_command_ = vel_sp_z;   // for the 50 Hz log / 50 Hz の記録用
             // The climb rate of the velocity loop is the ESKF's plus the climb that only the accelerometer integral shows (takeoffClimbRate()).
             // 速度ループの上昇率は、ESKF の値に、加速度積分だけが示す上昇を足したもの（takeoffClimbRate()）。
             float thrust_correction = alt_vel_.compute(vel_sp_z, takeoffClimbRate(vel_up), dt);
@@ -986,6 +998,8 @@ ControlOutput PidController::compute(
             float vel_sp_z = alt_pos_.compute(alt_setpoint_, altitude, dt);
             if (climb_rate_sp != 0) vel_sp_z = climb_rate_sp;
             vel_sp_z = limitClimbAboveCeiling(vel_sp_z, altitude);   // no climb command above the ceiling + margin / 上限 + 余裕を超えたら上昇の指令を出さない
+            reference_velocity_command_   = vel_sp_z;       // for the 50 Hz log / 50 Hz の記録用
+            reference_climb_rate_command_ = climb_rate_sp;
 
             float thrust_correction = alt_vel_.compute(vel_sp_z, vel_up, dt);
 
@@ -1031,7 +1045,7 @@ ControlOutput PidController::compute(
             // 与える — 内部モデル制御として正しい構造（モデルはローターへの
             // 実際の指令を見るべきで、DOB適用前のPI出力ではない）。
             if (dob_enabled_) {
-                dob_delay_ring_[dob_delay_idx_] = thrust;
+                dob_delay_ring_[dob_delay_idx_] = addExcitation(thrust, excitation_thrust);   // the model sees the excitation too, so the DOB does not cancel it as a disturbance / モデルも励振を見るので、DOB が外乱として打ち消さない
                 dob_delay_idx_ = (dob_delay_idx_ + 1) % kDobDelaySamples;
             }
 
@@ -1064,7 +1078,7 @@ ControlOutput PidController::compute(
     // Remember the thrust commanded this cycle: the blind landing starts its ramp from it.
     // 今周期の指令推力を覚える: ToF なしの着陸はこれからランプを始める。
     last_thrust_ = thrust;
-    if (!restingOnGround(thrust)) {   // the idle ground thrust says nothing about hover / 接地中の推力はホバーを表さない
+    if (!restingOnGround(thrust) && !thrust_excitation_.suppressesLearning()) {   // the idle ground thrust says nothing about hover; the support window does not learn from an excited flight / 接地中の推力はホバーを表さない。励振中の飛行から支持推力の窓は学習しない
         updateBlindStartFilters(state, thrust, dt);
     }
 
@@ -1194,7 +1208,7 @@ ControlOutput PidController::compute(
         if (output.torque[2] >  yaw_limit) output.torque[2] =  yaw_limit;
         if (output.torque[2] < -yaw_limit) output.torque[2] = -yaw_limit;
     }
-    output.thrust = thrust;
+    output.thrust = addExcitation(thrust, excitation_thrust);   // = thrust while the excitation is idle / 励振がアイドルの間は thrust そのもの
 
     // Stepped-sine I/Q accumulation (after the settle transient): correlate the
     // ACTUAL rate-loop output torque u and the gyro y with the excitation phase.
@@ -1403,6 +1417,7 @@ void PidController::learnHoverThrust(float thrust_correction, float vz_up,
     // param (hover.thrust.learn = 0) で無効化: 学習せず手動 corr のみ。着陸エッジの NVS 保存は
     // 別の毎サイクル処理（persistHoverThrust）— 接地は Grounded フェーズで起き本関数は呼ばれない。
     if (!hover_learn_enable_ || dt <= 0.0f) return;
+    if (thrust_excitation_.suppressesLearning()) return;   // the response to the thrust excitation is not a hover-thrust error / 推力励振への応答はホバー推力の誤差ではない
 
     // Gate: learn ONLY in a true steady hover with the altitude loop active — Airborne,
     // ALT_HOLD/POS_HOLD, throttle neutral (no commanded climb/descent), and the craft
@@ -2163,6 +2178,10 @@ void PidController::startExcitation(const SysidCommand& cmd)
         ESP_LOGW(TAG, "Sysid excitation rejected: flip in progress");
         return;
     }
+    if (thrust_excitation_.isActive() || thrust_excitation_pending_) {   // one excitation at a time / 励振は同時に 1 つ
+        ESP_LOGW(TAG, "Sysid excitation rejected: thrust excitation in progress");
+        return;
+    }
     if (phase_ != VerticalPhase::Airborne) {   // Landing/Takeoff/Grounded are not Airborne
         ESP_LOGW(TAG, "Sysid excitation rejected: not airborne");
         return;
@@ -2203,6 +2222,129 @@ void PidController::startExcitation(const SysidCommand& cmd)
              static_cast<double>(excite_amp_), static_cast<double>(excite_dur_));
 }
 
+// -----------------------------------------------------------------------------
+// Thrust excitation (thrust_excitation.hpp; detailed_design.md §3 "thrust excitation")
+// 推力励振（thrust_excitation.hpp、detailed_design.md §3「推力励振」）
+//
+// @design architecture.md INV-1 — only output.thrust changes; one attitude + rate pipeline [OK]
+// @design architecture.md INV-3 — the controller reads facts injected by ControlTask; it detects nothing [OK]
+// -----------------------------------------------------------------------------
+
+/// Latch a thrust-excitation request; compute() judges it with the state estimate and the setpoint at hand.
+/// 推力励振の要求を保持する。compute() が、状態推定と設定点が手元にある時点で判断する。
+void PidController::startThrustExcitation(const ThrustExcitationCommand& command)
+{
+    thrust_excitation_pending_command_ = command;
+    thrust_excitation_pending_ = true;
+}
+
+/// True when guidance is not driving the craft: no stick reposition, no rc velocity command, and a position target (if any)
+/// already reached with the craft nearly still. The flag guidance_active_ stays set after an API takeoff, so it cannot be used.
+/// 誘導が機体を動かしていないとき真: スティックの再配置なし、rc の速度指令なし、位置の目標（あれば）に着いていて機体はほぼ静止。
+/// guidance_active_ は API の離陸の後も立ったままなので使えない。
+bool PidController::guidanceStill(const StateEstimate& state) const
+{
+    if (reposition_active_) return false;
+    const bool horizontal_hold = current_mode_ >= FlightMode::POS_HOLD;
+    const float horizontal_speed = std::hypot(state.velocity[0], state.velocity[1]);
+    if (horizontal_hold && horizontal_speed > limits::kThrustExciteStartHorizontalSpeedMaxMps) return false;
+    if (!guidance_active_) return true;
+    if (guide_mode_ == 2) {
+        return guide_vx_ == 0.0f && guide_vy_ == 0.0f && guide_vz_ == 0.0f && guide_vyaw_ == 0.0f;
+    }
+    constexpr float kArrivedM = 0.01f;   // setpoint within 1 cm of the guidance target = the seek has finished / 設定点が誘導の目標の 1 cm 以内 = 追従が終わった
+    return std::fabs(pos_setpoint_x_ - guide_pos_[0]) < kArrivedM && std::fabs(pos_setpoint_y_ - guide_pos_[1]) < kArrivedM &&
+           std::fabs(alt_setpoint_ + guide_pos_[2]) < kArrivedM;
+}
+
+/// True when a stick left its snapshot (taken at the request) by more than the guidance-cancel threshold: the pilot wins.
+/// スティックが（要求のときの）スナップショットから誘導解除のしきい値を超えて動いたとき真: パイロット優先。
+bool PidController::sticksMovedSinceRequest(const CommandSetpoint& setpoint) const
+{
+    const float moved_roll     = std::fabs(setpoint.roll - thrust_excitation_sticks_[0]);
+    const float moved_pitch    = std::fabs(setpoint.pitch - thrust_excitation_sticks_[1]);
+    const float moved_yaw      = std::fabs(setpoint.yaw - thrust_excitation_sticks_[2]);
+    const float moved_throttle = std::fabs(setpoint.throttle_axis - thrust_excitation_sticks_[3]);
+    return moved_roll > stick_move_cancel_ || moved_pitch > stick_move_cancel_ ||
+           moved_yaw > stick_move_cancel_ || moved_throttle > stick_move_cancel_;
+}
+
+/// Gather the facts the start / abort judgement reads (INV-3: ToF, battery and phase are detected elsewhere).
+/// 開始・打ち切りの判断が読む事実を集める（INV-3: ToF・電池・フェーズの検出は別の層）。
+ThrustExcitationFacts PidController::buildThrustExcitationFacts(const StateEstimate& state, const CommandSetpoint& setpoint,
+                                                                const math::Vec3& euler) const
+{
+    ThrustExcitationFacts facts{};
+    facts.airborne               = phase_ == VerticalPhase::Airborne;
+    facts.altitude_mode          = current_mode_ >= FlightMode::ALT_HOLD;
+    facts.flip_active            = flip_.active();
+    facts.rate_excitation_active = excite_active_;
+    facts.altitude_m             = -state.position[2];
+    facts.altitude_target_m      = alt_setpoint_;
+    facts.vertical_speed_mps     = -state.velocity[2];
+    facts.tilt_rad               = std::fmax(std::fabs(euler.x), std::fabs(euler.y));
+    facts.battery_voltage        = state.battery_voltage;
+    facts.tof_usable             = state.tof_valid && !state.tof_silent;
+    facts.guidance_still         = guidanceStill(state);
+    facts.stick_moved            = sticksMovedSinceRequest(setpoint);
+    return facts;
+}
+
+/// Judge the latched request (if any) and step the excitation one control cycle. Returns the thrust [N] to add.
+/// 保持した要求（あれば）を判断し、励振を制御周期 1 回分進める。足す推力 [N] を返す。
+float PidController::runThrustExcitation(const StateEstimate& state, const CommandSetpoint& setpoint, const math::Vec3& euler)
+{
+    if (thrust_excitation_pending_) {
+        thrust_excitation_pending_ = false;
+        const ThrustExcitationCommand& command = thrust_excitation_pending_command_;
+        thrust_excitation_ack_ = command.sequence;
+        if (command.kind == static_cast<uint8_t>(ThrustExcitationKind::Cancel)) {
+            thrust_excitation_.cancel();
+        } else {
+            thrust_excitation_sticks_[0] = setpoint.roll;
+            thrust_excitation_sticks_[1] = setpoint.pitch;
+            thrust_excitation_sticks_[2] = setpoint.yaw;
+            thrust_excitation_sticks_[3] = setpoint.throttle_axis;
+            thrust_excitation_.request(command, buildThrustExcitationFacts(state, setpoint, euler), hover_thrust_);
+        }
+    }
+    return thrust_excitation_.step(buildThrustExcitationFacts(state, setpoint, euler));
+}
+
+/// thrust + excitation clamped to [0, max_thrust_]; `thrust` itself (no arithmetic) when the excitation is exactly 0, so an idle excitation
+/// leaves the output unchanged bit for bit. / thrust + 励振を [0, max_thrust_] にクランプ。励振がちょうど 0 なら thrust そのもの
+/// （演算なし）なので、アイドルの励振は出力をビット単位で変えない。
+float PidController::addExcitation(float thrust, float excitation) const
+{
+    if (excitation == 0.0f) return thrust;
+    const float total = thrust + excitation;
+    if (total < 0.0f) return 0.0f;
+    return total > max_thrust_ ? max_thrust_ : total;
+}
+
+/// Copy the excitation status and the control references into the status that the task layer publishes.
+/// 励振の状態と制御目標を、タスク層が発行する状態へ写す。
+void PidController::fillDiagnostics(ControllerStatus& status) const
+{
+    const bool active = thrust_excitation_.isActive();
+    status.thrust_excitation_state              = static_cast<uint8_t>(thrust_excitation_.state());
+    status.thrust_excitation_result             = static_cast<uint8_t>(thrust_excitation_.result());
+    status.thrust_excitation_reason             = static_cast<uint8_t>(thrust_excitation_.reason());
+    status.thrust_excitation_waveform           = active ? static_cast<uint8_t>(thrust_excitation_.kind()) : 0u;
+    status.thrust_excitation_amplitude_permille = active ? thrust_excitation_.amplitudePermille() : 0u;
+    status.thrust_excitation_elapsed_ms         = thrust_excitation_.elapsedMs();
+    status.thrust_excitation_ack                = thrust_excitation_ack_;
+
+    const bool altitude_loop = current_mode_ >= FlightMode::ALT_HOLD &&
+                               (phase_ == VerticalPhase::TakeoffClimb || phase_ == VerticalPhase::Airborne);
+    status.reference_altitude_m              = altitude_loop ? alt_setpoint_ : 0.0f;
+    status.reference_climb_velocity_mps      = reference_velocity_command_;
+    status.reference_climb_rate_command_mps  = reference_climb_rate_command_;
+    const bool hold_valid = altitude_loop && current_mode_ >= FlightMode::POS_HOLD && !capture_pos_;
+    status.reference_position_ned[0] = hold_valid ? pos_setpoint_x_ : 0.0f;
+    status.reference_position_ned[1] = hold_valid ? pos_setpoint_y_ : 0.0f;
+}
+
 bool PidController::fetchSysidResult(SysidFreqResult& out)
 {
     if (!sysid_pending_valid_) {
@@ -2232,6 +2374,8 @@ void PidController::reset()
     guidance_active_ = false;            // guidance dies with the flight / 誘導も飛行と共に終了
     reposition_active_ = false;          // stick repositioning state clears / スティック再配置状態クリア
     excite_active_   = false;            // so does the excitation / 励振も同様
+    thrust_excitation_.reset();          // the thrust excitation stops at once (the motors stop) / 推力励振も即時に止まる（モータは止まる）
+    thrust_excitation_pending_ = false;
     yaw_hold_active_ = false;            // heading hold too / ヘディングホールドも同様
     throttle_recentered_    = false;     // re-center gate re-arms for the next takeoff / 次の離陸用にロックを再び掛ける
     takeoff_reached_        = false;      // takeoff-complete signal clears / 離陸完了信号クリア
@@ -2547,7 +2691,7 @@ void PidController::updateFlipReadiness(const StateEstimate& state, float dt)
     // API は誘導で飛ぶので、移動直後の宙返りが Tello の通常の使い方。onFlip() が目標を
     // 解放し FlipComplete が位置を取り直す。競合する設定点の出所は同定励振だけ。
     // 進行中の API 移動は ApiTask が 1 件ずつ処理するため宙返りと重ならない。
-    if (ready && excite_active_) {
+    if (ready && (excite_active_ || thrust_excitation_.isActive() || thrust_excitation_pending_)) {
         ready = false;
         reason = FlipBlockReason::SourceConflict;
     }

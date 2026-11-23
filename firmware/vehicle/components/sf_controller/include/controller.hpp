@@ -235,6 +235,20 @@ public:
     /// 完了ステップドサイン点の一回限り取得。publish はタスク層。既定: なし。
     virtual bool fetchSysidResult(SysidFreqResult& out) { return false; }
 
+    /// Thrust excitation (API `sysid thrust ...`): add a small signal to the total thrust while the altitude loop stays
+    /// closed. The request (including Cancel) is judged at the next compute(); the answer is read back through
+    /// fillDiagnostics(). Default no-op: a controller that does not implement it is never excited.
+    /// 推力励振（API `sysid thrust ...`）: 高さのループを閉じたまま総推力へ小さな信号を足す。要求（Cancel を含む）は
+    /// 次の compute() で判断し、答えは fillDiagnostics() で読み返す。既定 no-op: 実装しない制御器は励振されない。
+    /// @design detailed_design.md §3 — thrust excitation [OK]
+    virtual void startThrustExcitation(const ThrustExcitationCommand& command) {}
+
+    /// Copy the controller's diagnostic facts into the status that the task layer publishes: the thrust excitation state and
+    /// the control references (altitude and horizontal targets) of the 50 Hz log. Default: leaves the status untouched.
+    /// 制御器の診断の事実を、タスク層が発行する状態へ写す: 推力励振の状態と、50 Hz の記録用の制御目標（高さと水平の目標）。
+    /// 既定: 状態に触れない。
+    virtual void fillDiagnostics(ControllerStatus& status) const {}
+
     // =========================================================================
     // Live Parameter Reload
     // ライブパラメータ再読込

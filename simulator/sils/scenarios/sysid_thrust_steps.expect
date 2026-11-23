@@ -1,0 +1,26 @@
+# sysid_thrust_steps.expect — a +-4 % step excitation: accepted, on the records, the height within +-0.15 m, ends normally
+# sysid_thrust_steps.expect — ±4 % の階段の推力励振: 受理・記録に出る・高さが ±0.15 m 以内・正常に終わる
+#
+# Pass lines from the design (the height within +-0.15 m; the closed-loop estimate for 4 % x 0.8 s is a few cm) and the pre-excitation hover thrust.
+# 合格の線は設計（高さ ±0.15 m 以内。4 % × 0.8 s の閉ループの試算は数 cm）と、励振の前のホバー推力から。
+exit 0
+log_contains any "cmd: sysid thrust step 4 0.8 4"
+log_contains any "Thrust excitation accepted: kind=2 amplitude=40 permille"
+log_contains any "Thrust excitation end: result=2 reason=0 (none)"
+log_absent  any "excitation rejected"
+log_absent  any "excitation aborted"
+order "Thrust excitation end: result=2" "cmd: land"
+metric alt_band < 0.30 in 26.5 34.0
+metric alt_min > 0.55 in 26.5 34.0
+metric tilt_max < 0.1745 in 26.0 35.0
+metric duty_max < 0.92 in 26.0 35.0
+# Waveform 2 (steps) in bits 3-4: RampDown at the end -> 20; amplitude 40 = 4.0 %. / 波形 2（階段）はビット 3〜4: 終わりの RampDown で 20。振幅 40 = 4.0 %。
+bundle_value ctrl_ref.thrust_excitation_state max >= 20
+bundle_value ctrl_ref.thrust_excitation_state max < 21
+bundle_value ctrl_ref.thrust_excitation_amplitude max >= 40
+bundle_value ctrl_ref.thrust_excitation_amplitude max <= 40
+# A level of 4 % is 0.0138 N; half of it (0.0069 N) above / below the hover is crossed by the steps only (the unexcited hover moves by less than 0.003 N).
+# 4 % は 0.0138 N。その半分（0.0069 N）をホバーの上下に取る。越えるのは階段だけ（励振なしのホバーは 0.003 N 未満）。
+bundle_value ctrl_output.thrust max > 0.3510 in 27.5 33.0
+bundle_value ctrl_output.thrust min < 0.3372 in 27.5 33.0
+metric alt_max < 0.10 in 45.0 46.5

@@ -156,7 +156,11 @@ STREAMS = {   'imu': {   'file': 'imu.csv',
                                    ('alt_vel_target', 'float', 'm/s'),
                                    ('climb_rate_cmd', 'float', 'm/s'),
                                    ('pos_setpoint_x', 'float', 'm'),
-                                   ('pos_setpoint_y', 'float', 'm'))},
+                                   ('pos_setpoint_y', 'float', 'm'),
+                                   ('thrust_excitation_state', 'int', 'bitfield'),
+                                   (   'thrust_excitation_amplitude',
+                                       'int',
+                                       '1/1000 of the hover thrust'))},
     'baro': {   'file': 'baro.csv',
                 'source': 'Baro (0x45)',
                 'nominal_rate_hz': 50,
@@ -350,6 +354,12 @@ STREAMS = {   'imu': {   'file': 'imu.csv',
 COLUMN_NAMES = {
     name: [c[0] for c in info['columns']] for name, info in STREAMS.items()
 }
+
+# Trailing columns that a bundle from older firmware may lack (YAML `optional: true`):
+# check.py does not report them as missing. stream name -> [column names].
+# 旧ファームの一式に無いことがある末尾の列（YAML の `optional: true`）。check.py は欠落として
+# 報告しない。ストリーム名 -> [列名]。
+OPTIONAL_COLUMNS = {'ctrl_ref': ['thrust_excitation_state', 'thrust_excitation_amplitude']}
 
 # Streams that MUST be present in every v1 bundle (only imu.csv today --
 # every other stream is optional because not every firmware/scenario
@@ -1212,7 +1222,37 @@ _COLUMN_META = {   'imu': [   {   'name': 'timestamp_us',
                         'unit': 'm',
                         'description_ja': '水平位置保持の目標位置 Y（POS_HOLD、NED 座標系）。',
                         'description_en': 'Position-hold target Y (POS_HOLD, NED '
-                                          'frame).'}],
+                                          'frame).'},
+                    {   'name': 'thrust_excitation_state',
+                        'type': 'int',
+                        'unit': 'bitfield',
+                        'description_ja': '推力励振の状態。下位 3 ビット（値 & 7）が状態（0 なし・1 待機・2 '
+                                          '立ち上げ・3 実行・4 立ち下げ）、ビット 3〜4 （値 >> 3）が波形（1 '
+                                          '多重正弦波・2 階段）。励振が動いていない間と、旧ファームと DISARM 中は '
+                                          '0。励振の信号そのものは記録せず、 '
+                                          '`protocol/spec/thrust_excitation.yaml` の表から '
+                                          'PC が再生成する（実行の始まりは `ctrl_output` '
+                                          'の推力の応答に合わせる）。',
+                        'description_en': 'State of the thrust excitation. The low 3 '
+                                          'bits (value & 7) are the state (0 none, 1 '
+                                          'standby, 2 ramp-up, 3 running, 4 ramp-down) '
+                                          'and bits 3 to 4 (value >> 3) the waveform '
+                                          '(1 multisine, 2 steps). 0 while no '
+                                          'excitation runs, on older firmware and '
+                                          'while disarmed. The signal itself is not '
+                                          'logged: the PC regenerates it from the '
+                                          'table of '
+                                          '`protocol/spec/thrust_excitation.yaml` (the '
+                                          'start of a run is aligned with the response '
+                                          'of the `ctrl_output` thrust).'},
+                    {   'name': 'thrust_excitation_amplitude',
+                        'type': 'int',
+                        'unit': '1/1000 of the hover thrust',
+                        'description_ja': '受理した推力励振の振幅（ホバー推力の千分率。10 % なら '
+                                          '100）。励振が動いていない間は 0。',
+                        'description_en': 'Amplitude of the accepted thrust excitation '
+                                          'in 1/1000 of the hover thrust (100 for 10 '
+                                          '%). 0 while no excitation runs.'}],
     'baro': [   {   'name': 'timestamp_us',
                     'type': 'int',
                     'unit': 'us',

@@ -386,6 +386,42 @@ void DataStream::appendFlightFlagsEntry(datastream::UnifiedPacketBuilder& builde
 }
 
 // -----------------------------------------------------------------------------
+// appendCtrlRefEntry — 50Hz control references, motor duty and the thrust-excitation state.
+// appendCtrlRefEntry — 50Hz の制御目標・モータ duty・推力励振の状態。
+// -----------------------------------------------------------------------------
+void DataStream::appendCtrlRefEntry(datastream::UnifiedPacketBuilder& builder, const LogStreamSample& last)
+{
+    // The angle references and the duty come from the batch's LAST sample. The altitude and horizontal targets and the thrust-excitation
+    // state are the controller's own, read from controller_status (R5: by topic). controller_status is not republished while disarmed,
+    // so the targets and the excitation state are written as 0 then (the values would be those of the last armed cycle).
+    // 姿勢の目標と duty はバッチの最終サンプルから。高さと水平の目標と推力励振の状態は制御器のもので、controller_status から読む（R5: トピック経由）。
+    // controller_status は disarm 中は再発行されないので、そのときは 0 を書く（値は最後の ARM 中の周期のものになってしまう）。
+    const bool armed = system_mode.latest().armed;
+    const ControllerStatus status = controller_status.latest();
+    datastream::WireCtrlRef ctrl_ref = {};
+    ctrl_ref.timestamp_us = last.timestamp;
+    ctrl_ref.flight_mode  = last.flight_mode;
+    ctrl_ref.angle_ref[0] = datastream::quantize(last.angle_ref[0], datastream::kAngleRefScale);
+    ctrl_ref.angle_ref[1] = datastream::quantize(last.angle_ref[1], datastream::kAngleRefScale);
+    ctrl_ref.total_thrust = last.thrust;
+    for (int i = 0; i < 4; ++i) {
+        ctrl_ref.motor_duty[i] = last.duty[i];   // FR, RR, RL, FL
+    }
+    if (armed) {
+        ctrl_ref.alt_setpoint    = status.reference_altitude_m;
+        ctrl_ref.alt_vel_target  = status.reference_climb_velocity_mps;
+        ctrl_ref.climb_rate_cmd  = status.reference_climb_rate_command_mps;
+        ctrl_ref.pos_setpoint_x  = status.reference_position_ned[0];
+        ctrl_ref.pos_setpoint_y  = status.reference_position_ned[1];
+        ctrl_ref.thrust_excitation = static_cast<uint8_t>(
+            (status.thrust_excitation_state & datastream::kThrustExcitationStateMask) |
+            (status.thrust_excitation_waveform << datastream::kThrustExcitationWaveformShift));
+        ctrl_ref.thrust_excitation_amplitude = static_cast<uint8_t>(status.thrust_excitation_amplitude_permille);
+    }
+    countDrop(builder.addEntry(datastream::kPktCtrlRef, &ctrl_ref, sizeof(ctrl_ref)));
+}
+
+// -----------------------------------------------------------------------------
 // appendPilotAndReferenceEntries — pilot input, control references and the flow samples.
 // appendPilotAndReferenceEntries — パイロット入力、制御目標、フローのサンプル。
 // -----------------------------------------------------------------------------
@@ -402,23 +438,7 @@ void DataStream::appendPilotAndReferenceEntries(datastream::UnifiedPacketBuilder
     control.yaw          = setpoint.yaw;
     countDrop(builder.addEntry(datastream::kPktControl, &control, sizeof(control)));
 
-    // Control references + motor duty, taken from the batch's LAST sample
-    // (v3 wire layout: data_size 30 selects the version on the PC side).
-    // 制御目標＋モータ duty。バッチ最終サンプルから採取（v3 電文: PC 側は
-    // data_size=30 でバージョンを判別する）。
-    const LogStreamSample& last = batch_[datastream::kSamplesPerPacket - 1];
-    datastream::WireCtrlRef ctrl_ref = {};
-    ctrl_ref.timestamp_us = last.timestamp;
-    ctrl_ref.flight_mode  = last.flight_mode;
-    ctrl_ref.angle_ref[0] = datastream::quantize(last.angle_ref[0],
-                                                 datastream::kAngleRefScale);
-    ctrl_ref.angle_ref[1] = datastream::quantize(last.angle_ref[1],
-                                                 datastream::kAngleRefScale);
-    ctrl_ref.total_thrust = last.thrust;
-    for (int i = 0; i < 4; ++i) {
-        ctrl_ref.motor_duty[i] = last.duty[i];   // FR, RR, RL, FL
-    }
-    countDrop(builder.addEntry(datastream::kPktCtrlRef, &ctrl_ref, sizeof(ctrl_ref)));
+    appendCtrlRefEntry(builder, batch_[datastream::kSamplesPerPacket - 1]);
 
     // Flow: drain EVERY sample from the log_flow ring (typically 2 per packet
     // at 100Hz). Flow dx/dy are INCREMENTAL — displacement since the previous

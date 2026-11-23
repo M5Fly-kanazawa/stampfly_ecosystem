@@ -259,6 +259,8 @@ StampFly フライトログ一式（`.sflog.zip`、拡張子固定）は、1回�
 | `climb_rate_cmd` | float | m/s | 操縦入力から生成した上昇率指令。 |
 | `pos_setpoint_x` | float | m | 水平位置保持の目標位置 X（POS_HOLD、NED 座標系）。 |
 | `pos_setpoint_y` | float | m | 水平位置保持の目標位置 Y（POS_HOLD、NED 座標系）。 |
+| `thrust_excitation_state` | int | bitfield | 推力励振の状態。下位 3 ビット（値 & 7）が状態（0 なし・1 待機・2 立ち上げ・3 実行・4 立ち下げ）、ビット 3〜4 （値 >> 3）が波形（1 多重正弦波・2 階段）。励振が動いていない間と、旧ファームと DISARM 中は 0。励振の信号そのものは記録せず、 `protocol/spec/thrust_excitation.yaml` の表から PC が再生成する（実行の始まりは `ctrl_output` の推力の応答に合わせる）。 |
+| `thrust_excitation_amplitude` | int | 1/1000 of the hover thrust | 受理した推力励振の振幅（ホバー推力の千分率。10 % なら 100）。励振が動いていない間は 0。 |
 
 #### baro（`baro.csv`）
 
@@ -764,6 +766,8 @@ Source: CtrlRef (0x48) / Nominal rate: 50 Hz / Required: no
 | `climb_rate_cmd` | float | m/s | Climb-rate command derived from pilot input. |
 | `pos_setpoint_x` | float | m | Position-hold target X (POS_HOLD, NED frame). |
 | `pos_setpoint_y` | float | m | Position-hold target Y (POS_HOLD, NED frame). |
+| `thrust_excitation_state` | int | bitfield | State of the thrust excitation. The low 3 bits (value & 7) are the state (0 none, 1 standby, 2 ramp-up, 3 running, 4 ramp-down) and bits 3 to 4 (value >> 3) the waveform (1 multisine, 2 steps). 0 while no excitation runs, on older firmware and while disarmed. The signal itself is not logged: the PC regenerates it from the table of `protocol/spec/thrust_excitation.yaml` (the start of a run is aligned with the response of the `ctrl_output` thrust). |
+| `thrust_excitation_amplitude` | int | 1/1000 of the hover thrust | Amplitude of the accepted thrust excitation in 1/1000 of the hover thrust (100 for 10 %). 0 while no excitation runs. |
 
 #### baro (`baro.csv`)
 

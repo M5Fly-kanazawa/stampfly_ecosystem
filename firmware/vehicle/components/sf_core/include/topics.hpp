@@ -113,6 +113,7 @@ extern Topic<MagCalCommand,   Queue,  2>      mag_command;       // CLI → MagT
 extern Topic<ApiCommand,      Queue,  4>      api_command;       // ApiTask, CLITask (arm/disarm/emergency/mode) → StateTask (flight verbs)
 extern Topic<SysidCommand,    Queue,  2>      sysid_command;     // ApiTask → ControlTask (rate excitation)
 extern Topic<SysidFreqResult, Latest, 1>      sysid_result;      // controller → ApiTask (stepped-sine I/Q)
+extern Topic<ThrustExcitationCommand, Queue, 2> thrust_excitation_command; // ApiTask → ControlTask (thrust excitation: start / cancel)
 extern Topic<MagCalStatus,    Latest, 1>      mag_cal_status;    // MagTask → CLI (magcal progress/result)
 
 // =============================================================================

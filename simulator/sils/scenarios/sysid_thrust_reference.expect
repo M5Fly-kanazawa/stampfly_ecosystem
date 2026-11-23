@@ -1,0 +1,13 @@
+# sysid_thrust_reference.expect — the same flight without the excitation (the reference of tests/test_thrust_excitation_bundles.py)
+# sysid_thrust_reference.expect — 励振のない同じ飛行（tests/test_thrust_excitation_bundles.py の基準）
+#
+exit 0
+log_absent  any "Thrust excitation"
+log_contains any "cmd: land"
+# The hover wanders by 0.06-0.08 m peak to peak (analysis of the flight logs, detailed_design.md §3 thrust excitation); 0.15 m leaves room. / ホバーの揺れはピーク間 0.06〜0.08 m（実機ログ）。0.15 m は余裕。
+metric alt_band < 0.15 in 27.0 46.5
+metric tilt_max < 0.1745 in 26.0 47.0
+# Without the signal the thrust stays within half the amplitude of the hover. / 信号がなければ、推力はホバーから振幅の半分以内。
+bundle_value ctrl_output.thrust max < 0.3527 in 30.0 44.0
+bundle_value ctrl_output.thrust min > 0.3355 in 30.0 44.0
+metric alt_max < 0.10 in 56.0 57.9

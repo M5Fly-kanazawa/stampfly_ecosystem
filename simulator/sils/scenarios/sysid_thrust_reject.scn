@@ -1,0 +1,32 @@
+# sysid_thrust_reject.scn — thrust excitation is REFUSED with a reason: on the ground, above the limits, at the wrong height, in the wrong mode
+#                         推力励振が理由つきで拒否される: 地上・上限超え・高さ違い・モード違い
+#
+# On the ground the request is answered `error excitation rejected: not_flying`. In flight: an amplitude of 15 % (limit 10 %) -> amplitude; 40 s (limit 30 s) -> duration; steps of 6 % x 1.0 s (limit 4.0 %.s) -> step_limit; a negative number -> error out of range; a word that is not a waveform -> the usage line; at 1.0 m (start window 0.35-0.9 m) -> height; in STABILIZE -> mode. None of them moves the craft: the height stays within 0.05 m of the hover.
+# 地上では `error excitation rejected: not_flying`。飛行中: 振幅 15 %（上限 10 %）→ amplitude、40 s（上限 30 s）→ duration、6 % × 1.0 s の階段（上限 4.0 %·s）→ step_limit、負の数 → error out of range、波形でない語 → 使い方の 1 行、1.0 m（開始の窓 0.35〜0.9 m）→ height、STABILIZE → mode。どれも機体を動かさない: 高さはホバーの 0.05 m 以内。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_thrust_reject.scn --target vehicle --duration 55000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (t=0-6)
+   +    api  "command"                                                        # B: SDK mode
+   +    api  "sysid thrust multisine 5 10"                                    # B2: on the ground -> not_flying
+   +    api  "takeoff"                                                        # C: POS_HOLD auto-takeoff -> 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000      50                       # D: neutral RC during takeoff + hover (t=6-18)
+   +    api  "up 20"                                                          # E: climb to 0.7 m (t=18)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # F: neutral RC while climbing and settling (t=18-26)
+   +    api  "sysid thrust multisine 15 10"                                   # G1: amplitude 15 % -> amplitude (t=26)
+   +    api  "sysid thrust multisine 5 40"                                    # G2: length 40 s -> duration
+   +    api  "sysid thrust step 6 1 2"                                        # G3: 6 % x 1.0 s -> step_limit
+   +    api  "sysid thrust multisine -5 10"                                   # G4: negative amplitude -> error out of range
+   +    api  "sysid thrust bogus"                                             # G5: not a waveform -> usage
+   +    rc   2048  2048   2048    2048  0     1000      50                       # G6: let the replies settle
+   +    api  "up 30"                                                          # H: climb to 1.0 m, above the start window (t=27)
+   +    rc   2048  2048   2048    2048  0     7000      50                       # H2: neutral RC while climbing and settling (t=27-34)
+   +    api  "sysid thrust multisine 5 10"                                    # H3: at 1.0 m -> height (t=34)
+   +    api  "down 30"                                                        # I: back to 0.7 m
+   +    rc   2048  2048   2048    2048  0     7000      50                       # I2: neutral RC while descending and settling (t=34-41)
+   +    rc   2048  2048   2048    2048  0     1500      50        1                       # J: switch to ALT_HOLD (edge: allowed mode)
+   +    rc   3171  2048   2048    2048  0     1500      50        0                       # K: switch to STABILIZE with the throttle above the STABILIZE hover (the craft climbs a little)
+   +    api  "sysid thrust multisine 5 10"                                    # L: in STABILIZE -> mode (t=44)
+   +    api  "land"                                                           # M: land
+   +    rc   3171  2048   2048    2048  0     10000      50        0                       # N: throttle held through the landing

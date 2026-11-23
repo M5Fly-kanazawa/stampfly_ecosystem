@@ -93,7 +93,7 @@ ESP-NOW との共存品質を決めるのはデータ量ではなく **sendto() 
 
 ## 4. テキストログとステータス v4（統合パケットの外に足したもの）
 
-統合パケット（0x50）は数値の 400Hz ストリームで、最悪でも 1317 バイト（上限 1400 バイトまで 83 バイト）しか余裕が無い。機体の `ESP_LOG` の行（状態遷移・着陸判定・フェイルセーフ・拒否の理由）と診断値は、統合パケットを大きくせずに、同じソケット・同じ TelemetryTask から別のパケットで届ける。
+統合パケット（0x50）は数値の 400Hz ストリームで、最悪でも 1355 バイト（フロー 2 件の想定。上限 1400 バイトまで 45 バイト）しか余裕が無い（2026-11-23 に 50 Hz の `ctrl_ref` を 30 → 51 バイトにして目標 5 欄と推力励振の状態を載せたため、1334 バイトから +21 バイト。遅れた TelemetryTask が 1 回でフローの標本を 6 件まで排出しても 1399 バイトで収まり、7 件以上では最後の磁気などが落ちる。実測の表は `test_main.cpp` の `wire_unified_packet_size_by_flow_samples`）。機体の `ESP_LOG` の行（状態遷移・着陸判定・フェイルセーフ・拒否の理由）と診断値は、統合パケットを大きくせずに、同じソケット・同じ TelemetryTask から別のパケットで届ける。
 
 | パケット | 内容 | 送る頻度・大きさ |
 |---------|------|----------------|
@@ -185,7 +185,7 @@ Minimizing call count determines ESP-NOW coexistence quality.
 
 ## 4. Text Log and Status v4 (added outside the unified packet)
 
-The unified packet (0x50) is the numeric 400Hz stream and has only 83 bytes of margin under its 1400-byte cap in the worst case (1317 bytes). The ESP_LOG lines of the vehicle (state transitions, landing decisions, failsafe, reasons for refusals) and the diagnostics reach the PC without growing it, as separate packets from the same socket and the same TelemetryTask.
+The unified packet (0x50) is the numeric 400Hz stream and has only 45 bytes of margin under its 1400-byte cap in the worst case (1355 bytes, assuming 2 flow samples; since 2026-11-23 the 50 Hz `ctrl_ref` is 51 bytes instead of 30 so that it carries the 5 targets and the thrust-excitation state, +21 bytes over 1334). A late TelemetryTask that drains up to 6 flow samples at once still fits (1399 bytes); from 7 the last entries (mag, ...) are dropped. The measured table is `wire_unified_packet_size_by_flow_samples` in `test_main.cpp`. The ESP_LOG lines of the vehicle (state transitions, landing decisions, failsafe, reasons for refusals) and the diagnostics reach the PC without growing it, as separate packets from the same socket and the same TelemetryTask.
 
 | Packet | Content | Rate and size |
 |--------|---------|---------------|

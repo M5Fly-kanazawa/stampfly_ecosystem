@@ -1,0 +1,26 @@
+# sysid_thrust_multisine.scn — thrust excitation (vertical identification) by the API: a 5 % multisine for 20 s
+#                               API による推力励振（鉛直の同定）: 5 % の多重正弦波を 20 s
+#
+# Chain: API takeoff (POS_HOLD hover at 0.5 m) -> "up 20" (0.7 m, the height the real flight uses) ->
+# "sysid thrust multisine 5 20" adds an 8-tone multisine (0.4-8.9 Hz) to the total thrust while the altitude loop stays closed
+# -> the excitation ends -> land. Verifies: the command is accepted and answered "ok", the signal is on the 400 Hz thrust record
+# (ctrl_output) and the state on the 50 Hz ctrl_ref record, the height stays within +-0.15 m of the hover, the hover-thrust
+# learner is not moved by the excitation, and the flight ends normally.
+# 連鎖: API 離陸（POS_HOLD で 0.5 m のホバー）→ "up 20"（0.7 m。実機の飛行が使う高さ）→ "sysid thrust multisine 5 20" が
+# 高さのループを閉じたまま総推力へ 8 本の多重正弦波（0.4〜8.9 Hz）を足す → 励振の終了 → 着陸。検証: 命令が受理されて "ok" を返す、
+# 信号が 400 Hz の推力の記録（ctrl_output）に、状態が 50 Hz の ctrl_ref の記録に出る、高さがホバーの ±0.15 m 以内、
+# ホバー推力の学習が励振で動かない、飛行が正常に終わる。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_thrust_multisine.scn --target vehicle --duration 58000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (t=0-6)
+   +    api  "command"                                                           # B: SDK mode
+   +    api  "takeoff"                                                           # C: POS_HOLD auto-takeoff -> 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000     50                       # D: neutral RC during takeoff + hover (t=6-18)
+   +    api  "up 20"                                                             # E: climb to 0.7 m (t=18)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # F: neutral RC while climbing and settling (t=18-26)
+   +    api  "sysid thrust multisine 5 20"                                       # G: 5 % multisine for 20 s (t=26; 0.5 s of waiting, 20 s of signal)
+   +    rc   2048  2048   2048    2048  0     24000     50                       # H: neutral RC through the excitation and its 1 s hold-off (t=26-50)
+   +    api  "land"                                                              # I: land (t=50)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # J: neutral RC through touchdown

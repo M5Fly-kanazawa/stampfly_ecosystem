@@ -119,6 +119,28 @@ TEST(sysid_range_rejects_long_negative_zero_and_non_finite)
     ASSERT_TRUE(!isSysidRangeValid(25.0f, kInfinity));
 }
 
+// `sysid thrust ...`: the API hands on any finite positive number (the controller judges the limits and names the reason);
+// the step count must be a whole number from 1 to 65535.
+// `sysid thrust ...`: API は有限で正の数なら渡す（上限の判断と理由の名前は制御器）。階段の回数は 1〜65535 の整数。
+TEST(thrust_excitation_numbers_are_finite_positive_and_the_count_is_whole)
+{
+    using sf::api_arguments::isThrustExcitationCountValid;
+    using sf::api_arguments::isThrustExcitationNumberValid;
+    ASSERT_TRUE(isThrustExcitationNumberValid(5.0f));
+    ASSERT_TRUE(isThrustExcitationNumberValid(1000.0f));   // a limit is the controller's call, with a reason / 上限は制御器の判断（理由つき）
+    ASSERT_TRUE(!isThrustExcitationNumberValid(0.0f));
+    ASSERT_TRUE(!isThrustExcitationNumberValid(-1.0f));
+    ASSERT_TRUE(!isThrustExcitationNumberValid(kNotANumber));
+    ASSERT_TRUE(!isThrustExcitationNumberValid(kInfinity));
+    ASSERT_TRUE(isThrustExcitationCountValid(1.0f));
+    ASSERT_TRUE(isThrustExcitationCountValid(65535.0f));
+    ASSERT_TRUE(!isThrustExcitationCountValid(0.0f));
+    ASSERT_TRUE(!isThrustExcitationCountValid(2.5f));
+    ASSERT_TRUE(!isThrustExcitationCountValid(65536.0f));
+    ASSERT_TRUE(!isThrustExcitationCountValid(kNotANumber));
+    ASSERT_TRUE(!isThrustExcitationCountValid(-3.0f));
+}
+
 TEST(wrap_angle_leaves_values_inside_the_range)
 {
     ASSERT_TRUE(std::fabs(sf::math::wrapAngleRad(0.0f)) < kAngleToleranceRad);
@@ -164,6 +186,7 @@ int main()
     run_rotate_angle_range_is_one_to_three_hundred_sixty();
     run_sysid_range_accepts_what_the_controller_takes();
     run_sysid_range_rejects_long_negative_zero_and_non_finite();
+    run_thrust_excitation_numbers_are_finite_positive_and_the_count_is_whole();
     run_wrap_angle_leaves_values_inside_the_range();
     run_wrap_angle_folds_into_minus_pi_to_plus_pi();
     run_wrap_angle_terminates_and_stays_in_range_for_huge_finite_input();

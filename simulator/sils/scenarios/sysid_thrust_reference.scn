@@ -1,0 +1,18 @@
+# sysid_thrust_reference.scn — the flight of sysid_thrust_multisine WITHOUT the excitation (the reference the other scenarios are compared with)
+#                            sysid_thrust_multisine から励振を除いた飛行（ほかのシナリオと比べる基準）
+#
+# Same chain as sysid_thrust_multisine (takeoff, up 20, hover, land) with no `sysid thrust` line. It shows what the hover thrust, the height and the acceleration look like without the excitation, so that tests/test_thrust_excitation_bundles.py can compare the excited flights with it.
+# sysid_thrust_multisine と同じ連鎖（離陸・up 20・ホバー・着陸）で、`sysid thrust` の行がない。励振がないときのホバー推力・高さ・加速度の様子を示し、tests/test_thrust_excitation_bundles.py が励振のある飛行と比べる。
+#
+# Run: sf sils scenario simulator/sils/scenarios/sysid_thrust_reference.scn --target vehicle --duration 58000000
+#
+#  <t>  ch  <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
+   0    rc   2048  2048   2048    2048  0     6000      50                       # A: boot at rest — still calibration (t=0-6)
+   +    api  "command"                                                        # B: SDK mode
+   +    api  "takeoff"                                                        # C: POS_HOLD auto-takeoff -> 0.5 m
+   +    rc   2048  2048   2048    2048  0     12000      50                       # D: neutral RC during takeoff + hover (t=6-18)
+   +    api  "up 20"                                                          # E: climb to 0.7 m (t=18)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # F: neutral RC while climbing and settling (t=18-26)
+   +    rc   2048  2048   2048    2048  0     24000      50                       # H: neutral RC for the 24 s in which the other flight excites (t=26-50)
+   +    api  "land"                                                           # I: land (t=50)
+   +    rc   2048  2048   2048    2048  0     8000      50                       # J: neutral RC through touchdown
