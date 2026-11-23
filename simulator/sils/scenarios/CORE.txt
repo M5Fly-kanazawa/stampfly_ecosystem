@@ -1,0 +1,40 @@
+# CORE.txt - the 30 most important SILS scenarios, run by default by `sf sils regression`.
+#              (`sf sils regression --all` runs every scenario: CI and the check before merging into main.)
+# 最重要の 30 本。`sf sils regression` が既定で実行する（--all は全本数: CI と main に取り込む前）。
+# One scenario name per line (no .scn), '#' starts a comment. Every name must have a .scn and a
+# .expect, must not be KNOWN-FAIL (xfail) or workshop-target, and the list must hold exactly 30.
+# 1 行 1 名（.scn なし）。全てに .scn と .expect が要る。既知の不合格・workshop 対象は入れない。本数は 30。
+
+# --- safety / 安全
+cli_emergency_flying
+commloss
+battery_emergency_flying
+battery_emergency_takeoff_climbing
+tof_silent_hover
+tof_silent_prearm
+tof_recover_climb_alt
+tof_reinit_flight
+alt_ceiling_stick
+landing_dead_zone
+prearm
+boot_motion
+
+# --- modes and operations / 飛行モードと操作
+cli_arm_stabilize
+stab_flight
+stab_ground_windup
+acro_flight
+alt_auto_takeoff
+alt_recenter_gate
+pos_reposition
+modeswitch
+api_flight
+api_rc
+api_takeoff_emergency
+api_rotate_ok_when_complete
+api_flip_roll
+flip_disabled
+pairing
+sysid_thrust_multisine
+crash_refly
+diagnostics_log

@@ -17,9 +17,10 @@ Subcommands:
   status     Show the machine verdict (results.json) for a milestone
   gate       Gate check: bundle complete AND verdict passes (output-driven)
   scenario   Run a *.scn input scenario (console/ESP-NOW) and assert outputs (E6)
-  regression Run every *.scn that has a matching *.expect and gate on the aggregate
-             (the automated form of the manual A/B loop in release-workflow.md; CI
-             entry point for sils-regression.yml)
+  regression Run the core scenarios (CORE.txt, default) or every *.scn that has a matching
+             *.expect (--all) and gate on the aggregate (the automated form of the manual
+             A/B loop in release-workflow.md; CI entry point for sils-regression.yml, which
+             uses --all). --list shows what would run; --match PREFIX narrows by name
   milestone  build → run → video → gate in one shot (the /sils-milestone skill)
   sysid-gate Model-match check: forward model of the plant vs SILS truth and vs real
              flip/hover logs (simulation-policy.md §5; distinct from the "gate" milestone check)
@@ -581,7 +582,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     # This is the CI/pre-release entry point (sils-regression.yml, versioning.md §5).
     # 再確認試験: .expect を伴う全 *.scn を実行し集約判定で合否を決める(README/TEST_MATRIX
     # の「32本」。.expect グロブが正)。CI・リリース前のエントリポイント。
-    p = sub.add_parser("regression", help="Run all *.scn/*.expect scenarios and gate (CI)")
+    p = sub.add_parser("regression", help="Run the core *.scn/*.expect scenarios (default) or all with --all, and gate")
     p.add_argument("--json-out", default=None,
                    help="write a machine-readable summary (per-scenario pass/fail) to this path")
     p.add_argument("--include-workshop", action="store_true",
@@ -592,6 +593,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                         "motors), so a liftoff gate fails by construction there, not "
                         "from a real regression. Run `sf lesson switch N --solution` "
                         "first, then pass this flag)")
+    p.add_argument("--all", action="store_true",
+                   help="run every scenario that has a .expect (CI and the check before merging "
+                        "into main). Default: only the core scenarios listed in "
+                        "simulator/sils/scenarios/CORE.txt")
+    p.add_argument("--list", action="store_true",
+                   help="print the scenarios that would run (default set and --all set) and exit "
+                        "without running anything")
+    p.add_argument("--match", action="append", nargs="+", default=None, metavar="PREFIX",
+                   help="run only scenarios whose name starts with PREFIX (several allowed, "
+                        "e.g. --match tof_ weak_spool); searches all scenarios, not only the core set")
     p.set_defaults(func=run_regression)
 
     p = sub.add_parser("compare", help="Side-by-side ESKF vs complementary video (P4/P6)")
@@ -2423,6 +2434,79 @@ def _check_pid_lockstep() -> tuple:
     return r.returncode == 0, r.stdout + r.stderr
 
 
+def _print_regression_list(scn_dir: Path, scenarios: list, mode_label: str,
+                           n_available: int, args: argparse.Namespace) -> int:
+    """Print the scenarios that would run, without running them (--list). With no --all and no
+    --match, also print the --all set. 実行せずに、実行される一覧を表示する（--list）。--all も
+    --match も無いときは --all の一覧も続けて出す。"""
+    def show(title: str, paths: list) -> None:
+        print(f"{title}: {len(paths)} of {n_available}")
+        for p in paths:
+            print(f"  {p.stem}")
+    show(f"[{mode_label}]", scenarios)
+    if mode_label == "core":
+        show("[all] (--all)", _regression_candidates(scn_dir))
+    return 0
+
+
+CORE_LIST_FILE = "CORE.txt"
+# Number of scenarios the core list must hold (checked by test_sils_core_list.py).
+# 最重要リストが持つべき本数（test_sils_core_list.py が確かめる）。
+CORE_LIST_SIZE = 30
+
+
+def _regression_candidates(scn_dir: Path) -> list:
+    """All *.scn that have a matching *.expect (the .expect glob is authoritative).
+    .expect を伴う全 *.scn（.expect グロブが正）。"""
+    return sorted(p for p in scn_dir.glob("*.scn") if p.with_suffix(".expect").exists())
+
+
+def _load_core_list(scn_dir: Path) -> list:
+    """Read CORE.txt (one scenario name per line, '#' starts a comment) and return the names.
+    Raises ValueError if a name is duplicated, has no .scn, or has no .expect, so the core set
+    can never shrink silently.
+    CORE.txt（1 行 1 名、# 以降は注記）を読んで名前の一覧を返す。名前の重複・.scn の欠落・
+    .expect の欠落は ValueError にし、最重要の一覧が黙って減らないようにする。"""
+    path = scn_dir / CORE_LIST_FILE
+    if not path.exists():
+        raise ValueError(f"{path} not found")
+    names, problems = [], []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        name = raw.split("#", 1)[0].strip()
+        if not name:
+            continue
+        if name in names:
+            problems.append(f"duplicate entry: {name}")
+            continue
+        names.append(name)
+        if not (scn_dir / f"{name}.scn").exists():
+            problems.append(f"{name}: no {name}.scn")
+        elif not (scn_dir / f"{name}.expect").exists():
+            problems.append(f"{name}: no {name}.expect")
+    if problems:
+        raise ValueError(f"{path}: " + "; ".join(problems))
+    return names
+
+
+def _select_regression(scn_dir: Path, run_all: bool, prefixes) -> tuple:
+    """Choose the scenarios to run. Returns (scenarios, mode_label, available_count).
+    --all: every scenario with .expect; --match: those whose name starts with a prefix (searched
+    over all scenarios); default: the core list.
+    実行するシナリオを選ぶ。(シナリオ一覧, モード表示, 全本数) を返す。--all は .expect を伴う全て、
+    --match は名前が接頭辞で始まるもの（全シナリオから探す）、既定は最重要リスト。"""
+    candidates = _regression_candidates(scn_dir)
+    by_name = {p.stem: p for p in candidates}
+    core = _load_core_list(scn_dir)
+    if prefixes:
+        chosen = [p for p in candidates if any(p.stem.startswith(x) for x in prefixes)]
+        label = "match " + "+".join(prefixes)
+    elif run_all:
+        chosen, label = candidates, "all"
+    else:
+        chosen, label = [by_name[n] for n in sorted(core)], "core"
+    return chosen, label, len(candidates)
+
+
 def run_regression(args: argparse.Namespace) -> int:
     scn_dir = _sils_dir() / "scenarios"
     # The .expect glob is authoritative (README/TEST_MATRIX "32 scenarios" as of
@@ -2430,9 +2514,20 @@ def run_regression(args: argparse.Namespace) -> int:
     # gated here — see TEST_MATRIX.md "その他のシナリオ").
     # .expect グロブが正（2026-07時点で「32本」。.expect の無いものは探索的・手動用の
     # ベンチでありここでは判定しない — TEST_MATRIX.md「その他のシナリオ」参照）。
-    scenarios = sorted(p for p in scn_dir.glob("*.scn") if p.with_suffix(".expect").exists())
+    # Default = the core set in CORE.txt; --all = every scenario with a .expect (CI and the
+    # check before merging into main); --match = name prefixes over all scenarios.
+    # 既定 = CORE.txt の最重要リスト、--all = .expect を伴う全て（CI と main に取り込む前の確認）、
+    # --match = 全シナリオから名前の接頭辞で絞る。
+    prefixes = [x for group in (getattr(args, "match", None) or []) for x in group] or None
+    try:
+        scenarios, mode_label, n_available = _select_regression(
+            scn_dir, getattr(args, "all", False), prefixes)
+        if getattr(args, "list", False):
+            return _print_regression_list(scn_dir, scenarios, mode_label, n_available, args)
+    except ValueError as e:
+        console.error(f"core scenario list is inconsistent: {e}"); return 1
     if not scenarios:
-        console.error(f"no *.scn/*.expect pairs found under {scn_dir}"); return 1
+        console.error(f"no scenarios selected ({mode_label}) under {scn_dir}"); return 1
 
     # Gate on hand-copied physical-parameter consistency BEFORE running any
     # scenario (tools/params_audit — C_T/C_Q/kappa/inertia are hand-duplicated
@@ -2508,7 +2603,7 @@ def run_regression(args: argparse.Namespace) -> int:
         return 1
     console.info("[PASS] PID lockstep (firmware pid.hpp == replay_pid)")
 
-    console.info(f"SILS regression: {len(scenarios)} scenario(s) with a matching .expect...")
+    console.info(f"SILS regression: {len(scenarios)} scenario(s) ({mode_label}, of {n_available} with a matching .expect)...")
     results = []
     include_workshop = getattr(args, "include_workshop", False)
     for scn in scenarios:
@@ -2597,14 +2692,16 @@ def run_regression(args: argparse.Namespace) -> int:
     n_unexpected = n_fail + n_xpass
 
     if getattr(args, "json_out", None):
-        summary = {"total": len(results), "pass": n_pass, "known_fail": n_known_fail,
+        summary = {"mode": mode_label, "selected": len(results), "available": n_available,
+                  "total": len(results), "pass": n_pass, "known_fail": n_known_fail,
                   "xpass": n_xpass, "fail": n_unexpected, "skip": n_skip, "scenarios": results}
         Path(args.json_out).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
         console.info(f"Summary written to {args.json_out}")
 
     if n_unexpected:
         console.error(f"SILS regression: {n_fail} FAIL + {n_xpass} XPASS "
-                     f"(of {len(results)}; known-fail={n_known_fail}):")
+                     f"(of {len(results)}; known-fail={n_known_fail}) "
+                     f"[{mode_label} {len(results)} of {n_available}]:")
         for r in results:
             if r["status"] == "FAIL":
                 console.error(f"  FAIL {r['name']} (target={r['target']})")
@@ -2613,7 +2710,8 @@ def run_regression(args: argparse.Namespace) -> int:
                              f"remove the xfail marker in {r['name']}.expect")
         return 1
     console.success(f"SILS regression: {n_pass} PASS + {n_known_fail} KNOWN-FAIL "
-                    f"+ {n_skip} SKIP ({len(results)} total) known-fail={n_known_fail}")
+                    f"+ {n_skip} SKIP ({len(results)} total) known-fail={n_known_fail} "
+                    f"[{mode_label} {len(results)} of {n_available}]")
     return 0
 
 

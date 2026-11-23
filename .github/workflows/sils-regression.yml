@@ -245,17 +245,21 @@ jobs:
 
       - name: Run the SILS scenario regression suite
         id: sils_regression
-        # `sf sils regression` runs every *.scn with a matching *.expect (32 as of
+        # `sf sils regression --all` runs every *.scn with a matching *.expect (32 as of
         # 2026-07) with the invocation each scenario's own header documents, and
         # exits non-zero if any fails — the job goes red on a real regression.
         # --json-out feeds the job-summary step below, which runs unconditionally
         # (if: always()) so a FAILing run still shows which scenario(s) broke.
-        # `sf sils regression` は .expect を伴う全 *.scn（2026-07時点で32本）を
+        # `sf sils regression --all` は .expect を伴う全 *.scn（2026-07時点で32本）を
         # 各自のヘッダ宣言どおりに実行し、1つでも FAIL すれば非0で終了する —
         # 実際に既存動作の破壊があればジョブは赤くなる。--json-out は下のジョブサマリ
         # ステップへ渡す。サマリステップは常時実行（if: always()）のため、
         # FAIL 時もどのシナリオが壊れたか表示される。
-        run: sf sils regression --json-out simulator/sils/viz/sils_regression_results.json
+        # --all is required: without it `sf sils regression` runs only the 30 core scenarios
+        # (CORE.txt, the local default). CI keeps the full set.
+        # --all が必須: 無いと `sf sils regression` は最重要の 30 本（CORE.txt、手元の既定）だけを
+        # 実行する。CI は全本数のままにする。
+        run: sf sils regression --all --json-out simulator/sils/viz/sils_regression_results.json
 
       - name: Model-match check (forward model vs SILS truth and real flip logs)
         # `sf sils sysid-gate` (simulation-policy.md section 5, backlog #0/#21) runs

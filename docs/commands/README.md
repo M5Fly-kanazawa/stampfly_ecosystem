@@ -39,7 +39,7 @@ sf <command> [subcommand] [options]
 | `sf blocks` | Blockly ブロックプログラミング連携（ブラウザ UI ↔ 機体 UDP API） | `sf blocks --help` |
 | `sf log` | ログ取得・解析 | [sf-log.md](sf-log.md) |
 | `sf sim` | フライトシミュレータ実行 | [sf-sim.md](sf-sim.md) |
-| `sf sils`（`sf sil`） | SILS 試験環境（閉ループホバー・レビュー動画・合否判定） | `sf sils --help` |
+| `sf sils`（`sf sil`） | SILS 試験環境（閉ループホバー・レビュー動画・合否判定）。`sf sils regression` の既定は最重要の 30 本、全本数は `--all`（main に取り込む前・CI）、`--list` で一覧、`--match <接頭辞>` で絞り込み | `sf sils --help` |
 | `sf cal` | センサキャリブレーション | [sf-cal.md](sf-cal.md) |
 | `sf sysid` | フライトログからのシステム同定 | [sf-sysid.md](sf-sysid.md) |
 | `sf params` | 物理パラメータ整合検査（C_T・C_Q・κ・慣性 等） | `sf params --help` |
@@ -179,7 +179,7 @@ command with no dedicated page, run `sf <command> --help` for details.
 | `sf blocks` | Blockly block-programming bridge (browser UI <-> drone UDP API) | `sf blocks --help` |
 | `sf log` | Log capture and analysis | [sf-log.md](sf-log.md) |
 | `sf sim` | Run flight simulator | [sf-sim.md](sf-sim.md) |
-| `sf sils` (`sf sil`) | Software-in-the-Loop bench (closed-loop hover, review video, gate) | `sf sils --help` |
+| `sf sils` (`sf sil`) | Software-in-the-Loop bench (closed-loop hover, review video, gate). `sf sils regression` defaults to the 30 core scenarios; `--all` runs everything (before merging into main, and CI), `--list` shows the set, `--match <prefix>` narrows by name | `sf sils --help` |
 | `sf cal` | Sensor calibration | [sf-cal.md](sf-cal.md) |
 | `sf sysid` | System identification from flight logs | [sf-sysid.md](sf-sysid.md) |
 | `sf params` | Physical parameter consistency audit (C_T, C_Q, kappa, inertia, ...) | `sf params --help` |

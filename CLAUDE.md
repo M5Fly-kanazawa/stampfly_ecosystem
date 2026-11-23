@@ -77,6 +77,7 @@ sf flash vehicle -m    # 書き込み後にモニタを開く
 | `sf params check` | 物理パラメータ整合検査（C_T/C_Q/κ/慣性等の手動コピーの食い違い検出）|
 | `sf cal list` | キャリブレーション一覧 |
 | `sf cal gyro/accel/mag` | 各種キャリブレーション |
+| `sf sils regression` | SILS の再確認試験（変更で既存の動作が壊れていないかを自動で確かめる試験）。**既定は最重要の 30 本**（`simulator/sils/scenarios/CORE.txt`）。**全本数は `--all`（main に取り込む前だけ。CI は `--all`）**。`--list` で一覧、`--match <接頭辞>` で変更に関係する分だけ |
 | `sf sim list/run` | シミュレータ操作 |
 | `sf blocks` | ブロックプログラミングWeb UI（Blockly、--demo でデモモード）|
 

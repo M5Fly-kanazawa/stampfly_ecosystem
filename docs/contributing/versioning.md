@@ -81,7 +81,7 @@ sf CLI のバージョンを個別に上げるかどうかは、エコシステ�
 
 | # | 項目 | コマンド／確認内容 |
 |---|------|-------------------|
-| 1 | SILS再確認試験（変更で既存機能が壊れていないことをシミュレーション上で確認するテスト。英語では regression test）がPASSしていること | `sf sils regression`（`sf sils scenario` を対象シナリオ一式に一括適用）でPASSを確認。main へのpush・PRで GitHub Actions（`sils-regression.yml`）が自動実行するため、ローカル実行は事前確認・デバッグ用の補助 |
+| 1 | SILS再確認試験（変更で既存機能が壊れていないことをシミュレーション上で確認するテスト。英語では regression test）がPASSしていること | `sf sils regression --all`（`sf sils scenario` を .expect を伴う全シナリオに一括適用。`--all` なしの既定は最重要の 30 本だけなので、リリース前は必ず `--all`）でPASSを確認。main へのpush・PRで GitHub Actions（`sils-regression.yml`）が自動実行するため、ローカル実行は事前確認・デバッグ用の補助 |
 | 2 | vehicle・controller 両ターゲットのローカルビルドが通ること | `sf build vehicle` / `sf build controller` |
 | 3 | 前回リリースからの変更点を整理すること | CHANGELOG的に、主要な `feat`/`fix` コミットを箇条書きで洗い出す |
 | 4 | バージョンタグを作成すること | `git tag vYYYY.MM.P`（例: `git tag v2026.07.0`） |
@@ -188,7 +188,7 @@ Before cutting a tag, work through the following checklist in order.
 
 | # | Item | Command / What to check |
 |---|------|--------------------------|
-| 1 | SILS regression (a simulation-based check that changes have not broken existing behavior — "regression" here means software regression, not statistical regression) passes | Confirm PASS via `sf sils regression` (applies `sf sils scenario` to the full scenario suite in one shot). GitHub Actions (`sils-regression.yml`) runs this automatically on every push to main and every PR, so a local run is mainly for pre-check / debugging |
+| 1 | SILS regression (a simulation-based check that changes have not broken existing behavior — "regression" here means software regression, not statistical regression) passes | Confirm PASS via `sf sils regression --all` (applies `sf sils scenario` to the full scenario suite in one shot; without `--all` the default runs only the 30 core scenarios, so always pass `--all` before a release). GitHub Actions (`sils-regression.yml`) runs this automatically on every push to main and every PR, so a local run is mainly for pre-check / debugging |
 | 2 | Both vehicle and controller build locally | `sf build vehicle` / `sf build controller` |
 | 3 | Summarize changes since the last release | Draft a CHANGELOG-style bullet list of the key `feat`/`fix` commits |
 | 4 | Create the version tag | `git tag vYYYY.MM.P` (e.g. `git tag v2026.07.0`) |
