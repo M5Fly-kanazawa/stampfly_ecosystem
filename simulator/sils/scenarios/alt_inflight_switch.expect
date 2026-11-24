@@ -40,17 +40,23 @@
 # 捕まえた目標からの行き過ぎは、併合なしで大きくなっていない（滞留 400/700/1000/1200/1500: −3.4/−2.5/−5.4/+1.2/−4.0 cm）。
 # 実機にはこのケースの記録がない（飛行中の切替の実機ログが要る）。実機の ToF は約 50 ms の遅れが残り、併合なしの SILS の ToF は約 0。
 # 線は動かさない: 今日の SILS の値を記録するだけになるため。
-xfail: in-flight switch into ALT_HOLD captures the current estimated altitude with no look-ahead for the climb speed, so the post-switch peak is 1.133 m (> 1.1) once the ToF reading no longer lags; a ToF lag used to act as an accidental brake. Belongs to the altitude-control rework (simulation-policy backlog #26)
+# xfail marker removed 2026-11-25: with the raised altitude gains (ff179724) the transient after the switch peaks at 0.909 m (true height; 14.25 s), not 1.133 m, so `alt_max < 1.1` passes
+# with 0.19 m of margin. The cause named above is NOT fixed: the switch still captures the current estimate with no look-ahead (the craft climbs at 0.4 m/s at the switch and rises 0.13 m
+# above the captured target); the stronger altitude gains only brake that overshoot sooner. The window of the two F metrics now starts at 13.3 s, right after the switch at 13.22 s (it was 14.7 s): the
+# post-switch peak now comes at 14.25 s and the old window would have missed it. Bounds unchanged (1.1 m, 0.38 m); the wider window can only fail more often, not less.
+# xfail の印は 2026-11-25 に外した: 高さのゲインの引き上げ（ff179724）の後、切替後の過渡の山は 1.133 m でなく 0.909 m（真の高さ、14.25 s）で、`alt_max < 1.1` は余裕 0.19 m で合格する。
+# 上に書いた原因は直っていない: 切替は今も先読みなしで現在の推定を捕まえる（切替時に 0.4 m/s で上昇し、捕まえた目標から 0.13 m 行き過ぎる）。ゲインが強くなって、その行き過ぎを早く止めるだけ。
+# F の 2 つの指標の窓は、切替（13.22 s）の直後の 13.3 s から始める（以前は 14.7 s）: 切替後の山が 14.25 s に来るようになり、以前の窓は山を外す。境界値（1.1 m、0.38 m）は変えていない。窓を広げると不合格になりやすくなるだけで、緩くはならない。
 exit 0
 log_contains any "Mode: ALT_HOLD → STABILIZE"
 log_contains any "Mode: STABILIZE → ALT_HOLD"
 # Gate CLOSED by the in-flight switch: the off-center throttle (3330) is blocked — the
 # climb is arrested and the altitude stays bounded (< 1.1 m; an open gate would reach ~1.5 m).
-metric alt_max  < 1.10 in 14.7 18.7
+metric alt_max  < 1.10 in 13.3 18.7
 # alt_band < 0.38: the R_out plant value 0.351 + ~8 % (with the merge off the value is 0.3516 again). No real counterpart;
 # unverified - needs a hardware log of an in-flight switch to ALT_HOLD. / 実機の対応値なし。R_out プラントの値 0.351 に約 8 % の余裕を加えて 0.38。
 # 未検証 - 飛行中の ALT_HOLD 切替の実機ログが必要。
-metric alt_band < 0.38 in 14.7 18.7
+metric alt_band < 0.38 in 13.3 18.7
 # Gate OPEN (after re-centering at G): full-up throttle now climbs well past the hold. The altitude ceiling
 # (sf::limits::kAltitudeCeilingM = 1.2 m) bounds the ALT_HOLD stick climb and tapers it toward the ceiling, so the climb
 # ends near 1.1 m: alt_mean 1.09 m (without the ceiling the stick climbs past 1.6 m). The bound

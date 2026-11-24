@@ -19,6 +19,11 @@
 #  2. 接地の 3 G の衝撃は、非常の DISARM でなく LANDING を終わらせる。モータは床の上でだけ止まる。
 #  3. センサが出力停止している間、ARM は拒否される。
 #
+# Silence starts at 8.2 s (was 8.4 s) so that it is still detected during TAKEOFF (changed 2026-11-25): with the altitude gains raised (ff179724) the takeoff completes at 8.66 s,
+# before a silence that starts at 8.4 s is detected (8.72 s), so the chain went TAKEOFF -> FLYING -> LANDING. The climb speed at LANDING is now 1.06 m/s (was 1.3 m/s); the measured values below are from 2026-11-25.
+# 無音を 8.4 s でなく 8.2 s から始め、TAKEOFF 中に検出されるようにした（2026-11-25 変更）: 高さのゲインの引き上げ（ff179724）後は離陸の完了が 8.66 s で、
+# 8.4 s から始まる無音の検出（8.72 s）より早く、TAKEOFF → FLYING → LANDING の連鎖になっていた。LANDING での上昇速度は 1.06 m/s（以前は 1.3 m/s）。以下の実測値は 2026-11-25 のもの。
+#
 # Run: sf sils scenario simulator/sils/scenarios/tof_silent_takeoff_bias_est_high.scn --target vehicle --duration 21000000
 #
 #  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt> <acro> <pos>
@@ -27,9 +32,9 @@
    +    rc         2048  2048   2048    2048  0     1500      50        0     0     1  # B: POS switch ON while DISARMED
    +    rc         2048  2048   2048    2048  1     300       50        0     0     1  # ARM in POS_HOLD (7.5 s) — spool
    +    bias 0 0 0.2 0 0 0                                                             # 7.8 s — the accelerometer offset error appears with the take-off
-   +    rc         2048  2048   2048    2048  1     600       50        0     0     1  # the auto-takeoff climb
-   +    tof_silent 1                                                                   # D: 8.4 s — ToF output stops (last sample, then nothing)
-   +    rc         2048  2048   2048    2048  1     8000      50        0     0     1  # E: stick centre — LANDING by silence, then blind landing by time
+   +    rc         2048  2048   2048    2048  1     400       50        0     0     1  # the auto-takeoff climb
+   +    tof_silent 1                                                                   # D: 8.2 s — ToF output stops (last sample, then nothing)
+   +    rc         2048  2048   2048    2048  1     8200      50        0     0     1  # E: stick centre — LANDING by silence, then blind landing by time
    +    rc         2048  2048   2048    2048  0     200       50        0     0     1  # F: release the ARM button
    +    rc         2048  2048   2048    2048  1     1000      50        0     0     1  # G: press again (17 s) — landed, ToF still silent → ARM REFUSED
    +    rc         2048  2048   2048    2048  0     600       50                       # H: settle
