@@ -531,46 +531,159 @@ def find_excitation_windows(text_log, axis):
     return out
 
 
-def resolve_window(df, axis, mode="auto", time_range=None, pad_s=0.5):
+#: Firmware chirp band (pid_controller.hpp: kChirpF0 / kChirpF1). The chirp is
+#: logarithmic: f(t) = F0 * (F1/F0)^(t/dur).
+#: ファームのチャープ帯域（pid_controller.hpp の kChirpF0 / kChirpF1）。対数チャープ。
+EXC_CHIRP_F0_HZ = 1.0
+EXC_CHIRP_F1_HZ = 25.0
+
+#: A row counts as "analysed" when the summed Hann^2 weight of the Welch segments
+#: covering it is at least this (two 50 %-overlapping Hann segments always give >= 0.5).
+#: Welch の各区間の Hann^2 重みの和がこの値以上の行を「解析された」とみなす
+#: （50 % 重なりの Hann 窓 2 枚が重なる所は常に 0.5 以上）。
+COVER_MIN_WEIGHT = 0.5
+_COVER_TOL = 5e-3             # slack for the discrete window / 離散窓の誤差の許容
+COVER_WARN_S = 0.05           # warn when more than this much of either end is under-weighted
+
+
+def auto_pads(nperseg, fs=FS):
+    """Pads (before_s, after_s) that put every excitation sample where two Welch
+    segments overlap: one hop (nperseg/2) before, one segment (nperseg) after.
+    励振の全サンプルを Welch 区間 2 枚の重なる所に置くパッド（前 = 1 ホップ、後 = 1 区間）。"""
+    return nperseg / (2.0 * fs), nperseg / fs
+
+
+def resolve_nperseg_and_pads(duration_s, pad_s="auto", nperseg="auto", fs=FS):
+    """Decide the Welch segment length and the pads together, once.
+    Welch 区間長とパッドを一度にまとめて決める。
+
+    pad_s "auto": pads from `auto_pads(nperseg)`; a number: that many seconds on both
+    sides. nperseg "auto": 1024 if the padded window has at least 4096 rows, else 512
+    (the pads of the chosen length are used); an int is taken as given.
+    Returns (nperseg, pad_before_s, pad_after_s).
+    pad_s "auto" は auto_pads(nperseg)、数値なら前後に同じ秒数。nperseg "auto" は
+    パッド込みの窓が 4096 行以上なら 1024、未満なら 512（選んだ長さのパッドを使う）。
+    """
+    def pads_for(n):
+        if pad_s == "auto":
+            return auto_pads(n, fs)
+        return float(pad_s), float(pad_s)
+
+    if nperseg != "auto":
+        n = int(nperseg)
+        return (n,) + pads_for(n)
+    pb, pa = pads_for(1024)
+    if (duration_s + pb + pa) * fs >= 4096:
+        return (1024, pb, pa)
+    return (512,) + pads_for(512)
+
+
+def welch_coverage(ts_us, exc_us, nperseg):
+    """How well the Welch averaging of etfe() covers the excitation, on the ACTUAL rows.
+    Reproduces etfe()'s segment placement (from the first row, hop nperseg//2, the
+    leftover rows dropped) and sums Hann^2 per row. Pure function; no log needed.
+    etfe() の Welch 平均が励振をどれだけ覆うかを、実際の行で調べる。etfe() と同じ区間配置
+    （先頭行から nperseg//2 ずつ、端数は捨てる）を再現し、行ごとに Hann^2 の和を取る。
+
+    ts_us: timestamps [us] of the rows that go into the fit; exc_us: (start_us, end_us).
+    Returns a dict: covered_from_s / covered_to_s (excitation-relative times between
+    which the weight is >= 0.5; None when nothing is), min_weight (over the excitation
+    rows), last_row_s (excitation-relative time of the last analysed row), dur_s,
+    uncovered_head_s / uncovered_tail_s (excitation lengths below weight 0.5 at each
+    end), nperseg.
+    """
+    ts = np.asarray(ts_us, dtype=float)
+    n = len(ts)
+    nperseg = min(int(nperseg), n)
+    step = nperseg // 2
+    w2 = np.hanning(nperseg) ** 2
+    weight = np.zeros(n)
+    last_row = -1
+    for start in range(0, n - nperseg + 1, step):
+        weight[start:start + nperseg] += w2
+        last_row = start + nperseg - 1
+    t0, t1 = float(exc_us[0]), float(exc_us[1])
+    dur = (t1 - t0) / 1e6
+    inside = (ts >= t0) & (ts <= t1)
+    out = {"dur_s": dur, "nperseg": int(nperseg),
+           "last_row_s": (float(ts[last_row]) - t0) / 1e6 if last_row >= 0 else None,
+           "covered_from_s": None, "covered_to_s": None, "min_weight": 0.0,
+           "uncovered_head_s": dur, "uncovered_tail_s": dur}
+    if not np.any(inside):
+        return out
+    out["min_weight"] = float(weight[inside].min())
+    ok = inside & (weight >= COVER_MIN_WEIGHT - _COVER_TOL)
+    if np.any(ok):
+        idx = np.flatnonzero(ok)
+        out["covered_from_s"] = (float(ts[idx[0]]) - t0) / 1e6
+        out["covered_to_s"] = (float(ts[idx[-1]]) - t0) / 1e6
+        out["uncovered_head_s"] = max(0.0, out["covered_from_s"])
+        out["uncovered_tail_s"] = max(0.0, dur - out["covered_to_s"])
+    return out
+
+
+def chirp_freq_at(t_s, dur_s, f0=EXC_CHIRP_F0_HZ, f1=EXC_CHIRP_F1_HZ):
+    """Instantaneous frequency [Hz] of the log chirp `t_s` seconds after its start.
+    チャープ開始から t_s 秒後の瞬時周波数 [Hz]（対数チャープ）。"""
+    return f0 * (f1 / f0) ** (min(max(t_s, 0.0), dur_s) / dur_s)
+
+
+def resolve_window(df, axis, mode="auto", time_range=None, pad_s="auto", nperseg="auto"):
     """Choose the time window [t0_us, t1_us] (absolute `timestamp_us`) to fit.
     同定に使う時間窓 [t0_us, t1_us]（`timestamp_us` の絶対値）を決める。
 
     time_range=(T0, T1) [s from the first row of `df`] overrides `mode`.
     mode "auto": the LAST excitation of `axis` in df.attrs["text_log"], padded by
-    `pad_s` each side; None (with a note in info["warning"]) when the log has
-    none. mode "all": None (whole log).
-    Returns (window_us or None, info dict {source, note, warning}).
+    `pad_s`; None (with a note in info["warning"]) when the log has none. mode "all":
+    None (whole log). pad_s "auto" (default): one Welch hop before and one Welch
+    segment after the excitation, so every excitation sample is covered by two
+    overlapping segments (see resolve_nperseg_and_pads); a number: that many
+    seconds on both sides. `nperseg` ("auto" or an int) is resolved together with
+    the pads.
+    Returns (window_us or None, info dict {source, note, warning, nperseg,
+    pad_before_s, pad_after_s, exc_us, waveform, exc_dur_s}); nperseg is an int
+    only for the text_log source (else the value passed in), and the pads / exc_*
+    entries are None when no excitation was found.
     time_range は mode より優先（df の先頭行からの秒）。"auto" は df.attrs["text_log"]
-    にある `axis` の最後の励振を前後 pad_s 秒広げた区間。無ければ None（info["warning"]
-    に理由）。"all" は None（ログ全体）。
+    にある `axis` の最後の励振を pad_s で広げた区間。無ければ None（info["warning"]
+    に理由）。"all" は None（ログ全体）。pad_s "auto"（既定）は励振の前に Welch の
+    1 ホップ・後に 1 区間分を取り、励振の全サンプルが 2 枚の重なる区間に入るようにする。
+    数値なら前後に同じ秒数。nperseg はパッドと一緒に決める。
     """
     t_first = float(df["timestamp_us"].iloc[0])
+    base = {"nperseg": nperseg, "pad_before_s": None, "pad_after_s": None,
+            "exc_us": None, "waveform": None, "exc_dur_s": None}
     if time_range is not None:
         t0, t1 = float(time_range[0]), float(time_range[1])
         if not t1 > t0:
             raise ValueError(f"--time-range needs T1 > T0 (got {t0:g} {t1:g})")
         return ((t_first + t0 * 1e6, t_first + t1 * 1e6),
-                {"source": "time-range", "note": "", "warning": ""})
+                dict(base, source="time-range", note="", warning=""))
     if mode == "all":
-        return None, {"source": "whole log", "note": "", "warning": ""}
+        return None, dict(base, source="whole log", note="", warning="")
     if mode != "auto":
         raise ValueError(f"unknown window mode {mode!r} (auto or all)")
     wins = find_excitation_windows(df.attrs.get("text_log"), axis)
     if not wins:
-        return None, {"source": "whole log", "note": "",
-                      "warning": (f"no '{axis}' excitation found in the bundle's text_log "
-                                  "-- fitting the WHOLE log (unexcited segments can dominate "
-                                  "the result on hardware; use --time-range)")}
+        return None, dict(base, source="whole log", note="",
+                          warning=(f"no '{axis}' excitation found in the bundle's text_log "
+                                   "-- fitting the WHOLE log (unexcited segments can dominate "
+                                   "the result on hardware; use --time-range)"))
     w = wins[-1]
     note = f"excitation end from {w['end_source']}"
     if len(wins) > 1:
         note += f"; {len(wins)} {axis} excitations in the log, using the last"
-    return ((w["start_us"] - pad_s * 1e6, w["end_us"] + pad_s * 1e6),
-            {"source": "text_log", "note": note, "warning": ""})
+    dur_s = (w["end_us"] - w["start_us"]) / 1e6
+    nps, pad_b, pad_a = resolve_nperseg_and_pads(dur_s, pad_s, nperseg)
+    return ((w["start_us"] - pad_b * 1e6, w["end_us"] + pad_a * 1e6),
+            {"source": "text_log", "note": note, "warning": "", "nperseg": nps,
+             "pad_before_s": pad_b, "pad_after_s": pad_a,
+             "exc_us": (w["start_us"], w["end_us"]), "waveform": w["waveform"],
+             "exc_dur_s": dur_s})
 
 
 def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
-                 input_mode='auto', window_us=None, nperseg=1024):
+                 input_mode='auto', window_us=None, nperseg=1024, exc_us=None):
     """Full pipeline on an aligned flight-log-bundle DataFrame: df -> recover
     u -> ETFE -> parametric (b, T, L). This is the entry point `sf sysid
     rate-fit` uses for a real vehicle flight-log bundle, AND the entry point
@@ -624,6 +737,11 @@ def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
             (closed loop + sensor noise), so fit the excitation window.
         nperseg: Welch segment length (default 1024); "auto" = 1024 when the
             used rows number at least 4096, else 512.
+        exc_us: optional (start_us, end_us) of the excitation; when given, the
+            result's "window" dict gets a "coverage" entry (welch_coverage() on the
+            rows actually used).
+        exc_us: 任意。励振の (start_us, end_us)。与えると result["window"] に、実際に使う
+            行での welch_coverage() の結果 "coverage" が入る。
         window_us: 任意。バンドルの絶対 `timestamp_us` での (t0_us, t1_us)。区間内の行
             だけを使う（resolve_window() 参照）。既定 None = ログ全体（従来動作）。実機では
             地上・離陸・励振していないホバーが Welch 平均を支配するので励振区間を使う。
@@ -683,6 +801,8 @@ def fit_from_df(df, axis, gains=None, f_lo=0.8, f_hi=30.0, plot_path=None,
     window_info = {"t0_s": float(t_us[0] / 1e6), "t1_s": float(t_us[-1] / 1e6),
                    "n_samples": int(len(r)), "nperseg": int(nperseg),
                    "rows_in_log": n_rows_total}
+    if exc_us is not None:
+        window_info["coverage"] = welch_coverage(t_us, exc_us, nperseg)
 
     # Real per-row timestamps are available (unlike an exact-400Hz-spacing
     # assumption via `len(t) * DT`) but this function's own math

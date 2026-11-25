@@ -184,3 +184,129 @@ def test_fit_plant_empty_or_nan_raises():
         rs.fit_plant(np.array([]), np.array([], dtype=complex), np.array([]))
     with pytest.raises(ValueError):
         rs.fit_plant(np.array([10.0]), np.array([1 + 0j]), np.array([np.nan]))
+
+
+# --- (5) Welch coverage and the auto pad ------------------------------------
+# The padded excitation window is cut into Hann segments from its first row; the
+# leftover rows at the end are dropped. A fixed 0.5 s pad left the top of a 10 s
+# 1-25 Hz chirp (above ~18 Hz) under-weighted and the last ~0.26 s unanalysed.
+# パッド込みの励振区間は先頭行から Hann 区間に切られ、末尾の端数は捨てられる。
+# 固定 0.5 s のパッドでは 10 s・1-25 Hz チャープの上端（約 18 Hz 以上）の重みが足りず、
+# 最後の約 0.26 s は解析されなかった。
+
+def test_auto_pads_and_nperseg_resolution():
+    # 10 s chirp -> 1024 (13.84 s window); 5 s chirp -> 512 with its own pads
+    assert rs.resolve_nperseg_and_pads(10.0) == (1024, pytest.approx(1.28), pytest.approx(2.56))
+    n, pb, pa = rs.resolve_nperseg_and_pads(10.0)
+    assert (10.0 + pb + pa) * rs.FS >= 4096
+    n, pb, pa = rs.resolve_nperseg_and_pads(5.0)
+    assert (n, pb, pa) == (512, pytest.approx(0.64), pytest.approx(1.28))
+    # an explicit nperseg decides the auto pads; a number is symmetric
+    assert rs.resolve_nperseg_and_pads(5.0, nperseg=256) == (
+        256, pytest.approx(0.32), pytest.approx(0.64))
+    assert rs.resolve_nperseg_and_pads(10.0, pad_s=0.5) == (1024, 0.5, 0.5)
+    assert rs.resolve_nperseg_and_pads(5.0, pad_s=0.5) == (512, 0.5, 0.5)
+
+
+def test_resolve_window_auto_pad_and_numeric_pad():
+    df, s_us, e_us = _make_df(chirp_s=10.0)
+    df.attrs["text_log"] = _text_log([(s_us, START.format(ax=0)), (e_us, DONE)])
+    win, info = rs.resolve_window(df, "roll")                  # default: auto
+    assert info["nperseg"] == 1024
+    assert win == (pytest.approx(s_us - 1.28e6), pytest.approx(e_us + 2.56e6))
+    assert info["exc_us"] == (s_us, e_us) and info["waveform"] == "chirp"
+    win, info = rs.resolve_window(df, "roll", pad_s=0.5)       # old symmetric meaning
+    assert win == (s_us - 0.5e6, e_us + 0.5e6) and info["nperseg"] == 1024
+    assert (info["pad_before_s"], info["pad_after_s"]) == (0.5, 0.5)
+    win, info = rs.resolve_window(df, "roll", nperseg=512)     # pads follow the override
+    assert info["nperseg"] == 512
+    assert win == (pytest.approx(s_us - 0.64e6), pytest.approx(e_us + 1.28e6))
+
+
+def _rows(window_s, exc_dur_s, jitter=0.0, seed=0, pre_s=0.0):
+    """Row timestamps [us] for a window of `window_s` seconds around an excitation
+    that starts `pre_s` after the first row. / 励振が先頭から pre_s 後に始まる窓の行時刻。"""
+    n = int(round(window_s * rs.FS)) + 1
+    t = np.arange(n) / rs.FS
+    if jitter:
+        t = t + np.random.default_rng(seed).uniform(-jitter, jitter, n)
+        t = np.maximum.accumulate(t)
+    ts = (t * 1e6).astype("int64") + 40_000_000
+    start = 40_000_000 + int(pre_s * 1e6)
+    return ts, (start, start + int(exc_dur_s * 1e6))
+
+
+def test_welch_coverage_fixed_pad_loses_the_chirp_top():
+    ts, exc = _rows(11.0, 10.0, pre_s=0.5)                     # --pad 0.5 on a 10 s chirp
+    cov = rs.welch_coverage(ts, exc, 1024)
+    assert cov["last_row_s"] == pytest.approx(9.74, abs=1.5 / rs.FS)
+    assert cov["covered_to_s"] == pytest.approx(8.96, abs=0.08)
+    assert cov["min_weight"] < 0.01                            # the unanalysed tail
+    assert cov["uncovered_tail_s"] > 1.0
+
+
+def test_welch_coverage_auto_pad_covers_everything():
+    for exc_dur in (10.0, 9.37):                               # also a non-multiple of the hop
+        pb, pa = rs.auto_pads(1024)
+        ts, exc = _rows(pb + exc_dur + pa, exc_dur, pre_s=pb)
+        cov = rs.welch_coverage(ts, exc, 1024)
+        assert cov["min_weight"] >= rs.COVER_MIN_WEIGHT - 5e-3
+        assert cov["covered_from_s"] == pytest.approx(0.0, abs=1.0 / rs.FS)
+        assert cov["covered_to_s"] == pytest.approx(exc_dur, abs=1.0 / rs.FS)
+        assert cov["uncovered_head_s"] < rs.COVER_WARN_S and cov["uncovered_tail_s"] < rs.COVER_WARN_S
+
+
+def test_welch_coverage_irregular_rows():
+    # real logs jitter by a few ms (mean 2.5 ms, max ~5.7 ms between rows): the
+    # check works on the rows themselves, not on a nominal 400 Hz grid
+    pb, pa = rs.auto_pads(1024)
+    ts, exc = _rows(pb + 10.0 + pa, 10.0, jitter=1.2e-3, seed=5, pre_s=pb)
+    assert np.all(np.diff(ts) >= 0)
+    cov = rs.welch_coverage(ts, exc, 1024)
+    assert cov["min_weight"] >= rs.COVER_MIN_WEIGHT - 5e-3
+    # 16 dropped rows (a 40 ms gap) shift the segment grid in time: the last analysed
+    # row is the same row index, hence ~40 ms later; seen only when working on rows
+    keep = np.ones(len(ts), bool)
+    keep[2000:2016] = False
+    cov_gap = rs.welch_coverage(ts[keep], exc, 1024)
+    assert cov_gap["last_row_s"] == pytest.approx(cov["last_row_s"] + 16 / rs.FS, abs=3e-3)
+    # an explicit short window: the same pure function reports the loss
+    ts2, exc2 = _rows(10.5 + 0.2, 10.0, jitter=1.2e-3, seed=6, pre_s=0.2)
+    assert rs.welch_coverage(ts2, exc2, 1024)["uncovered_tail_s"] > rs.COVER_WARN_S
+
+
+def _noisy_chirp_fit(pad_s, monkeypatch, seed=11):
+    """Fit a noisy 10 s 1-25 Hz chirp with hover before/after; also capture the ETFE
+    (omega, G, coherence) that fit_from_df computed. / ETFE も取り出す。"""
+    rng = np.random.default_rng(seed)
+    df, s_us, e_us = _make_df(lead_s=4.0, chirp_s=10.0, tail_s=4.0)
+    df["gyro_x"] = df["gyro_x"] + rng.normal(0, 0.1, len(df))   # sensor noise throughout
+    df.attrs["text_log"] = _text_log([(s_us, START.format(ax=0)), (e_us, DONE)])
+    win, info = rs.resolve_window(df, "roll", pad_s=pad_s)
+    seen = {}
+    real_etfe = rs.etfe
+
+    def spy(*a, **k):
+        seen["etfe"] = real_etfe(*a, **k)
+        return seen["etfe"]
+    monkeypatch.setattr(rs, "etfe", spy)
+    res = rs.fit_from_df(df, "roll", f_lo=1.0, f_hi=25.0, input_mode="duty", window_us=win,
+                         nperseg=info["nperseg"], exc_us=info["exc_us"])
+    return (res,) + seen["etfe"]
+
+
+def test_auto_pad_raises_high_band_coherence_on_a_noisy_chirp(monkeypatch):
+    res_old, om, G_old, coh_old = _noisy_chirp_fit(0.5, monkeypatch)
+    res_new, om2, G_new, coh_new = _noisy_chirp_fit("auto", monkeypatch)
+    hi = om / (2 * np.pi) >= 20.0
+    assert hi.sum() > 10
+    assert coh_new[hi].mean() > coh_old[hi].mean() + 0.1
+    assert coh_new[hi].mean() > 0.6
+    # 20-25 Hz FRF vs the true plant within a few dB (the old pad is checked to be worse)
+    truth = rs.plant_response(om2[hi], B_TRUE, T_TRUE, L_TRUE)
+    err_old = np.abs(20 * np.log10(np.abs(G_old[hi]) / np.abs(truth))).mean()
+    err_new = np.abs(20 * np.log10(np.abs(G_new[hi]) / np.abs(truth))).mean()
+    assert err_new < 3.0 and err_old > 2 * err_new
+    assert res_new["window"]["coverage"]["min_weight"] >= rs.COVER_MIN_WEIGHT - 5e-3
+    assert res_old["window"]["coverage"]["covered_to_s"] < 9.0
+    assert res_new["window"]["nperseg"] == 1024 and res_old["window"]["nperseg"] == 1024
