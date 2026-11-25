@@ -1638,12 +1638,15 @@ def _register_rate_fit(subparsers):
                         metavar=("T0", "T1"),
                         help="fit only T0..T1 [s from the first row of the log] "
                              "(overrides --window)")
-    parser.add_argument("--pad", type=float, default=0.5,
-                        help="seconds added before/after the excitation window "
-                             "(--window auto; default 0.5)")
+    parser.add_argument("--pad", default="auto", type=_pad_arg, metavar="{auto,SECONDS}",
+                        help="padding around the excitation window (--window auto). "
+                             "'auto' (default): one Welch hop (nperseg/2 samples) before "
+                             "and one Welch segment (nperseg samples) after, so the whole "
+                             "excitation is analysed (1.28 s / 2.56 s for nperseg 1024 "
+                             "at 400 Hz). A number: that many seconds on both sides")
     parser.add_argument("--nperseg", type=int,
                         help="Welch segment length in samples (default: auto -- 1024 "
-                             "if the window has at least 4096 samples, else 512)")
+                             "if the padded window has at least 4096 samples, else 512)")
     parser.add_argument("-o", "--output", help="write the fit result JSON here")
     parser.add_argument("--selftest", action="store_true",
                         help="run the synthetic-plant pipeline self-test and exit")
@@ -1651,6 +1654,55 @@ def _register_rate_fit(subparsers):
                         help="save a Bode (measured vs fit) + coherence figure next to the input bundle")
     parser.add_argument("--plot-output", help="path for the Bode+coherence PNG (implies --plot)")
     parser.set_defaults(func=run_rate_fit)
+
+
+def _pad_arg(text):
+    """argparse type for --pad: "auto" or a non-negative number of seconds.
+    --pad の argparse 型: "auto" または 0 以上の秒数。"""
+    if text == "auto":
+        return "auto"
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected 'auto' or a number of seconds, got {text!r}")
+    if value < 0:
+        raise argparse.ArgumentTypeError("--pad must be >= 0")
+    return value
+
+
+def _report_coverage(rs, cov, winfo):
+    """Print the Welch coverage line (and a warning when an end of the excitation is
+    under-weighted). `cov` is welch_coverage()'s dict.
+    Welch の覆い具合の行を表示する（励振の端の重みが足りなければ警告も）。"""
+    dur = cov["dur_s"]
+    chirp = winfo.get("waveform") == "chirp"
+    lo, hi = cov["covered_from_s"], cov["covered_to_s"]
+
+    def hz(t):
+        return rs.chirp_freq_at(t, dur)
+
+    if lo is None:
+        console.warning("coverage: no excitation row has Welch weight >= 0.5 -- "
+                        "the fit does not see the excitation; check the window")
+        return
+    text = (f"coverage: excitation {lo:.2f}..{hi:.2f} s of {dur:.2f} s has Welch weight "
+            f">= 0.5 (min weight {cov['min_weight']:.2f}, last row analysed "
+            f"{cov['last_row_s']:.2f} s after the start)")
+    if chirp:
+        text += f"; chirp {hz(lo):.1f}..{hz(hi):.1f} Hz"
+    console.info(text)
+    lost = []
+    if cov["uncovered_tail_s"] > rs.COVER_WARN_S:
+        what = (f"the chirp above {hz(hi):.1f} Hz" if chirp
+                else f"the last {cov['uncovered_tail_s']:.2f} s of the excitation")
+        lost.append((what, "hold the log longer after the excitation, or raise --pad"))
+    if cov["uncovered_head_s"] > rs.COVER_WARN_S:
+        what = (f"the chirp below {hz(lo):.1f} Hz" if chirp
+                else f"the first {cov['uncovered_head_s']:.2f} s of the excitation")
+        lost.append((what, "start the log earlier, or raise --pad"))
+    for what, fix in lost:
+        console.warning(f"{what} is under-weighted in the fit (Welch weight < 0.5), "
+                        f"so the response there is unreliable -- {fix}")
 
 
 def run_rate_fit(args) -> int:
@@ -1687,11 +1739,16 @@ def run_rate_fit(args) -> int:
     try:
         window_us, winfo = rs.resolve_window(
             df, args.axis, mode=args.window,
-            time_range=args.time_range, pad_s=args.pad)
+            time_range=args.time_range, pad_s=args.pad,
+            nperseg=args.nperseg if args.nperseg else "auto")
+        # nperseg and the pads were decided together in resolve_window (an int for a
+        # text_log window), so the fit cannot disagree with them.
+        # nperseg とパッドは resolve_window で一緒に決めた（text_log 区間では整数）ので、
+        # 同定側と食い違わない。
         result = rs.fit_from_df(df, args.axis, gains=gains,
                                 f_lo=args.f_lo, f_hi=args.f_hi, plot_path=plot_path,
                                 input_mode=args.input_mode, window_us=window_us,
-                                nperseg=args.nperseg if args.nperseg else "auto")
+                                nperseg=winfo["nperseg"], exc_us=winfo["exc_us"])
     except ValueError as exc:
         console.error(f"rate-fit failed: {exc}")
         return 1
@@ -1700,9 +1757,15 @@ def run_rate_fit(args) -> int:
     w = result["window"]
     t_first = float(df["timestamp_us"].iloc[0]) / 1e6
     note = f" ({winfo['note']})" if winfo["note"] else ""
+    pads = ""
+    if winfo["pad_before_s"] is not None:
+        pads = (f", pad {winfo['pad_before_s']:.2f} s before / "
+                f"{winfo['pad_after_s']:.2f} s after")
     console.info(f"window: {winfo['source']}{note}  "
                  f"{w['t0_s'] - t_first:.2f}..{w['t1_s'] - t_first:.2f} s from log start, "
-                 f"{w['n_samples']} samples, nperseg={w['nperseg']}")
+                 f"{w['n_samples']} samples, nperseg={w['nperseg']}{pads}")
+    if w.get("coverage") is not None:
+        _report_coverage(rs, w["coverage"], winfo)
     if result["duty_reason"] and "filled" in result["duty_reason"]:
         console.info(f"  ({result['duty_reason']})")
     input_desc = ("400Hz motor duty (firmware/vehicle mixer inverted)"
