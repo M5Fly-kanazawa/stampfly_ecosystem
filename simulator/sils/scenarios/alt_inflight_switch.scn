@@ -8,7 +8,7 @@
 #   controller captures the current altitude AND closes the re-center gate, so the
 #   off-center throttle does NOT jump the altitude — it HOLDS. Re-centering (2048)
 #   opens the gate; pushing up (4095) then climbs.
-#     F [14.7,18.7]: gate CLOSED by the switch → throttle 3330 (norm 0.63) is IGNORED,
+#     F [13.3,18.7] (14.7 before 2026-11-25): gate CLOSED by the switch → throttle 3330 (norm 0.63) is IGNORED,
 #                    altitude settles into a bounded, decaying transient (~0.88 m peak
 #                    within the window; see the window note below). Without the gate it
 #                    would climb further still.
@@ -26,6 +26,7 @@
 # ALT_HOLD throttle is the SYMMETRIC axis (raw-2048)/2048 ∈ [-1,+1]: 2048=0=HOLD,
 # up(>2048)=climb, down(<2048)=descend. STABILIZE throttle is [0,1] (2048=0=off).
 #
+# (The KNOWN-FAIL below no longer applies since 2026-11-25: the xfail marker is removed, see alt_inflight_switch.expect. / 下の既知の不合格は 2026-11-25 から該当しない: xfail の印は外した。alt_inflight_switch.expect 参照。)
 # KNOWN-FAIL since 2026-11-23 (ToF histogram merge off removed an accidental brake; the header numbers 0.88 m / alt peak ~1.15 m below are from before): see alt_inflight_switch.expect and simulation-policy.md backlog #26.
 # 2026-11-23 から既知の不合格（ToF のヒストグラム併合なしで、偶然のブレーキが無くなった。下の 0.88 m・alt の山 約 1.15 m は変更前の値）: alt_inflight_switch.expect と simulation-policy.md のバックログ #26 を参照。
 #

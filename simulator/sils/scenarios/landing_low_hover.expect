@@ -3,6 +3,7 @@
 #
 # Measured: the hover at 0.106 m (vertical speed -0.003 m/s) from 20.7 s; LANDING at 20.72 s, LANDING -> IDLE_GROUND at 21.44 s (0.72 s), true height 0.020 m.
 # 実測: 0.106 m（鉛直速度 -0.003 m/s）のホバーが 20.7 s から、LANDING は 20.72 s、LANDING → IDLE_GROUND は 21.44 s（0.72 s）、真の高さ 0.020 m。
+# (2026-11-25: the stick time in the .scn is now 3.4 s, so the hover is at about 0.13 m, not 0.106 m; the figures above and below are the old values. / .scn のスティック時間を 3.4 s にしたので、ホバーは 0.106 m でなく約 0.13 m。上下の数値は変更前の値。)
 exit 0
 log_contains any "Auto-takeoff engaged"
 log_contains any "Takeoff complete"

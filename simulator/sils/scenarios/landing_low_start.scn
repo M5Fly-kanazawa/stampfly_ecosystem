@@ -1,7 +1,7 @@
-# landing_low_start.scn — a LANDING that begins low (0.117 m, from TAKEOFF, by a comm loss) ends by a verdict made in that LANDING
+# landing_low_start.scn — a LANDING that begins low (about 0.11 m, from TAKEOFF, by a comm loss) ends by a verdict made in that LANDING
 #                         低い高さ（0.117 m、TAKEOFF から、通信途絶で）で始まる LANDING は、その LANDING の中で出た判定で終わる
 #
-# A weak craft (motor health 0.8725) cannot climb: it hovers low in TAKEOFF, then the link is lost for 12 s and the LANDING begins at 0.117 m, inside the hysteresis band of the ground flag
+# A weak craft (motor health 0.84) cannot climb: it hovers low in TAKEOFF, then the link is lost for 12 s and the LANDING begins at 0.117 m, inside the hysteresis band of the ground flag
 # (set below 0.05 m, released above 0.15 m). Spec under test: the touchdown of a LANDING is judged from the samples that arrive after the LANDING began (TakeoffLandingMgr::noteLandingDescent(),
 # SystemStatus.verdict_state_since_us, takeoff_policy.hpp landingVerdictCounts(); detailed_design.md §3 note 7), so the motors keep running after it began (a verdict left over from before would stop them in the first cycle, about 0.1 m above the floor)
 # and stop on the floor. The craft is still rising slowly at 0.117 m (0.2 m/s) and the ground flag is set, so ImuTask holds the estimated vertical velocity at 0 and the evidence of rest is the ToF itself (TakeoffLandingMgr::atRest()): the craft
@@ -10,7 +10,7 @@
 # (weak craft 0.80-0.90: it either never lifts and the TAKEOFF is aborted, or it climbs). The afresh judgement and the stamp are checked on the host: test_main.cpp (land_notice_*) and
 # test_takeoff_policy.cpp (a_touchdown_verdict_counts_only_with_the_stamp_of_the_present_landing). The stalled-descent verdict of a craft that does hold still is checked on the host (land_low_hover_with_a_held_estimate_ends_by_the_stalled_descent).
 #
-# 弱い機体（モータの健全度 0.8725）は上昇できず TAKEOFF で低くホバーする。そこでリンクが 12 s 途絶え、LANDING が 0.117 m で始まる。0.117 m は接地フラグのヒステリシス帯の中（0.05 m 未満で立ち、
+# 弱い機体（モータの健全度 0.84）は上昇できず TAKEOFF で低くホバーする。そこでリンクが 12 s 途絶え、LANDING が 0.117 m で始まる。0.117 m は接地フラグのヒステリシス帯の中（0.05 m 未満で立ち、
 # 0.15 m 超で解ける）。検証する仕様: LANDING の接地は、LANDING が始まった後に届いたサンプルから判定される（TakeoffLandingMgr::noteLandingDescent()、SystemStatus.verdict_state_since_us、
 # takeoff_policy.hpp の landingVerdictCounts()。detailed_design.md §3 注7）ので、モータは始まった後も回り続け（以前から残った判定は、最初の周期に、床の約 0.1 m 上でモータを止める）、床の上で止まる。
 # 機体は 0.117 m でまだゆっくり上昇中（0.2 m/s）で接地フラグは立っているので、ImuTask は推定の鉛直速度を 0 に固定し、静止の証拠は ToF そのもの（TakeoffLandingMgr::atRest()）: 最大 0.5 m/s で沈む機体は静止でなく、
@@ -19,14 +19,17 @@
 # FLYING または TAKEOFF）を作る入力は、SILS では見つからなかった（弱い機体 0.80〜0.90: 浮かずに TAKEOFF が中止されるか、上昇する）。やり直しと刻印の確認はホストで検査する:
 # test_main.cpp（land_notice_*）と test_takeoff_policy.cpp（a_touchdown_verdict_counts_only_with_the_stamp_of_the_present_landing）。静止し続ける機体の降下停滞の判定はホストで検査する（land_low_hover_with_a_held_estimate_ends_by_the_stalled_descent）。
 #
+# Health 0.84, not 0.8725 (changed 2026-11-25): since the altitude gains were raised (ff179724) a 0.85-0.8725 craft climbs on to FLYING; 0.83 and below cannot lift and the takeoff is aborted. Only the band 0.84 (0.83 < h < 0.85) keeps the craft low in TAKEOFF as before. The heights quoted below (0.117 m, 0.2 m/s, 0.017 m) are the old values; now LANDING begins at 11.02 s at a true height of about 0.11 m, the peak is 0.127 m and the impact cut comes at 11.44 s.
+# 健全度は 0.8725 でなく 0.84（2026-11-25 変更）: 高さのゲインの引き上げ（ff179724）後は、0.85〜0.8725 の機体は上昇を続けて FLYING に進み、0.83 以下は浮けず離陸が中止される。以前と同じく TAKEOFF で低くとどまるのは 0.84 付近（0.83 < h < 0.85）だけ。以下に書いた数値（0.117 m・0.2 m/s・0.017 m）は変更前の値で、現在の LANDING は 11.02 s に真の高さ約 0.11 m で始まり、最高は 0.127 m、衝撃のカットは 11.44 s。
+#
 # Run: sf sils scenario simulator/sils/scenarios/landing_low_start.scn --target vehicle --duration 26000000
 #
 #  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz> <alt>
    0    tof_deadzone 0
-   0    fault 0 0.8725
-   0    fault 1 0.8725
-   0    fault 2 0.8725
-   0    fault 3 0.8725
+   0    fault 0 0.84
+   0    fault 1 0.84
+   0    fault 2 0.84
+   0    fault 3 0.84
    0    rc         2048  2048   2048    2048  0     4000      50                       # A: boot at rest — calibration completes
    +    rc         2048  2048   2048    2048  0     1500      50        1              # B: ALT switch ON while DISARMED
    +    rc         2048  2048   2048    2048  1     2000      50        1              # C: ARM in ALT_HOLD (5.5 s) — auto-takeoff, the weak craft hovers low in TAKEOFF

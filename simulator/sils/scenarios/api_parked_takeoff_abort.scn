@@ -2,20 +2,23 @@
 #
 #   離陸の自動中止（床の上で浮けない機体）で地上へ戻ったときも、後回しの行は捨てられる
 #
-# Weak motors (health 0.85) and a valid floor ToF (`tof_deadzone 0`): the auto-takeoff is aborted at about 11.3 s, TAKEOFF -> IDLE_GROUND (the craft of api_land_in_takeoff).
+# Weak motors (health 0.80) and a valid floor ToF (`tof_deadzone 0`): the auto-takeoff is aborted at about 11.3 s, TAKEOFF -> IDLE_GROUND (the craft of api_land_in_takeoff).
 # The `takeoff` and `up 50` parked during the wait are dropped at the abort and answered "error cancelled: flight ended" (before the fix the `takeoff` waited 12 s for a timeout and `up 50` answered "error not flying").
 #
-# 弱いモータ（健全度 0.85）と有効な床の ToF（`tof_deadzone 0`）で自動離陸は約 11.3 s に中止され TAKEOFF → IDLE_GROUND になる（api_land_in_takeoff と同じ機体）。
+# 弱いモータ（健全度 0.80）と有効な床の ToF（`tof_deadzone 0`）で自動離陸は約 11.3 s に中止され TAKEOFF → IDLE_GROUND になる（api_land_in_takeoff と同じ機体）。
 # 待機中に並んだ `takeoff`・`up 50` は、中止の時点で捨てられ "error cancelled: flight ended" を返す（修正前は `takeoff` が 12 s 待って timeout、`up 50` は "error not flying"）。
+#
+# Health 0.80, not 0.85 (changed 2026-11-25): since the altitude gains were raised (ff179724) a 0.85 craft lifts off within the 5 s limit; 0.80 still cannot lift, so the abort path stays under test (0.82 passes, 0.84 does not).
+# 健全度は 0.85 でなく 0.80（2026-11-25 変更）: 高さのゲインの引き上げ（ff179724）後は 0.85 の機体も 5 s の期限内に浮く。0.80 は今も浮けないので、中止の経路の検証は保たれる（0.82 は合格、0.84 は不合格）。
 #
 # Run: sf sils scenario simulator/sils/scenarios/api_parked_takeoff_abort.scn --target vehicle --duration 34000000
 #
 #  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
    0    tof_deadzone 0
-   0    fault 0 0.85
-   0    fault 1 0.85
-   0    fault 2 0.85
-   0    fault 3 0.85
+   0    fault 0 0.80
+   0    fault 1 0.80
+   0    fault 2 0.80
+   0    fault 3 0.80
    0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
    +    api        "command"                                  # B: enter SDK mode (t=6)
    +    api        "takeoff"                                  # C: takeoff -> ARM -> auto-takeoff; the craft cannot lift (t=6)

@@ -1,9 +1,9 @@
 # landing_low_start.expect — a LANDING that begins low is judged from the samples of the LANDING: the motors run on and stop on the floor
 # 低い高さで始まる LANDING は、その LANDING のサンプルから判定される: モータは回り続け、床の上で止まる
 #
-# Measured: LANDING at 11.02 s (0.117 m), the craft turns round at 0.133 m and sinks at up to 0.58 m/s, the motors stop at 11.52 s by the impact cut at a true height of 0.017 m. The craft is not at rest, so no stalled-descent verdict is made.
+# Measured (before 2026-11-25, health 0.8725; now health 0.84: LANDING at 11.02 s at about 0.11 m, peak 0.127 m, impact cut at 11.44 s): LANDING at 11.02 s (0.117 m), the craft turns round at 0.133 m and sinks at up to 0.58 m/s, the motors stop at 11.52 s by the impact cut at a true height of 0.017 m. The craft is not at rest, so no stalled-descent verdict is made.
 # Without the afresh judgement the SILS result is the same (see the scenario file): this checks the behaviour, the host tests check the judgement.
-# 実測: LANDING は 11.02 s（0.117 m）、機体は 0.133 m で向きを変え、最大 0.58 m/s で沈み、モータは 11.52 s に衝撃のカットで、真の高さ 0.017 m で止まる。機体は静止していないので、降下停滞の判定は出ない。
+# 実測（2026-11-25 より前、健全度 0.8725。現在は健全度 0.84: LANDING は 11.02 s、約 0.11 m、最高 0.127 m、衝撃のカットは 11.44 s）: LANDING は 11.02 s（0.117 m）、機体は 0.133 m で向きを変え、最大 0.58 m/s で沈み、モータは 11.52 s に衝撃のカットで、真の高さ 0.017 m で止まる。機体は静止していないので、降下停滞の判定は出ない。
 # 判定のやり直しが無くても SILS の結果は同じ（シナリオファイル参照）: これは動作の確認で、判定そのものはホスト試験が検査する。
 exit 0
 log_contains any "Transition: TAKEOFF → LANDING"

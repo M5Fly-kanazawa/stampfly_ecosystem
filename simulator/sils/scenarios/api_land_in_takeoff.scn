@@ -1,27 +1,30 @@
 # api_land_in_takeoff.scn — `land` while `takeoff` is still waiting for FLYING, on a craft that cannot lift: the `land` is parked, the abort stops the motors on the floor, there is no LANDING
 #                           `takeoff` が FLYING を待っている最中の `land`（浮けない機体）: `land` は後回しになり、中止で床の上でモータが止まり、LANDING は無い
 #
-# The API task blocks inside `takeoff` (waitUntil) until the auto-takeoff reaches FLYING. A craft whose motors are too weak to lift (health 0.85) and whose ToF reads the floor validly
+# The API task blocks inside `takeoff` (waitUntil) until the auto-takeoff reaches FLYING. A craft whose motors are too weak to lift (health 0.80) and whose ToF reads the floor validly
 # (`tof_deadzone 0`) stays in TAKEOFF until the system's own abort (5 s after the TAKEOFF began: DISARM, the motors stop). A `land` that arrives meanwhile is parked like every other line (dispatchDuringWait):
 # StateManager::notifyLandingRequest does not accept TAKEOFF, because a LANDING that begins on the floor can float the craft up (detailed_design.md §3 note 5), so the `land` waits until the takeoff has ended.
 # The abort ends the wait ("error takeoff aborted"), the abort takes the craft from TAKEOFF back to IDLE_GROUND, which drops the parked `land` (DISARM wins over every parked line, detailed_design.md §3.1): it answers "error cancelled: flight ended" (before this rule it ran on the grounded craft and answered "error not flying"). The craft never leaves the floor and the motors are stopped.
 # Spec under test (detailed_design.md §3.1, TAKEOFF -> IDLE_GROUND row; §3 note 13).
 #
-# `takeoff` が FLYING を待っている間、API タスクは `takeoff` の中（waitUntil）でブロックする。モータが弱すぎて浮けない機体（健全度 0.85）で、ToF が床を有効に読む（`tof_deadzone 0`）と、
+# `takeoff` が FLYING を待っている間、API タスクは `takeoff` の中（waitUntil）でブロックする。モータが弱すぎて浮けない機体（健全度 0.80）で、ToF が床を有効に読む（`tof_deadzone 0`）と、
 # 機体は、システム自身の中止（TAKEOFF の開始から 5 s 後。DISARM でモータ停止）まで TAKEOFF に留まる。その間に届いた `land` は、他の行と同じく後回しになる（dispatchDuringWait）:
 # StateManager::notifyLandingRequest は TAKEOFF を受け付けない。床の上で始めた LANDING は機体を浮かせうるため（detailed_design.md §3 注5）。`land` は離陸が終わるまで待つ。
 # 中止が待機を終え（"error takeoff aborted"）、中止で機体は TAKEOFF から IDLE_GROUND へ戻り、後回しの `land` は捨てられる（DISARM は後回しのどの行よりも優先。detailed_design.md §3.1）: "error cancelled: flight ended" を返す（この規則の前は、地上の機体に対して実行され "error not flying" を返した）。機体は床を離れず、モータは止まる。
 # 検証する仕様（detailed_design.md §3.1 の TAKEOFF → IDLE_GROUND の行、§3 注13）。
 #
 # Timeline: takeoff at 6.0 s (ARM, spool, the TAKEOFF begins at about 6.3 s), land at 8.0 s, the abort at about 11.3 s.
+# Health 0.80, not 0.85 (changed 2026-11-25): since the altitude gains were raised (ff179724) a 0.85 craft lifts off within the 5 s limit; 0.80 still cannot lift, so the abort path stays under test (0.82 passes, 0.84 does not).
+# 健全度は 0.85 でなく 0.80（2026-11-25 変更）: 高さのゲインの引き上げ（ff179724）後は 0.85 の機体も 5 s の期限内に浮く。0.80 は今も浮けないので、中止の経路の検証は保たれる（0.82 は合格、0.84 は不合格）。
+#
 # Run: sf sils scenario simulator/sils/scenarios/api_land_in_takeoff.scn --target vehicle --duration 22000000
 #
 #  <t>  ch        <thr> <roll> <pitch> <yaw> <arm> <hold_ms> <rate_hz>
    0    tof_deadzone 0
-   0    fault 0 0.85
-   0    fault 1 0.85
-   0    fault 2 0.85
-   0    fault 3 0.85
+   0    fault 0 0.80
+   0    fault 1 0.80
+   0    fault 2 0.80
+   0    fault 3 0.80
    0    rc         2048  2048   2048    2048  0     6000      50      # A: boot at rest — calibration completes
    +    api        "command"                                          # B: enter SDK mode (t=6)
    +    api        "takeoff"                                          # C: takeoff -> ARM -> auto-takeoff; the craft cannot lift (t=6)
